@@ -1,0 +1,163 @@
+StillHere — Trust & Safety (Website Version)
+
+You can put this at
+stillhere.app/trust
+or
+stillhere.app/safety
+
+Title
+
+Trust & Safety at StillHere
+
+Intro (short, calm)
+
+StillHere is built for people who live alone, their families, and caregivers.
+Our goal is simple: peace of mind without surveillance.
+
+Everything we build follows one rule:
+
+You stay in control. StillHere only acts when you don’t respond.
+
+How StillHere works
+
+You choose when to check in.
+
+You tap “I’m OK” to confirm you’re fine.
+
+If you don’t respond, we notify the people you chose.
+
+Your contacts can step in before anything else happens.
+
+StillHere does not monitor you continuously.
+
+Location sharing (always your choice)
+
+Location sharing is OFF by default.
+
+We never track your location unless you turn it on.
+
+You can turn location sharing off at any time, instantly.
+
+If enabled:
+
+Location is shared only during emergencies or shifts, based on your settings.
+
+We show when the location was last updated.
+
+We do not create long-term location histories by default.
+
+If location sharing is off, no location data is shared.
+
+Human-first safety
+
+StillHere is designed to reduce false alarms and unnecessary panic.
+
+Emergency contacts are notified first.
+
+If a contact confirms they are checking on you, alerts are paused.
+
+In the current version, StillHere does not automatically contact emergency services.
+
+People come before automation.
+
+What we never do
+
+StillHere does not:
+
+secretly track your location
+
+monitor your conversations
+
+record audio or video
+
+sell or share your data for advertising
+
+activate features without your consent
+
+Minimal data by design
+
+We intentionally collect and store very little data:
+
+Your most recent check-in time
+
+Short-lived alert events
+
+Location data only if enabled, and only when needed
+
+This reduces risk and protects your privacy.
+
+Security & misuse prevention
+
+We actively protect the service:
+
+Secure one-time login codes
+
+Rate limits to prevent spam or abuse
+
+Secure contact access links
+
+Monitoring for unusual activity
+
+Misuse of StillHere is not tolerated.
+
+Our commitment
+
+If StillHere ever changes in a meaningful way:
+
+we will explain it clearly
+
+we will not remove your control
+
+we will not enable tracking without consent
+
+Trust is not a feature — it is the product.
+
+Contact
+
+Questions or concerns?
+📧 support@stillhere.app
+ (example)
+
+2️⃣ In-App Trust Summary (One Screen)
+
+This should be accessible from Settings → Trust & Safety
+or shown once during onboarding.
+
+Title
+
+Your Trust & Safety
+
+Body (large text, simple language)
+
+StillHere only acts if you don’t respond
+
+Location sharing is OFF by default
+
+You choose who gets notified
+
+Contacts are notified before anything else
+
+You can pause alerts or turn features off anytime
+
+Footer (bold)
+
+You are always in control.
+
+Optional small link:
+Read full Trust & Safety
+
+Why this is a strong strategic move
+
+This combination:
+
+reassures elderly users instantly
+
+helps caregivers feel confident
+
+passes App Store / Play Store scrutiny
+
+neutralizes fear-based competitors
+
+protects you if challenged by regulators or platforms
+
+This is how you win long-term, not just launch.

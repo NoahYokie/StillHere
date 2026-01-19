@@ -12,6 +12,7 @@ import ContactPage from "@/pages/contact";
 import LoginPage from "@/pages/login";
 import LoginCodePage from "@/pages/login-code";
 import SetupPage from "@/pages/setup";
+import TrustPage from "@/pages/trust";
 
 function Router() {
   return (
@@ -46,6 +47,7 @@ function Router() {
         </RequireAuth>
       </Route>
       <Route path="/help" component={HelpPage} />
+      <Route path="/trust" component={TrustPage} />
       <Route path="/c/:token" component={ContactPage} />
       <Route component={NotFound} />
     </Switch>

@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield } from "lucide-react";
 import type { UserStatus, LocationMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
@@ -490,6 +490,16 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <HelpCircle className="h-5 w-5 text-muted-foreground" />
               <span className="font-medium" data-testid="link-help">What happens if…</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Trust & Safety Link */}
+        <Card className="hover-elevate cursor-pointer" onClick={() => setLocation("/trust")}>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-muted-foreground" />
+              <span className="font-medium" data-testid="link-trust">Trust & Safety</span>
             </div>
           </CardContent>
         </Card>

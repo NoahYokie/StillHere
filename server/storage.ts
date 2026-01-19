@@ -176,6 +176,10 @@ export class DatabaseStorage implements IStorage {
       and(eq(contactTokens.token, token), eq(contactTokens.revoked, false))
     );
     if (!tokenRecord) return undefined;
+    
+    if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) < new Date()) {
+      return undefined;
+    }
 
     const contact = await this.getContact(tokenRecord.contactId);
     if (!contact) return undefined;
@@ -187,11 +191,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateToken(contactId: string): Promise<ContactToken> {
-    const token = randomBytes(16).toString("hex");
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
     const [result] = await db.insert(contactTokens).values({
       contactId,
       token,
       revoked: false,
+      expiresAt,
     }).returning();
     return result;
   }

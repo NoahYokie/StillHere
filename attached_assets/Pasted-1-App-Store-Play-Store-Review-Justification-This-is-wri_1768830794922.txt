@@ -1,0 +1,263 @@
+1️⃣ App Store & Play Store Review Justification
+
+(This is written specifically to pass review smoothly)
+
+You can paste this into App Review Notes (Apple) and Policy Declarations (Google).
+
+App Name
+
+StillHere
+
+App Purpose
+
+StillHere is a voluntary safety check-in app designed for people living independently, their families, and caregivers. It provides reassurance through scheduled check-ins and trusted contacts — not continuous monitoring.
+
+Location Usage Explanation
+
+StillHere requests location permission only if the user explicitly enables it.
+
+Location sharing is OFF by default
+
+Location is used only during emergencies or work shifts, based on user settings
+
+Users can turn location sharing off at any time
+
+Location data is not collected continuously
+
+No long-term location history is stored by default
+
+Location is used solely to help trusted contacts find the user during a safety event.
+
+Background Activity
+
+StillHere does not run constant background tracking.
+Any live location sharing is time-limited, user-initiated, and clearly indicated in the UI.
+
+Emergency & Safety Behavior
+
+Emergency contacts are notified before any escalation
+
+Contacts can confirm they are checking on the user
+
+StillHere does not automatically contact police or emergency services in the current version
+
+This design minimizes false alarms and respects user autonomy.
+
+Privacy Commitment
+
+StillHere does not sell or share user data
+
+No advertising or tracking SDKs
+
+No audio, video, or message monitoring
+
+Minimal data collection by design
+
+Summary
+
+StillHere is a privacy-first safety app focused on consent, clarity, and human-first escalation. It complies with App Store and Play Store safety and privacy guidelines.
+
+2️⃣ Abuse Response Playbook
+
+(This protects you legally, operationally, and reputationally)
+
+This is internal, but written simply so you can actually follow it.
+
+Abuse Scenarios & Responses
+A) OTP / Login Abuse
+
+Risk: repeated OTP requests, SMS spam, cost abuse
+Prevention:
+
+OTP cooldown (≥60s)
+
+Daily OTP limits per phone
+
+IP + device throttling
+
+Response:
+
+Temporarily block OTP for the number
+
+Log event
+
+Notify user only if necessary
+
+B) Contact Alert Misuse
+
+Risk: someone spams emergency contacts
+Prevention:
+
+No anonymous alerts
+
+Human confirmation + delay
+
+Contact responsibility flow
+
+Response:
+
+Pause alerts
+
+Review logs
+
+Suspend account if malicious
+
+Revoke contact tokens if needed
+
+C) False Emergency Panic
+
+Risk: elderly user forgets phone / accidental SOS
+Prevention:
+
+Countdown before escalation
+
+Contact-first design
+
+Response:
+
+Contact confirms safety → incident resolved
+
+No emergency services triggered
+
+Log resolution
+
+D) Lost Phone / SIM Swap
+
+Risk: unauthorized access
+Response:
+
+OTP re-verification required
+
+Session rotation
+
+User can revoke contact access links
+
+E) Data Breach (unlikely by design)
+
+Why impact is limited:
+
+No continuous tracking
+
+No long-term location history
+
+Minimal stored personal data
+
+Response:
+
+Notify affected users
+
+Rotate tokens
+
+Publish transparent update
+
+Golden Rule
+
+We respond calmly, clearly, and human-first. No automation panic.
+
+3️⃣ Onboarding Flow Text
+
+(First 2 minutes — this is CRITICAL for elderly users)
+
+This is exact text you can put into the app.
+
+Screen 1 — Welcome
+
+Title: Welcome to StillHere
+Body:
+StillHere helps your family know you’re okay — without tracking you.
+
+Button: Continue
+
+Screen 2 — What StillHere Does
+
+Title: How it works
+Body:
+
+You check in by tapping “I’m OK”
+
+If you don’t respond, we notify your chosen contacts
+
+They can check on you before anything else happens
+
+Button: Continue
+
+Screen 3 — Your Control
+
+Title: You stay in control
+Body:
+
+Location sharing is OFF by default
+
+You choose who gets notified
+
+You can pause alerts anytime
+
+Button: Continue
+
+Screen 4 — Let’s Get Set Up
+
+Title: Let’s get started
+Body:
+We’ll help you set up check-ins and emergency contacts.
+
+Button: Start setup
+
+4️⃣ Caregiver Messaging Templates
+
+(This is where trust is either built or lost)
+
+A) SMS — Missed Check-In
+
+StillHere alert:
+{Name} hasn’t checked in yet.
+Tap here to see their status and check on them:
+{secure link}
+
+B) SMS — SOS Button Pressed
+
+StillHere alert:
+{Name} has asked for help.
+Please check on them now:
+{secure link}
+
+C) SMS — Test Message
+
+StillHere test:
+This is a test message from {Name}.
+No action is needed.
+
+D) Contact Page — Status Text
+
+OK: Checked in at 9:02am
+
+Pending: No response yet
+
+Handling: {ContactName} is checking on them
+
+E) Contact Action Confirmations
+
+“I’m handling this”
+
+We’ll pause alerts while you check on them.
+
+“I can’t reach them”
+
+We’ll continue notifying other contacts.
+
+Final Strategic Summary (important)
+
+You now have:
+
+✅ platform-approved review language
+
+✅ operational abuse controls
+
+✅ elderly-safe onboarding
+
+✅ caregiver-calm messaging
+
+This puts StillHere in a category most apps never reach:
+
+boringly trustworthy, regulator-safe, human-first
+
+That is your moat.

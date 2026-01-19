@@ -1,13 +1,19 @@
 import { db } from "./db";
-import { authSessions, otpCodes, users, settings } from "@shared/schema";
-import { eq, and, gt } from "drizzle-orm";
+import { authSessions, otpCodes, otpRateLimits, users, settings } from "@shared/schema";
+import { eq, and, gt, gte } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import type { Request, Response, NextFunction } from "express";
-import { addMinutes, addDays } from "date-fns";
+import { addMinutes, addDays, subMinutes, subHours } from "date-fns";
 
 const SESSION_COOKIE_NAME = "stillhere_session";
 const SESSION_EXPIRY_DAYS = 30;
 const OTP_EXPIRY_MINUTES = 10;
+const OTP_RATE_LIMIT_SECONDS = 60;
+const OTP_RATE_LIMIT_HOURLY = 5;
+
+// Staging environment configuration
+const APP_ENV = process.env.APP_ENV || "staging";
+const WHITELIST_NUMBERS = (process.env.WHITELIST_NUMBERS || "").split(",").map(n => n.trim()).filter(Boolean);
 
 // Generate 6-digit OTP
 function generateOtp(): string {
@@ -37,9 +43,100 @@ export function normalizePhone(phone: string): string {
   return cleaned;
 }
 
-// Create and store OTP
-export async function createOtp(phone: string): Promise<string> {
+// Check if phone is whitelisted in staging
+export function isPhoneWhitelisted(phone: string): boolean {
+  if (APP_ENV === "production") return true;
+  if (WHITELIST_NUMBERS.length === 0) return true; // No whitelist = allow all for dev
+  return WHITELIST_NUMBERS.includes(phone);
+}
+
+// Check rate limits for OTP requests
+export async function checkOtpRateLimit(phone: string): Promise<{ 
+  allowed: boolean; 
+  reason?: string;
+  waitSeconds?: number;
+}> {
   const normalizedPhone = normalizePhone(phone);
+  const now = new Date();
+  
+  // Check last request (60 second cooldown)
+  const oneMinuteAgo = subMinutes(now, 1);
+  const recentRequests = await db
+    .select()
+    .from(otpRateLimits)
+    .where(
+      and(
+        eq(otpRateLimits.phone, normalizedPhone),
+        gte(otpRateLimits.createdAt, oneMinuteAgo)
+      )
+    );
+  
+  if (recentRequests.length > 0) {
+    const lastRequest = recentRequests[recentRequests.length - 1];
+    const waitMs = OTP_RATE_LIMIT_SECONDS * 1000 - (now.getTime() - new Date(lastRequest.createdAt).getTime());
+    const waitSeconds = Math.ceil(waitMs / 1000);
+    return {
+      allowed: false,
+      reason: `Please wait ${waitSeconds} seconds before requesting another code.`,
+      waitSeconds,
+    };
+  }
+  
+  // Check hourly limit (5 per hour)
+  const oneHourAgo = subHours(now, 1);
+  const hourlyRequests = await db
+    .select()
+    .from(otpRateLimits)
+    .where(
+      and(
+        eq(otpRateLimits.phone, normalizedPhone),
+        gte(otpRateLimits.createdAt, oneHourAgo)
+      )
+    );
+  
+  if (hourlyRequests.length >= OTP_RATE_LIMIT_HOURLY) {
+    return {
+      allowed: false,
+      reason: "Too many code requests. Please try again in an hour.",
+    };
+  }
+  
+  return { allowed: true };
+}
+
+// Create and store OTP
+export async function createOtp(phone: string): Promise<{ 
+  success: boolean; 
+  phone?: string; 
+  error?: string;
+  waitSeconds?: number;
+}> {
+  const normalizedPhone = normalizePhone(phone);
+  
+  // Check staging whitelist
+  if (!isPhoneWhitelisted(normalizedPhone)) {
+    console.log(`[AUTH] Blocked non-whitelisted number in staging: ${normalizedPhone}`);
+    return {
+      success: false,
+      error: "This version is in private testing. Your number is not on the test list.",
+    };
+  }
+  
+  // Check rate limits
+  const rateLimitCheck = await checkOtpRateLimit(normalizedPhone);
+  if (!rateLimitCheck.allowed) {
+    return {
+      success: false,
+      error: rateLimitCheck.reason,
+      waitSeconds: rateLimitCheck.waitSeconds,
+    };
+  }
+  
+  // Record this request for rate limiting
+  await db.insert(otpRateLimits).values({
+    phone: normalizedPhone,
+  });
+  
   const code = generateOtp();
   const expiresAt = addMinutes(new Date(), OTP_EXPIRY_MINUTES);
   
@@ -57,9 +154,10 @@ export async function createOtp(phone: string): Promise<string> {
   console.log(`Phone: ${normalizedPhone}`);
   console.log(`Code: ${code}`);
   console.log(`Expires: ${expiresAt.toLocaleTimeString()}`);
+  console.log(`Environment: ${APP_ENV}`);
   console.log("========================================\n");
   
-  return normalizedPhone;
+  return { success: true, phone: normalizedPhone };
 }
 
 // Verify OTP and create session
