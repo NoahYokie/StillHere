@@ -129,13 +129,39 @@ New users see a 4-screen onboarding before setup:
 - `SESSION_SECRET` - Secret for session signing
 - `APP_ENV` - Environment mode (staging/production)
 - `WHITELIST_NUMBERS` - Comma-separated E.164 phone numbers for staging
+- `TWILIO_ACCOUNT_SID` - Twilio Account SID for SMS
+- `TWILIO_AUTH_TOKEN` - Twilio Auth Token for SMS
+- `TWILIO_PHONE_NUMBER` - Twilio phone number (E.164 format)
+
+## SMS Configuration
+
+StillHere uses Twilio for sending SMS messages. If Twilio credentials are not configured, messages are logged to the console instead.
+
+### Supported Countries
+- Australia (+61)
+- USA/Canada (+1)
+- UK (+44)
+- France (+33), Germany (+49), Italy (+39), Spain (+34)
+- Netherlands (+31), Belgium (+32), Austria (+43), Switzerland (+41)
+- Ireland (+353), Poland (+48), Sweden (+46), Norway (+47), Denmark (+45)
+- Finland (+358), Portugal (+351), Greece (+30)
+
+### Phone Number Normalization
+Local formats are auto-normalized for these countries:
+- Australian mobile: `0412345678` → `+61412345678`
+- Australian landline: `02/03/07/08 XXXX XXXX` → `+61...`
+- UK mobile: `07123456789` → `+447123456789`
+- US/Canada: `4155551234` (10 digits) → `+14155551234`
+- US/Canada: `14155551234` (11 digits) → `+14155551234`
+
+For EU countries, users must enter the full international format with `+` prefix (e.g., `+33 6 12 34 56 78` for France).
 
 ## Running the App
 
 The app runs on port 5000 with `npm run dev`. 
 
 For testing:
-- OTP codes are logged to the console
+- If Twilio is not configured, OTP codes are logged to the console
 - Contact page URLs are logged when contacts are saved
 - Check server logs for debugging
 
@@ -168,6 +194,6 @@ No action is needed.
 
 ## Future Enhancements (planned)
 
-- Twilio integration for real SMS delivery
+- Biometric unlock (Face ID / fingerprint) after first login
 - Push notifications
 - Apple Watch / wearable integration

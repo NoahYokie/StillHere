@@ -4,6 +4,7 @@ import { eq, and, gt, gte } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import { addMinutes, addDays, subMinutes, subHours } from "date-fns";
+import { sendOtpSms } from "./sms";
 
 const SESSION_COOKIE_NAME = "stillhere_session";
 const SESSION_EXPIRY_DAYS = 30;
@@ -25,22 +26,78 @@ function generateSessionToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-// Normalize phone number (basic E.164-ish format)
+// Allowed country codes for OTP
+const ALLOWED_COUNTRIES = [
+  "+61",  // Australia
+  "+1",   // USA/Canada
+  "+44",  // UK
+  "+33",  // France
+  "+49",  // Germany
+  "+39",  // Italy
+  "+34",  // Spain
+  "+31",  // Netherlands
+  "+32",  // Belgium
+  "+43",  // Austria
+  "+41",  // Switzerland
+  "+353", // Ireland
+  "+48",  // Poland
+  "+46",  // Sweden
+  "+47",  // Norway
+  "+45",  // Denmark
+  "+358", // Finland
+  "+351", // Portugal
+  "+30",  // Greece
+];
+
+// Normalize phone number to E.164 format
 export function normalizePhone(phone: string): string {
   // Remove all non-digit characters except leading +
   let cleaned = phone.replace(/[^\d+]/g, "");
   
-  // If starts with 0, assume Australian and convert to +61
-  if (cleaned.startsWith("0")) {
-    cleaned = "+61" + cleaned.slice(1);
+  // Already has + prefix - keep as is (international format)
+  if (cleaned.startsWith("+")) {
+    return cleaned;
   }
   
-  // If no + prefix, add it
-  if (!cleaned.startsWith("+")) {
-    cleaned = "+" + cleaned;
+  // Handle common local formats by country
+  
+  // Australian mobile: 04XX XXXXXX (10 digits starting with 04)
+  if (cleaned.startsWith("04") && cleaned.length === 10) {
+    return "+61" + cleaned.slice(1);
   }
   
-  return cleaned;
+  // Australian landline: 02/03/07/08 XXXX XXXX (10 digits starting with 0)
+  // Only normalize 10-digit numbers starting with common AU area codes
+  if (cleaned.length === 10 && /^0[2378]/.test(cleaned)) {
+    return "+61" + cleaned.slice(1);
+  }
+  
+  // UK mobile: 07XXX XXXXXX (11 digits starting with 07)
+  if (cleaned.startsWith("07") && cleaned.length === 11) {
+    return "+44" + cleaned.slice(1);
+  }
+  
+  // US/Canada: 10 digit number (no leading 0)
+  // e.g., 4155551234 -> +14155551234
+  if (cleaned.length === 10 && !cleaned.startsWith("0")) {
+    return "+1" + cleaned;
+  }
+  
+  // US/Canada: 11 digit number starting with 1
+  // e.g., 14155551234 -> +14155551234
+  if (cleaned.length === 11 && cleaned.startsWith("1")) {
+    return "+" + cleaned;
+  }
+  
+  // For all other formats, user must provide international format with +
+  // Add + prefix anyway so validation can catch it
+  return "+" + cleaned;
+}
+
+// Check if phone is from an allowed country
+export function isAllowedCountry(phone: string): boolean {
+  const normalized = normalizePhone(phone);
+  return ALLOWED_COUNTRIES.some(code => normalized.startsWith(code));
 }
 
 // Check if phone is whitelisted in staging
@@ -48,6 +105,29 @@ export function isPhoneWhitelisted(phone: string): boolean {
   if (APP_ENV === "production") return true;
   if (WHITELIST_NUMBERS.length === 0) return true; // No whitelist = allow all for dev
   return WHITELIST_NUMBERS.includes(phone);
+}
+
+// Check if phone can receive OTP (country + whitelist)
+export function canSendOtp(phone: string): { allowed: boolean; error?: string } {
+  const normalized = normalizePhone(phone);
+  
+  // Check country allowlist
+  if (!isAllowedCountry(normalized)) {
+    return {
+      allowed: false,
+      error: "Please enter your number with country code (e.g., +33 for France, +49 for Germany).",
+    };
+  }
+  
+  // Check staging whitelist
+  if (!isPhoneWhitelisted(normalized)) {
+    return {
+      allowed: false,
+      error: "This version is in private testing. Your number is not on the test list.",
+    };
+  }
+  
+  return { allowed: true };
 }
 
 // Check rate limits for OTP requests
@@ -113,12 +193,13 @@ export async function createOtp(phone: string): Promise<{
 }> {
   const normalizedPhone = normalizePhone(phone);
   
-  // Check staging whitelist
-  if (!isPhoneWhitelisted(normalizedPhone)) {
-    console.log(`[AUTH] Blocked non-whitelisted number in staging: ${normalizedPhone}`);
+  // Check country and whitelist
+  const canSend = canSendOtp(normalizedPhone);
+  if (!canSend.allowed) {
+    console.log(`[AUTH] Blocked: ${normalizedPhone} - ${canSend.error}`);
     return {
       success: false,
-      error: "This version is in private testing. Your number is not on the test list.",
+      error: canSend.error,
     };
   }
   
@@ -147,15 +228,14 @@ export async function createOtp(phone: string): Promise<{
     used: false,
   });
   
-  // Log the OTP for testing (in production, this would be sent via Twilio)
-  console.log("\n========================================");
-  console.log("OTP CODE (for testing)");
-  console.log("========================================");
-  console.log(`Phone: ${normalizedPhone}`);
-  console.log(`Code: ${code}`);
-  console.log(`Expires: ${expiresAt.toLocaleTimeString()}`);
-  console.log(`Environment: ${APP_ENV}`);
-  console.log("========================================\n");
+  // Send OTP via SMS (Twilio if configured, otherwise logs to console)
+  const smsResult = await sendOtpSms(normalizedPhone, code);
+  
+  if (!smsResult.success) {
+    console.error(`[AUTH] Failed to send OTP SMS: ${smsResult.error}`);
+  }
+  
+  console.log(`[AUTH] OTP created for ${normalizedPhone}, expires ${expiresAt.toLocaleTimeString()}`);
   
   return { success: true, phone: normalizedPhone };
 }
