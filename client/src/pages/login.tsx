@@ -16,16 +16,28 @@ export default function LoginPage() {
 
   const sendCodeMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/auth/send-code", { phone });
+      const response = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to send code");
+      }
+      
+      return response.json();
     },
     onSuccess: (data: any) => {
       const normalizedPhone = data.phone || phone;
       setLocation(`/login/code?phone=${encodeURIComponent(normalizedPhone)}`);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: "Could not send code. Please check your number.",
+        title: "Could not send code",
+        description: error.message,
         variant: "destructive",
       });
     },

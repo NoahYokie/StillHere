@@ -1,0 +1,278 @@
+The login UI is right, now we turn it into a fully working, production-grade flow and connect everything end-to-end (auth → user record → settings → home).
+
+I’ll do this in genius IT + entrepreneur mode: minimal changes, maximum correctness, no rewrites.
+
+What you have now (assessment)
+
+From the screenshot, you already have:
+
+✅ Clean login UI
+
+✅ Phone number input
+
+✅ “Send code” CTA
+
+✅ Calm, elderly-friendly copy
+
+What’s missing is plumbing + guardrails, not design.
+
+The exact wiring plan (no guessing)
+Architecture (lock this in)
+
+Auth: Supabase Phone OTP (SMS)
+
+User identity: auth.users.id = primary key everywhere
+
+Contacts: never require login
+
+Login flow: 2 steps, no shortcuts
+
+STEP 1 — Supabase Auth (phone OTP) setup
+In Supabase Dashboard
+
+Go to Authentication → Providers
+
+Enable Phone
+
+Configure SMS provider (Twilio recommended for AU/US/EU)
+
+Set:
+
+OTP length: 6
+
+OTP expiry: 5–10 minutes
+
+Enable rate limits (important):
+
+Send OTP: 1 / minute
+
+Verify attempts: max 5
+
+This already blocks most abuse.
+
+STEP 2 — Login page logic (/login)
+When user clicks Send code
+
+You must:
+
+Normalize phone to E.164
+
+Enforce country allowlist (for now)
+
+Call Supabase OTP
+
+Correct client code (example)
+const { error } = await supabase.auth.signInWithOtp({
+  phone: normalizedPhone,
+  options: {
+    channel: 'sms'
+  }
+});
+
+if (error) {
+  showError(error.message);
+} else {
+  router.push(`/login/code?phone=${encodeURIComponent(normalizedPhone)}`);
+}
+
+Important guardrails (DO NOT SKIP)
+
+Block countries you’re not ready for
+
+Disable resend for 60 seconds
+
+Show human error messages:
+
+“Please wait before requesting another code.”
+
+STEP 3 — Code verification page (/login/code)
+On Continue
+const { data, error } = await supabase.auth.verifyOtp({
+  phone,
+  token: code,
+  type: 'sms'
+});
+
+
+If success:
+
+You now have a real authenticated session
+
+Supabase sets cookies automatically
+
+STEP 4 — User bootstrap (CRITICAL)
+
+This is where most apps mess up. Do it once, cleanly.
+
+After successful OTP verify
+
+Run this server-side (API route or server action):
+
+const userId = authUser.id;
+
+// 1. Ensure user row exists
+await db.query(`
+  insert into users (id, phone)
+  values ($1, $2)
+  on conflict (id) do nothing
+`, [userId, phone]);
+
+// 2. Ensure settings row exists
+await db.query(`
+  insert into settings (user_id)
+  values ($1)
+  on conflict (user_id) do nothing
+`, [userId]);
+
+Routing logic
+
+If new user → /settings
+
+Else → /
+
+This guarantees zero broken state later.
+
+STEP 5 — Route protection (middleware.ts)
+Public routes
+
+/login
+
+/login/code
+
+/help
+
+/c/*
+
+Protected routes
+
+/
+
+/settings
+
+everything else
+
+Middleware logic (conceptual)
+if (!session && isProtectedRoute) {
+  redirect('/login');
+}
+
+
+No login → no app access. Simple. Secure.
+
+STEP 6 — Home page: real data connection
+On page load
+
+Fetch:
+
+next check-in time
+
+last check-in
+
+location mode
+
+pause status
+
+If no settings exist
+
+Redirect to /settings (failsafe).
+
+STEP 7 — Make OTP + alerts safe from abuse (non-negotiable)
+Add 3 lightweight tables or logs
+
+You do not need heavy infra.
+
+otp_requests(phone, created_at)
+
+alert_events(user_id, created_at)
+
+contact_actions(token, created_at)
+
+Enforce:
+
+OTP max/day
+
+Alert max/hour
+
+Contact action cooldown
+
+This protects you more than any vendor choice.
+
+STEP 8 — Wire SMS templates (real messages)
+OTP SMS (handled by provider)
+
+Your StillHere code is: 123456
+This code expires in 10 minutes.
+
+Missed check-in SMS
+
+StillHere alert:
+Mum hasn’t checked in yet.
+Tap to see status: {secure link}
+
+SOS SMS
+
+StillHere alert:
+Mum has asked for help.
+Please check on her now: {secure link}
+
+STEP 9 — Production readiness checklist (before Publish)
+MUST PASS
+
+ OTP works on your real phone
+
+ Wrong code fails gracefully
+
+ Refresh keeps session
+
+ New user → Settings
+
+ Existing user → Home
+
+ Contacts never need login
+
+ Location OFF by default
+
+ Rate limits enforced
+
+If these pass, you are legit production-ready.
+
+One strategic adjustment (important)
+
+Your login screen is good, but I recommend one micro-copy change:
+
+Current
+
+Sign in to check in.
+
+Better (elderly + trust)
+
+Sign in so we know it’s you.
+
+Small change. Big trust gain.
+
+What I need from you next
+
+To connect this perfectly, answer these:
+
+Are you already using Supabase Auth Helpers / SSR or just @supabase/supabase-js?
+
+Which countries do you want OTP enabled for right now?
+
+Do you want biometric unlock later (Face ID / fingerprint) after first login?
+
+Reply with:
+
+1) Supabase auth setup: ___
+2) Countries: ___
+3) Biometrics later: yes / no
+
+
+Then I’ll give you drop-in code for:
+
+middleware.ts
+
+auth client/server setup
+
+and the OTP rate-limit logic
+
+You’re very close to something real and defensible.

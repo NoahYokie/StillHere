@@ -69,6 +69,7 @@ export const contactTokens = pgTable("contact_tokens", {
   contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   revoked: boolean("revoked").notNull().default(false),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -141,6 +142,13 @@ export const otpCodes = pgTable("otp_codes", {
   code: text("code").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// OTP Rate Limit table
+export const otpRateLimits = pgTable("otp_rate_limits", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  phone: text("phone").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

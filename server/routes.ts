@@ -37,8 +37,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Phone number is required" });
       }
       
-      const normalizedPhone = await createOtp(phone);
-      res.json({ success: true, phone: normalizedPhone });
+      const result = await createOtp(phone);
+      
+      if (!result.success) {
+        return res.status(429).json({ 
+          error: result.error,
+          waitSeconds: result.waitSeconds,
+        });
+      }
+      
+      res.json({ success: true, phone: result.phone });
     } catch (error) {
       console.error("Error sending OTP:", error);
       res.status(500).json({ error: "Failed to send code" });
