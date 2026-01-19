@@ -1,0 +1,127 @@
+What your screenshots mean
+1) curl: (7) Failed to connect to localhost port 3000
+
+✅ This means: nothing is listening on port 3000 inside that shell environment (or it’s running on a different port).
+
+Even if Replit “Preview” shows the app, the process may be:
+
+running on a different port, or
+
+running in a different service/session, or
+
+not running at all when you executed curl.
+
+2) bash: printenv: command not found
+
+That’s unusual (printenv is normally present), but not fatal.
+
+Use this instead:
+
+env | grep -E "SUPABASE|TWILIO|APP_ENV|NEXT_PUBLIC|PORT"
+
+3) select * from users... giving bash syntax errors
+
+That’s expected: you ran SQL inside bash.
+
+You can’t run SQL like that unless you’re inside psql or a script.
+
+So for database verification, do one of these:
+
+check in Supabase SQL editor, or
+
+create a tiny Next API route like /api/debug/db to query and return JSON.
+
+4) grep ... app lib → “No such file or directory”
+
+This usually means you’re not in the project root, or your folders aren’t named app/lib at the current path.
+
+The smartest next checks (do these in order)
+Step A — Find what port your server is actually using
+
+Run:
+
+echo "PORT=$PORT"
+ss -ltnp | head -n 50
+
+
+Look for something like:
+
+LISTEN 0 511 0.0.0.0:3000
+or :5173 or :8080
+
+If you see a port (example 5173), test it:
+
+curl -I http://127.0.0.1:5173/login | head -n 5
+
+
+If $PORT is set, do:
+
+curl -I http://127.0.0.1:$PORT/login | head -n 5
+
+
+✅ If that works, you’ve confirmed the app is up and reachable.
+
+Step B — Confirm the server process exists
+
+Run:
+
+ps aux | grep -E "next|node|bun|vite" | grep -v grep
+
+
+✅ You should see a running process like next dev or node server.js or vite.
+
+If you see nothing → the server isn’t running in that shell session.
+
+Step C — Make sure you’re in the correct folder
+
+Run:
+
+pwd
+ls
+
+
+If you don’t see your project files (like package.json), then:
+
+find . -maxdepth 3 -name package.json
+
+
+Then cd into the correct directory and run:
+
+cat package.json | head
+
+Step D — Start the server manually (if needed)
+
+Once you’re in the folder with package.json, run one of these depending on what you use:
+
+npm run dev
+# or
+bun run dev
+# or
+pnpm dev
+
+
+Then re-test:
+
+curl -I http://127.0.0.1:$PORT/login | head -n 5
+
+The one thing to tell your Replit agent right now
+
+Your agent should NOT assume port 3000. Tell it:
+
+“Shell can’t connect to localhost:3000 — please detect the runtime port using $PORT and bind the server to 0.0.0.0:$PORT.”
+
+That’s the standard Replit pattern.
+
+Quick copy/paste message for the agent
+
+Paste this to the Replit agent:
+
+Shell tests show curl cannot reach localhost:3000.
+Please ensure the dev server binds to 0.0.0.0 and uses process.env.PORT (Replit runtime port).
+Also add a /api/health route that returns {ok:true, port:process.env.PORT} so we can curl it reliably.
+
+If you do ONE command and send me the output
+
+Run this and paste results:
+
+echo "PORT=$PORT" && ss -ltnp | head -n 50 && ps aux | grep -E "next|node|bun|vite" | grep -v 

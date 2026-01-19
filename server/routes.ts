@@ -13,6 +13,12 @@ import {
   getSessionToken,
   getUserFromSession,
 } from "./auth";
+import {
+  sendSosAlert,
+  sendMissedCheckinAlert,
+  sendTestMessage,
+  isTwilioConfigured,
+} from "./sms";
 
 // Helper to get userId from session
 const getUserId = (req: Request): string | null => {
@@ -23,6 +29,18 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // ============================================
+  // HEALTH CHECK (public)
+  // ============================================
+  
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      ok: true, 
+      port: process.env.PORT || 5000,
+      timestamp: new Date().toISOString(),
+    });
+  });
   
   // ============================================
   // AUTH ROUTES (public)
@@ -223,25 +241,23 @@ export async function registerRoutes(
         await storage.createLocationSession(userId, "emergency", incident.id);
       }
       
-      // Get tokens for contacts
+      // Get tokens and base URL for contacts
       const tokens = await storage.getContactTokensForUser(userId);
       const user = await storage.getUser(userId);
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : "http://localhost:5000";
       
-      // Log SMS notifications (stub)
-      console.log("\n========================================");
-      console.log("SOS ALERT - HELP REQUESTED");
-      console.log("========================================");
+      // Send SMS alerts to all contacts
+      console.log("\n[SOS] Alerting contacts...");
       for (const contact of contacts) {
         const token = tokens.find(t => t.contact.id === contact.id);
-        const link = token ? `/c/${token.token}` : "(no token)";
-        console.log(`[SMS to ${contact.phone}]`);
-        console.log(`StillHere alert:`);
-        console.log(`${user?.name || "User"} has asked for help.`);
-        console.log(`Please check on them now:`);
-        console.log(`${link}`);
-        console.log("");
+        if (token) {
+          const link = `${baseUrl}/c/${token.token}`;
+          await sendSosAlert(contact.phone, user?.name || "User", link);
+        }
       }
-      console.log("========================================\n");
+      console.log("[SOS] Alerts sent\n");
       
       res.json({ success: true, incident });
     } catch (error) {
@@ -354,18 +370,12 @@ export async function registerRoutes(
       // Get user
       const user = await storage.getUser(userId);
       
-      // Log SMS notifications (stub)
-      console.log("\n========================================");
-      console.log("TEST NOTIFICATION SENT");
-      console.log("========================================");
+      // Send test SMS to all contacts
+      console.log("\n[TEST] Sending test notifications...");
       for (const contact of contacts) {
-        console.log(`[SMS to ${contact.phone}]`);
-        console.log(`StillHere test:`);
-        console.log(`This is a test message from ${user?.name || "User"}.`);
-        console.log(`No action is needed.`);
-        console.log("");
+        await sendTestMessage(contact.phone, user?.name || "User");
       }
-      console.log("========================================\n");
+      console.log("[TEST] Notifications sent\n");
       
       // Immediately resolve the test incident
       await storage.updateIncident(incident.id, {
@@ -454,23 +464,22 @@ export async function registerRoutes(
       
       console.log(`\n[INCIDENT] ${data.contact.name} escalated the incident for ${data.user.name}\n`);
       
-      // Log re-notification
+      // Re-notify contacts
       const contacts = await storage.getContacts(data.user.id);
       const tokens = await storage.getContactTokensForUser(data.user.id);
-      console.log("========================================");
-      console.log("ESCALATION - CONTINUING ALERTS");
-      console.log("========================================");
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : "http://localhost:5000";
+      
+      console.log("\n[ESCALATION] Re-notifying contacts...");
       for (const contact of contacts) {
         const token = tokens.find(t => t.contact.id === contact.id);
-        const link = token ? `/c/${token.token}` : "(no token)";
-        console.log(`[SMS to ${contact.phone}]`);
-        console.log(`StillHere alert:`);
-        console.log(`${data.user.name} hasn't checked in yet.`);
-        console.log(`Tap here to see their status and check on them:`);
-        console.log(`${link}`);
-        console.log("");
+        if (token) {
+          const link = `${baseUrl}/c/${token.token}`;
+          await sendMissedCheckinAlert(contact.phone, data.user.name, link);
+        }
       }
-      console.log("========================================\n");
+      console.log("[ESCALATION] Alerts sent\n");
       
       res.json({ success: true, incident });
     } catch (error) {
@@ -517,24 +526,22 @@ export async function registerRoutes(
           await storage.createLocationSession(user.id, "emergency", incident.id);
         }
         
-        // Get tokens
+        // Get tokens and base URL
         const tokens = await storage.getContactTokensForUser(user.id);
+        const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+          : "http://localhost:5000";
         
-        // Log SMS notifications (stub)
-        console.log("\n========================================");
-        console.log(`MISSED CHECK-IN: ${user.name}`);
-        console.log("========================================");
+        // Send missed check-in alerts
+        console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting contacts...`);
         for (const contact of contacts) {
           const token = tokens.find(t => t.contact.id === contact.id);
-          const link = token ? `/c/${token.token}` : "(no token)";
-          console.log(`[SMS to ${contact.phone}]`);
-          console.log(`StillHere alert:`);
-          console.log(`${user.name} hasn't checked in yet.`);
-          console.log(`Tap here to see their status and check on them:`);
-          console.log(`${link}`);
-          console.log("");
+          if (token) {
+            const link = `${baseUrl}/c/${token.token}`;
+            await sendMissedCheckinAlert(contact.phone, user.name, link);
+          }
         }
-        console.log("========================================\n");
+        console.log("[MISSED CHECK-IN] Alerts sent\n");
       }
       
       res.json({ success: true, processed: dueUsers.length });

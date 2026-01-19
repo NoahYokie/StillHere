@@ -58,7 +58,7 @@ export default function LoginPage() {
             <Heart className="h-8 w-8 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl" data-testid="text-login-title">StillHere</CardTitle>
-          <CardDescription>Sign in to check in.</CardDescription>
+          <CardDescription>Sign in so we know it's you.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -67,7 +67,7 @@ export default function LoginPage() {
               <Input
                 id="phone"
                 type="tel"
-                placeholder="e.g. 0412 345 678"
+                placeholder="e.g. 0412 345 678 or +1 555 123 4567"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 autoComplete="tel"
