@@ -39,19 +39,20 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 - `POST /api/location/update` - Update location
 - `GET /api/cron/tick` - Check for overdue users (scheduler)
 
-## Demo Data
+## User Setup
 
-On startup, the app creates:
-- Demo user "Mum" with phone +61412345678
-- Contact 1: "Sarah (Daughter)" +61423456789
-- Contact 2: "John (Son)" +61434567890
-- Contact tokens printed to console for testing
+The app starts with no users. On first visit, a setup screen appears where users can:
+- Enter their name (required)
+- Enter their phone number (optional)
+- Click "Get Started" to create their account
+
+After setup, users are taken to the main check-in screen.
 
 ## Tech Stack
 
 - Frontend: React + TypeScript + Tailwind CSS + shadcn/ui
 - Backend: Express.js
-- Storage: In-memory (MemStorage)
+- Database: PostgreSQL with Drizzle ORM
 - Routing: wouter
 - Data fetching: TanStack Query
 
