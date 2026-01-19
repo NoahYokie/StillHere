@@ -1,0 +1,189 @@
+A Trust & Safety statement is one of the smartest defensive moves you can make right now.
+Below is a clear, human, regulator-friendly Trust & Safety statement written specifically for StillHere.
+
+This is not marketing fluff.
+It’s written so that:
+
+an elderly user can understand it,
+
+a caregiver can trust it,
+
+an App Store reviewer can approve it,
+
+and a regulator can read it without concern.
+
+You can use this almost verbatim on your website and later inside the app.
+
+StillHere — Trust & Safety Statement
+
+Last updated: [date]
+
+Our promise
+
+StillHere exists to give peace of mind, not to watch or control people.
+
+We are a quiet check-in service designed for people who live alone, their families, and caregivers.
+Everything we build follows one simple rule:
+
+You stay in control. We only act when you don’t respond.
+
+1. How StillHere works (plain English)
+
+You choose when to check in.
+
+You tap “I’m OK” to let your contacts know you’re fine.
+
+If you don’t respond, we notify the people you chose.
+
+Your contacts can check on you before anything else happens.
+
+StillHere does not monitor you continuously.
+
+2. Location sharing (your choice, always)
+
+Location sharing is OFF by default.
+
+We never track your location unless you turn it on.
+
+You can turn location sharing on or off at any time, instantly.
+
+If you choose to enable location sharing:
+
+Your location is shared only during emergencies or shifts, depending on your settings.
+
+We show your contacts when your location was last updated.
+
+We do not build long-term location histories by default.
+
+If location sharing is OFF, no location data is shared.
+
+3. Emergency contacts come first
+
+StillHere is designed to be human-first.
+
+If something goes wrong, we notify your emergency contacts first.
+
+If a contact confirms they are checking on you, we pause further alerts.
+
+This helps avoid unnecessary panic or false alarms.
+
+In the current version of StillHere:
+
+We do not automatically call police or ambulance services.
+
+Your contacts decide what to do next.
+
+4. No hidden monitoring
+
+StillHere does not:
+
+secretly track your location
+
+listen to your microphone
+
+record audio or video
+
+monitor your messages or calls
+
+sell or share your data for advertising
+
+We collect only what is needed to make check-ins work.
+
+5. Minimal data, minimal risk
+
+We design StillHere so there is very little sensitive data to misuse.
+
+We store your most recent check-in time.
+
+Location data (if enabled) is short-lived and limited.
+
+We do not keep long-term movement histories by default.
+
+Contacts see only what is necessary to help you.
+
+This protects you even in the unlikely event of a system breach.
+
+6. Clear consent, no surprises
+
+We believe trust comes from clarity.
+
+We explain what happens if you miss a check-in.
+
+We show exactly when alerts are sent.
+
+We show when location sharing is active.
+
+You can pause alerts if you are busy, sleeping, or travelling.
+
+Nothing happens silently.
+
+7. Security & abuse prevention
+
+We actively prevent misuse of StillHere:
+
+Login is protected by one-time verification codes.
+
+Alert sending is rate-limited to prevent spam.
+
+Contact access links are secure and can be revoked.
+
+We monitor for abnormal usage patterns.
+
+Abuse of the service is not tolerated.
+
+8. Who StillHere is for
+
+StillHere is designed for:
+
+people living independently
+
+elderly users who want reassurance without surveillance
+
+caregivers and families
+
+lone workers who need a simple safety check-in
+
+It is not designed for tracking people without consent.
+
+9. Our commitment
+
+If we ever change how StillHere works in a meaningful way:
+
+we will explain it clearly
+
+we will not remove your control
+
+we will not turn on tracking without consent
+
+Trust is not optional — it is the product.
+
+10. Questions or concerns
+
+If you ever have questions about how StillHere works, we want to hear from you.
+
+Contact us at:
+[support@stillhere.app
+] (example)
+
+Short version (for in-app display)
+
+If you want a one-screen version inside the app:
+
+StillHere only acts when you don’t respond.
+Location is off by default.
+Your contacts come first.
+You stay in control.
+
+Why this statement protects you
+
+This Trust & Safety statement:
+
+aligns with GDPR principles
+
+aligns with Apple & Google safety expectations
+
+makes it hard for competitors to attack your credibility
+
+reassures elderly users without overwhelming them
+
+reduces regulatory and reputational risk
