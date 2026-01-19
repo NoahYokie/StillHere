@@ -1,70 +1,176 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { addMinutes, addHours } from "date-fns";
 import { db } from "./db";
 import { users } from "@shared/schema";
+import {
+  createOtp,
+  verifyOtp,
+  deleteSession,
+  setSessionCookie,
+  clearSessionCookie,
+  getSessionToken,
+  getUserFromSession,
+} from "./auth";
 
-// Store default user ID in memory (set on first request or user creation)
-let defaultUserId: string | null = null;
+// Helper to get userId from session
+const getUserId = (req: Request): string | null => {
+  return (req as any).userId || null;
+};
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Helper to get or create the default user ID
-  const getDefaultUserId = async (): Promise<string | null> => {
-    if (defaultUserId) return defaultUserId;
-    
-    // Try to find existing user
-    const [existingUser] = await db.select().from(users).limit(1);
-    if (existingUser) {
-      defaultUserId = existingUser.id;
-      return defaultUserId;
+  
+  // ============================================
+  // AUTH ROUTES (public)
+  // ============================================
+  
+  // Send OTP code
+  app.post("/api/auth/send-code", async (req, res) => {
+    try {
+      const { phone } = req.body;
+      
+      if (!phone) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+      
+      const normalizedPhone = await createOtp(phone);
+      res.json({ success: true, phone: normalizedPhone });
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+      res.status(500).json({ error: "Failed to send code" });
     }
-    
-    return null;
-  };
+  });
+  
+  // Verify OTP code
+  app.post("/api/auth/verify-code", async (req, res) => {
+    try {
+      const { phone, code } = req.body;
+      
+      if (!phone || !code) {
+        return res.status(400).json({ error: "Phone and code are required" });
+      }
+      
+      const result = await verifyOtp(phone, code);
+      
+      if (!result.success) {
+        return res.status(401).json({ error: "Invalid or expired code" });
+      }
+      
+      // Set session cookie
+      setSessionCookie(res, result.sessionToken!);
+      
+      res.json({
+        success: true,
+        userId: result.userId,
+        isNewUser: result.isNewUser,
+        needsSetup: result.needsSetup,
+      });
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      res.status(500).json({ error: "Failed to verify code" });
+    }
+  });
+  
+  // Get current auth status
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      if (!userId) {
+        return res.json({ authenticated: false });
+      }
+      
+      const user = (req as any).user;
+      const needsSetup = !user?.name || user.name.trim() === "";
+      
+      res.json({
+        authenticated: true,
+        userId,
+        user: {
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+        },
+        needsSetup,
+      });
+    } catch (error) {
+      console.error("Error getting auth status:", error);
+      res.status(500).json({ error: "Failed to get auth status" });
+    }
+  });
+  
+  // Logout
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      const sessionToken = getSessionToken(req);
+      
+      if (sessionToken) {
+        await deleteSession(sessionToken);
+      }
+      
+      clearSessionCookie(res);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error logging out:", error);
+      res.status(500).json({ error: "Failed to logout" });
+    }
+  });
 
-  // Create/setup user
+  // ============================================
+  // USER SETUP (requires auth)
+  // ============================================
+  
+  // Update user profile (name setup)
   app.post("/api/setup", async (req, res) => {
     try {
-      const { name, phone } = req.body;
+      const userId = getUserId(req);
       
-      if (!name) {
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      
+      const { name } = req.body;
+      
+      if (!name || name.trim() === "") {
         return res.status(400).json({ error: "Name is required" });
       }
       
-      // Check if user already exists
-      const existingId = await getDefaultUserId();
-      if (existingId) {
-        return res.status(400).json({ error: "User already exists" });
-      }
-      
-      // Create new user
-      const user = await storage.createUser({ name, phone });
-      defaultUserId = user.id;
+      // Update user name
+      const { eq } = await import("drizzle-orm");
+      const [updatedUser] = await db
+        .update(users)
+        .set({ name: name.trim() })
+        .where(eq(users.id, userId))
+        .returning();
       
       console.log("\n========================================");
-      console.log("StillHere - User Created");
+      console.log("StillHere - User Setup Complete");
       console.log("========================================");
-      console.log(`User: ${user.name}`);
-      console.log(`Phone: ${user.phone || "Not set"}`);
+      console.log(`User: ${updatedUser.name}`);
+      console.log(`Phone: ${updatedUser.phone || "Not set"}`);
       console.log("========================================\n");
       
-      res.json({ success: true, user });
+      res.json({ success: true, user: updatedUser });
     } catch (error) {
       console.error("Error setting up user:", error);
-      res.status(500).json({ error: "Failed to create user" });
+      res.status(500).json({ error: "Failed to setup user" });
     }
   });
+
+  // ============================================
+  // PROTECTED ROUTES (require auth)
+  // ============================================
 
   // Get user status
   app.get("/api/status", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found", needsSetup: true });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const status = await storage.getUserStatus(userId);
       res.json(status);
@@ -77,9 +183,9 @@ export async function registerRoutes(
   // Check in
   app.post("/api/checkin", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const checkin = await storage.createCheckin(userId);
       res.json({ success: true, checkin });
@@ -92,9 +198,9 @@ export async function registerRoutes(
   // SOS - immediate incident
   app.post("/api/sos", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       
       // Create SOS incident
@@ -128,9 +234,9 @@ export async function registerRoutes(
   // Update settings
   app.post("/api/settings", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const { checkinIntervalHours, graceMinutes, locationMode } = req.body;
       
@@ -150,9 +256,9 @@ export async function registerRoutes(
   // Pause alerts
   app.post("/api/settings/pause", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const { pauseUntil } = req.body;
       
@@ -169,9 +275,9 @@ export async function registerRoutes(
   // Save contacts
   app.post("/api/contacts", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const { contact1Name, contact1Phone, contact2Name, contact2Phone } = req.body;
       
@@ -215,9 +321,9 @@ export async function registerRoutes(
   // Run test
   app.post("/api/test", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       
       // Create test incident
@@ -247,6 +353,10 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to run test" });
     }
   });
+
+  // ============================================
+  // PUBLIC ROUTES (no auth required)
+  // ============================================
 
   // Contact page - get data
   app.get("/api/c/:token", async (req, res) => {
@@ -335,12 +445,12 @@ export async function registerRoutes(
     }
   });
 
-  // Location update
+  // Location update (requires auth)
   app.post("/api/location/update", async (req, res) => {
     try {
-      const userId = await getDefaultUserId();
+      const userId = getUserId(req);
       if (!userId) {
-        return res.status(404).json({ error: "No user found" });
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const { lat, lng, accuracy } = req.body;
       
