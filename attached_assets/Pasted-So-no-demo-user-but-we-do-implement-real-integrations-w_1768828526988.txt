@@ -1,0 +1,138 @@
+So: no demo user, but we do implement real integrations with a “test mode” that is still real (sends real SMS) and controlled.
+
+Login approach (best for your users + your business)
+✅ Phone number OTP (SMS), but do it with Supabase Auth + Twilio
+
+This gives you:
+
+passwordless simplicity for elderly
+
+scalable auth infra
+
+less custom security work
+
+a clean path to US/EU markets
+
+Decision: Use Supabase phone OTP (it will use your configured SMS provider).
+
+The “genius” constraints (to avoid breaking your wallet + trust)
+1) Two environments: Staging + Production (even on Replit)
+
+You can still test “live,” but with:
+
+STAGING: your phone numbers + your internal testers only
+
+PRODUCTION: later
+
+This is not “thinking small” — it’s how you avoid becoming your own biggest incident.
+
+Guardrail rule
+
+If ENV=staging, then:
+
+only send SMS to whitelisted numbers (your team/test contacts)
+
+block everyone else with a friendly message:
+This version is in private testing.
+
+This gives you real integration testing without accidental public launch.
+
+2) One more guardrail: rate limits
+
+OTP resend limit (e.g., 1 per 60 seconds, max 5/hour)
+
+Contact alert limit (no repeated SMS loops)
+
+This is how Life360-scale apps avoid abuse + cost explosions.
+
+Login UX (elderly-friendly, zero clutter)
+/login
+
+Title: StillHere
+
+Subtitle: Sign in to check in.
+
+Phone field
+
+Button: Send code
+
+/login/code
+
+Title: Enter code
+
+Text: We sent a 6-digit code to {phone}.
+
+Code input
+
+Button: Continue
+
+Links: Resend code + Change number
+
+That’s it. No “marketing page,” no confusion.
+
+Security stance (entrepreneur + IT expert)
+
+Phone OTP is good, but we add just enough to be safe:
+
+Contact pages stay public via token (as designed)
+
+But we harden tokens:
+
+long random token
+
+optionally expiry (like 30 days) + regenerate
+
+revoke token if contact is removed
+
+Abuse prevention
+
+rate limit OTP requests by IP + phone number
+
+rate limit contact actions on /c/[token] (handle/escalate)
+
+This prevents spam and protects you legally.
+
+Implementation instructions for Replit agent (no demo, real integration)
+
+Copy/paste this:
+
+Implement REAL phone OTP login for StillHere with Supabase Auth (SMS).
+
+NO DEMO MODE. We will test end-to-end live.
+
+PAGES:
+- /login: phone input + "Send code"
+- /login/code: 6-digit code input + "Continue" + "Resend" + "Change number"
+
+AUTH RULES:
+- Protect / and /settings behind auth
+- Keep /c/[token] and /help public
+
+TECH:
+- Next.js App Router + TypeScript
+- Use Supabase auth sessions in cookies
+- Use @supabase/ssr (recommended) so auth persists on refresh and works in server components
+
+DATABASE SYNC:
+- On first successful login, ensure a row exists in public.users where id = auth.user.id.
+- Also ensure a settings row exists for that user.
+
+STAGING GUARDRAILS (IMPORTANT):
+- Add ENV variable: APP_ENV=staging|production
+- If staging: only allow OTP sign-in for phone numbers in WHITELIST_NUMBERS (comma-separated E.164).
+  If not whitelisted, show message: "Private testing only."
+
+RATE LIMITS:
+- Prevent OTP resend spam:
+  - 1 request per 60 seconds per phone
+  - max 5 requests per hour per phone
+- Store limits in DB table otp_requests(phone, created_at) or in-memory if simplest for now.
+
+CONTACT TOKEN HARDENING:
+- Token must be long, random, unguessable.
+- If a contact is edited/removed, rotate/revoke their token.
+
+DELIVER:
+- middleware.ts that redirects unauth users to /login
+- clean UI matching current style
+- clear error messages for elderly users (plain language)

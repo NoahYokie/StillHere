@@ -118,6 +118,32 @@ export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   locationSessions: many(locationSessions),
 }));
 
+// Auth Sessions table
+export const authSessions = pgTable("auth_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const authSessionsRelations = relations(authSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [authSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+// OTP Codes table
+export const otpCodes = pgTable("otp_codes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  phone: text("phone").notNull(),
+  code: text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Location Sessions table
 export const locationSessions = pgTable("location_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -151,6 +177,8 @@ export const insertContactSchema = createInsertSchema(contacts).omit({ id: true,
 export const insertCheckinSchema = createInsertSchema(checkins).omit({ id: true, createdAt: true });
 export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, startedAt: true });
 export const insertLocationSessionSchema = createInsertSchema(locationSessions).omit({ id: true, updatedAt: true });
+export const insertOtpCodeSchema = createInsertSchema(otpCodes).omit({ id: true, createdAt: true });
+export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -173,6 +201,9 @@ export type IncidentReason = Incident["reason"];
 export type LocationSession = typeof locationSessions.$inferSelect;
 export type LocationSessionType = LocationSession["type"];
 export type LocationMode = Settings["locationMode"];
+
+export type AuthSession = typeof authSessions.$inferSelect;
+export type OtpCode = typeof otpCodes.$inferSelect;
 
 // API Response Types
 export interface UserStatus {
