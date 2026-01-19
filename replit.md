@@ -24,11 +24,20 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 1. `/` - Home page with check-in buttons and status (protected)
 2. `/login` - Phone number entry for OTP login
 3. `/login/code` - OTP code verification
-4. `/setup` - New user name entry
-5. `/settings` - Check-in schedule, contacts, location, pause alerts (protected)
-6. `/help` - FAQ explaining how the app works (public)
-7. `/trust` - Trust & Safety statement (public)
-8. `/c/:token` - Contact status page (public, no login required)
+4. `/setup` - 4-screen onboarding flow for new users
+5. `/setup/name` - Name entry to complete setup
+6. `/settings` - Check-in schedule, contacts, location, pause alerts (protected)
+7. `/help` - FAQ explaining how the app works (public)
+8. `/trust` - Trust & Safety statement (public)
+9. `/c/:token` - Contact status page (public, no login required)
+
+## Onboarding Flow
+
+New users see a 4-screen onboarding before setup:
+1. **Welcome**: "StillHere helps your family know you're okay"
+2. **How it works**: Check in, notify contacts, human-first escalation
+3. **You stay in control**: Location OFF by default, you choose contacts
+4. **Let's get started**: Begins name entry setup
 
 ## Authentication
 
@@ -129,6 +138,33 @@ For testing:
 - OTP codes are logged to the console
 - Contact page URLs are logged when contacts are saved
 - Check server logs for debugging
+
+## SMS Message Templates
+
+Messages sent to emergency contacts follow these templates:
+
+**Missed Check-in:**
+```
+StillHere alert:
+{Name} hasn't checked in yet.
+Tap here to see their status and check on them:
+{secure link}
+```
+
+**SOS Button Pressed:**
+```
+StillHere alert:
+{Name} has asked for help.
+Please check on them now:
+{secure link}
+```
+
+**Test Message:**
+```
+StillHere test:
+This is a test message from {Name}.
+No action is needed.
+```
 
 ## Future Enhancements (planned)
 

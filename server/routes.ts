@@ -223,12 +223,23 @@ export async function registerRoutes(
         await storage.createLocationSession(userId, "emergency", incident.id);
       }
       
+      // Get tokens for contacts
+      const tokens = await storage.getContactTokensForUser(userId);
+      const user = await storage.getUser(userId);
+      
       // Log SMS notifications (stub)
       console.log("\n========================================");
-      console.log("SOS ALERT TRIGGERED");
+      console.log("SOS ALERT - HELP REQUESTED");
       console.log("========================================");
       for (const contact of contacts) {
-        console.log(`[SMS STUB] Sending SOS alert to ${contact.name} (${contact.phone})`);
+        const token = tokens.find(t => t.contact.id === contact.id);
+        const link = token ? `/c/${token.token}` : "(no token)";
+        console.log(`[SMS to ${contact.phone}]`);
+        console.log(`StillHere alert:`);
+        console.log(`${user?.name || "User"} has asked for help.`);
+        console.log(`Please check on them now:`);
+        console.log(`${link}`);
+        console.log("");
       }
       console.log("========================================\n");
       
@@ -340,12 +351,19 @@ export async function registerRoutes(
       // Get contacts
       const contacts = await storage.getContacts(userId);
       
+      // Get user
+      const user = await storage.getUser(userId);
+      
       // Log SMS notifications (stub)
       console.log("\n========================================");
       console.log("TEST NOTIFICATION SENT");
       console.log("========================================");
       for (const contact of contacts) {
-        console.log(`[SMS STUB] Sending test notification to ${contact.name} (${contact.phone})`);
+        console.log(`[SMS to ${contact.phone}]`);
+        console.log(`StillHere test:`);
+        console.log(`This is a test message from ${user?.name || "User"}.`);
+        console.log(`No action is needed.`);
+        console.log("");
       }
       console.log("========================================\n");
       
@@ -438,11 +456,19 @@ export async function registerRoutes(
       
       // Log re-notification
       const contacts = await storage.getContacts(data.user.id);
+      const tokens = await storage.getContactTokensForUser(data.user.id);
       console.log("========================================");
-      console.log("ESCALATION - RE-NOTIFYING CONTACTS");
+      console.log("ESCALATION - CONTINUING ALERTS");
       console.log("========================================");
       for (const contact of contacts) {
-        console.log(`[SMS STUB] Sending escalation to ${contact.name} (${contact.phone})`);
+        const token = tokens.find(t => t.contact.id === contact.id);
+        const link = token ? `/c/${token.token}` : "(no token)";
+        console.log(`[SMS to ${contact.phone}]`);
+        console.log(`StillHere alert:`);
+        console.log(`${data.user.name} hasn't checked in yet.`);
+        console.log(`Tap here to see their status and check on them:`);
+        console.log(`${link}`);
+        console.log("");
       }
       console.log("========================================\n");
       
@@ -491,12 +517,22 @@ export async function registerRoutes(
           await storage.createLocationSession(user.id, "emergency", incident.id);
         }
         
+        // Get tokens
+        const tokens = await storage.getContactTokensForUser(user.id);
+        
         // Log SMS notifications (stub)
         console.log("\n========================================");
         console.log(`MISSED CHECK-IN: ${user.name}`);
         console.log("========================================");
         for (const contact of contacts) {
-          console.log(`[SMS STUB] Sending missed check-in alert to ${contact.name} (${contact.phone})`);
+          const token = tokens.find(t => t.contact.id === contact.id);
+          const link = token ? `/c/${token.token}` : "(no token)";
+          console.log(`[SMS to ${contact.phone}]`);
+          console.log(`StillHere alert:`);
+          console.log(`${user.name} hasn't checked in yet.`);
+          console.log(`Tap here to see their status and check on them:`);
+          console.log(`${link}`);
+          console.log("");
         }
         console.log("========================================\n");
       }
