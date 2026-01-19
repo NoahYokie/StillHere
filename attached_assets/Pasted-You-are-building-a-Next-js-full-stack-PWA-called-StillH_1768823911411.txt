@@ -1,0 +1,83 @@
+You are building a Next.js full-stack PWA called "StillHere" (web first) that helps elderly, lone workers, and caregivers. Core UX must be extremely simple. Build v1 only.
+
+NON-NEGOTIABLE RULES:
+- Home screen has only: big "I'm OK" button, "I need help" button, next check-in text, location status line, and a Settings button.
+- Location is OFF by default. User can enable/disable anytime. Never force-enable.
+- No AI/LLM decision-making. No automatic emergency services calling.
+- Contacts are notified first. Contacts can take responsibility and pause escalation.
+- Keep everything explainable in one sentence.
+
+STACK:
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- Database: use Supabase Postgres (or Neon) with a simple SQL schema.
+- SMS: Twilio (if credentials not available, stub SMS with console logs but keep interfaces clean).
+
+PAGES:
+1) / (Home)
+   - Show: "Next check-in: <time>"
+   - Big green button: "I'm OK" => POST /api/checkin
+   - Red button: "I need help" => POST /api/sos
+   - Location status: "Location Sharing OFF | Enable Location" (if off) OR "ON | Turn Off"
+   - Settings button (top right) => /settings
+
+2) /settings
+   - Sections:
+     a) Check-in schedule presets: Daily / 12h / 48h / Custom hours
+     b) Grace period: 10/15/30 minutes preset
+     c) Emergency Contacts: Contact 1 and Contact 2 (name + phone). Save.
+     d) Location mode radio: Off (default), Emergency only (recommended), On-shift only
+     e) Pause alerts until: 2h / 6h / tomorrow morning
+     f) Test/Drill: triggers test incident notification to contacts
+     g) "What happens if…" link => /help
+
+3) /help
+   - Plain language explanation of flow (missed check-in -> reminders -> contacts -> responsibility)
+
+4) /c/[token] (Contact page, no login)
+   - Show user status: last check-in, incident status
+   - Buttons:
+     - Call user (tel:)
+     - Message user (sms:)
+     - "I'm handling this" => POST /api/incidents/:id/handle (pauses escalation + responsibility timer)
+     - "Escalate / can't reach" => POST /api/incidents/:id/escalate
+   - If location sharing active and permitted: show map with last known location + timestamp (use Leaflet + OSM or Mapbox if easy)
+
+BACKEND LOGIC:
+- Data tables: users, contacts, settings, checkins, incidents, location_sessions, contact_tokens.
+- Scheduler/cron: runs every minute. Determine who is due:
+  - If now > next_due_time AND not paused: start incident(reason=missed_checkin)
+  - When incident starts:
+    - Notify user (in-app state)
+    - Notify contacts 1 and 2 via SMS containing contact link (/c/token)
+    - If user location_mode allows emergency sharing: create location session expires in 60 minutes
+- When user checks in:
+  - Create checkin record
+  - Resolve any open incident (status=resolved)
+  - End any active emergency location session
+- Responsibility:
+  - If a contact taps "I'm handling this": set incident status=paused, handled_by_contact_id, set next_action_at to now+45min (responsibility timeout)
+  - If timeout reached and incident still paused without resolution: resume escalation (notify both contacts again)
+
+LOCATION:
+- Implement browser geolocation on Home only when user enabled and an active location session exists.
+- Use watchPosition; send updates to /api/location/update at most every 10 seconds AND only if moved > 20 meters.
+- Store only last_lat/lng/accuracy/timestamp in location_sessions. Do not store long history in v1.
+
+SECURITY:
+- Contact page access is via token (random, unguessable).
+- Tokens can be revoked later (optional).
+
+TESTING CHECKLIST:
+- Can create user and save settings
+- Can check in and see next due time update
+- Missed check-in triggers incident + SMS stub/log
+- Contact link opens and "I'm handling" pauses escalation
+- Location toggling works: OFF->ON requires permission; OFF stops updates immediately
+- SOS triggers immediate incident and notifications
+
+Deliverables:
+- Working Next.js project in Replit
+- README with setup steps, env vars: DATABASE_URL, TWILIO_SID, TWILIO_AUTH, TWILIO_NUMBER
+- Seed script to create a test user + contacts + tokens.

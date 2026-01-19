@@ -1,0 +1,447 @@
+here are the three deliverables for StillHere v1:
+
+Elderly-friendly UI microcopy (exact text)
+
+Supabase Postgres SQL schema (paste-ready)
+
+Minimal Next.js folder structure (organized for Replit agent)
+
+1) Elderly-friendly UI microcopy (exact text)
+App name + tone
+
+App name: StillHere
+
+Tone: calm, reassuring, plain language (avoid “monitor”, “track”, “incident”, “escalation”)
+
+Home screen (/)
+
+Header
+
+Title: StillHere
+
+Settings button label: Settings
+
+Main status
+
+Line: Next check-in: {time}
+
+Secondary (small): Tap “I’m OK” anytime.
+
+Primary button
+
+Button: I’m OK
+
+After success toast: Checked in. Thank you.
+
+Small line under button (optional): This lets your family know you’re okay.
+
+SOS button
+
+Button: I need help
+
+Confirm dialog title: Send help alert?
+
+Confirm dialog body: We will notify your emergency contacts now.
+
+Confirm buttons: Cancel / Send Alert
+
+Location status line
+
+If OFF: Location sharing: OFF + link button Enable
+
+If ON: Location sharing: ON + link button Turn off
+
+If ON but no active sharing session: Location is on, but not sharing right now. (tiny helper text)
+
+Start Shift (optional for lone workers)
+
+Button: Start shift
+
+Helper: Shares location during your shift (if enabled).
+
+End shift: End shift
+
+Settings screen (/settings)
+
+Keep it visually grouped with big headings and very few words.
+
+Section: Check-ins
+
+Heading: Check-ins
+
+Label: How often should we check in?
+
+Presets:
+
+Once a day
+
+Every 12 hours
+
+Every 2 days
+
+Custom
+
+Custom label: Custom (hours) placeholder e.g. 24
+
+Section: If you miss a check-in
+
+Heading: If you miss a check-in
+
+Label: How long should we wait before notifying contacts?
+
+Presets:
+
+10 minutes
+
+15 minutes
+
+30 minutes
+
+Helper: We’ll remind you first.
+
+Section: Emergency contacts
+
+Heading: Emergency contacts
+
+Helper: We’ll notify these people if you don’t respond.
+
+Contact 1:
+
+Label: Contact 1 (primary)
+
+Name placeholder: Name
+
+Phone placeholder: Mobile number
+
+Contact 2:
+
+Label: Contact 2 (backup)
+
+Name placeholder: Name
+
+Phone placeholder: Mobile number
+
+Button: Save contacts
+
+Success: Contacts saved.
+
+Section: Location sharing
+
+Heading: Location sharing
+
+Helper: You control this. You can turn it off anytime.
+
+Radio options:
+
+Off (recommended for privacy)
+
+Only during emergencies (recommended)
+
+Only during shifts
+
+Note (small): If location is off, we will not share your location.
+
+Section: Pause alerts
+
+Heading: Pause alerts
+
+Helper: Use this if you’re busy, sleeping, or travelling.
+
+Buttons:
+
+Pause for 2 hours
+
+Pause for 6 hours
+
+Pause until tomorrow morning
+
+When active: Alerts paused until {time}. + button Resume now
+
+Section: Test
+
+Heading: Test
+
+Button: Run a test now
+
+Confirm title: Send a test message?
+
+Body: We will send a test link to your emergency contacts.
+
+After: Test sent.
+
+Section: Help
+
+Link: What happens if…
+
+Help screen (/help)
+
+Use super short Q&A.
+
+Title: What happens if…
+
+Q1 What happens if I miss a check-in?
+A: We will remind you. If you still don’t respond, we will notify your emergency contacts.
+
+Q2 What if my phone is off?
+A: If we can’t reach you, your contacts may be notified when your check-in is missed.
+
+Q3 Will you share my location?
+A: Only if you turn location sharing on. You can turn it off anytime.
+
+Q4 What happens when a contact responds?
+A: If a contact says “I’m handling this”, we pause further alerts while they check on you.
+
+Contact page (/c/[token])
+
+Header
+
+Title: StillHere
+
+Subheader: Status for {UserName}
+
+Status block
+
+Last check-in: {time}
+
+If OK: Status: OK
+
+If missed: Status: No response yet
+
+If contact handling: Status: {ContactName} is checking on them
+
+Buttons
+
+Call {UserName} (tel link)
+
+Message {UserName} (sms link)
+
+Primary action: I’m handling this
+
+Confirm: We will pause alerts while you check on them.
+
+Secondary: I can’t reach them
+
+Confirm: We will continue alerts to the next contact.
+
+Location block (only if allowed + active)
+
+Last known location: {time}
+
+Small note: Location sharing is controlled by the user.
+
+2) Supabase SQL schema (paste-ready)
+
+Paste into Supabase SQL Editor. This includes:
+
+uuid PKs
+
+basic constraints
+
+contact token for link-based access
+
+timestamps
+
+status enums as text checks (simple for v1)
+
+-- Enable UUID generation
+create extension if not exists "pgcrypto";
+
+-- USERS
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  timezone text default 'Australia/Melbourne',
+  created_at timestamptz not null default now()
+);
+
+-- SETTINGS (1 row per user)
+create table if not exists settings (
+  user_id uuid primary key references users(id) on delete cascade,
+  checkin_interval_hours int not null default 24,
+  grace_minutes int not null default 15,
+  location_mode text not null default 'off'
+    check (location_mode in ('off', 'emergency_only', 'on_shift_only')),
+  pause_until timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+-- CONTACTS (Emergency contacts)
+create table if not exists contacts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  name text not null,
+  phone text not null,
+  priority int not null check (priority in (1,2)),
+  can_view_location boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (user_id, priority)
+);
+
+-- CONTACT TOKENS (for /c/[token] access)
+create table if not exists contact_tokens (
+  id uuid primary key default gen_random_uuid(),
+  contact_id uuid not null references contacts(id) on delete cascade,
+  token text not null unique,
+  revoked boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- CHECKINS
+create table if not exists checkins (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  method text not null default 'button' check (method in ('button')),
+  created_at timestamptz not null default now()
+);
+
+-- INCIDENTS
+create table if not exists incidents (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  status text not null check (status in ('open', 'paused', 'resolved')),
+  reason text not null check (reason in ('missed_checkin', 'sos', 'test')),
+  started_at timestamptz not null default now(),
+  resolved_at timestamptz,
+  handled_by_contact_id uuid references contacts(id),
+  next_action_at timestamptz
+);
+
+create index if not exists incidents_user_status_idx on incidents(user_id, status);
+create index if not exists incidents_next_action_idx on incidents(next_action_at);
+
+-- LOCATION SESSIONS (store minimal last known point)
+create table if not exists location_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  incident_id uuid references incidents(id) on delete set null,
+  type text not null check (type in ('emergency', 'shift')),
+  active boolean not null default true,
+  expires_at timestamptz not null,
+  last_lat double precision,
+  last_lng double precision,
+  last_accuracy double precision,
+  last_timestamp timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists location_sessions_user_active_idx on location_sessions(user_id, active);
+
+-- OPTIONAL: helper view to get latest check-in time quickly
+create or replace view user_last_checkin as
+select
+  u.id as user_id,
+  max(c.created_at) as last_checkin_at
+from users u
+left join checkins c on c.user_id = u.id
+group by u.id;
+
+-- OPTIONAL: updated_at trigger for settings/location_sessions
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_settings_updated_at on settings;
+create trigger trg_settings_updated_at
+before update on settings
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_location_sessions_updated_at on location_sessions;
+create trigger trg_location_sessions_updated_at
+before update on location_sessions
+for each row execute function set_updated_at();
+
+3) Minimal Next.js folder structure (Replit-friendly)
+
+This keeps the agent from spaghetti code and makes it obvious where logic lives.
+
+stillhere/
+  app/
+    layout.tsx
+    page.tsx                # Home
+    settings/
+      page.tsx
+    help/
+      page.tsx
+    c/
+      [token]/
+        page.tsx            # Contact view
+
+    api/
+      checkin/
+        route.ts            # POST
+      sos/
+        route.ts            # POST
+      settings/
+        route.ts            # GET/POST
+      contacts/
+        route.ts            # GET/POST
+      incidents/
+        [id]/
+          handle/
+            route.ts        # POST (contact takes responsibility)
+          escalate/
+            route.ts        # POST
+      location/
+        update/
+          route.ts          # POST (updates last point)
+
+  components/
+    Button.tsx
+    Card.tsx
+    LocationStatus.tsx
+    BigActionButton.tsx
+    ConfirmDialog.tsx
+    Section.tsx
+
+  lib/
+    db.ts                   # Supabase client / SQL helper
+    twilio.ts               # sendSms() wrapper (stub if no creds)
+    time.ts                 # formatting next check-in, timezone helpers
+    tokens.ts               # generate secure token
+    scheduler.ts            # functions used by cron route
+    constants.ts
+
+  scripts/
+    seed.ts                 # create test user + contacts + tokens
+    generateTokens.ts
+
+  public/
+    icons/                  # PWA icons
+    manifest.json
+
+  styles/
+    globals.css
+
+  README.md
+  .env.example
+
+Scheduler approach on Replit (simple)
+
+Because Replit doesn’t guarantee background jobs, do v1 like this:
+
+Create an endpoint: GET /api/cron/tick
+
+It runs “check overdue users” + “process next_action_at”
+
+In testing you manually hit it
+
+Later you attach an uptime/cron service (or Supabase scheduled functions)
+
+Add this file:
+
+app/api/cron/tick/route.ts
+
+If you want, I can also write an agent-proof seed (so you can test immediately on your phone) that:
+
+creates a demo user “Mum”
+
+adds two contacts
+
+generates contact tokens
+
+prints the /c/<token> URLs for testing.
