@@ -1,21 +1,71 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage, MemStorage } from "./storage";
+import { storage } from "./storage";
 import { addMinutes, addHours } from "date-fns";
+import { db } from "./db";
+import { users } from "@shared/schema";
+
+// Store default user ID in memory (set on first request or user creation)
+let defaultUserId: string | null = null;
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Helper to get the default user ID (for demo purposes - single user app)
-  const getDefaultUserId = () => {
-    return (storage as MemStorage).getDefaultUserId();
+  // Helper to get or create the default user ID
+  const getDefaultUserId = async (): Promise<string | null> => {
+    if (defaultUserId) return defaultUserId;
+    
+    // Try to find existing user
+    const [existingUser] = await db.select().from(users).limit(1);
+    if (existingUser) {
+      defaultUserId = existingUser.id;
+      return defaultUserId;
+    }
+    
+    return null;
   };
+
+  // Create/setup user
+  app.post("/api/setup", async (req, res) => {
+    try {
+      const { name, phone } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      
+      // Check if user already exists
+      const existingId = await getDefaultUserId();
+      if (existingId) {
+        return res.status(400).json({ error: "User already exists" });
+      }
+      
+      // Create new user
+      const user = await storage.createUser({ name, phone });
+      defaultUserId = user.id;
+      
+      console.log("\n========================================");
+      console.log("StillHere - User Created");
+      console.log("========================================");
+      console.log(`User: ${user.name}`);
+      console.log(`Phone: ${user.phone || "Not set"}`);
+      console.log("========================================\n");
+      
+      res.json({ success: true, user });
+    } catch (error) {
+      console.error("Error setting up user:", error);
+      res.status(500).json({ error: "Failed to create user" });
+    }
+  });
 
   // Get user status
   app.get("/api/status", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found", needsSetup: true });
+      }
       const status = await storage.getUserStatus(userId);
       res.json(status);
     } catch (error) {
@@ -27,7 +77,10 @@ export async function registerRoutes(
   // Check in
   app.post("/api/checkin", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       const checkin = await storage.createCheckin(userId);
       res.json({ success: true, checkin });
     } catch (error) {
@@ -39,7 +92,10 @@ export async function registerRoutes(
   // SOS - immediate incident
   app.post("/api/sos", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       
       // Create SOS incident
       const incident = await storage.createIncident(userId, "sos");
@@ -72,7 +128,10 @@ export async function registerRoutes(
   // Update settings
   app.post("/api/settings", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       const { checkinIntervalHours, graceMinutes, locationMode } = req.body;
       
       const updates: any = {};
@@ -91,7 +150,10 @@ export async function registerRoutes(
   // Pause alerts
   app.post("/api/settings/pause", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       const { pauseUntil } = req.body;
       
       const settings = await storage.updateSettings(userId, {
@@ -107,7 +169,10 @@ export async function registerRoutes(
   // Save contacts
   app.post("/api/contacts", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       const { contact1Name, contact1Phone, contact2Name, contact2Phone } = req.body;
       
       if (!contact1Name || !contact1Phone) {
@@ -129,6 +194,17 @@ export async function registerRoutes(
         } : undefined,
       });
       
+      // Print contact tokens for testing
+      const tokens = await storage.getContactTokensForUser(userId);
+      if (tokens.length > 0) {
+        console.log("\n========================================");
+        console.log("Contact Page URLs:");
+        for (const t of tokens) {
+          console.log(`  ${t.contact.name}: /c/${t.token}`);
+        }
+        console.log("========================================\n");
+      }
+      
       res.json({ success: true, contacts });
     } catch (error) {
       console.error("Error saving contacts:", error);
@@ -139,7 +215,10 @@ export async function registerRoutes(
   // Run test
   app.post("/api/test", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       
       // Create test incident
       const incident = await storage.createIncident(userId, "test");
@@ -204,7 +283,7 @@ export async function registerRoutes(
       const incident = await storage.updateIncident(data.incident.id, {
         status: "paused",
         handledByContactId: data.contact.id,
-        nextActionAt: addMinutes(new Date(), 45), // 45 min responsibility timeout
+        nextActionAt: addMinutes(new Date(), 45),
       });
       
       console.log(`\n[INCIDENT] ${data.contact.name} is now handling the incident for ${data.user.name}\n`);
@@ -259,7 +338,10 @@ export async function registerRoutes(
   // Location update
   app.post("/api/location/update", async (req, res) => {
     try {
-      const userId = getDefaultUserId();
+      const userId = await getDefaultUserId();
+      if (!userId) {
+        return res.status(404).json({ error: "No user found" });
+      }
       const { lat, lng, accuracy } = req.body;
       
       const session = await storage.getActiveLocationSession(userId);
@@ -272,18 +354,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating location:", error);
       res.status(500).json({ error: "Failed to update location" });
-    }
-  });
-
-  // Debug: Get contact tokens (for testing)
-  app.get("/api/debug/tokens", async (req, res) => {
-    try {
-      const userId = getDefaultUserId();
-      const tokens = await (storage as MemStorage).getContactTokensForUser(userId);
-      res.json({ tokens: tokens.map(t => ({ contact: t.contact.name, priority: t.contact.priority, token: t.token })) });
-    } catch (error) {
-      console.error("Error getting tokens:", error);
-      res.status(500).json({ error: "Failed to get tokens" });
     }
   });
 

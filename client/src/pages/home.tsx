@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, Heart } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -24,9 +26,34 @@ export default function Home() {
   const { toast } = useToast();
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const [setupName, setSetupName] = useState("");
+  const [setupPhone, setSetupPhone] = useState("");
 
-  const { data: status, isLoading } = useQuery<UserStatus>({
+  const { data: status, isLoading, error } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
+    retry: false,
+  });
+
+  const needsSetup = (error as any)?.needsSetup === true || (error && (error as any)?.message?.includes("No user found"));
+
+  const setupMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/setup", { name: setupName, phone: setupPhone });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      toast({
+        title: "Welcome to StillHere!",
+        description: "Your account has been created.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Could not create account. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const checkinMutation = useMutation({
@@ -118,6 +145,57 @@ export default function Home() {
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">Loading...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Show setup screen if no user exists
+  if (needsSetup || error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
+              <Heart className="h-8 w-8 text-primary-foreground" />
+            </div>
+            <CardTitle className="text-2xl">Welcome to StillHere</CardTitle>
+            <CardDescription>
+              A simple safety check-in app to help your loved ones know you're okay.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Your Name</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Mum, Dad, Grandma"
+                value={setupName}
+                onChange={(e) => setSetupName(e.target.value)}
+                data-testid="input-setup-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Your Phone (optional)</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+61 412 345 678"
+                value={setupPhone}
+                onChange={(e) => setSetupPhone(e.target.value)}
+                data-testid="input-setup-phone"
+              />
+            </div>
+            <Button
+              className="w-full"
+              size="lg"
+              disabled={!setupName.trim() || setupMutation.isPending}
+              onClick={() => setupMutation.mutate()}
+              data-testid="button-setup-submit"
+            >
+              {setupMutation.isPending ? "Creating..." : "Get Started"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
