@@ -1,0 +1,224 @@
+the agent nailed the core UI and Settings. The next step is Login, but we should design it in a way that stays:
+
+elderly-friendly
+
+fast
+
+low-friction
+
+secure enough for v1
+
+and doesn’t break the “contacts don’t need accounts” rule.
+
+Below is the login master plan + exact microcopy + implementation instructions you can hand to the Replit agent.
+
+Login plan for StillHere (v1)
+The simplest, most universal login
+✅ Phone number + 6-digit code (OTP)
+
+Why this is best for your audience:
+
+No passwords to forget
+
+Works for elderly
+
+Works worldwide
+
+Pairs perfectly with Twilio (or Supabase OTP)
+
+Important: Contacts still use /c/[token] with no login.
+
+UX: screens and flow
+A) First-time user (new)
+
+User opens app → sees Login
+
+Enter phone number → “Send code”
+
+Enter 6-digit code → logged in
+
+If it’s a new account → take them to a very short setup:
+
+name
+
+timezone (auto)
+
+contacts
+
+schedule
+
+Then home screen
+
+B) Returning user
+
+Same flow, but after code they land on Home.
+
+C) Caregiver contact link
+
+No login required. Must remain unchanged.
+
+Login screen design (microcopy)
+/login
+
+Title: StillHere
+Subtitle: Sign in to check in.
+
+Field label: Mobile number
+Placeholder: e.g. 0412 345 678
+
+Helper text (small):
+We’ll send a 6-digit code by SMS.
+
+Button: Send code
+
+Link (small): Need help? → goes to /help
+
+/login/code
+
+Title: Enter code
+Body: We sent a 6-digit code to {phone}.
+
+Code input: 6 boxes or one field
+Placeholder: 123456
+
+Button: Continue
+
+Resend link: Resend code
+Change number: Change number
+
+Success toast: Signed in.
+
+What we should NOT do (keeps it simple)
+
+No email/password
+
+No social logins
+
+No “remember me” toggle
+
+No complex onboarding page before login
+
+Implementation (Next.js + Supabase Auth)
+
+There are two good approaches:
+
+Option 1 (Recommended): Supabase Auth OTP (phone)
+
+Pros: Supabase handles OTP verification + sessions
+
+Cons: needs Supabase phone auth configured (and sometimes Twilio behind it)
+
+Option 2: Twilio Verify + custom session
+
+Pros: you fully control OTP
+
+Cons: you must build session/cookies yourself
+
+Since your app already uses Supabase Postgres, go with Option 1.
+
+Routing structure (add these pages)
+
+Add:
+
+app/login/page.tsx
+
+app/login/code/page.tsx
+
+middleware.ts (protect logged-in pages)
+
+Also ensure these routes are public:
+
+/login
+
+/login/code
+
+/c/* (contact links)
+
+/help
+
+Everything else requires login.
+
+Auth rules (simple and safe)
+Protect user pages
+
+Require auth for:
+
+/
+
+/settings
+
+Allow public:
+
+/c/[token]
+
+/help
+
+/login/*
+
+Session persistence
+
+Use Supabase auth session cookies so the user stays logged in after refresh.
+
+Database note (important)
+
+Your current users table uses an internal UUID. With Supabase auth you’ll also have auth.users.
+
+Best practice for v1:
+
+Use auth.users.id as the user’s ID everywhere.
+
+Your users.id should match Supabase auth user id.
+
+So, when a user logs in the first time:
+
+if row doesn’t exist in public.users, create it with id = authUser.id.
+
+Minimal implementation checklist for the Replit agent
+
+Copy/paste this to your Replit agent:
+
+Implement login for StillHere using phone OTP with Supabase Auth.
+
+GOAL:
+- Add /login and /login/code
+- Gate Home (/) and Settings (/settings) behind login
+- Keep contact pages /c/[token] public (no login)
+- Keep UX simple for elderly users
+
+PAGES:
+1) app/login/page.tsx
+   - Mobile number input
+   - Button "Send code"
+   - Call supabase.auth.signInWithOtp({ phone })
+   - After success, navigate to /login/code?phone=<E164>
+
+2) app/login/code/page.tsx
+   - 6-digit code input
+   - Button "Continue"
+   - Call supabase.auth.verifyOtp({ phone, token: code, type: "sms" })
+   - On success:
+     - ensure row exists in public.users with id = auth.user.id
+     - if new user, redirect to /settings (or a short /setup page)
+     - else redirect to /
+
+AUTH GUARD:
+- Add middleware.ts to redirect unauth users to /login
+- Allow public routes: /login, /login/code, /help, /c/*, /api/public/*
+- Require auth for / and /settings and all other routes
+
+DB SYNC:
+- On first login:
+  - insert into users(id,name,phone,timezone) values(authUser.id, "","<phone>", default)
+  - create default settings row if missing
+
+MICROCOPY:
+- Keep text calm and simple:
+  - "We’ll send a 6-digit code by SMS."
+  - "Enter code"
+  - "Resend code"
+  - "Change number"
+
+DO NOT:
+- Add passwords
+- Add social login
+- Force login for /c/[token]
