@@ -112,7 +112,7 @@ export default function ContactPage() {
   const getStatusText = () => {
     if (isSOS) return "Help requested";
     if (isBeingHandled) return `${handlingContact?.name} is checking on them`;
-    if (hasActiveIncident) return "No response yet";
+    if (hasActiveIncident) return "Pending";
     return "OK";
   };
 
@@ -290,9 +290,9 @@ export default function ContactPage() {
       <AlertDialog open={showHandleConfirm} onOpenChange={setShowHandleConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Take responsibility?</AlertDialogTitle>
+            <AlertDialogTitle>I'm handling this</AlertDialogTitle>
             <AlertDialogDescription>
-              We will pause alerts while you check on {user.name}. You have 45 minutes before we continue notifying others.
+              We'll pause alerts while you check on them.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -314,9 +314,9 @@ export default function ContactPage() {
       <AlertDialog open={showEscalateConfirm} onOpenChange={setShowEscalateConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Can't reach them?</AlertDialogTitle>
+            <AlertDialogTitle>I can't reach them</AlertDialogTitle>
             <AlertDialogDescription>
-              We will continue alerts to the next contact.
+              We'll continue notifying other contacts.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

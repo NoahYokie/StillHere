@@ -11,7 +11,8 @@ import HelpPage from "@/pages/help";
 import ContactPage from "@/pages/contact";
 import LoginPage from "@/pages/login";
 import LoginCodePage from "@/pages/login-code";
-import SetupPage from "@/pages/setup";
+import OnboardingPage from "@/pages/onboarding";
+import SetupNamePage from "@/pages/setup-name";
 import TrustPage from "@/pages/trust";
 
 function Router() {
@@ -29,7 +30,12 @@ function Router() {
       </Route>
       <Route path="/setup">
         <RequireAuth>
-          <SetupPage />
+          <OnboardingPage />
+        </RequireAuth>
+      </Route>
+      <Route path="/setup/name">
+        <RequireAuth>
+          <SetupNamePage />
         </RequireAuth>
       </Route>
       <Route path="/">

@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Heart } from "lucide-react";
 
-export default function SetupPage() {
+export default function SetupNamePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [name, setName] = useState("");
