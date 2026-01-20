@@ -240,12 +240,12 @@ export default function SettingsPage() {
                 <Label htmlFor="daily">Once a day</Label>
               </div>
               <div className="flex items-center space-x-3">
-                <RadioGroupItem value="12" id="12h" data-testid="radio-12h" />
-                <Label htmlFor="12h">Every 12 hours</Label>
-              </div>
-              <div className="flex items-center space-x-3">
                 <RadioGroupItem value="48" id="48h" data-testid="radio-48h" />
                 <Label htmlFor="48h">Every 2 days</Label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="168" id="weekly" data-testid="radio-weekly" />
+                <Label htmlFor="weekly">Once a week</Label>
               </div>
             </RadioGroup>
             <div className="flex items-center gap-2">
