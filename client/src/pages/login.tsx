@@ -84,7 +84,7 @@ export default function LoginPage() {
               disabled={!phone.trim() || sendCodeMutation.isPending}
               data-testid="button-send-code"
             >
-              {sendCodeMutation.isPending ? "Sending..." : "Send code"}
+              {sendCodeMutation.isPending ? "Sending..." : "Send secure code"}
             </Button>
           </form>
           <div className="mt-6 text-center">
