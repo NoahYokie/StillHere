@@ -273,12 +273,18 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, preferredCheckinTime, timezone } = req.body;
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
       if (graceMinutes !== undefined) updates.graceMinutes = graceMinutes;
       if (locationMode !== undefined) updates.locationMode = locationMode;
+      if (preferredCheckinTime !== undefined) updates.preferredCheckinTime = preferredCheckinTime;
+      
+      // Update user timezone if provided
+      if (timezone) {
+        await storage.updateUser(userId, { timezone });
+      }
       
       const settings = await storage.updateSettings(userId, updates);
       res.json({ success: true, settings });

@@ -9,6 +9,26 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const timeOptions = [
+  { value: "06:00", label: "6:00 AM" },
+  { value: "07:00", label: "7:00 AM" },
+  { value: "08:00", label: "8:00 AM" },
+  { value: "09:00", label: "9:00 AM" },
+  { value: "10:00", label: "10:00 AM" },
+  { value: "11:00", label: "11:00 AM" },
+  { value: "12:00", label: "12:00 PM" },
+  { value: "13:00", label: "1:00 PM" },
+  { value: "14:00", label: "2:00 PM" },
+  { value: "15:00", label: "3:00 PM" },
+  { value: "16:00", label: "4:00 PM" },
+  { value: "17:00", label: "5:00 PM" },
+  { value: "18:00", label: "6:00 PM" },
+  { value: "19:00", label: "7:00 PM" },
+  { value: "20:00", label: "8:00 PM" },
+  { value: "21:00", label: "9:00 PM" },
+];
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +67,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [showTestConfirm, setShowTestConfirm] = useState(false);
   const [checkinInterval, setCheckinInterval] = useState(24);
+  const [preferredTime, setPreferredTime] = useState("09:00");
   const [graceMinutes, setGraceMinutes] = useState(15);
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
   const [customInterval, setCustomInterval] = useState("");
@@ -68,6 +89,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (status) {
       setCheckinInterval(status.settings?.checkinIntervalHours || 24);
+      setPreferredTime((status.settings as any)?.preferredCheckinTime || "09:00");
       setGraceMinutes(status.settings?.graceMinutes || 15);
       setLocationMode(status.settings?.locationMode || "off");
 
@@ -84,7 +106,7 @@ export default function SettingsPage() {
   }, [status, form]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; preferredCheckinTime?: string }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -266,6 +288,31 @@ export default function SettingsPage() {
               >
                 Set
               </Button>
+            </div>
+
+            <div className="pt-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">Preferred time</Label>
+              <Select 
+                value={preferredTime} 
+                onValueChange={(value) => {
+                  setPreferredTime(value);
+                  settingsMutation.mutate({ preferredCheckinTime: value });
+                }}
+              >
+                <SelectTrigger className="w-40" data-testid="select-checkin-time">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {timeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-2">
+                Times shown in your local timezone
+              </p>
             </div>
           </CardContent>
         </Card>

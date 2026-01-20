@@ -30,6 +30,7 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
   
   // Settings
   getSettings(userId: string): Promise<Settings | undefined>;
@@ -87,6 +88,15 @@ export class DatabaseStorage implements IStorage {
       locationMode: "off",
     });
     
+    return user;
+  }
+
+  async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
     return user;
   }
 
