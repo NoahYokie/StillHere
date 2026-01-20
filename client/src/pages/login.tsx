@@ -67,7 +67,7 @@ export default function LoginPage() {
               <Input
                 id="phone"
                 type="tel"
-                placeholder="e.g. 0412 345 678 or +1 555 123 4567"
+                placeholder="e.g. 0412 345 678 (AU) or +1 555 123 4567"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 autoComplete="tel"
