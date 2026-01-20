@@ -270,18 +270,15 @@ export default function SettingsPage() {
                 <Label htmlFor="weekly">Once a week</Label>
               </div>
             </RadioGroup>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  placeholder="e.g. 36"
-                  value={customInterval}
-                  onChange={(e) => setCustomInterval(e.target.value)}
-                  className="w-20 text-sm"
-                  data-testid="input-custom-interval"
-                />
-                <span className="text-sm text-muted-foreground">hours</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                placeholder="Custom hours"
+                value={customInterval}
+                onChange={(e) => setCustomInterval(e.target.value)}
+                className="w-28"
+                data-testid="input-custom-interval"
+              />
               <Button
                 variant="outline"
                 size="sm"
