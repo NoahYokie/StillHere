@@ -13,6 +13,8 @@ import LoginPage from "@/pages/login";
 import LoginCodePage from "@/pages/login-code";
 import OnboardingPage from "@/pages/onboarding";
 import SetupNamePage from "@/pages/setup-name";
+import SetupContactsPage from "@/pages/setup-contacts";
+import SetupPreferencesPage from "@/pages/setup-preferences";
 import TrustPage from "@/pages/trust";
 
 function Router() {
@@ -36,6 +38,16 @@ function Router() {
       <Route path="/setup/name">
         <RequireAuth>
           <SetupNamePage />
+        </RequireAuth>
+      </Route>
+      <Route path="/setup/contacts">
+        <RequireAuth>
+          <SetupContactsPage />
+        </RequireAuth>
+      </Route>
+      <Route path="/setup/preferences">
+        <RequireAuth>
+          <SetupPreferencesPage />
         </RequireAuth>
       </Route>
       <Route path="/">
