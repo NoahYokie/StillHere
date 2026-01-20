@@ -455,7 +455,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="on_shift_only" id="loc-shift" data-testid="radio-location-shift" />
-                <Label htmlFor="loc-shift">Only during shifts</Label>
+                <Label htmlFor="loc-shift">During active check-ins</Label>
               </div>
             </RadioGroup>
             <p className="text-sm text-muted-foreground mt-3">
