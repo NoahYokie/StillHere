@@ -37,7 +37,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
         title: "Checked in",
-        description: "Thank you. Your family knows you're okay.",
+        description: "Your contacts have been updated.",
       });
     },
     onError: () => {
@@ -56,8 +56,8 @@ export default function Home() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
-        title: "Help alert sent",
-        description: "Your emergency contacts have been notified.",
+        title: "Alert sent",
+        description: "Your contacts were notified.",
       });
     },
     onError: () => {
@@ -93,8 +93,8 @@ export default function Home() {
         () => {
           setLocationEnabled(true);
           toast({
-            title: "Location enabled",
-            description: "Your location can now be shared during emergencies.",
+            title: "Location on",
+            description: "Location sharing is on for emergencies.",
           });
         },
         () => {
@@ -108,8 +108,7 @@ export default function Home() {
     } else {
       setLocationEnabled(false);
       toast({
-        title: "Location disabled",
-        description: "Your location will not be shared.",
+        title: "Location off",
       });
     }
   };

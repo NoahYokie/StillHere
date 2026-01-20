@@ -30,8 +30,7 @@ export default function LoginCodePage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({
-        title: "Signed in",
-        description: "Welcome to StillHere.",
+        title: "You're signed in",
       });
       
       if (data.needsSetup) {
@@ -42,8 +41,8 @@ export default function LoginCodePage() {
     },
     onError: () => {
       toast({
-        title: "Invalid code",
-        description: "Please check the code and try again.",
+        title: "That code didn't work",
+        description: "Try again.",
         variant: "destructive",
       });
       setCode("");
@@ -56,8 +55,8 @@ export default function LoginCodePage() {
     },
     onSuccess: () => {
       toast({
-        title: "Code resent",
-        description: "Check your phone for the new code.",
+        title: "New code sent",
+        description: "Check your phone.",
       });
     },
     onError: () => {

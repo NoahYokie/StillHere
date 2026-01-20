@@ -12,7 +12,7 @@ const screens = [
   },
   {
     title: "How it works",
-    body: "You check in by tapping \"I'm OK\"\n\nIf you don't respond, we notify your chosen contacts\n\nThey can check on you before anything else happens",
+    body: "You check in by tapping \"I'm OK\"\n\nIf you don't respond, we notify your chosen contacts\n\nThey can check on you first",
     icon: Bell,
   },
   {
@@ -22,7 +22,7 @@ const screens = [
   },
   {
     title: "Let's get started",
-    body: "We'll help you set up check-ins and emergency contacts.",
+    body: "Next, we'll set up check-ins and contacts.",
     icon: ArrowRight,
     isLast: true,
   },

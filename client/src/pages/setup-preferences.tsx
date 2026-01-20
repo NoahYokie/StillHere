@@ -56,8 +56,7 @@ export default function SetupPreferencesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({
-        title: "Welcome to StillHere!",
-        description: "Your account is ready.",
+        title: "Setup complete",
       });
       setLocation("/");
     },
