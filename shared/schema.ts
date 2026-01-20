@@ -31,6 +31,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 export const settings = pgTable("settings", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   checkinIntervalHours: integer("checkin_interval_hours").notNull().default(24),
+  preferredCheckinTime: text("preferred_checkin_time").notNull().default("09:00"),
   graceMinutes: integer("grace_minutes").notNull().default(15),
   locationMode: locationModeEnum("location_mode").notNull().default("off"),
   pauseUntil: timestamp("pause_until"),

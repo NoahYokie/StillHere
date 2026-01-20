@@ -1,26 +1,55 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Settings, Clock, MapPin } from "lucide-react";
 import type { LocationMode } from "@shared/schema";
 
+const timeOptions = [
+  { value: "06:00", label: "6:00 AM" },
+  { value: "07:00", label: "7:00 AM" },
+  { value: "08:00", label: "8:00 AM" },
+  { value: "09:00", label: "9:00 AM" },
+  { value: "10:00", label: "10:00 AM" },
+  { value: "11:00", label: "11:00 AM" },
+  { value: "12:00", label: "12:00 PM" },
+  { value: "13:00", label: "1:00 PM" },
+  { value: "14:00", label: "2:00 PM" },
+  { value: "15:00", label: "3:00 PM" },
+  { value: "16:00", label: "4:00 PM" },
+  { value: "17:00", label: "5:00 PM" },
+  { value: "18:00", label: "6:00 PM" },
+  { value: "19:00", label: "7:00 PM" },
+  { value: "20:00", label: "8:00 PM" },
+  { value: "21:00", label: "9:00 PM" },
+];
+
 export default function SetupPreferencesPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [checkinInterval, setCheckinInterval] = useState(24);
+  const [preferredTime, setPreferredTime] = useState("09:00");
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
+  const [timezone, setTimezone] = useState("");
+
+  useEffect(() => {
+    const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setTimezone(detectedTimezone);
+  }, []);
 
   const settingsMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/settings", {
         checkinIntervalHours: checkinInterval,
+        preferredCheckinTime: preferredTime,
         locationMode: locationMode,
+        timezone: timezone,
       });
     },
     onSuccess: () => {
@@ -87,6 +116,27 @@ export default function SetupPreferencesPage() {
                 <Label htmlFor="weekly">Once a week</Label>
               </div>
             </RadioGroup>
+
+            <div className="pt-3">
+              <Label className="text-sm text-muted-foreground mb-2 block">Preferred time</Label>
+              <Select value={preferredTime} onValueChange={setPreferredTime}>
+                <SelectTrigger data-testid="select-checkin-time">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {timeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {timezone && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Times shown in {timezone.replace(/_/g, " ")}
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-3">
