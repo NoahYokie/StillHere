@@ -151,7 +151,7 @@ export default function SetupPreferencesPage() {
             >
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="off" id="loc-off" data-testid="radio-location-off" />
-                <Label htmlFor="loc-off">Off (recommended for privacy)</Label>
+                <Label htmlFor="loc-off">Off</Label>
               </div>
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="emergency_only" id="loc-emergency" data-testid="radio-location-emergency" />
