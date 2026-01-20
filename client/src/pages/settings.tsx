@@ -430,12 +430,12 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Location Sharing Section */}
+        {/* Share my Location Section */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <MapPin className="h-5 w-5" />
-              Location sharing
+              Share my Location
             </CardTitle>
             <CardDescription>You control this. You can turn it off anytime.</CardDescription>
           </CardHeader>
