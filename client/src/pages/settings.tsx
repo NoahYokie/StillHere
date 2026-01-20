@@ -139,9 +139,10 @@ export default function SettingsPage() {
     mutationFn: async () => {
       return apiRequest("POST", "/api/auth/logout");
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.clear();
-      setLocation("/login");
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      window.location.href = "/login";
     },
     onError: () => {
       toast({ title: "Error logging out", variant: "destructive" });
