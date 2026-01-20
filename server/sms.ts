@@ -67,17 +67,34 @@ export async function sendSms(to: string, body: string): Promise<SendSmsResult> 
   
   // Use alphanumeric sender if configured via TWILIO_ALPHA_SENDER, otherwise use phone number
   // Alphanumeric sender requires Twilio Messaging Service setup and only works outside US/Canada
+  // Note: Australia requires pre-registration for Alpha Sender IDs
   const alphaSender = process.env.TWILIO_ALPHA_SENDER;
-  const sender = (alphaSender && supportsAlphaSenderId(to)) ? alphaSender : fromPhone;
+  const useAlpha = alphaSender && supportsAlphaSenderId(to);
   
   try {
+    // Try alpha sender first if configured
+    if (useAlpha) {
+      try {
+        const message = await client.messages.create({
+          body,
+          from: alphaSender,
+          to,
+        });
+        console.log(`[SMS] Sent to ${to} from "${alphaSender}", SID: ${message.sid}`);
+        return { success: true, messageId: message.sid };
+      } catch (alphaError: any) {
+        console.log(`[SMS] Alpha sender failed, falling back to phone number: ${alphaError.message}`);
+      }
+    }
+    
+    // Fall back to phone number
     const message = await client.messages.create({
       body,
-      from: sender,
+      from: fromPhone,
       to,
     });
     
-    console.log(`[SMS] Sent to ${to} from "${sender}", SID: ${message.sid}`);
+    console.log(`[SMS] Sent to ${to} from "${fromPhone}", SID: ${message.sid}`);
     return { success: true, messageId: message.sid };
   } catch (error: any) {
     console.error(`[SMS] Failed to send to ${to}:`, error.message);
