@@ -69,7 +69,7 @@ export default function HelpPage() {
 
       <main className="max-w-md mx-auto px-6 py-6 space-y-4">
         <p className="text-center text-muted-foreground text-sm pb-2">
-          StillHere is designed to support you — not rush or alarm you.
+          StillHere is designed to support you, not rush or alarm you.
         </p>
         {faqs.map((faq, index) => (
           <Card key={index}>
