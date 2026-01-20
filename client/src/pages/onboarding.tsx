@@ -7,7 +7,7 @@ import { Heart, Bell, Shield, ArrowRight } from "lucide-react";
 const screens = [
   {
     title: "Welcome to StillHere",
-    body: "StillHere helps your family know you're okay — without tracking you.",
+    body: "StillHere helps your family know you're okay, without tracking you.",
     icon: Heart,
   },
   {
