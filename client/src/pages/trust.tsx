@@ -26,9 +26,9 @@ export default function TrustPage() {
             <Shield className="h-8 w-8 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-semibold" data-testid="text-intro-title">Peace of mind without surveillance</h2>
+            <h2 className="text-2xl font-semibold" data-testid="text-intro-title">Safety without tracking</h2>
             <p className="text-muted-foreground mt-2 text-lg">
-              StillHere is built for people who live alone, their families, and caregivers.
+              Built for people who live alone and the people who care about them.
             </p>
           </div>
           <p className="text-lg font-medium text-primary">

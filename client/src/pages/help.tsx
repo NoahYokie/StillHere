@@ -7,32 +7,32 @@ const faqs = [
   {
     question: "What happens if I miss a check-in?",
     answer:
-      "We'll remind you first. If you still don't respond after the grace period, we'll gently notify your emergency contacts so they can check on you.",
+      "We send a reminder first. If you still don't respond after the grace period, we notify your contacts.",
   },
   {
     question: "What if my phone is off?",
     answer:
-      "If we can't reach you, and a check-in is missed, your emergency contacts may be notified so they know to check in on you.",
+      "If we can't reach you and a check-in is missed, we notify your contacts.",
   },
   {
     question: "Will you share my location?",
     answer:
-      "Only if you turn location sharing on. You're always in control and can turn it off anytime.",
+      "Only if you turn it on. You can turn it off any time.",
   },
   {
     question: "What happens when a contact responds?",
     answer:
-      'If a contact responds with "I\'m handling this," we pause further alerts while they check on you, so you\'re not overwhelmed.',
+      'If a contact says they\'re handling it, we pause further alerts.',
   },
   {
     question: "Can I change my check-in schedule?",
     answer:
-      "Yes! Go to Settings and choose how often you'd like to check in - once a day, every 2 days, or set your own schedule.",
+      "Yes. Go to Settings and choose how often to check in.",
   },
   {
     question: "What is the grace period?",
     answer:
-      "After your check-in is due, we wait 10-30 minutes before notifying your contacts. This gives you time to respond if you're just running late.",
+      "After your check-in is due, we wait 10-30 minutes before notifying your contacts. This gives you extra time to respond.",
   },
   {
     question: "How do I add emergency contacts?",
@@ -42,7 +42,7 @@ const faqs = [
   {
     question: "Can I pause check-ins temporarily?",
     answer:
-      "Yes. In Settings, you can pause alerts for 2 hours, 6 hours, or until tomorrow morning — perfect for travel, rest, or busy days.",
+      "Yes. In Settings, you can pause alerts for 2 hours, 6 hours, or until tomorrow morning.",
   },
 ];
 

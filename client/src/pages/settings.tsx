@@ -150,7 +150,7 @@ export default function SettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
-      toast({ title: "Test sent", description: "A test message was sent to your contacts." });
+      toast({ title: "Test sent" });
     },
     onError: () => {
       toast({ title: "Error sending test", variant: "destructive" });
