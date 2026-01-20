@@ -4,6 +4,33 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const fromPhone = process.env.TWILIO_PHONE_NUMBER;
 
+const ALPHA_SENDER_ID = "StillHere";
+
+const ALPHA_SUPPORTED_PREFIXES = [
+  "+61",  // Australia
+  "+44",  // UK
+  "+33",  // France
+  "+49",  // Germany
+  "+39",  // Italy
+  "+34",  // Spain
+  "+31",  // Netherlands
+  "+32",  // Belgium
+  "+43",  // Austria
+  "+41",  // Switzerland
+  "+353", // Ireland
+  "+48",  // Poland
+  "+46",  // Sweden
+  "+47",  // Norway
+  "+45",  // Denmark
+  "+358", // Finland
+  "+351", // Portugal
+  "+30",  // Greece
+];
+
+function supportsAlphaSenderId(phone: string): boolean {
+  return ALPHA_SUPPORTED_PREFIXES.some(prefix => phone.startsWith(prefix));
+}
+
 let twilioClient: twilio.Twilio | null = null;
 
 function getClient(): twilio.Twilio | null {
@@ -38,14 +65,19 @@ export async function sendSms(to: string, body: string): Promise<SendSmsResult> 
     return { success: true, messageId: "console-only" };
   }
   
+  // Use alphanumeric sender if configured via TWILIO_ALPHA_SENDER, otherwise use phone number
+  // Alphanumeric sender requires Twilio Messaging Service setup and only works outside US/Canada
+  const alphaSender = process.env.TWILIO_ALPHA_SENDER;
+  const sender = (alphaSender && supportsAlphaSenderId(to)) ? alphaSender : fromPhone;
+  
   try {
     const message = await client.messages.create({
       body,
-      from: fromPhone,
+      from: sender,
       to,
     });
     
-    console.log(`[SMS] Sent to ${to}, SID: ${message.sid}`);
+    console.log(`[SMS] Sent to ${to} from "${sender}", SID: ${message.sid}`);
     return { success: true, messageId: message.sid };
   } catch (error: any) {
     console.error(`[SMS] Failed to send to ${to}:`, error.message);
