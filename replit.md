@@ -39,6 +39,13 @@ New users see a 4-screen onboarding before setup:
 3. **You stay in control**: Location OFF by default, you choose contacts
 4. **Let's get started**: Begins name entry setup
 
+After onboarding, users complete a 3-step registration:
+1. `/setup/name` - Enter their name (how they appear to contacts)
+2. `/setup/contacts` - Add at least one emergency contact (required)
+3. `/setup/preferences` - Choose check-in frequency and location sharing
+
+Users cannot access the home page until all three steps are completed.
+
 ## Authentication
 
 ### Phone OTP Login
