@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -64,6 +64,23 @@ export default function Home() {
       toast({
         title: "Error",
         description: "Could not send alert. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/auth/logout");
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      setLocation("/login");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Could not log out. Please try again.",
         variant: "destructive",
       });
     },
@@ -136,15 +153,27 @@ export default function Home() {
               Welcome, {status?.user?.name || "User"}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-primary-foreground"
-            onClick={() => setLocation("/settings")}
-            data-testid="button-settings"
-          >
-            <Settings className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground"
+              onClick={() => setLocation("/settings")}
+              data-testid="button-settings"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              data-testid="button-logout"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </header>
 
