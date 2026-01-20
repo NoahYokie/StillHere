@@ -74,7 +74,7 @@ export default function LoginPage() {
                 data-testid="input-phone"
               />
               <p className="text-sm text-muted-foreground">
-                We'll send a 6-digit code by SMS.
+                We'll send a one time code. No passwords needed.
               </p>
             </div>
             <Button
