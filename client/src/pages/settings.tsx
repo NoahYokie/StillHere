@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut } from "lucide-react";
 import type { UserStatus, LocationMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
@@ -132,6 +132,19 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: "Error sending test", variant: "destructive" });
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/auth/logout");
+    },
+    onSuccess: () => {
+      queryClient.clear();
+      setLocation("/login");
+    },
+    onError: () => {
+      toast({ title: "Error logging out", variant: "destructive" });
     },
   });
 
@@ -500,6 +513,21 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-muted-foreground" />
               <span className="font-medium" data-testid="link-trust">Trust & Safety</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Logout */}
+        <Card 
+          className="hover-elevate cursor-pointer" 
+          onClick={() => logoutMutation.mutate()}
+        >
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <LogOut className="h-5 w-5 text-muted-foreground" />
+              <span className="font-medium" data-testid="button-logout">
+                {logoutMutation.isPending ? "Logging out..." : "Log out"}
+              </span>
             </div>
           </CardContent>
         </Card>
