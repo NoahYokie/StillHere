@@ -1,0 +1,269 @@
+This is a very strong first version. I’ll review it like a product designer + trust & safety lead + growth founder, and I’ll be honest but constructive.
+I’ll break it into (1) overall feel, (2) login screen, (3) “Need help?” flow, and (4) exact wording improvements you can paste in.
+
+1. Overall feel (first impression)
+What works extremely well
+
+
+Clean, calm, non-threatening
+
+
+No clutter → great for stress, emergencies, elderly users
+
+
+Consistent tone across screens
+
+
+Clear intent: safety, reassurance, control
+
+
+What it feels like right now
+
+
+Safe ✅
+
+
+Trustworthy ✅
+
+
+Slightly clinical / system-like ❌
+
+
+Could feel more human and emotionally supportive
+
+
+This is good news — the fixes are mostly copy and micro-tone, not redesign.
+
+2. Login page review (very important)
+Current login screen text
+
+StillHere
+Sign in so we know it’s you.
+Mobile number
+We’ll send a 6-digit code by SMS.
+Send code
+
+What’s good
+
+
+Extremely simple
+
+
+No friction
+
+
+No scary language
+
+
+SMS OTP is familiar
+
+
+What can be improved
+The line “Sign in so we know it’s you” sounds:
+
+
+slightly transactional
+
+
+slightly surveillance-like
+
+
+not emotionally aligned with a safety app
+
+
+You want reassurance, not verification vibes.
+
+✅ Recommended improved login copy (best option)
+Title
+
+StillHere
+
+Subtitle (replace current line)
+
+A simple check-in system that looks out for you.
+
+or (more personal)
+
+A simple way to let people know you’re okay.
+
+Field label
+
+Your mobile number
+
+Helper text
+
+We’ll text you a one-time code to keep your account secure.
+
+Button
+
+Send secure code
+
+This does 3 things:
+
+
+Explains why the app exists
+
+
+Removes “we know it’s you” (which can feel invasive)
+
+
+Frames security as protection, not control
+
+
+
+3. “Need help?” → FAQ page (this is GOOD)
+This page is actually one of your strongest assets.
+What’s working very well
+
+
+Question-based layout = perfect
+
+
+Calm neutral colors
+
+
+Answers are short and non-alarmist
+
+
+You never shame or scare the user
+
+
+This already feels App Store-safe and regulator-friendly.
+
+Where it can improve (important)
+Right now, the answers are correct but passive.
+You can slightly increase trust by:
+
+
+using “you’re in control” language
+
+
+emphasizing grace, not punishment
+
+
+reinforcing human backup, not automation panic
+
+
+
+4. Suggested wording improvements (copy you can paste)
+Below are small refinements, not rewrites.
+
+❓ “What happens if I miss a check-in?”
+Current
+
+We will remind you. If you still don’t respond, we will notify your emergency contacts.
+
+Improved
+
+We’ll remind you first.
+If you still don’t respond after the grace period, we’ll gently notify your emergency contacts so they can check on you.
+
+Why better:
+
+
+“gently” matters
+
+
+“grace period” reassures
+
+
+“check on you” feels human
+
+
+
+❓ “What if my phone is off?”
+Current
+
+If we can't reach you, your contacts may be notified when your check-in is missed.
+
+Improved
+
+If we can’t reach you, and a check-in is missed, your emergency contacts may be notified so they know to check in on you.
+
+Removes ambiguity and keeps tone supportive.
+
+❓ “Will you share my location?”
+Current
+
+Only if you turn location sharing on. You can turn it off anytime.
+
+Improved
+
+Only if you turn location sharing on.
+You’re always in control and can turn it off anytime.
+
+Adds a control signal (very important for trust).
+
+❓ “What happens when a contact responds?”
+Current
+
+If a contact says "I'm handling this", we pause further alerts while they check on you.
+
+Improved
+
+If a contact responds with “I’m handling this,” we pause further alerts while they check on you, so you’re not overwhelmed.
+
+Shows care for the user’s experience, not just logic.
+
+❓ “What is the grace period?”
+Current
+
+After your check-in is due, we wait for the grace period (10–30 minutes) before notifying your contacts.
+
+Improved
+
+After your check-in is due, we wait 10–30 minutes before notifying your contacts.
+This gives you time to respond if you’re just running late.
+
+Very reassuring. Keep this.
+
+❓ “Can I pause check-ins temporarily?”
+Current
+
+Yes! In Settings, you can pause alerts for 2 hours, 6 hours, or until tomorrow morning.
+
+Improved
+
+Yes. In Settings, you can pause alerts for 2 hours, 6 hours, or until tomorrow morning — perfect for travel, rest, or busy days.
+
+Humanizes usage.
+
+5. One important UX suggestion (high value)
+Add ONE sentence at the top of the Help page:
+At the very top, under “What happens if…”, add:
+
+StillHere is designed to support you — not rush or alarm you.
+
+This single line:
+
+
+reduces anxiety
+
+
+builds emotional trust
+
+
+differentiates you from Life360-style “tracking” apps
+
+
+
+Final verdict (honest)
+Design: 8.5 / 10
+Trust & Safety tone: 9 / 10
+Emotional warmth: 7 / 10 → easily upgraded to 9
+Launch readiness: Very high
+You’re not building a “tech app”.
+You’re building a psychological safety product — and you’re doing it right.
+Next best steps (I recommend):
+
+
+Finalize copy polish (above)
+
+
+Review Settings page wording next
+
+
+Then review alert messages sent to contacts (very important)
+
+
+When you’re ready, send the Settings screen or contact alert SMS text and we’ll refine those too.
