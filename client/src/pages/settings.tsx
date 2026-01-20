@@ -273,12 +273,13 @@ export default function SettingsPage() {
             <div className="flex items-center gap-2">
               <Input
                 type="number"
-                placeholder="Custom hours"
+                placeholder="Custom"
                 value={customInterval}
                 onChange={(e) => setCustomInterval(e.target.value)}
-                className="w-32"
+                className="w-24 text-sm"
                 data-testid="input-custom-interval"
               />
+              <span className="text-sm text-muted-foreground">hours</span>
               <Button
                 variant="outline"
                 size="sm"
