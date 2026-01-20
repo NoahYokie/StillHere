@@ -21,11 +21,7 @@ export default function SetupNamePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
-      toast({
-        title: "Welcome to StillHere!",
-        description: "Your account is ready.",
-      });
-      setLocation("/");
+      setLocation("/setup/contacts");
     },
     onError: (error: any) => {
       if (error?.requiresLogin) {
@@ -80,11 +76,17 @@ export default function SetupNamePage() {
               className="w-full"
               size="lg"
               disabled={!name.trim() || setupMutation.isPending}
-              data-testid="button-finish-setup"
+              data-testid="button-continue"
             >
-              {setupMutation.isPending ? "Saving..." : "Get started"}
+              {setupMutation.isPending ? "Saving..." : "Continue"}
             </Button>
           </form>
+
+          <div className="flex justify-center gap-2 mt-6">
+            <div className="w-2 h-2 rounded-full bg-primary" />
+            <div className="w-2 h-2 rounded-full bg-muted" />
+            <div className="w-2 h-2 rounded-full bg-muted" />
+          </div>
         </CardContent>
       </Card>
     </div>
