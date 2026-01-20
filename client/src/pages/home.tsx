@@ -239,7 +239,7 @@ export default function Home() {
         <div className="flex items-center justify-center gap-2 text-sm">
           <MapPin className={`h-4 w-4 ${locationEnabled ? "text-accent" : "text-destructive"}`} />
           <span className="text-muted-foreground">
-            Location Sharing {locationEnabled ? "ON" : "OFF"}
+            Share my Location {locationEnabled ? "ON" : "OFF"}
           </span>
           <span className="text-muted-foreground">|</span>
           <button
