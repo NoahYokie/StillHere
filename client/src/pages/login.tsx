@@ -58,7 +58,7 @@ export default function LoginPage() {
             <Heart className="h-8 w-8 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl" data-testid="text-login-title">StillHere</CardTitle>
-          <CardDescription>Sign in so we know it's you.</CardDescription>
+          <CardDescription>Sign in to stay connected.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
