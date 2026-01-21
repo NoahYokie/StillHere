@@ -7,7 +7,7 @@ const faqs = [
   {
     question: "What happens if I miss a check-in?",
     answer:
-      "We send a reminder first. If you still don't respond after the grace period, we notify your contacts.",
+      "We send you a reminder first. If you still don't respond after the grace period, we send a message to your emergency contacts so they can check on you.",
   },
   {
     question: "What if my phone is off?",
