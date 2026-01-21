@@ -264,15 +264,16 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       const baseUrl = getBaseUrl();
       
-      // Send SMS alerts to all contacts
+      // Send SMS alerts to all contacts in parallel
       console.log("\n[SOS] Alerting contacts...");
-      for (const contact of contacts) {
+      const alertPromises = contacts.map(async (contact) => {
         const token = tokens.find(t => t.contact.id === contact.id);
         if (token) {
           const link = `${baseUrl}/emergency/${token.token}`;
           await sendSosAlert(contact.phone, user?.name || "User", link);
         }
-      }
+      });
+      await Promise.all(alertPromises);
       console.log("[SOS] Alerts sent\n");
       
       res.json({ success: true, incident });
@@ -393,11 +394,11 @@ export async function registerRoutes(
       // Get user
       const user = await storage.getUser(userId);
       
-      // Send test SMS to all contacts
+      // Send test SMS to all contacts in parallel
       console.log("\n[TEST] Sending test notifications...");
-      for (const contact of contacts) {
-        await sendTestMessage(contact.phone, user?.name || "User");
-      }
+      await Promise.all(contacts.map(contact => 
+        sendTestMessage(contact.phone, user?.name || "User")
+      ));
       console.log("[TEST] Notifications sent\n");
       
       // Immediately resolve the test incident
@@ -493,13 +494,13 @@ export async function registerRoutes(
       const baseUrl = getBaseUrl();
       
       console.log("\n[ESCALATION] Re-notifying contacts...");
-      for (const contact of contacts) {
+      await Promise.all(contacts.map(async (contact) => {
         const token = tokens.find(t => t.contact.id === contact.id);
         if (token) {
           const link = `${baseUrl}/emergency/${token.token}`;
           await sendMissedCheckinAlert(contact.phone, data.user.name, link);
         }
-      }
+      }));
       console.log("[ESCALATION] Alerts sent\n");
       
       res.json({ success: true, incident });
@@ -565,15 +566,15 @@ export async function registerRoutes(
           // Get tokens
           const tokens = await storage.getContactTokensForUser(user.id);
           
-          // Send missed check-in alerts
+          // Send missed check-in alerts in parallel
           console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting contacts...`);
-          for (const contact of contacts) {
+          await Promise.all(contacts.map(async (contact) => {
             const token = tokens.find(t => t.contact.id === contact.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
               await sendMissedCheckinAlert(contact.phone, user.name, link);
             }
-          }
+          }));
           console.log("[MISSED CHECK-IN] Alerts sent\n");
           alertsSent++;
           
