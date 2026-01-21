@@ -26,6 +26,19 @@ const getUserId = (req: Request): string | null => {
   return (req as any).userId || null;
 };
 
+// Helper to get base URL for links (custom domain in production, dev domain otherwise)
+const getBaseUrl = (): string => {
+  // In production deployment, use custom domain
+  if (process.env.REPLIT_DEPLOYMENT) {
+    return "https://stillhere.health";
+  }
+  // In development, use dev domain
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
+  }
+  return "http://localhost:5000";
+};
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -249,9 +262,7 @@ export async function registerRoutes(
       // Get tokens and base URL for contacts
       const tokens = await storage.getContactTokensForUser(userId);
       const user = await storage.getUser(userId);
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : "http://localhost:5000";
+      const baseUrl = getBaseUrl();
       
       // Send SMS alerts to all contacts
       console.log("\n[SOS] Alerting contacts...");
@@ -479,9 +490,7 @@ export async function registerRoutes(
       // Re-notify contacts
       const contacts = await storage.getContacts(data.user.id);
       const tokens = await storage.getContactTokensForUser(data.user.id);
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : "http://localhost:5000";
+      const baseUrl = getBaseUrl();
       
       console.log("\n[ESCALATION] Re-notifying contacts...");
       for (const contact of contacts) {
@@ -526,9 +535,7 @@ export async function registerRoutes(
   app.get("/api/cron/tick", async (req, res) => {
     try {
       const overdueUsers = await storage.getOverdueUsersWithSettings();
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : "http://localhost:5000";
+      const baseUrl = getBaseUrl();
       
       let remindersSent = 0;
       let alertsSent = 0;
