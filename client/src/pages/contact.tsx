@@ -27,7 +27,7 @@ export default function ContactPage() {
   const [address, setAddress] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<ContactPageData>({
-    queryKey: ["/api/c", token],
+    queryKey: ["/api/emergency", token],
   });
 
   // Fetch address from coordinates
@@ -49,10 +49,10 @@ export default function ContactPage() {
 
   const handleMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/c/${token}/handle`);
+      return apiRequest("POST", `/api/emergency/${token}/handle`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/c", token] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emergency", token] });
       toast({
         title: "You're handling this",
         description: "We've paused further alerts while you check on them.",
@@ -69,10 +69,10 @@ export default function ContactPage() {
 
   const escalateMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/c/${token}/escalate`);
+      return apiRequest("POST", `/api/emergency/${token}/escalate`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/c", token] });
+      queryClient.invalidateQueries({ queryKey: ["/api/emergency", token] });
       toast({
         title: "Alert escalated",
         description: "We will continue notifying other contacts.",

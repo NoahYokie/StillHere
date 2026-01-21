@@ -30,7 +30,7 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 6. `/settings` - Check-in schedule, contacts, location, pause alerts (protected)
 7. `/help` - FAQ explaining how the app works (public)
 8. `/trust` - Trust & Safety statement (public)
-9. `/c/:token` - Contact status page (public, no login required)
+9. `/emergency/:token` - Contact status page (public, no login required)
 
 ## Onboarding Flow
 
@@ -89,17 +89,18 @@ Users cannot access the home page until all three steps are completed.
 - `POST /api/location/update` - Update location
 
 ### Public Routes
-- `GET /api/c/:token` - Get contact page data
-- `POST /api/c/:token/handle` - Contact takes responsibility
-- `POST /api/c/:token/escalate` - Contact escalates alert
+- `GET /api/emergency/:token` - Get contact page data
+- `POST /api/emergency/:token/handle` - Contact takes responsibility
+- `POST /api/emergency/:token/escalate` - Contact escalates alert
 - `GET /api/cron/tick` - Check for overdue users (scheduler)
 
 ## Contact Token Security
 
-- Tokens are 64 characters (32 bytes hex)
+- Tokens are 10 characters (mixed case alphanumeric, URL-safe)
 - Tokens expire after 30 days
 - Tokens are rotated when contacts are edited or removed
 - Revoked tokens are rejected
+- Example URL: `https://stillhere.health/emergency/9FkaP2Lm8Q`
 
 ## Database Tables
 
