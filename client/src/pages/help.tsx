@@ -44,6 +44,21 @@ const faqs = [
     answer:
       "Yes. In Settings, you can pause alerts for 2 hours, 6 hours, or until tomorrow morning.",
   },
+  {
+    question: "What are reminders?",
+    answer:
+      "Reminders are messages we send to you before notifying your contacts. They give you a chance to check in if you forgot.",
+  },
+  {
+    question: "How many reminders can I get?",
+    answer:
+      "You can choose none, one, or two reminders in Settings. We recommend one reminder.",
+  },
+  {
+    question: "What if I don't respond to reminders?",
+    answer:
+      "If the grace period ends and you haven't checked in, we notify your contacts regardless of how many reminders were sent.",
+  },
 ];
 
 export default function HelpPage() {
