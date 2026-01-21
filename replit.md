@@ -12,6 +12,7 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 - **SOS Alert**: Red "I Need Help" button for immediate emergency notification
 - **Configurable Schedule**: Check-in intervals from 12 hours to 48+ hours
 - **Grace Period**: 10-30 minute buffer before alerting contacts
+- **Reminders**: Configurable reminders (none, one, or two) sent before alerting contacts
 - **Emergency Contacts**: Up to 2 contacts with priority levels
 - **Location Sharing**: Optional, user-controlled location sharing
 - **Contact Pages**: Token-based pages for contacts to view status and take action
@@ -198,6 +199,27 @@ StillHere test:
 This is a test message from {Name}.
 No action is needed.
 ```
+
+**Reminder (sent to user):**
+```
+StillHere reminder:
+You haven't checked in yet.
+Tap below to let us know you're OK:
+{link to home page}
+```
+
+## Reminder System
+
+Users can configure how many reminders they receive before their emergency contacts are notified:
+- **None**: No reminders, contacts are alerted immediately after the grace period
+- **One (recommended)**: One reminder during the grace period
+- **Two**: Two reminders during the grace period
+
+Reminders are throttled to prevent spamming (minimum 5 minutes between reminders). If the grace period expires, contacts are alerted regardless of how many reminders were sent.
+
+Reminder state (remindersSent, lastReminderAt) is reset when:
+- User checks in
+- An incident is created
 
 ## Future Enhancements (planned)
 
