@@ -3,9 +3,10 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth } from "@/lib/auth";
+import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth, useAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import LandingPage from "@/pages/landing";
 import SettingsPage from "@/pages/settings";
 import HelpPage from "@/pages/help";
 import ContactPage from "@/pages/contact";
@@ -16,6 +17,36 @@ import SetupNamePage from "@/pages/setup-name";
 import SetupContactsPage from "@/pages/setup-contacts";
 import SetupPreferencesPage from "@/pages/setup-preferences";
 import TrustPage from "@/pages/trust";
+import { useLocation } from "wouter";
+import { useEffect } from "react";
+
+function LandingOrHome() {
+  const { auth, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && auth?.authenticated && auth?.needsSetup) {
+      setLocation("/setup");
+    }
+  }, [auth, isLoading, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth?.authenticated && !auth?.needsSetup) {
+    return <Home />;
+  }
+
+  return <LandingPage />;
+}
 
 function Router() {
   return (
@@ -51,11 +82,7 @@ function Router() {
         </RequireAuth>
       </Route>
       <Route path="/">
-        <RequireAuth>
-          <RequireSetup>
-            <Home />
-          </RequireSetup>
-        </RequireAuth>
+        <LandingOrHome />
       </Route>
       <Route path="/settings">
         <RequireAuth>
