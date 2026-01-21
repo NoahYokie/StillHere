@@ -5,6 +5,7 @@ import { z } from "zod";
 
 // Enums
 export const locationModeEnum = pgEnum("location_mode", ["off", "emergency_only", "on_shift_only", "both"]);
+export const reminderModeEnum = pgEnum("reminder_mode", ["none", "one", "two"]);
 export const incidentStatusEnum = pgEnum("incident_status", ["open", "paused", "resolved"]);
 export const incidentReasonEnum = pgEnum("incident_reason", ["missed_checkin", "sos", "test"]);
 export const locationSessionTypeEnum = pgEnum("location_session_type", ["emergency", "shift"]);
@@ -34,6 +35,9 @@ export const settings = pgTable("settings", {
   preferredCheckinTime: text("preferred_checkin_time").notNull().default("09:00"),
   graceMinutes: integer("grace_minutes").notNull().default(15),
   locationMode: locationModeEnum("location_mode").notNull().default("off"),
+  reminderMode: reminderModeEnum("reminder_mode").notNull().default("one"),
+  remindersSent: integer("reminders_sent").notNull().default(0),
+  lastReminderAt: timestamp("last_reminder_at"),
   pauseUntil: timestamp("pause_until"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -210,6 +214,7 @@ export type IncidentReason = Incident["reason"];
 export type LocationSession = typeof locationSessions.$inferSelect;
 export type LocationSessionType = LocationSession["type"];
 export type LocationMode = Settings["locationMode"];
+export type ReminderMode = Settings["reminderMode"];
 
 export type AuthSession = typeof authSessions.$inferSelect;
 export type OtpCode = typeof otpCodes.$inferSelect;
