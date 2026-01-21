@@ -539,7 +539,6 @@ export default function SettingsPage() {
                     data-testid="input-custom-pause"
                   />
                   <Button
-                    variant="outline"
                     size="sm"
                     onClick={() => {
                       const hours = parseInt(customPauseHours);
