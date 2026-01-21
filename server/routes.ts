@@ -242,7 +242,7 @@ export async function registerRoutes(
       const settings = await storage.getSettings(userId);
       
       // Create location session if allowed
-      if (settings?.locationMode === "emergency_only") {
+      if (settings?.locationMode === "emergency_only" || settings?.locationMode === "both") {
         await storage.createLocationSession(userId, "emergency", incident.id);
       }
       
@@ -588,9 +588,13 @@ export async function registerRoutes(
             
             // Use home page as the check-in link
             const checkInLink = `${baseUrl}/`;
-            await sendReminderSms(user.phone, checkInLink);
-            await storage.incrementRemindersSent(user.id);
-            remindersSent++;
+            if (user.phone) {
+              await sendReminderSms(user.phone, checkInLink);
+              await storage.incrementRemindersSent(user.id);
+              remindersSent++;
+            } else {
+              console.log("[REMINDER] No phone number, skipping");
+            }
             
             console.log("[REMINDER] Sent\n");
           } else {
