@@ -35,6 +35,8 @@ export interface IStorage {
   // Settings
   getSettings(userId: string): Promise<Settings | undefined>;
   updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
+  incrementRemindersSent(userId: string): Promise<Settings>;
+  resetReminderState(userId: string): Promise<Settings>;
   
   // Contacts
   getContacts(userId: string): Promise<Contact[]>;
@@ -115,6 +117,7 @@ export class DatabaseStorage implements IStorage {
         checkinIntervalHours: updates.checkinIntervalHours ?? 24,
         graceMinutes: updates.graceMinutes ?? 15,
         locationMode: updates.locationMode ?? "off",
+        reminderMode: updates.reminderMode ?? "one",
         pauseUntil: updates.pauseUntil,
       }).returning();
       return result;
@@ -123,6 +126,37 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db
       .update(settings)
       .set({ ...updates, updatedAt: new Date() })
+      .where(eq(settings.userId, userId))
+      .returning();
+    return result;
+  }
+
+  async incrementRemindersSent(userId: string): Promise<Settings> {
+    const existing = await this.getSettings(userId);
+    if (!existing) {
+      throw new Error("Settings not found");
+    }
+    
+    const [result] = await db
+      .update(settings)
+      .set({ 
+        remindersSent: (existing.remindersSent || 0) + 1,
+        lastReminderAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(settings.userId, userId))
+      .returning();
+    return result;
+  }
+
+  async resetReminderState(userId: string): Promise<Settings> {
+    const [result] = await db
+      .update(settings)
+      .set({ 
+        remindersSent: 0,
+        lastReminderAt: null,
+        updatedAt: new Date()
+      })
       .where(eq(settings.userId, userId))
       .returning();
     return result;
@@ -384,10 +418,10 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getDueUsers(): Promise<User[]> {
+  async getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean }[]> {
     const now = new Date();
     const allUsers = await db.select().from(users);
-    const dueUsers: User[] = [];
+    const results: { user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean }[] = [];
 
     for (const user of allUsers) {
       const userSettings = await this.getSettings(user.id);
@@ -400,18 +434,23 @@ export class DatabaseStorage implements IStorage {
       const openIncident = await this.getOpenIncident(user.id);
       if (openIncident) continue;
 
-      // Check if due
+      // Check timing
       const lastCheckin = await this.getLastCheckin(user.id);
       const lastTime = lastCheckin?.createdAt || user.createdAt;
       const dueTime = addHours(lastTime, userSettings.checkinIntervalHours);
       const graceTime = new Date(dueTime.getTime() + userSettings.graceMinutes * 60 * 1000);
 
-      if (now > graceTime) {
-        dueUsers.push(user);
+      if (now > dueTime) {
+        results.push({ user, settings: userSettings, isDueForReminder: true, isDueForAlert: now > graceTime });
       }
     }
 
-    return dueUsers;
+    return results;
+  }
+
+  async getDueUsers(): Promise<User[]> {
+    const results = await this.getOverdueUsersWithSettings();
+    return results.filter(r => r.isDueForAlert).map(r => r.user);
   }
 
   async getContactTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]> {
