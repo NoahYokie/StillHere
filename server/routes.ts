@@ -532,6 +532,8 @@ export async function registerRoutes(
       
       let remindersSent = 0;
       let alertsSent = 0;
+      const now = new Date();
+      const REMINDER_THROTTLE_MINUTES = 5; // Minimum time between reminders
       
       for (const { user, settings, isDueForAlert } of overdueUsers) {
         // Calculate max reminders based on reminderMode
@@ -541,23 +543,9 @@ export async function registerRoutes(
         
         const remindersSentSoFar = settings.remindersSent || 0;
         
-        // Check if we should send a reminder (not past grace period yet, or still have reminders to send)
-        if (!isDueForAlert && remindersSentSoFar < maxReminders) {
-          // Send reminder to the user
-          console.log(`\n[REMINDER] ${user.name} - sending reminder ${remindersSentSoFar + 1}/${maxReminders}...`);
-          
-          // Use home page as the check-in link
-          const checkInLink = `${baseUrl}/`;
-          await sendReminderSms(user.phone, checkInLink);
-          await storage.incrementRemindersSent(user.id);
-          remindersSent++;
-          
-          console.log("[REMINDER] Sent\n");
-          continue;
-        }
-        
-        // If past grace period and all reminders sent, create incident and alert contacts
-        if (isDueForAlert && remindersSentSoFar >= maxReminders) {
+        // If past grace period, send alert regardless of reminder state
+        // This prevents deadlock if cron runs late or reminders weren't sent
+        if (isDueForAlert) {
           // Create missed check-in incident
           const incident = await storage.createIncident(user.id, "missed_checkin");
           const contacts = await storage.getContacts(user.id);
@@ -584,6 +572,30 @@ export async function registerRoutes(
           
           // Reset reminder state after incident is created
           await storage.resetReminderState(user.id);
+          continue;
+        }
+        
+        // Not past grace period - check if we should send a reminder
+        if (remindersSentSoFar < maxReminders) {
+          // Throttle: check if enough time has passed since last reminder
+          const timeSinceLastReminder = settings.lastReminderAt 
+            ? (now.getTime() - new Date(settings.lastReminderAt).getTime()) / (1000 * 60)
+            : Infinity;
+          
+          if (timeSinceLastReminder >= REMINDER_THROTTLE_MINUTES) {
+            // Send reminder to the user
+            console.log(`\n[REMINDER] ${user.name} - sending reminder ${remindersSentSoFar + 1}/${maxReminders}...`);
+            
+            // Use home page as the check-in link
+            const checkInLink = `${baseUrl}/`;
+            await sendReminderSms(user.phone, checkInLink);
+            await storage.incrementRemindersSent(user.id);
+            remindersSent++;
+            
+            console.log("[REMINDER] Sent\n");
+          } else {
+            console.log(`[REMINDER] ${user.name} - throttled, ${Math.round(REMINDER_THROTTLE_MINUTES - timeSinceLastReminder)} min until next reminder`);
+          }
         }
       }
       
