@@ -1,0 +1,30 @@
+{
+  "appId": "com.stillhere.app",
+  "appName": "StillHere",
+  "webDir": "dist/public",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#0ea5e9",
+      "showSpinner": false,
+      "androidSpinnerStyle": "small",
+      "spinnerColor": "#ffffff"
+    },
+    "StatusBar": {
+      "style": "Light",
+      "backgroundColor": "#0ea5e9"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
