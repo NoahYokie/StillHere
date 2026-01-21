@@ -12,7 +12,7 @@ const screens = [
   },
   {
     title: "How it works",
-    body: "You check in by tapping \"I'm OK\"\n\nIf you don't respond, we notify your chosen contacts\n\nThey can check on you first",
+    body: "You check in by tapping \"I'm OK\"\n\nIf you don't respond, we notify your emergency contacts\n\nThey can check on you first",
     icon: Bell,
   },
   {

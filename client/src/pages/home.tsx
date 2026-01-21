@@ -37,7 +37,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
         title: "Checked in",
-        description: "Your contacts have been updated.",
+        description: "Your emergency contacts know you're okay.",
       });
     },
     onError: () => {
@@ -57,7 +57,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
         title: "Alert sent",
-        description: "Your contacts were notified.",
+        description: "Your emergency contacts were notified.",
       });
     },
     onError: () => {
