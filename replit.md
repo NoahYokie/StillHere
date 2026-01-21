@@ -221,6 +221,82 @@ Reminder state (remindersSent, lastReminderAt) is reset when:
 - User checks in
 - An incident is created
 
+## PWA (Progressive Web App)
+
+StillHere is a fully installable PWA with offline support:
+
+- **Manifest**: `/manifest.json` with app metadata and icons
+- **Service Worker**: `/sw.js` caches static assets, network-first for API calls
+- **Icons**: 8 sizes (72px to 512px) in `/icons/`
+- **Install**: Users can add to home screen from browser
+
+### Browser Install
+- **iOS Safari**: Share → Add to Home Screen
+- **Android Chrome**: Menu → Add to Home Screen
+- **Desktop Chrome**: Install icon in address bar
+
+## Native App Build (Capacitor)
+
+StillHere uses Capacitor for native iOS and Android builds.
+
+### Prerequisites
+- **iOS**: Mac with Xcode, Apple Developer account ($99/year)
+- **Android**: Android Studio, Google Play Developer account ($25 one-time)
+
+### Configuration
+- `capacitor.config.json` - App ID: `com.stillhere.app`
+- Web directory: `dist/public`
+- Splash screen: Blue (#0ea5e9) with 2s duration
+
+### Build Steps
+
+1. **Install Capacitor** (on your local machine, not Replit):
+   ```bash
+   npm install @capacitor/core @capacitor/cli
+   npm install @capacitor/ios @capacitor/android
+   ```
+
+2. **Build the web app**:
+   ```bash
+   npm run build
+   ```
+
+3. **Initialize platforms**:
+   ```bash
+   npx cap add ios
+   npx cap add android
+   ```
+
+4. **Sync web assets**:
+   ```bash
+   npx cap sync
+   ```
+
+5. **Open in IDE**:
+   ```bash
+   npx cap open ios     # Opens Xcode
+   npx cap open android # Opens Android Studio
+   ```
+
+6. **Build and submit**:
+   - iOS: Archive in Xcode → Upload to App Store Connect
+   - Android: Generate signed APK/AAB → Upload to Google Play Console
+
+### App Store Assets Needed
+- App icon (1024x1024 for iOS, 512x512 for Android)
+- Screenshots (various device sizes)
+- App description, privacy policy URL
+- Support URL, marketing website
+
+### Capacitor Plugins (optional)
+Add these for native features:
+```bash
+npm install @capacitor/push-notifications
+npm install @capacitor/local-notifications
+npm install @capacitor/geolocation
+npm install @capacitor/haptics
+```
+
 ## Future Enhancements (planned)
 
 - Biometric unlock (Face ID / fingerprint) after first login
