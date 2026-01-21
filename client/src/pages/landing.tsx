@@ -152,7 +152,7 @@ export default function LandingPage() {
                 "I don't want to be found weeks later. This gives me peace of mind."
               </p>
               <p className="text-sm text-muted-foreground">
-                — Someone who lives alone
+                Someone who lives alone
               </p>
             </CardContent>
           </Card>
