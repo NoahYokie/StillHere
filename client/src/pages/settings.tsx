@@ -71,6 +71,7 @@ export default function SettingsPage() {
   const [graceMinutes, setGraceMinutes] = useState(15);
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
   const [customInterval, setCustomInterval] = useState("");
+  const [customPauseHours, setCustomPauseHours] = useState("");
 
   const { data: status, isLoading } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
@@ -496,34 +497,63 @@ export default function SettingsPage() {
                 </Button>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePause(2)}
-                  disabled={pauseMutation.isPending}
-                  data-testid="button-pause-2h"
-                >
-                  Pause for 2 hours
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePause(6)}
-                  disabled={pauseMutation.isPending}
-                  data-testid="button-pause-6h"
-                >
-                  Pause for 6 hours
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePause("tomorrow")}
-                  disabled={pauseMutation.isPending}
-                  data-testid="button-pause-tomorrow"
-                >
-                  Pause until tomorrow morning
-                </Button>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePause(2)}
+                    disabled={pauseMutation.isPending}
+                    data-testid="button-pause-2h"
+                  >
+                    Pause for 2 hours
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePause(6)}
+                    disabled={pauseMutation.isPending}
+                    data-testid="button-pause-6h"
+                  >
+                    Pause for 6 hours
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePause("tomorrow")}
+                    disabled={pauseMutation.isPending}
+                    data-testid="button-pause-tomorrow"
+                  >
+                    Pause until tomorrow morning
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="72"
+                    placeholder="Custom hrs"
+                    value={customPauseHours}
+                    onChange={(e) => setCustomPauseHours(e.target.value)}
+                    className="w-28"
+                    data-testid="input-custom-pause"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const hours = parseInt(customPauseHours);
+                      if (hours >= 1 && hours <= 72) {
+                        handlePause(hours);
+                        setCustomPauseHours("");
+                      }
+                    }}
+                    disabled={pauseMutation.isPending || !customPauseHours}
+                    data-testid="button-pause-custom"
+                  >
+                    Pause
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
