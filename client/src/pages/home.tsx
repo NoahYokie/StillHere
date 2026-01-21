@@ -115,6 +115,27 @@ export default function Home() {
     },
   });
 
+  const resolveAlertMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/resolve-alert");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      toast({
+        title: "Alert resolved",
+        description: "Your contacts will know you're OK.",
+      });
+      setLocationEnabled(false);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Could not resolve alert. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const logoutMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/auth/logout");
@@ -303,20 +324,32 @@ export default function Home() {
 
         {/* Open Incident Warning */}
         {hasOpenIncident && (
-          <Card className="bg-destructive/10 border-destructive/30">
+          <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-destructive">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-amber-800 dark:text-amber-400">
                     {status.openIncident?.reason === "sos"
-                      ? "Help alert active"
-                      : "Missed check-in alert"}
+                      ? "Help request sent"
+                      : "Check-in reminder sent"}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your emergency contacts have been notified.
-                    {status.openIncident?.status === "paused" && " Someone is checking on you."}
+                  <p className="text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
+                    {status.openIncident?.status === "paused" 
+                      ? "Someone is checking on you. They'll reach out soon."
+                      : "Your contacts have been notified."}
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                    onClick={() => resolveAlertMutation.mutate()}
+                    disabled={resolveAlertMutation.isPending}
+                    data-testid="button-resolve-alert"
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    {resolveAlertMutation.isPending ? "Resolving..." : "I'm OK now"}
+                  </Button>
                 </div>
               </div>
             </CardContent>

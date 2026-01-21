@@ -277,6 +277,38 @@ export async function registerRoutes(
     }
   });
 
+  // Resolve active incident (dismiss alert)
+  app.post("/api/resolve-alert", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      
+      const openIncident = await storage.getOpenIncident(userId);
+      if (!openIncident) {
+        return res.status(404).json({ error: "No active alert" });
+      }
+      
+      // Resolve the incident
+      await storage.updateIncident(openIncident.id, {
+        status: "resolved",
+        resolvedAt: new Date(),
+      });
+      
+      // End any active location session
+      const session = await storage.getActiveLocationSession(userId);
+      if (session) {
+        await storage.endLocationSession(session.id);
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving alert:", error);
+      res.status(500).json({ error: "Failed to resolve alert" });
+    }
+  });
+
   // Update settings
   app.post("/api/settings", async (req, res) => {
     try {
