@@ -482,7 +482,7 @@ export default function SettingsPage() {
               <Bell className="h-5 w-5" />
               Reminders before alerting contacts
             </CardTitle>
-            <CardDescription>We'll send you a reminder before notifying your contacts.</CardDescription>
+            <CardDescription>We'll send you a reminder before notifying your emergency contacts.</CardDescription>
           </CardHeader>
           <CardContent>
             <RadioGroup

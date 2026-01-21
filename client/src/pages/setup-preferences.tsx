@@ -200,7 +200,7 @@ export default function SetupPreferencesPage() {
               </div>
             </RadioGroup>
             <p className="text-sm text-muted-foreground">
-              We'll send you a reminder before notifying your contacts.
+              We'll send you a reminder before notifying your emergency contacts.
             </p>
           </div>
 
