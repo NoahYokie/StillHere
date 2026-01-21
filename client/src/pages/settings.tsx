@@ -281,7 +281,6 @@ export default function SettingsPage() {
                 data-testid="input-custom-interval"
               />
               <Button
-                variant="outline"
                 size="sm"
                 onClick={() => handleIntervalChange(customInterval)}
                 disabled={!customInterval}
