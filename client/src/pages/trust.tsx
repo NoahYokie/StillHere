@@ -264,7 +264,7 @@ export default function TrustPage() {
               Questions or concerns? We want to hear from you.
             </p>
             <p className="text-primary mt-2">
-              support@stillhere.app
+              support@stillhere.health
             </p>
           </CardContent>
         </Card>
