@@ -22,7 +22,7 @@ const faqs = [
   {
     question: "What happens when an emergency contact responds?",
     answer:
-      'If an emergency contact says they\'re checking on you, we pause further alerts.',
+      "When your emergency contact receives a message, they can tap a link to see your status. If they say \"I'm handling this\", we stop sending more alerts while they check on you. If they can't reach you, they can ask us to notify your other emergency contact.",
   },
   {
     question: "Can I change my check-in schedule?",
