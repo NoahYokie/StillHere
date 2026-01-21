@@ -25,6 +25,21 @@ const faqs = [
       "When your emergency contact receives a message, they can tap a link to see your status. If they say \"I'm handling this\", we stop sending more alerts while they check on you. If they can't reach you, they can ask us to notify your other emergency contact.",
   },
   {
+    question: "What do my emergency contacts see?",
+    answer:
+      "They see a page with your name, status, when you last checked in, and if you've turned on location sharing, they can see your location on a map with your full address and a link to get directions.",
+  },
+  {
+    question: "What guidance do my emergency contacts get?",
+    answer:
+      "They see simple steps: 1) Try calling you, 2) If no answer, send you a text message, 3) If still no response, call local emergency services. This helps them know what to do without panicking.",
+  },
+  {
+    question: "What is the SOS button?",
+    answer:
+      "The red 'I Need Help' button sends an immediate alert to your emergency contacts. Use it if you need help right away. Your emergency contacts will see that you pressed the emergency button and can check on you.",
+  },
+  {
     question: "Can I change my check-in schedule?",
     answer:
       "Yes. Go to Settings and choose how often to check in.",
