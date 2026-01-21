@@ -457,6 +457,10 @@ export default function SettingsPage() {
                 <RadioGroupItem value="on_shift_only" id="loc-shift" data-testid="radio-location-shift" />
                 <Label htmlFor="loc-shift">During active check-ins</Label>
               </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="both" id="loc-both" data-testid="radio-location-both" />
+                <Label htmlFor="loc-both">During emergencies and active check-ins</Label>
+              </div>
             </RadioGroup>
             <p className="text-sm text-muted-foreground mt-3">
               If location is off, we will not share your location.
