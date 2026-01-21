@@ -179,23 +179,35 @@ export default function ContactPage() {
 
         {/* Alert Banner */}
         {hasActiveIncident && !isBeingHandled && (
-          <Card className={isSOS ? "bg-destructive/10 border-destructive/30" : "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800"}>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isSOS ? "text-destructive" : "text-yellow-600 dark:text-yellow-500"}`} />
-                <div>
-                  <p className={`font-medium ${isSOS ? "text-destructive" : "text-yellow-700 dark:text-yellow-400"}`}>
-                    {isSOS ? "Help has been requested" : "Missed check-in"}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {isSOS
-                      ? `${user.name} pressed the emergency button.`
-                      : `${user.name} hasn't checked in as expected.`}
-                  </p>
+          <>
+            <Card className={isSOS ? "bg-destructive/10 border-destructive/30" : "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800"}>
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isSOS ? "text-destructive" : "text-yellow-600 dark:text-yellow-500"}`} />
+                  <div>
+                    <p className={`font-medium ${isSOS ? "text-destructive" : "text-yellow-700 dark:text-yellow-400"}`}>
+                      {isSOS ? "Help has been requested" : "Missed check-in"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {isSOS
+                        ? `${user.name} pressed the emergency button.`
+                        : `${user.name} hasn't checked in as expected.`}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* What to do next guidance */}
+            <div className="bg-muted/50 rounded-lg p-4 mt-4" data-testid="guidance-next-steps">
+              <p className="text-sm font-medium mb-2">What to do next:</p>
+              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                <li>Try calling them</li>
+                <li>If no answer, send them a text message</li>
+                <li>If still no response, call local emergency services</li>
+              </ol>
+            </div>
+          </>
         )}
 
         {/* Contact Actions */}
