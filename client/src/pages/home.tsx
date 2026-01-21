@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -24,10 +24,42 @@ export default function Home() {
   const { toast } = useToast();
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const locationWatchRef = useRef<number | null>(null);
 
   const { data: status, isLoading } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
   });
+
+  const sendLocationToServer = async (position: GeolocationPosition) => {
+    try {
+      await apiRequest("POST", "/api/location/update", {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      });
+    } catch (error) {
+      console.log("Location update failed:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (locationEnabled && status?.activeLocationSession) {
+      navigator.geolocation.getCurrentPosition(sendLocationToServer);
+      
+      locationWatchRef.current = navigator.geolocation.watchPosition(
+        sendLocationToServer,
+        (error) => console.log("Location watch error:", error),
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
+      );
+    }
+
+    return () => {
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+        locationWatchRef.current = null;
+      }
+    };
+  }, [locationEnabled, status?.activeLocationSession]);
 
   const checkinMutation = useMutation({
     mutationFn: async () => {
