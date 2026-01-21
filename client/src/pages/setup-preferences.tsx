@@ -141,7 +141,7 @@ export default function SetupPreferencesPage() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-muted-foreground" />
-              <Label className="text-base font-medium">Location sharing</Label>
+              <Label className="text-base font-medium">Share my Location</Label>
             </div>
             <RadioGroup
               value={locationMode}
@@ -160,9 +160,16 @@ export default function SetupPreferencesPage() {
                 <RadioGroupItem value="on_shift_only" id="loc-checkin" data-testid="radio-location-checkin" />
                 <Label htmlFor="loc-checkin">During active check-ins</Label>
               </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="both" id="loc-both" data-testid="radio-location-both" />
+                <Label htmlFor="loc-both">During emergencies and active check-ins</Label>
+              </div>
             </RadioGroup>
             <p className="text-sm text-muted-foreground">
-              You stay in control. Change this anytime.
+              You control this. You can turn it off anytime.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              If location is off, we will not share your location.
             </p>
           </div>
 
