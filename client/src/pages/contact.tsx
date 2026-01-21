@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -24,10 +24,28 @@ export default function ContactPage() {
   const { toast } = useToast();
   const [showHandleConfirm, setShowHandleConfirm] = useState(false);
   const [showEscalateConfirm, setShowEscalateConfirm] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<ContactPageData>({
     queryKey: ["/api/c", token],
   });
+
+  // Fetch address from coordinates
+  useEffect(() => {
+    const locationSession = data?.locationSession;
+    if (locationSession?.lastLat && locationSession?.lastLng) {
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${locationSession.lastLat}&lon=${locationSession.lastLng}`)
+        .then(res => res.json())
+        .then(result => {
+          if (result.display_name) {
+            setAddress(result.display_name);
+          }
+        })
+        .catch(() => {
+          setAddress(null);
+        });
+    }
+  }, [data?.locationSession?.lastLat, data?.locationSession?.lastLng]);
 
   const handleMutation = useMutation({
     mutationFn: async () => {
@@ -280,6 +298,11 @@ export default function ContactPage() {
                   data-testid="map-location"
                 />
               </div>
+              {address && (
+                <p className="text-sm text-foreground mt-3 text-center" data-testid="text-address">
+                  {address}
+                </p>
+              )}
               <a
                 href={`https://www.google.com/maps?q=${locationSession.lastLat},${locationSession.lastLng}`}
                 target="_blank"
