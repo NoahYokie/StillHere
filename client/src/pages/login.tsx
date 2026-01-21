@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Heart, HelpCircle } from "lucide-react";
+import { Heart, HelpCircle, ArrowLeft } from "lucide-react";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -87,7 +87,15 @@ export default function LoginPage() {
               {sendCodeMutation.isPending ? "Sending..." : "Send secure code"}
             </Button>
           </form>
-          <div className="mt-6 text-center">
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <button
+              onClick={() => setLocation("/")}
+              className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              data-testid="link-back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </button>
             <button
               onClick={() => setLocation("/help")}
               className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
