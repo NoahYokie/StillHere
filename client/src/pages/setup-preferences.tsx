@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Settings, Clock, MapPin } from "lucide-react";
-import type { LocationMode } from "@shared/schema";
+import type { LocationMode, ReminderMode } from "@shared/schema";
+import { Bell } from "lucide-react";
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -36,6 +37,7 @@ export default function SetupPreferencesPage() {
   const [checkinInterval, setCheckinInterval] = useState(24);
   const [preferredTime, setPreferredTime] = useState("09:00");
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
+  const [reminderMode, setReminderMode] = useState<ReminderMode>("one");
   const [timezone, setTimezone] = useState("");
 
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function SetupPreferencesPage() {
         checkinIntervalHours: checkinInterval,
         preferredCheckinTime: preferredTime,
         locationMode: locationMode,
+        reminderMode: reminderMode,
         timezone: timezone,
       });
     },
@@ -170,6 +173,34 @@ export default function SetupPreferencesPage() {
             </p>
             <p className="text-sm text-muted-foreground">
               If location is off, we will not share your location.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              <Label className="text-base font-medium">Reminders before alerting contacts</Label>
+            </div>
+            <RadioGroup
+              value={reminderMode}
+              onValueChange={(value) => setReminderMode(value as ReminderMode)}
+              className="space-y-2"
+            >
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="none" id="rem-none" data-testid="radio-reminder-none" />
+                <Label htmlFor="rem-none">No reminders</Label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="one" id="rem-one" data-testid="radio-reminder-one" />
+                <Label htmlFor="rem-one">One reminder (recommended)</Label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="two" id="rem-two" data-testid="radio-reminder-two" />
+                <Label htmlFor="rem-two">Two reminders</Label>
+              </div>
+            </RadioGroup>
+            <p className="text-sm text-muted-foreground">
+              We'll send you a reminder before notifying your contacts.
             </p>
           </div>
 

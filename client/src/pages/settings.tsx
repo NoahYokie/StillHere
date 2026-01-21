@@ -49,8 +49,8 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut } from "lucide-react";
-import type { UserStatus, LocationMode } from "@shared/schema";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell } from "lucide-react";
+import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
 const contactsSchema = z.object({
@@ -70,6 +70,7 @@ export default function SettingsPage() {
   const [preferredTime, setPreferredTime] = useState("09:00");
   const [graceMinutes, setGraceMinutes] = useState(15);
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
+  const [reminderMode, setReminderMode] = useState<ReminderMode>("one");
   const [customInterval, setCustomInterval] = useState("");
   const [customPauseHours, setCustomPauseHours] = useState("");
 
@@ -93,6 +94,7 @@ export default function SettingsPage() {
       setPreferredTime((status.settings as any)?.preferredCheckinTime || "09:00");
       setGraceMinutes(status.settings?.graceMinutes || 15);
       setLocationMode(status.settings?.locationMode || "off");
+      setReminderMode((status.settings as any)?.reminderMode || "one");
 
       const contact1 = status.contacts?.find((c) => c.priority === 1);
       const contact2 = status.contacts?.find((c) => c.priority === 2);
@@ -107,7 +109,7 @@ export default function SettingsPage() {
   }, [status, form]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; preferredCheckinTime?: string }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -191,6 +193,11 @@ export default function SettingsPage() {
   const handleLocationModeChange = (value: LocationMode) => {
     setLocationMode(value);
     settingsMutation.mutate({ locationMode: value });
+  };
+
+  const handleReminderModeChange = (value: ReminderMode) => {
+    setReminderMode(value);
+    settingsMutation.mutate({ reminderMode: value });
   };
 
   const handlePause = (hours: number | "tomorrow") => {
@@ -465,6 +472,37 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground mt-3">
               If location is off, we will not share your location.
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Reminders Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Bell className="h-5 w-5" />
+              Reminders before alerting contacts
+            </CardTitle>
+            <CardDescription>We'll send you a reminder before notifying your contacts.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup
+              value={reminderMode}
+              onValueChange={(value) => handleReminderModeChange(value as ReminderMode)}
+              className="space-y-2"
+            >
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="none" id="rem-none" data-testid="radio-reminder-none" />
+                <Label htmlFor="rem-none">No reminders</Label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="one" id="rem-one" data-testid="radio-reminder-one" />
+                <Label htmlFor="rem-one">One reminder (recommended)</Label>
+              </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="two" id="rem-two" data-testid="radio-reminder-two" />
+                <Label htmlFor="rem-two">Two reminders</Label>
+              </div>
+            </RadioGroup>
           </CardContent>
         </Card>
 
