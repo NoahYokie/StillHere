@@ -17,6 +17,7 @@ import {
   sendSosAlert,
   sendMissedCheckinAlert,
   sendTestMessage,
+  sendReminderSms,
   isTwilioConfigured,
 } from "./sms";
 
@@ -214,6 +215,10 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const checkin = await storage.createCheckin(userId);
+      
+      // Reset reminder state when user checks in
+      await storage.resetReminderState(userId);
+      
       res.json({ success: true, checkin });
     } catch (error) {
       console.error("Error checking in:", error);
@@ -273,12 +278,13 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode, preferredCheckinTime, timezone } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone } = req.body;
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
       if (graceMinutes !== undefined) updates.graceMinutes = graceMinutes;
       if (locationMode !== undefined) updates.locationMode = locationMode;
+      if (reminderMode !== undefined) updates.reminderMode = reminderMode;
       if (preferredCheckinTime !== undefined) updates.preferredCheckinTime = preferredCheckinTime;
       
       // Update user timezone if provided
@@ -519,38 +525,69 @@ export async function registerRoutes(
   // Cron tick - check for due users
   app.get("/api/cron/tick", async (req, res) => {
     try {
-      const dueUsers = await storage.getDueUsers();
+      const overdueUsers = await storage.getOverdueUsersWithSettings();
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : "http://localhost:5000";
       
-      for (const user of dueUsers) {
-        // Create missed check-in incident
-        const incident = await storage.createIncident(user.id, "missed_checkin");
-        const contacts = await storage.getContacts(user.id);
-        const settings = await storage.getSettings(user.id);
+      let remindersSent = 0;
+      let alertsSent = 0;
+      
+      for (const { user, settings, isDueForAlert } of overdueUsers) {
+        // Calculate max reminders based on reminderMode
+        const maxReminders = settings.reminderMode === "none" ? 0 
+          : settings.reminderMode === "one" ? 1 
+          : 2;
         
-        // Create location session if allowed
-        if (settings?.locationMode === "emergency_only") {
-          await storage.createLocationSession(user.id, "emergency", incident.id);
+        const remindersSentSoFar = settings.remindersSent || 0;
+        
+        // Check if we should send a reminder (not past grace period yet, or still have reminders to send)
+        if (!isDueForAlert && remindersSentSoFar < maxReminders) {
+          // Send reminder to the user
+          console.log(`\n[REMINDER] ${user.name} - sending reminder ${remindersSentSoFar + 1}/${maxReminders}...`);
+          
+          // Use home page as the check-in link
+          const checkInLink = `${baseUrl}/`;
+          await sendReminderSms(user.phone, checkInLink);
+          await storage.incrementRemindersSent(user.id);
+          remindersSent++;
+          
+          console.log("[REMINDER] Sent\n");
+          continue;
         }
         
-        // Get tokens and base URL
-        const tokens = await storage.getContactTokensForUser(user.id);
-        const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-          ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-          : "http://localhost:5000";
-        
-        // Send missed check-in alerts
-        console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting contacts...`);
-        for (const contact of contacts) {
-          const token = tokens.find(t => t.contact.id === contact.id);
-          if (token) {
-            const link = `${baseUrl}/c/${token.token}`;
-            await sendMissedCheckinAlert(contact.phone, user.name, link);
+        // If past grace period and all reminders sent, create incident and alert contacts
+        if (isDueForAlert && remindersSentSoFar >= maxReminders) {
+          // Create missed check-in incident
+          const incident = await storage.createIncident(user.id, "missed_checkin");
+          const contacts = await storage.getContacts(user.id);
+          
+          // Create location session if allowed
+          if (settings.locationMode === "emergency_only" || settings.locationMode === "both") {
+            await storage.createLocationSession(user.id, "emergency", incident.id);
           }
+          
+          // Get tokens
+          const tokens = await storage.getContactTokensForUser(user.id);
+          
+          // Send missed check-in alerts
+          console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting contacts...`);
+          for (const contact of contacts) {
+            const token = tokens.find(t => t.contact.id === contact.id);
+            if (token) {
+              const link = `${baseUrl}/c/${token.token}`;
+              await sendMissedCheckinAlert(contact.phone, user.name, link);
+            }
+          }
+          console.log("[MISSED CHECK-IN] Alerts sent\n");
+          alertsSent++;
+          
+          // Reset reminder state after incident is created
+          await storage.resetReminderState(user.id);
         }
-        console.log("[MISSED CHECK-IN] Alerts sent\n");
       }
       
-      res.json({ success: true, processed: dueUsers.length });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent });
     } catch (error) {
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });

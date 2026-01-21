@@ -133,6 +133,14 @@ export async function sendTestMessage(
   return sendSms(contactPhone, body);
 }
 
+export async function sendReminderSms(
+  userPhone: string,
+  link: string
+): Promise<SendSmsResult> {
+  const body = `StillHere reminder:\nYou haven't checked in yet.\nTap below to let us know you're OK:\n${link}`;
+  return sendSms(userPhone, body);
+}
+
 export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && fromPhone);
 }
