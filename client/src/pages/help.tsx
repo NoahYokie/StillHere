@@ -32,7 +32,7 @@ const faqs = [
   {
     question: "What is the grace period?",
     answer:
-      "After your check-in is due, we wait 10-30 minutes before notifying your contacts. This gives you extra time to respond.",
+      "After your check-in is due, we wait 10-30 minutes before notifying your emergency contacts. This gives you extra time to respond.",
   },
   {
     question: "How do I add emergency contacts?",
@@ -47,7 +47,7 @@ const faqs = [
   {
     question: "What are reminders?",
     answer:
-      "Reminders are messages we send to you before notifying your contacts. They give you a chance to check in if you forgot.",
+      "Reminders are messages we send to you before notifying your emergency contacts. They give you a chance to check in if you forgot.",
   },
   {
     question: "How many reminders can I get?",
