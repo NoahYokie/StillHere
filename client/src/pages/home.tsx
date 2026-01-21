@@ -162,12 +162,17 @@ export default function Home() {
   const formatNextCheckin = (date: Date) => {
     const d = new Date(date);
     const now = new Date();
-    const diffMs = d.getTime() - now.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
+    
+    // Compare calendar days, not hours
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const dayAfterTomorrowStart = new Date(todayStart);
+    dayAfterTomorrowStart.setDate(dayAfterTomorrowStart.getDate() + 2);
 
-    if (diffHours < 24) {
+    if (d < tomorrowStart) {
       return format(d, "h:mm a 'today'");
-    } else if (diffHours < 48) {
+    } else if (d < dayAfterTomorrowStart) {
       return format(d, "h:mm a 'tomorrow'");
     } else {
       return format(d, "EEEE 'at' h:mm a");
