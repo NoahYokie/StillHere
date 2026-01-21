@@ -28,15 +28,9 @@ const getUserId = (req: Request): string | null => {
 
 // Helper to get base URL for links (custom domain in production, dev domain otherwise)
 const getBaseUrl = (): string => {
-  // In production deployment, use custom domain
-  if (process.env.REPLIT_DEPLOYMENT) {
-    return "https://stillhere.health";
-  }
-  // In development, use dev domain
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  return "http://localhost:5000";
+  // Always use custom domain for SMS links (both dev and production)
+  // This ensures emergency contacts always get the professional URL
+  return "https://stillhere.health";
 };
 
 export async function registerRoutes(
