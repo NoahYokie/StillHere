@@ -93,7 +93,7 @@ function Router() {
       </Route>
       <Route path="/help" component={HelpPage} />
       <Route path="/trust" component={TrustPage} />
-      <Route path="/c/:token" component={ContactPage} />
+      <Route path="/emergency/:token" component={ContactPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -258,7 +258,7 @@ export async function registerRoutes(
       for (const contact of contacts) {
         const token = tokens.find(t => t.contact.id === contact.id);
         if (token) {
-          const link = `${baseUrl}/c/${token.token}`;
+          const link = `${baseUrl}/emergency/${token.token}`;
           await sendSosAlert(contact.phone, user?.name || "User", link);
         }
       }
@@ -353,7 +353,7 @@ export async function registerRoutes(
         console.log("\n========================================");
         console.log("Contact Page URLs:");
         for (const t of tokens) {
-          console.log(`  ${t.contact.name}: /c/${t.token}`);
+          console.log(`  ${t.contact.name}: /emergency/${t.token}`);
         }
         console.log("========================================\n");
       }
@@ -407,7 +407,7 @@ export async function registerRoutes(
   // ============================================
 
   // Contact page - get data
-  app.get("/api/c/:token", async (req, res) => {
+  app.get("/api/emergency/:token", async (req, res) => {
     try {
       const { token } = req.params;
       const data = await storage.getContactPageData(token);
@@ -424,7 +424,7 @@ export async function registerRoutes(
   });
 
   // Contact takes responsibility
-  app.post("/api/c/:token/handle", async (req, res) => {
+  app.post("/api/emergency/:token/handle", async (req, res) => {
     try {
       const { token } = req.params;
       const data = await storage.getContactPageData(token);
@@ -454,7 +454,7 @@ export async function registerRoutes(
   });
 
   // Contact escalates
-  app.post("/api/c/:token/escalate", async (req, res) => {
+  app.post("/api/emergency/:token/escalate", async (req, res) => {
     try {
       const { token } = req.params;
       const data = await storage.getContactPageData(token);
@@ -487,7 +487,7 @@ export async function registerRoutes(
       for (const contact of contacts) {
         const token = tokens.find(t => t.contact.id === contact.id);
         if (token) {
-          const link = `${baseUrl}/c/${token.token}`;
+          const link = `${baseUrl}/emergency/${token.token}`;
           await sendMissedCheckinAlert(contact.phone, data.user.name, link);
         }
       }
@@ -563,7 +563,7 @@ export async function registerRoutes(
           for (const contact of contacts) {
             const token = tokens.find(t => t.contact.id === contact.id);
             if (token) {
-              const link = `${baseUrl}/c/${token.token}`;
+              const link = `${baseUrl}/emergency/${token.token}`;
               await sendMissedCheckinAlert(contact.phone, user.name, link);
             }
           }
