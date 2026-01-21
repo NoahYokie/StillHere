@@ -269,16 +269,27 @@ export default function ContactPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="bg-muted rounded-lg h-48 flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
-                  <MapPin className="h-8 w-8 mx-auto mb-2" />
-                  <p className="text-sm" data-testid="text-location-coords">
-                    {locationSession.lastLat.toFixed(4)}, {locationSession.lastLng?.toFixed(4)}
-                  </p>
-                  <p className="text-xs mt-1">Map view coming soon</p>
-                </div>
+              <div className="rounded-lg h-48 overflow-hidden">
+                <iframe
+                  title="User location map"
+                  width="100%"
+                  height="100%"
+                  style={{ border: 0 }}
+                  loading="lazy"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationSession.lastLng! - 0.01},${locationSession.lastLat - 0.01},${locationSession.lastLng! + 0.01},${locationSession.lastLat + 0.01}&layer=mapnik&marker=${locationSession.lastLat},${locationSession.lastLng}`}
+                  data-testid="map-location"
+                />
               </div>
-              <p className="text-xs text-muted-foreground mt-3">
+              <a
+                href={`https://www.google.com/maps?q=${locationSession.lastLat},${locationSession.lastLng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary underline mt-3 block text-center"
+                data-testid="link-open-maps"
+              >
+                Open in Google Maps
+              </a>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
                 Location sharing is controlled by the user.
               </p>
             </CardContent>
