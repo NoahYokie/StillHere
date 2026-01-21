@@ -175,23 +175,29 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t mt-12 py-6 px-6">
-        <div className="max-w-2xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <p>StillHere — A safety check-in app</p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setLocation("/help")}
-              className="hover:text-foreground"
-              data-testid="link-footer-help"
-            >
-              Help
-            </button>
-            <button
-              onClick={() => setLocation("/trust")}
-              className="hover:text-foreground"
-              data-testid="link-footer-trust"
-            >
-              Trust & Safety
-            </button>
+        <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 text-sm text-muted-foreground">
+          <p className="text-center px-4 py-3 bg-muted/50 rounded-md" data-testid="text-security-notice">
+            <Shield className="h-4 w-4 inline mr-1" />
+            StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere, do not respond.
+          </p>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 w-full">
+            <p>StillHere — A safety check-in app</p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setLocation("/help")}
+                className="hover:text-foreground"
+                data-testid="link-footer-help"
+              >
+                Help
+              </button>
+              <button
+                onClick={() => setLocation("/trust")}
+                className="hover:text-foreground"
+                data-testid="link-footer-trust"
+              >
+                Trust & Safety
+              </button>
+            </div>
           </div>
         </div>
       </footer>

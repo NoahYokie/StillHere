@@ -59,6 +59,11 @@ const faqs = [
     answer:
       "If the grace period ends and you haven't checked in, we notify your emergency contacts regardless of how many reminders were sent.",
   },
+  {
+    question: "Will StillHere ever ask for my personal information or payment?",
+    answer:
+      "No. StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere and asks for this information, do not respond — it's a scam. The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.",
+  },
 ];
 
 export default function HelpPage() {
