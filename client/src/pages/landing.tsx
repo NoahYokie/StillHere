@@ -181,7 +181,7 @@ export default function LandingPage() {
             StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere and asks for this information, do not respond as this is likely a fraudulent attempt.
           </p>
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 w-full">
-            <p>StillHere — A safety check-in app</p>
+            <p>StillHere - A safety check-in app</p>
             <div className="flex gap-4">
               <button
                 onClick={() => setLocation("/help")}
