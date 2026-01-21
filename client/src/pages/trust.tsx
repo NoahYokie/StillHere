@@ -247,7 +247,7 @@ export default function TrustPage() {
               </li>
             </ul>
             <p className="text-lg font-semibold text-primary mt-4">
-              Trust is not a feature — it is the product.
+              Trust is not a feature. It is the product.
             </p>
           </CardContent>
         </Card>
