@@ -175,41 +175,75 @@ export class DatabaseStorage implements IStorage {
     userId: string,
     contactsData: { contact1: InsertContact; contact2?: InsertContact }
   ): Promise<Contact[]> {
-    // Get existing contacts and their tokens
+    // Get existing contacts
     const existing = await this.getContacts(userId);
-    
-    // Delete tokens for existing contacts
-    for (const c of existing) {
-      await db.delete(contactTokens).where(eq(contactTokens.contactId, c.id));
-    }
-    
-    // Delete existing contacts
-    await db.delete(contacts).where(eq(contacts.userId, userId));
-
     const result: Contact[] = [];
 
-    // Create contact 1
-    const [contact1] = await db.insert(contacts).values({
-      userId,
-      name: contactsData.contact1.name,
-      phone: contactsData.contact1.phone,
-      priority: 1,
-      canViewLocation: contactsData.contact1.canViewLocation ?? true,
-    }).returning();
-    result.push(contact1);
-    await this.generateToken(contact1.id);
-
-    // Create contact 2 if provided
-    if (contactsData.contact2?.name && contactsData.contact2?.phone) {
-      const [contact2] = await db.insert(contacts).values({
+    // Update or create contact 1
+    const existingContact1 = existing.find(c => c.priority === 1);
+    if (existingContact1) {
+      // Update existing contact
+      const [updated] = await db.update(contacts)
+        .set({
+          name: contactsData.contact1.name,
+          phone: contactsData.contact1.phone,
+          canViewLocation: contactsData.contact1.canViewLocation ?? true,
+        })
+        .where(eq(contacts.id, existingContact1.id))
+        .returning();
+      result.push(updated);
+      // Regenerate token for updated contact
+      await db.delete(contactTokens).where(eq(contactTokens.contactId, existingContact1.id));
+      await this.generateToken(existingContact1.id);
+    } else {
+      // Create new contact
+      const [contact1] = await db.insert(contacts).values({
         userId,
-        name: contactsData.contact2.name,
-        phone: contactsData.contact2.phone,
-        priority: 2,
-        canViewLocation: contactsData.contact2.canViewLocation ?? true,
+        name: contactsData.contact1.name,
+        phone: contactsData.contact1.phone,
+        priority: 1,
+        canViewLocation: contactsData.contact1.canViewLocation ?? true,
       }).returning();
-      result.push(contact2);
-      await this.generateToken(contact2.id);
+      result.push(contact1);
+      await this.generateToken(contact1.id);
+    }
+
+    // Handle contact 2
+    const existingContact2 = existing.find(c => c.priority === 2);
+    if (contactsData.contact2?.name && contactsData.contact2?.phone) {
+      if (existingContact2) {
+        // Update existing contact 2
+        const [updated] = await db.update(contacts)
+          .set({
+            name: contactsData.contact2.name,
+            phone: contactsData.contact2.phone,
+            canViewLocation: contactsData.contact2.canViewLocation ?? true,
+          })
+          .where(eq(contacts.id, existingContact2.id))
+          .returning();
+        result.push(updated);
+        // Regenerate token for updated contact
+        await db.delete(contactTokens).where(eq(contactTokens.contactId, existingContact2.id));
+        await this.generateToken(existingContact2.id);
+      } else {
+        // Create new contact 2
+        const [contact2] = await db.insert(contacts).values({
+          userId,
+          name: contactsData.contact2.name,
+          phone: contactsData.contact2.phone,
+          priority: 2,
+          canViewLocation: contactsData.contact2.canViewLocation ?? true,
+        }).returning();
+        result.push(contact2);
+        await this.generateToken(contact2.id);
+      }
+    } else if (existingContact2) {
+      // Remove contact 2 if no longer provided - but clear any incident references first
+      await db.update(incidents)
+        .set({ handledByContactId: null })
+        .where(eq(incidents.handledByContactId, existingContact2.id));
+      await db.delete(contactTokens).where(eq(contactTokens.contactId, existingContact2.id));
+      await db.delete(contacts).where(eq(contacts.id, existingContact2.id));
     }
 
     return result;
