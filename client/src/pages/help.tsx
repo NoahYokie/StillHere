@@ -12,7 +12,7 @@ const faqs = [
   {
     question: "What if my phone is off?",
     answer:
-      "If we can't reach you and a check-in is missed, we notify your contacts.",
+      "StillHere works by waiting for you to tap the green button. If your phone is off and you miss your check-in time, we'll send a message to your emergency contacts so they can check on you.",
   },
   {
     question: "Will you share my location?",
