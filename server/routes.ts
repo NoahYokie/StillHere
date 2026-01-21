@@ -12,12 +12,14 @@ import {
   clearSessionCookie,
   getSessionToken,
   getUserFromSession,
+  normalizePhone,
 } from "./auth";
 import {
   sendSosAlert,
   sendMissedCheckinAlert,
   sendTestMessage,
   sendReminderSms,
+  sendAllClearNotification,
   isTwilioConfigured,
 } from "./sms";
 
@@ -290,6 +292,9 @@ export async function registerRoutes(
         return res.status(404).json({ error: "No active alert" });
       }
       
+      // Get user info for notification
+      const user = await storage.getUser(userId);
+      
       // Resolve the incident
       await storage.updateIncident(openIncident.id, {
         status: "resolved",
@@ -300,6 +305,20 @@ export async function registerRoutes(
       const session = await storage.getActiveLocationSession(userId);
       if (session) {
         await storage.endLocationSession(session.id);
+      }
+      
+      // Notify emergency contacts that user is OK now
+      if (user) {
+        const contactsWithTokens = await storage.getContactTokensForUser(userId);
+        const baseUrl = getBaseUrl();
+        
+        console.log("[Resolve] Notifying contacts that user is OK...");
+        for (const { contact, token } of contactsWithTokens) {
+          const normalizedPhone = normalizePhone(contact.phone);
+          const link = `${baseUrl}/emergency/${token}`;
+          await sendAllClearNotification(normalizedPhone, user.name, link);
+        }
+        console.log("[Resolve] All clear notifications sent");
       }
       
       res.json({ success: true });
