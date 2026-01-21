@@ -122,8 +122,8 @@ export default function HelpPage() {
         <div className="text-center pt-4">
           <p className="text-sm text-muted-foreground">
             Still have questions? Contact us at{" "}
-            <a href="mailto:support@stillhere.app" className="text-primary underline">
-              support@stillhere.app
+            <a href="mailto:support@stillhere.health" className="text-primary underline">
+              support@stillhere.health
             </a>
           </p>
         </div>
