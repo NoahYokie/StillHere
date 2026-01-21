@@ -154,7 +154,7 @@ export default function SetupPreferencesPage() {
               </div>
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="emergency_only" id="loc-emergency" data-testid="radio-location-emergency" />
-                <Label htmlFor="loc-emergency">Only during emergencies</Label>
+                <Label htmlFor="loc-emergency">Only during emergencies (recommended)</Label>
               </div>
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="on_shift_only" id="loc-checkin" data-testid="radio-location-checkin" />
