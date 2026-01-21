@@ -112,7 +112,7 @@ export async function sendMissedCheckinAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere alert:\n${userName} hasn't checked in yet.\nTap here to see their status and check on them:\n${link}`;
+  const body = `StillHere Alert\n\n${userName} hasn't checked in.\n\nView status and location:\n${link}\n\nYou are receiving this because you are an emergency contact.`;
   return sendSms(contactPhone, body);
 }
 
@@ -121,7 +121,7 @@ export async function sendSosAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere alert:\n${userName} has asked for help.\nPlease check on them now:\n${link}`;
+  const body = `StillHere Alert\n\n${userName} has requested help.\n\nView status and location:\n${link}\n\nYou are receiving this because you are an emergency contact.`;
   return sendSms(contactPhone, body);
 }
 

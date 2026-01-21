@@ -235,7 +235,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generateToken(contactId: string): Promise<ContactToken> {
-    const token = randomBytes(32).toString("hex");
+    // Generate a short, URL-safe token (10 characters, mixed case alphanumeric)
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let token = '';
+    const bytes = randomBytes(10);
+    for (let i = 0; i < 10; i++) {
+      token += chars[bytes[i] % chars.length];
+    }
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
     const [result] = await db.insert(contactTokens).values({
