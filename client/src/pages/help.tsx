@@ -1,4 +1,3 @@
-import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
@@ -82,8 +81,6 @@ const faqs = [
 ];
 
 export default function HelpPage() {
-  const [, setLocation] = useLocation();
-
   return (
     <div className="min-h-screen bg-background pb-12">
       {/* Header */}
@@ -93,7 +90,7 @@ export default function HelpPage() {
             variant="ghost"
             size="icon"
             className="text-primary-foreground"
-            onClick={() => setLocation("/settings")}
+            onClick={() => window.history.back()}
             data-testid="button-back"
           >
             <ArrowLeft className="h-5 w-5" />
