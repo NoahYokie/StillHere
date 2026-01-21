@@ -62,7 +62,7 @@ const faqs = [
   {
     question: "Will StillHere ever ask for my personal information or payment?",
     answer:
-      "No. StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere and asks for this information, do not respond. It's a scam. The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.",
+      "No. StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere and asks for this information, do not respond as this is likely a fraudulent attempt. The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.",
   },
 ];
 
