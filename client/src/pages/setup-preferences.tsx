@@ -156,6 +156,10 @@ export default function SetupPreferencesPage() {
                 <RadioGroupItem value="emergency_only" id="loc-emergency" data-testid="radio-location-emergency" />
                 <Label htmlFor="loc-emergency">Only during emergencies</Label>
               </div>
+              <div className="flex items-center space-x-3">
+                <RadioGroupItem value="on_shift_only" id="loc-checkin" data-testid="radio-location-checkin" />
+                <Label htmlFor="loc-checkin">During active check-ins</Label>
+              </div>
             </RadioGroup>
             <p className="text-sm text-muted-foreground">
               You stay in control. Change this anytime.
