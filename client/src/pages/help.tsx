@@ -42,7 +42,7 @@ const faqs = [
   {
     question: "Can I pause check-ins temporarily?",
     answer:
-      "Yes. In Settings, you can pause alerts for 2 hours, 6 hours, or until tomorrow morning.",
+      "Yes. If you're busy or going somewhere without your phone, you can pause alerts in Settings. Choose 2 hours, 6 hours, or until tomorrow morning. While paused, we won't send reminders or notify your emergency contacts if you miss a check-in.",
   },
   {
     question: "What are reminders?",
