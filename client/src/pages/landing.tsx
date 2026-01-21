@@ -145,6 +145,35 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <section className="mb-12">
+          <h3 className="text-xl font-semibold mb-6 text-center">What your emergency contacts see</h3>
+          <Card className="bg-muted/30">
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                When notified, your emergency contacts receive a text message with a link. On that page, they can see:
+              </p>
+              <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+                <li>Your name and status</li>
+                <li>When you last checked in</li>
+                <li>Your location on a map (if you've turned this on)</li>
+                <li>Your full address</li>
+                <li>A link to get directions</li>
+              </ul>
+              <p className="text-sm text-muted-foreground">
+                They also see simple guidance:
+              </p>
+              <div className="bg-background rounded-lg p-4">
+                <p className="text-sm font-medium mb-2">What to do next:</p>
+                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                  <li>Try calling them</li>
+                  <li>If no answer, send them a text message</li>
+                  <li>If still no response, call local emergency services</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
         <section className="text-center mb-12">
           <Card className="bg-muted/50">
             <CardContent className="pt-6">
