@@ -20,9 +20,9 @@ const faqs = [
       "Only if you turn it on. You can turn it off any time.",
   },
   {
-    question: "What happens when a contact responds?",
+    question: "What happens when an emergency contact responds?",
     answer:
-      'If a contact says they\'re handling it, we pause further alerts.',
+      'If an emergency contact says they\'re checking on you, we pause further alerts.',
   },
   {
     question: "Can I change my check-in schedule?",
@@ -57,7 +57,7 @@ const faqs = [
   {
     question: "What if I don't respond to reminders?",
     answer:
-      "If the grace period ends and you haven't checked in, we notify your contacts regardless of how many reminders were sent.",
+      "If the grace period ends and you haven't checked in, we notify your emergency contacts regardless of how many reminders were sent.",
   },
 ];
 

@@ -55,11 +55,11 @@ export default function TrustPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">•</span>
-                <span>If you don't respond, we notify the people you chose.</span>
+                <span>If you don't respond, we notify your emergency contacts.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">•</span>
-                <span>Your contacts can step in before anything else happens.</span>
+                <span>Your emergency contacts can check on you before anything else happens.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">•</span>

@@ -331,7 +331,7 @@ export default function SettingsPage() {
               <AlertCircle className="h-5 w-5" />
               If you miss a check-in
             </CardTitle>
-            <CardDescription>How long should we wait before notifying contacts?</CardDescription>
+            <CardDescription>How long should we wait before notifying your emergency contacts?</CardDescription>
           </CardHeader>
           <CardContent>
             <RadioGroup
@@ -352,7 +352,7 @@ export default function SettingsPage() {
                 <Label htmlFor="30min">30 minutes</Label>
               </div>
             </RadioGroup>
-            <p className="text-sm text-muted-foreground mt-3">We'll remind you first.</p>
+            <p className="text-sm text-muted-foreground mt-3">We'll send you a reminder first.</p>
           </CardContent>
         </Card>
 
