@@ -567,7 +567,6 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <Button
-              variant="outline"
               onClick={() => setShowTestConfirm(true)}
               disabled={testMutation.isPending}
               data-testid="button-run-test"
