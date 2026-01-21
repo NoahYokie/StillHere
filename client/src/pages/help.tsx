@@ -17,7 +17,7 @@ const faqs = [
   {
     question: "Will you share my location?",
     answer:
-      "Only if you turn it on. You can turn it off any time.",
+      "Location sharing is off by default. You choose whether to share it. If you turn it on, your emergency contacts can see where you are when they need to check on you. You can change this anytime in Settings.",
   },
   {
     question: "What happens when an emergency contact responds?",
