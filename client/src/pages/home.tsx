@@ -91,6 +91,20 @@ export default function Home() {
         title: "Alert sent",
         description: "Your emergency contacts were notified.",
       });
+      
+      // Automatically try to capture and send location after SOS
+      if (status?.settings?.locationMode !== "off") {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            sendLocationToServer(position);
+            setLocationEnabled(true);
+          },
+          () => {
+            console.log("Could not get location for SOS");
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }
     },
     onError: () => {
       toast({
