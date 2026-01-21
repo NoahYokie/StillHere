@@ -141,6 +141,15 @@ export async function sendReminderSms(
   return sendSms(userPhone, body);
 }
 
+export async function sendAllClearNotification(
+  contactPhone: string,
+  userName: string,
+  link: string
+): Promise<SendSmsResult> {
+  const body = `StillHere Update\n\n${userName} is OK now.\n\nNo action needed. You can view their status:\n${link}`;
+  return sendSms(contactPhone, body);
+}
+
 export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && fromPhone);
 }
