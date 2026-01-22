@@ -222,6 +222,51 @@ Reminder state (remindersSent, lastReminderAt) is reset when:
 - User checks in
 - An incident is created
 
+## Escalation System
+
+StillHere uses a sequential escalation system to ensure someone responds to alerts:
+
+### How It Works
+
+1. **Initial Alert (Contact 1 only)**
+   - When SOS is pressed or a check-in is missed, only Contact 1 (priority 1) is notified
+   - A 20-minute timer starts
+
+2. **Escalation to Contact 2 (if no response)**
+   - If Contact 1 doesn't respond within 20 minutes, Contact 2 is automatically notified
+   - Another 20-minute timer starts
+   - SMS: "{Name} {reason} and the first contact hasn't responded. Please check on them: {link}"
+
+3. **User Notification (if no contacts respond)**
+   - If neither contact responds, the user receives an SMS
+   - SMS: "We've been trying to reach your emergency contacts but haven't received a response yet. We'll keep trying."
+
+4. **Handling Timeout (45 minutes)**
+   - If a contact clicks "I'm handling this" but doesn't resolve the alert within 45 minutes
+   - All contacts are re-notified with a follow-up message
+   - SMS: "Follow-up: {Name}'s alert is still active. Please confirm you've reached them: {link}"
+
+### Contact Response Flow
+
+When a contact clicks "I'm handling this":
+1. The incident status changes to "paused"
+2. The user receives an SMS: "{Contact Name} has seen your alert and is checking on you."
+3. A 45-minute timer starts
+4. If resolved within 45 min, escalation ends
+5. If not resolved, all contacts are re-notified
+
+When the user clicks "I'm OK now":
+1. The incident is resolved
+2. All contacts receive an SMS: "{Name} is OK now. No action needed."
+
+### Database Fields (incidents table)
+
+- `escalationLevel` - Current escalation level (1 or 2)
+- `contact1NotifiedAt` - When Contact 1 was notified
+- `contact2NotifiedAt` - When Contact 2 was notified (if escalated)
+- `userNotifiedNoResponseAt` - When user was notified of no response
+- `nextActionAt` - When to check for escalation (used by cron)
+
 ## PWA (Progressive Web App)
 
 StillHere is a fully installable PWA with offline support:
