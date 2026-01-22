@@ -110,6 +110,11 @@ export const incidents = pgTable("incidents", {
   resolvedAt: timestamp("resolved_at"),
   handledByContactId: uuid("handled_by_contact_id").references(() => contacts.id),
   nextActionAt: timestamp("next_action_at"),
+  // Escalation tracking
+  escalationLevel: integer("escalation_level").notNull().default(1),
+  contact1NotifiedAt: timestamp("contact1_notified_at"),
+  contact2NotifiedAt: timestamp("contact2_notified_at"),
+  userNotifiedNoResponseAt: timestamp("user_notified_no_response_at"),
 });
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
