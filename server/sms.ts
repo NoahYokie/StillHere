@@ -150,6 +150,14 @@ export async function sendAllClearNotification(
   return sendSms(contactPhone, body);
 }
 
+export async function sendContactRespondedNotification(
+  userPhone: string,
+  contactName: string
+): Promise<SendSmsResult> {
+  const body = `StillHere Update\n\n${contactName} has seen your alert and is checking on you.`;
+  return sendSms(userPhone, body);
+}
+
 export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && fromPhone);
 }
