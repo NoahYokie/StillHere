@@ -21,6 +21,9 @@ import {
   sendReminderSms,
   sendAllClearNotification,
   sendContactRespondedNotification,
+  sendEscalationAlert,
+  sendNoResponseNotification,
+  sendHandlingTimeoutAlert,
   isTwilioConfigured,
 } from "./sms";
 
@@ -529,7 +532,7 @@ export async function registerRoutes(
     }
   });
 
-  // Contact escalates
+  // Contact escalates (manual escalation - "I can't help")
   app.post("/api/emergency/:token/escalate", async (req, res) => {
     try {
       const { token } = req.params;
@@ -543,29 +546,44 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No active incident" });
       }
       
-      // Update incident back to open
+      const now = new Date();
+      
+      // Update incident - reset escalation state and restart the flow
       const incident = await storage.updateIncident(data.incident.id, {
         status: "open",
         handledByContactId: null,
-        nextActionAt: null,
+        // Reset all escalation tracking to restart the flow
+        escalationLevel: 1,
+        contact1NotifiedAt: now,
+        contact2NotifiedAt: null,
+        userNotifiedNoResponseAt: null,
+        nextActionAt: addMinutes(now, 20), // Start fresh 20-min escalation window
       });
       
       console.log(`\n[INCIDENT] ${data.contact.name} escalated the incident for ${data.user.name}\n`);
       
-      // Re-notify contacts
+      // Follow sequential escalation: notify only Contact 1, let cron handle Contact 2 after 20 min
       const contacts = await storage.getContacts(data.user.id);
       const tokens = await storage.getContactTokensForUser(data.user.id);
       const baseUrl = getBaseUrl();
       
-      console.log("\n[ESCALATION] Re-notifying contacts...");
-      await Promise.all(contacts.map(async (contact) => {
-        const token = tokens.find(t => t.contact.id === contact.id);
-        if (token) {
-          const link = `${baseUrl}/emergency/${token.token}`;
-          await sendMissedCheckinAlert(contact.phone, data.user.name, link);
+      // Notify Contact 1 only (sequential escalation)
+      const contact1 = contacts.find(c => c.priority === 1);
+      if (contact1) {
+        const tokenData = tokens.find(t => t.contact.id === contact1.id);
+        if (tokenData) {
+          const link = `${baseUrl}/emergency/${tokenData.token}`;
+          const normalizedPhone = normalizePhone(contact1.phone);
+          console.log(`\n[ESCALATION] Re-notifying Contact 1: ${contact1.name}...`);
+          // Use correct SMS template based on incident reason
+          if (data.incident!.reason === "sos") {
+            await sendSosAlert(normalizedPhone, data.user.name, link);
+          } else {
+            await sendMissedCheckinAlert(normalizedPhone, data.user.name, link);
+          }
+          console.log("[ESCALATION] Contact 1 re-notified, escalation will continue via cron\n");
         }
-      }));
-      console.log("[ESCALATION] Alerts sent\n");
+      }
       
       res.json({ success: true, incident });
     } catch (error) {
@@ -687,7 +705,271 @@ export async function registerRoutes(
         }
       }
       
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent });
+      // Handle escalations for incidents that need attention
+      // These are incidents where nextActionAt has passed and they're not resolved
+      let escalations = 0;
+      const incidentsNeedingEscalation = await storage.getIncidentsNeedingEscalation();
+      
+      for (const incident of incidentsNeedingEscalation) {
+        const user = await storage.getUser(incident.userId);
+        if (!user) continue;
+        
+        const contacts = await storage.getContacts(incident.userId);
+        const tokens = await storage.getContactTokensForUser(incident.userId);
+        
+        // Handle incidents without proper escalation tracking (legacy incidents)
+        // Re-notify Contact 1 and initialize escalation tracking
+        if (!incident.contact1NotifiedAt) {
+          const contact1 = contacts.find(c => c.priority === 1);
+          if (contact1) {
+            const token = tokens.find(t => t.contact.id === contact1.id);
+            if (token) {
+              const link = `${baseUrl}/emergency/${token.token}`;
+              const normalizedPhone = normalizePhone(contact1.phone);
+              console.log(`\n[ESCALATION] Legacy incident for ${user.name} - notifying Contact 1: ${contact1.name}...`);
+              if (incident.reason === "sos") {
+                await sendSosAlert(normalizedPhone, user.name, link);
+              } else {
+                await sendMissedCheckinAlert(normalizedPhone, user.name, link);
+              }
+            }
+          }
+          
+          // Initialize escalation tracking
+          await storage.updateIncident(incident.id, {
+            escalationLevel: 1,
+            contact1NotifiedAt: now,
+            nextActionAt: addMinutes(now, 20),
+          });
+          console.log("[ESCALATION] Legacy incident initialized\n");
+          escalations++;
+          continue;
+        }
+        
+        // Case 1: Status is "paused" - handling timeout (45 min)
+        // Contact took responsibility but hasn't resolved it
+        if (incident.status === "paused") {
+          console.log(`\n[ESCALATION] ${user.name} - handling timeout, re-notifying all contacts...`);
+          
+          // Re-notify all contacts
+          for (const contact of contacts) {
+            const token = tokens.find(t => t.contact.id === contact.id);
+            if (token) {
+              const link = `${baseUrl}/emergency/${token.token}`;
+              const normalizedPhone = normalizePhone(contact.phone);
+              await sendHandlingTimeoutAlert(normalizedPhone, user.name, link);
+            }
+          }
+          
+          // Update incident - fully reset escalation state to restart the flow
+          // This ensures we go through the proper escalation sequence again
+          await storage.updateIncident(incident.id, {
+            status: "open",
+            handledByContactId: null,
+            // Reset all escalation tracking to restart the flow
+            escalationLevel: 1,
+            contact1NotifiedAt: now, // Mark as notified now since we just re-notified everyone
+            contact2NotifiedAt: null,
+            userNotifiedNoResponseAt: null,
+            nextActionAt: addMinutes(now, 20), // Start fresh 20-min escalation window
+          });
+          
+          console.log("[ESCALATION] Handling timeout alerts sent, escalation reset\n");
+          escalations++;
+          continue;
+        }
+        
+        // Case 2: Status is "open" - check escalation level with explicit timing
+        if (incident.status === "open") {
+          const contact2 = contacts.find(c => c.priority === 2);
+          const contact1 = contacts.find(c => c.priority === 1);
+          const ESCALATION_WINDOW_MS = 20 * 60 * 1000; // 20 minutes in milliseconds
+          
+          // Helper function to re-notify Contact 1 and reset to level 1
+          const resetToLevel1 = async (reason: string) => {
+            console.log(`[ESCALATION RECOVERY] Incident ${incident.id}: ${reason} - resetting to level 1`);
+            
+            if (contact1) {
+              const token = tokens.find(t => t.contact.id === contact1.id);
+              if (token) {
+                const link = `${baseUrl}/emergency/${token.token}`;
+                const normalizedPhone = normalizePhone(contact1.phone);
+                if (incident.reason === "sos") {
+                  await sendSosAlert(normalizedPhone, user.name, link);
+                } else {
+                  await sendMissedCheckinAlert(normalizedPhone, user.name, link);
+                }
+              }
+            }
+            
+            await storage.updateIncident(incident.id, {
+              escalationLevel: 1,
+              contact1NotifiedAt: now,
+              contact2NotifiedAt: null,
+              userNotifiedNoResponseAt: null,
+              nextActionAt: addMinutes(now, 20),
+            });
+            escalations++;
+          };
+          
+          // NORMALIZATION: Handle all inconsistent state combinations
+          const escalationLevel = incident.escalationLevel ?? 1;
+          
+          // Case A: Missing base state (escalationLevel or contact1NotifiedAt)
+          if (!incident.escalationLevel || incident.escalationLevel < 1 || !incident.contact1NotifiedAt) {
+            await resetToLevel1("missing base state");
+            continue;
+          }
+          
+          // Case B: contact2 was removed but escalationLevel >= 2 (user deleted contact2)
+          if (escalationLevel >= 2 && !contact2) {
+            await resetToLevel1("contact2 removed but level >= 2");
+            continue;
+          }
+          
+          // Case C: escalationLevel >= 2 but contact2NotifiedAt missing (inconsistent)
+          if (escalationLevel >= 2 && contact2 && !incident.contact2NotifiedAt) {
+            console.log(`[ESCALATION RECOVERY] Incident ${incident.id} has level 2+ but missing contact2NotifiedAt - notifying Contact 2`);
+            
+            const token = tokens.find(t => t.contact.id === contact2.id);
+            if (token) {
+              const link = `${baseUrl}/emergency/${token.token}`;
+              const normalizedPhone = normalizePhone(contact2.phone);
+              await sendEscalationAlert(normalizedPhone, user.name, link, incident.reason as "sos" | "missed_checkin");
+            }
+            
+            await storage.updateIncident(incident.id, {
+              escalationLevel: 2,
+              contact2NotifiedAt: now,
+              nextActionAt: addMinutes(now, 20),
+            });
+            escalations++;
+            continue;
+          }
+          
+          // Case D: escalationLevel = 1 but contact2NotifiedAt is set (inconsistent - normalize)
+          if (escalationLevel === 1 && incident.contact2NotifiedAt) {
+            if (!contact2) {
+              // Contact 2 was removed but timestamp exists - clear it and continue normally
+              await storage.updateIncident(incident.id, {
+                contact2NotifiedAt: null,
+              });
+              // Continue to normal level 1 processing
+            } else {
+              // Contact 2 exists with timestamp but level is 1 - promote using existing timestamp
+              console.log(`[ESCALATION RECOVERY] Incident ${incident.id} has level 1 but contact2NotifiedAt set - promoting to level 2`);
+              await storage.updateIncident(incident.id, {
+                escalationLevel: 2,
+                // Use existing contact2NotifiedAt for timing, add 20 min from that timestamp
+                nextActionAt: addMinutes(incident.contact2NotifiedAt, 20),
+              });
+              escalations++;
+              continue;
+            }
+          }
+          
+          // Escalation level 1 → 2: Notify Contact 2 if 20 min have passed since Contact 1 notification
+          if (escalationLevel === 1 && contact2 && !incident.contact2NotifiedAt) {
+            const contact1NotifiedMs = incident.contact1NotifiedAt.getTime();
+            const elapsedMs = now.getTime() - contact1NotifiedMs;
+            
+            // Verify 20 minutes have actually passed since Contact 1 was notified
+            if (elapsedMs < ESCALATION_WINDOW_MS) {
+              // Not time yet - reschedule for when 20 min window expires
+              const remainingMs = ESCALATION_WINDOW_MS - elapsedMs;
+              await storage.updateIncident(incident.id, {
+                nextActionAt: new Date(now.getTime() + remainingMs + 60000), // +1 min buffer
+              });
+              continue;
+            }
+            
+            const token = tokens.find(t => t.contact.id === contact2.id);
+            if (token) {
+              const link = `${baseUrl}/emergency/${token.token}`;
+              const normalizedPhone = normalizePhone(contact2.phone);
+              console.log(`\n[ESCALATION] ${user.name} - Contact 1 no response (${Math.round(elapsedMs/60000)} min), alerting Contact 2: ${contact2.name}...`);
+              await sendEscalationAlert(normalizedPhone, user.name, link, incident.reason as "sos" | "missed_checkin");
+              console.log("[ESCALATION] Contact 2 alert sent\n");
+            }
+            
+            // Update incident
+            await storage.updateIncident(incident.id, {
+              escalationLevel: 2,
+              contact2NotifiedAt: now,
+              nextActionAt: addMinutes(now, 20), // Check again in 20 min for user notification
+            });
+            
+            escalations++;
+            continue;
+          }
+          
+          // Check if it's time to notify user
+          // Either: no Contact 2 exists OR Contact 2 was already notified AND 20 min have passed
+          if (!incident.userNotifiedNoResponseAt) {
+            let shouldNotifyUser = false;
+            
+            if (!contact2) {
+              // No Contact 2 exists - check if 20 min passed since Contact 1 notification
+              // Guard: ensure contact1NotifiedAt exists
+              if (!incident.contact1NotifiedAt) {
+                await storage.updateIncident(incident.id, {
+                  contact1NotifiedAt: now,
+                  nextActionAt: addMinutes(now, 20),
+                });
+                continue;
+              }
+              
+              const contact1NotifiedMs = incident.contact1NotifiedAt.getTime();
+              const elapsedMs = now.getTime() - contact1NotifiedMs;
+              shouldNotifyUser = elapsedMs >= ESCALATION_WINDOW_MS;
+              
+              if (!shouldNotifyUser) {
+                const remainingMs = ESCALATION_WINDOW_MS - elapsedMs;
+                await storage.updateIncident(incident.id, {
+                  nextActionAt: new Date(now.getTime() + remainingMs + 60000),
+                });
+                continue;
+              }
+            } else if (incident.contact2NotifiedAt) {
+              // Contact 2 exists and was notified - check if 20 min passed since then
+              const contact2NotifiedMs = incident.contact2NotifiedAt.getTime();
+              const elapsedMs = now.getTime() - contact2NotifiedMs;
+              shouldNotifyUser = elapsedMs >= ESCALATION_WINDOW_MS;
+              
+              if (!shouldNotifyUser) {
+                const remainingMs = ESCALATION_WINDOW_MS - elapsedMs;
+                await storage.updateIncident(incident.id, {
+                  nextActionAt: new Date(now.getTime() + remainingMs + 60000),
+                });
+                continue;
+              }
+            }
+            
+            if (shouldNotifyUser && user.phone) {
+              console.log(`\n[ESCALATION] ${user.name} - no contacts responded, notifying user...`);
+              const normalizedPhone = normalizePhone(user.phone);
+              await sendNoResponseNotification(normalizedPhone);
+              console.log("[ESCALATION] User notified\n");
+              
+              // Update incident - mark user notified, check again in 30 min
+              await storage.updateIncident(incident.id, {
+                userNotifiedNoResponseAt: now,
+                nextActionAt: addMinutes(now, 30),
+              });
+              
+              escalations++;
+              continue;
+            }
+          }
+          
+          // Keep checking - push next action further out
+          await storage.updateIncident(incident.id, {
+            nextActionAt: addMinutes(now, 30),
+          });
+        }
+      }
+      
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations });
     } catch (error) {
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });

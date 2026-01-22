@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { eq, desc, and, ne, gt } from "drizzle-orm";
+import { eq, desc, and, ne, gt, lt, or, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -53,6 +53,7 @@ export interface IStorage {
   
   // Incidents
   getOpenIncident(userId: string): Promise<Incident | undefined>;
+  getIncidentsNeedingEscalation(): Promise<Incident[]>;
   createIncident(userId: string, reason: IncidentReason): Promise<Incident>;
   updateIncident(id: string, updates: Partial<Incident>): Promise<Incident>;
   
@@ -327,6 +328,33 @@ export class DatabaseStorage implements IStorage {
       .from(incidents)
       .where(and(eq(incidents.userId, userId), ne(incidents.status, "resolved")));
     return incident || undefined;
+  }
+
+  async getIncidentsNeedingEscalation(): Promise<Incident[]> {
+    const now = new Date();
+    // Get incidents where:
+    // 1. Status is not resolved AND
+    // 2. Either:
+    //    a) nextActionAt is set and has passed (normal case), OR
+    //    b) nextActionAt is null (stalled incident needing recovery)
+    const result = await db
+      .select()
+      .from(incidents)
+      .where(
+        and(
+          ne(incidents.status, "resolved"),
+          or(
+            // Normal case: nextActionAt has passed
+            and(
+              gt(incidents.nextActionAt, new Date(0)),
+              lt(incidents.nextActionAt, now)
+            ),
+            // Recovery case: active incident with null nextActionAt
+            isNull(incidents.nextActionAt)
+          )
+        )
+      );
+    return result;
   }
 
   async createIncident(userId: string, reason: IncidentReason): Promise<Incident> {
