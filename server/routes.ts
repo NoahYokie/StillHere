@@ -245,9 +245,9 @@ export async function registerRoutes(
       }
       
       // Create SOS incident
-      const incident = await storage.createIncident(userId, "sos");
+      let incident = await storage.createIncident(userId, "sos");
       
-      // Get contacts
+      // Get contacts sorted by priority
       const contacts = await storage.getContacts(userId);
       const settings = await storage.getSettings(userId);
       
@@ -261,17 +261,28 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       const baseUrl = getBaseUrl();
       
-      // Send SMS alerts to all contacts in parallel
-      console.log("\n[SOS] Alerting contacts...");
-      const alertPromises = contacts.map(async (contact) => {
-        const token = tokens.find(t => t.contact.id === contact.id);
+      // Sequential alerts: Only notify Contact 1 (priority 1) first
+      const contact1 = contacts.find(c => c.priority === 1);
+      const now = new Date();
+      
+      if (contact1) {
+        const token = tokens.find(t => t.contact.id === contact1.id);
         if (token) {
           const link = `${baseUrl}/emergency/${token.token}`;
-          await sendSosAlert(contact.phone, user?.name || "User", link);
+          const normalizedPhone = normalizePhone(contact1.phone);
+          console.log(`\n[SOS] Alerting Contact 1: ${contact1.name}...`);
+          await sendSosAlert(normalizedPhone, user?.name || "User", link);
+          console.log("[SOS] Contact 1 alert sent\n");
         }
+      }
+      
+      // Update incident with escalation info
+      // Set nextActionAt to 20 minutes from now for escalation check
+      incident = await storage.updateIncident(incident.id, {
+        escalationLevel: 1,
+        contact1NotifiedAt: now,
+        nextActionAt: addMinutes(now, 20),
       });
-      await Promise.all(alertPromises);
-      console.log("[SOS] Alerts sent\n");
       
       res.json({ success: true, incident });
     } catch (error) {
@@ -608,7 +619,7 @@ export async function registerRoutes(
         // This prevents deadlock if cron runs late or reminders weren't sent
         if (isDueForAlert) {
           // Create missed check-in incident
-          const incident = await storage.createIncident(user.id, "missed_checkin");
+          let incident = await storage.createIncident(user.id, "missed_checkin");
           const contacts = await storage.getContacts(user.id);
           
           // Create location session if allowed
@@ -619,16 +630,28 @@ export async function registerRoutes(
           // Get tokens
           const tokens = await storage.getContactTokensForUser(user.id);
           
-          // Send missed check-in alerts in parallel
-          console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting contacts...`);
-          await Promise.all(contacts.map(async (contact) => {
-            const token = tokens.find(t => t.contact.id === contact.id);
+          // Sequential alerts: Only notify Contact 1 (priority 1) first
+          const contact1 = contacts.find(c => c.priority === 1);
+          
+          if (contact1) {
+            const token = tokens.find(t => t.contact.id === contact1.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              await sendMissedCheckinAlert(contact.phone, user.name, link);
+              const normalizedPhone = normalizePhone(contact1.phone);
+              console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting Contact 1: ${contact1.name}...`);
+              await sendMissedCheckinAlert(normalizedPhone, user.name, link);
+              console.log("[MISSED CHECK-IN] Contact 1 alert sent\n");
             }
-          }));
-          console.log("[MISSED CHECK-IN] Alerts sent\n");
+          }
+          
+          // Update incident with escalation info
+          // Set nextActionAt to 20 minutes from now for escalation check
+          incident = await storage.updateIncident(incident.id, {
+            escalationLevel: 1,
+            contact1NotifiedAt: now,
+            nextActionAt: addMinutes(now, 20),
+          });
+          
           alertsSent++;
           
           // Reset reminder state after incident is created
