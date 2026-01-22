@@ -158,6 +158,33 @@ export async function sendContactRespondedNotification(
   return sendSms(userPhone, body);
 }
 
+export async function sendEscalationAlert(
+  contactPhone: string,
+  userName: string,
+  link: string,
+  reason: "sos" | "missed_checkin"
+): Promise<SendSmsResult> {
+  const reasonText = reason === "sos" ? "has requested help" : "hasn't checked in";
+  const body = `StillHere Alert (Escalated)\n\n${userName} ${reasonText} and the first contact hasn't responded.\n\nPlease check on them:\n${link}`;
+  return sendSms(contactPhone, body);
+}
+
+export async function sendNoResponseNotification(
+  userPhone: string
+): Promise<SendSmsResult> {
+  const body = `StillHere Update\n\nWe've been trying to reach your emergency contacts but haven't received a response yet. We'll keep trying.`;
+  return sendSms(userPhone, body);
+}
+
+export async function sendHandlingTimeoutAlert(
+  contactPhone: string,
+  userName: string,
+  link: string
+): Promise<SendSmsResult> {
+  const body = `StillHere Alert\n\nFollow-up: ${userName}'s alert is still active. Please confirm you've reached them:\n${link}`;
+  return sendSms(contactPhone, body);
+}
+
 export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && fromPhone);
 }
