@@ -20,6 +20,7 @@ import {
   sendTestMessage,
   sendReminderSms,
   sendAllClearNotification,
+  sendContactRespondedNotification,
   isTwilioConfigured,
 } from "./sms";
 
@@ -502,6 +503,13 @@ export async function registerRoutes(
       });
       
       console.log(`\n[INCIDENT] ${data.contact.name} is now handling the incident for ${data.user.name}\n`);
+      
+      // Notify the user that their contact has responded
+      if (data.user.phone) {
+        const userPhone = normalizePhone(data.user.phone);
+        await sendContactRespondedNotification(userPhone, data.contact.name);
+        console.log(`[INCIDENT] Notified ${data.user.name} that ${data.contact.name} is checking on them`);
+      }
       
       res.json({ success: true, incident });
     } catch (error) {
