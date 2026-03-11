@@ -204,6 +204,30 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       } catch {}
     });
 
+    socket.on("call:ice-restart", async (data: { targetUserId: string; offer: any }) => {
+      console.log(`[CALL] ${userId} sending ICE restart to ${data.targetUserId}`);
+      try {
+        const canCall = await checkCommunicationPermission(userId, data.targetUserId);
+        if (!canCall) return;
+        io!.to(`user:${data.targetUserId}`).emit("call:ice-restart", {
+          offer: data.offer,
+          fromUserId: userId,
+        });
+      } catch {}
+    });
+
+    socket.on("call:ice-restart-answer", async (data: { targetUserId: string; answer: any }) => {
+      console.log(`[CALL] ${userId} sending ICE restart answer to ${data.targetUserId}`);
+      try {
+        const canCall = await checkCommunicationPermission(userId, data.targetUserId);
+        if (!canCall) return;
+        io!.to(`user:${data.targetUserId}`).emit("call:ice-restart-answer", {
+          answer: data.answer,
+          fromUserId: userId,
+        });
+      } catch {}
+    });
+
     socket.on("call:reject", async (data: { callId: string; callerId: string }) => {
       console.log(`[CALL] ${userId} rejecting call ${data.callId}`);
       try {
