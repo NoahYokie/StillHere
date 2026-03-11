@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -532,6 +532,15 @@ export default function Home() {
             </p>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground"
+              onClick={() => setLocation("/watched")}
+              data-testid="button-watched"
+            >
+              <Eye className="h-5 w-5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"

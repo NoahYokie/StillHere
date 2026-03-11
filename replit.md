@@ -37,23 +37,40 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **PWA Support:** Full Progressive Web App capabilities, including a manifest, service worker for caching and offline support, and installability.
 - **Wearable API:** Dedicated API endpoints for companion watch apps (Apple Watch, Wear OS) using Bearer token authentication (`x-api-token` header) for quick check-ins (`POST /api/checkin/quick`) and minimal status updates (`GET /api/status/simple`).
 - **International Phone Normalization:** 28+ countries supported with E.164 normalization (US, UK, AU, CA, NZ, JP, KR, SG, IN, FR, DE, IT, ES, NL, BE, CH, IE, SE, NO, DK, CZ, HU, RO, HR, and more).
+- **WebSocket Communication:** Socket.IO for real-time messaging and video call signaling, with cookie-based authentication matching the existing session system.
+- **In-App Messaging:** Real-time chat between users and emergency contacts who have the app, with message persistence, read receipts, and push notification fallback for offline users.
+- **In-App Video Calling:** WebRTC-based peer-to-peer video calling with Socket.IO signaling. Uses free Google STUN servers for NAT traversal. Features include mute, camera toggle, camera flip, and incoming call notifications.
+- **Contact Detection & Watcher System:** Automatic detection of emergency contacts who are also StillHere users (via phone number matching). Contacts with the app get push notifications instead of SMS during incidents. Watcher dashboard shows real-time status of people being monitored.
+- **Smart Notification Routing:** When an emergency contact has the app (linked via `linkedUserId`), notifications are sent via push + in-app message instead of SMS, reducing costs and enabling richer communication.
 
 **Feature Specifications:**
 - **User Management:** Phone OTP authentication, user profiles, and settings.
 - **Check-in Features:** Manual "I'm OK" button, optional auto check-in on app open, configurable schedules (12-48+ hours), grace periods (10-30 min), and configurable reminders (none, one, or two). Quote of the day shown after check-in.
 - **Emergency Management:** SOS alert button, dynamic emergency contacts with priority levels (free: 2, premium: unlimited), token-based contact pages for status viewing, responsibility system for contacts to pause escalation, fall detection with countdown, and location sharing.
-- **Notifications:** SMS and web push notifications for reminders and alerts.
+- **Notifications:** SMS (via Twilio) and web push notifications for reminders and alerts. Smart routing sends push to contacts who have the app, SMS to those who don't.
+- **Communication:** In-app messaging with real-time delivery, read receipts, and message history. In-app video calling via WebRTC with camera/mic controls and incoming call overlay.
+- **Watcher Dashboard:** Emergency contacts who have the app can see a dashboard of all people they monitor — showing names, last check-in times, status (OK/overdue/alert), with direct message and video call buttons.
 - **Account Security:** OTP rate limiting, phone number normalization for 28+ countries, and staging environment whitelisting.
 
 ### Key Files
-- `shared/schema.ts` — Database schema (users, settings, contacts, incidents, checkins, etc.)
-- `server/routes.ts` — All API routes including cron tick escalation logic
+- `shared/schema.ts` — Database schema (users, settings, contacts, incidents, checkins, messages, calls, etc.)
+- `server/routes.ts` — All API routes including cron tick escalation logic, messaging, watcher endpoints
 - `server/storage.ts` — Storage interface and implementation (IStorage / DatabaseStorage)
 - `server/auth.ts` — Phone normalization, OTP generation, session management
 - `server/sms.ts` — Twilio SMS integration
+- `server/socket.ts` — Socket.IO WebSocket server for real-time messaging and video call signaling
+- `server/push.ts` — Web push notification sending
+- `client/src/App.tsx` — Frontend routing with all pages including chat, call, watcher
 - `client/src/pages/home.tsx` — Main check-in page with escalation banner, fall detection, quote of the day
-- `client/src/pages/settings.tsx` — Settings page with dynamic contacts list, fall detection toggle
+- `client/src/pages/settings.tsx` — Settings page with dynamic contacts list, fall detection toggle, "On StillHere" badges
+- `client/src/pages/watched.tsx` — Watcher dashboard showing monitored users
+- `client/src/pages/chat.tsx` — Real-time messaging conversation view
+- `client/src/pages/call.tsx` — Video call interface with WebRTC
+- `client/src/pages/contact.tsx` — Emergency contact status page with in-app chat/call buttons
 - `client/src/pages/setup-contacts.tsx` — Onboarding contacts setup (dynamic list)
+- `client/src/components/incoming-call.tsx` — Incoming call overlay (works on any page)
+- `client/src/lib/socket.ts` — Socket.IO client singleton
+- `client/src/lib/webrtc.ts` — WebRTC peer connection management
 - `client/src/lib/fall-detection.ts` — DeviceMotion-based fall detection module
 - `client/src/lib/quotes.ts` — 125 daily motivational quotes
 - `capacitor.config.json` — Capacitor config with watch companion app stubs
@@ -61,6 +78,7 @@ The application features an extremely simple, calm, and reassuring user interfac
 ### External Dependencies
 - **SMS Gateway:** Twilio (for sending SMS messages)
 - **Push Notifications:** `web-push` library (for VAPID-based web push notifications)
+- **WebSocket:** `socket.io` / `socket.io-client` (for real-time messaging and video call signaling)
 - **Frontend Framework:** React
 - **Styling:** Tailwind CSS, shadcn/ui
 - **Database:** PostgreSQL

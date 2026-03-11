@@ -10,6 +10,8 @@ import {
   incidents,
   locationSessions,
   pushSubscriptions,
+  messages,
+  calls,
   type User,
   type InsertUser,
   type Settings,
@@ -24,7 +26,12 @@ import {
   type LocationSessionType,
   type UserStatus,
   type ContactPageData,
+  type WatchedUser,
   type PushSubscription,
+  type Message,
+  type Call,
+  type CallStatus,
+  type CallType,
 } from "@shared/schema";
 import { addHours } from "date-fns";
 
@@ -83,6 +90,23 @@ export interface IStorage {
   getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
   deletePushSubscription(endpoint: string): Promise<void>;
   deletePushSubscriptionForUser(userId: string, endpoint: string): Promise<void>;
+
+  // Messages
+  saveMessage(senderId: string, receiverId: string, content: string): Promise<Message>;
+  getMessages(userId1: string, userId2: string, limit?: number): Promise<Message[]>;
+  markMessagesRead(senderId: string, receiverId: string): Promise<void>;
+  getUnreadCount(userId: string): Promise<number>;
+
+  // Calls
+  createCall(callerId: string, receiverId: string, callType: CallType): Promise<Call>;
+  updateCall(id: string, updates: Partial<Call>): Promise<Call>;
+
+  // Contact Linking
+  getUserByPhone(phone: string): Promise<User | undefined>;
+  linkContactToUser(contactId: string, linkedUserId: string | null): Promise<Contact>;
+  findContactsByPhone(phone: string): Promise<Contact[]>;
+  getWatchedUsers(watcherUserId: string): Promise<WatchedUser[]>;
+  getContactsLinkedToUser(linkedUserId: string): Promise<Contact[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -647,6 +671,115 @@ export class DatabaseStorage implements IStorage {
     await db.delete(pushSubscriptions).where(
       and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint))
     );
+  }
+
+  async saveMessage(senderId: string, receiverId: string, content: string): Promise<Message> {
+    const [msg] = await db.insert(messages).values({
+      senderId,
+      receiverId,
+      content,
+      read: false,
+    }).returning();
+    return msg;
+  }
+
+  async getMessages(userId1: string, userId2: string, limit = 50): Promise<Message[]> {
+    const result = await db.select().from(messages).where(
+      or(
+        and(eq(messages.senderId, userId1), eq(messages.receiverId, userId2)),
+        and(eq(messages.senderId, userId2), eq(messages.receiverId, userId1))
+      )
+    ).orderBy(desc(messages.createdAt)).limit(limit);
+    return result.reverse();
+  }
+
+  async markMessagesRead(senderId: string, receiverId: string): Promise<void> {
+    await db.update(messages).set({ read: true }).where(
+      and(eq(messages.senderId, senderId), eq(messages.receiverId, receiverId), eq(messages.read, false))
+    );
+  }
+
+  async getUnreadCount(userId: string): Promise<number> {
+    const result = await db.select().from(messages).where(
+      and(eq(messages.receiverId, userId), eq(messages.read, false))
+    );
+    return result.length;
+  }
+
+  async createCall(callerId: string, receiverId: string, callType: CallType): Promise<Call> {
+    const [call] = await db.insert(calls).values({
+      callerId,
+      receiverId,
+      status: "ringing",
+      callType,
+    }).returning();
+    return call;
+  }
+
+  async updateCall(id: string, updates: Partial<Call>): Promise<Call> {
+    const [call] = await db.update(calls).set(updates).where(eq(calls.id, id)).returning();
+    if (!call) throw new Error("Call not found");
+    return call;
+  }
+
+  async getUserByPhone(phone: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.phone, phone));
+    return user || undefined;
+  }
+
+  async findContactsByPhone(phone: string): Promise<Contact[]> {
+    return db.select().from(contacts).where(eq(contacts.phone, phone));
+  }
+
+  async linkContactToUser(contactId: string, linkedUserId: string | null): Promise<Contact> {
+    const [contact] = await db.update(contacts)
+      .set({ linkedUserId })
+      .where(eq(contacts.id, contactId))
+      .returning();
+    return contact;
+  }
+
+  async getWatchedUsers(watcherUserId: string): Promise<WatchedUser[]> {
+    const watcherUser = await this.getUser(watcherUserId);
+    if (!watcherUser?.phone) return [];
+
+    const linkedContacts = await db.select().from(contacts).where(
+      eq(contacts.linkedUserId, watcherUserId)
+    );
+
+    const result: WatchedUser[] = [];
+
+    for (const contact of linkedContacts) {
+      const user = await this.getUser(contact.userId);
+      if (!user) continue;
+
+      const userSettings = await this.getSettings(user.id);
+      const lastCheckin = await this.getLastCheckin(user.id);
+      const openIncident = await this.getOpenIncident(user.id);
+
+      let nextCheckinDue: Date;
+      if (lastCheckin) {
+        nextCheckinDue = addHours(lastCheckin.createdAt, userSettings?.checkinIntervalHours || 24);
+      } else {
+        nextCheckinDue = addHours(user.createdAt, userSettings?.checkinIntervalHours || 24);
+      }
+
+      result.push({
+        userId: user.id,
+        userName: user.name,
+        lastCheckinAt: lastCheckin?.createdAt || null,
+        nextCheckinDue,
+        hasOpenIncident: !!openIncident,
+        incidentReason: openIncident?.reason || null,
+        contactId: contact.id,
+      });
+    }
+
+    return result;
+  }
+
+  async getContactsLinkedToUser(linkedUserId: string): Promise<Contact[]> {
+    return db.select().from(contacts).where(eq(contacts.linkedUserId, linkedUserId));
   }
 }
 
