@@ -40,10 +40,21 @@ export default function CallPage() {
 
   const otherUserName = userProfile?.name || "User";
 
-  const attachStream = useCallback((videoEl: HTMLVideoElement | null, stream: MediaStream) => {
-    if (!videoEl) return;
-    videoEl.srcObject = stream;
-    videoEl.play().catch(() => {});
+  const attachLocalStream = useCallback((stream: MediaStream) => {
+    const el = localVideoRef.current;
+    if (!el) return;
+    el.srcObject = stream;
+    el.muted = true;
+    el.play().catch(() => {});
+  }, []);
+
+  const attachRemoteStream = useCallback((stream: MediaStream) => {
+    const el = remoteVideoRef.current;
+    if (!el) return;
+    el.srcObject = stream;
+    el.muted = false;
+    el.volume = 1.0;
+    el.play().catch(() => {});
   }, []);
 
   const cleanup = useCallback(() => {
@@ -97,7 +108,7 @@ export default function CallPage() {
       rtc.onRemoteStream = (stream) => {
         stopRingtone();
         playCallConnected();
-        attachStream(remoteVideoRef.current, stream);
+        attachRemoteStream(stream);
         setCallState("active");
       };
 
@@ -156,7 +167,7 @@ export default function CallPage() {
 
     try {
       const localStream = await rtc.getLocalStream();
-      attachStream(localVideoRef.current, localStream);
+      attachLocalStream(localStream);
 
       callIdRef.current = pendingCall.callId;
       const answer = await rtc.handleOffer(pendingCall.offer);
@@ -181,7 +192,7 @@ export default function CallPage() {
   async function initiateOutgoingCall(rtc: WebRTCConnection, socket: any) {
     try {
       const localStream = await rtc.getLocalStream();
-      attachStream(localVideoRef.current, localStream);
+      attachLocalStream(localStream);
 
       const offer = await rtc.createOffer();
       setCallState("ringing");
