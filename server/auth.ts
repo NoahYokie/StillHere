@@ -16,9 +16,11 @@ const OTP_RATE_LIMIT_HOURLY = 5;
 const APP_ENV = process.env.APP_ENV || "staging";
 const WHITELIST_NUMBERS = (process.env.WHITELIST_NUMBERS || "").split(",").map(n => n.trim()).filter(Boolean);
 
-// Generate 6-digit OTP
+// Generate 6-digit OTP using cryptographic randomness
 function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const bytes = randomBytes(4);
+  const num = bytes.readUInt32BE(0) % 900000 + 100000;
+  return num.toString();
 }
 
 // Generate session token
