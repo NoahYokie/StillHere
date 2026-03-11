@@ -23,6 +23,7 @@ import {
   sendEscalationAlert,
   sendHandlingTimeoutAlert,
   isTwilioConfigured,
+  getTurnCredentials,
 } from "./sms";
 import {
   isPushConfigured,
@@ -852,6 +853,29 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error removing push subscription:", error);
       res.status(500).json({ error: "Failed to remove subscription" });
+    }
+  });
+
+  // ============================================
+  // TURN CREDENTIALS FOR VIDEO CALLS
+  // ============================================
+
+  app.get("/api/turn-credentials", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const iceServers = await getTurnCredentials();
+      res.json({ iceServers });
+    } catch (error) {
+      console.error("Error fetching TURN credentials:", error);
+      res.json({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+      });
     }
   });
 
