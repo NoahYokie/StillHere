@@ -20,9 +20,7 @@ import {
   sendTestMessage,
   sendReminderSms,
   sendAllClearNotification,
-  sendContactRespondedNotification,
   sendEscalationAlert,
-  sendNoResponseNotification,
   sendHandlingTimeoutAlert,
   isTwilioConfigured,
 } from "./sms";
@@ -518,12 +516,7 @@ export async function registerRoutes(
       
       console.log(`\n[INCIDENT] ${data.contact.name} is now handling the incident for ${data.user.name}\n`);
       
-      // Notify the user that their contact has responded
-      if (data.user.phone) {
-        const userPhone = normalizePhone(data.user.phone);
-        await sendContactRespondedNotification(userPhone, data.contact.name);
-        console.log(`[INCIDENT] Notified ${data.user.name} that ${data.contact.name} is checking on them`);
-      }
+      // User will see in-app banner that contact responded (no SMS needed)
       
       res.json({ success: true, incident });
     } catch (error) {
@@ -945,13 +938,10 @@ export async function registerRoutes(
               }
             }
             
-            if (shouldNotifyUser && user.phone) {
-              console.log(`\n[ESCALATION] ${user.name} - no contacts responded, notifying user...`);
-              const normalizedPhone = normalizePhone(user.phone);
-              await sendNoResponseNotification(normalizedPhone);
-              console.log("[ESCALATION] User notified\n");
+            if (shouldNotifyUser) {
+              console.log(`\n[ESCALATION] ${user.name} - no contacts responded, updating in-app status...`);
               
-              // Update incident - mark user notified, check again in 30 min
+              // User will see in-app banner (no SMS needed)
               await storage.updateIncident(incident.id, {
                 userNotifiedNoResponseAt: now,
                 nextActionAt: addMinutes(now, 30),

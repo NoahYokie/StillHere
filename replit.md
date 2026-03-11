@@ -238,8 +238,8 @@ StillHere uses a sequential escalation system to ensure someone responds to aler
    - SMS: "{Name} {reason} and the first contact hasn't responded. Please check on them: {link}"
 
 3. **User Notification (if no contacts respond)**
-   - If neither contact responds, the user receives an SMS
-   - SMS: "We've been trying to reach your emergency contacts but haven't received a response yet. We'll keep trying."
+   - If neither contact responds, the user sees an in-app status banner (no SMS)
+   - Banner: "No contacts have responded yet"
 
 4. **Handling Timeout (45 minutes)**
    - If a contact clicks "I'm handling this" but doesn't resolve the alert within 45 minutes
@@ -250,7 +250,7 @@ StillHere uses a sequential escalation system to ensure someone responds to aler
 
 When a contact clicks "I'm handling this":
 1. The incident status changes to "paused"
-2. The user receives an SMS: "{Contact Name} has seen your alert and is checking on you."
+2. The user sees an in-app banner: "{Contact Name} is checking on you" (no SMS)
 3. A 45-minute timer starts
 4. If resolved within 45 min, escalation ends
 5. If not resolved, all contacts are re-notified
@@ -258,6 +258,21 @@ When a contact clicks "I'm handling this":
 When the user clicks "I'm OK now":
 1. The incident is resolved
 2. All contacts receive an SMS: "{Name} is OK now. No action needed."
+
+### In-App Status Banners
+
+The home page shows real-time escalation status banners (replacing user-facing SMS to reduce costs):
+- **Alert active (open)**: Shows which contacts have been notified with step-by-step progress
+- **Contact handling (paused)**: Blue banner showing "{Contact Name} is checking on you"
+- **No response**: Warning that no contacts have responded yet
+- Auto-refreshes every 15 seconds during active incidents (60 seconds otherwise)
+
+SMS is reserved for emergency contact notifications only:
+- Initial alerts to contacts (SOS or missed check-in)
+- Escalation to Contact 2 (after 20 min)
+- Handling timeout re-notifications
+- "All clear" when user resolves alert
+- Check-in reminders to user (essential - user not in app)
 
 ### Database Fields (incidents table)
 

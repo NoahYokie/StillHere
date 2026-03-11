@@ -15,9 +15,119 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
+
+function EscalationBanner({ status }: { status: UserStatus }) {
+  const incident = status.openIncident;
+  if (!incident || incident.status === "resolved") return null;
+
+  const contacts = status.contacts || [];
+  const contact1 = contacts.find(c => c.priority === 1);
+  const contact2 = contacts.find(c => c.priority === 2);
+  const handlingContact = incident.handledByContactId
+    ? contacts.find(c => c.id === incident.handledByContactId)
+    : null;
+
+  const isSOSReason = incident.reason === "sos";
+  const title = isSOSReason ? "Help request active" : "Missed check-in alert";
+
+  if (incident.status === "paused") {
+    const contactName = handlingContact?.name || "A contact";
+    return (
+      <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800" data-testid="banner-escalation">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-800 dark:text-blue-300" data-testid="text-banner-title">
+                {contactName} is checking on you
+              </p>
+              <p className="text-sm text-blue-700/80 dark:text-blue-300/60 mt-1" data-testid="text-banner-detail">
+                They've seen your alert and will reach out soon.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const steps = [];
+
+  if (incident.contact1NotifiedAt && contact1) {
+    steps.push({
+      label: `${contact1.name} notified`,
+      done: true,
+      icon: <Phone className="h-3.5 w-3.5" />,
+    });
+  }
+
+  if (incident.contact2NotifiedAt && contact2) {
+    steps.push({
+      label: `${contact2.name} notified`,
+      done: true,
+      icon: <Phone className="h-3.5 w-3.5" />,
+    });
+  } else if (contact2 && incident.escalationLevel === 1) {
+    steps.push({
+      label: `${contact2.name} will be notified if no response`,
+      done: false,
+      icon: <Clock className="h-3.5 w-3.5" />,
+    });
+  }
+
+  if (incident.userNotifiedNoResponseAt) {
+    steps.push({
+      label: "No contacts have responded yet",
+      done: true,
+      icon: <AlertCircle className="h-3.5 w-3.5" />,
+    });
+  }
+
+  return (
+    <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800" data-testid="banner-escalation">
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium text-amber-800 dark:text-amber-400" data-testid="text-banner-title">
+              {title}
+            </p>
+
+            {steps.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {steps.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm" data-testid={`step-escalation-${i}`}>
+                    <span className={step.done
+                      ? "text-amber-700 dark:text-amber-400"
+                      : "text-amber-600/50 dark:text-amber-500/40"
+                    }>
+                      {step.icon}
+                    </span>
+                    <span className={step.done
+                      ? "text-amber-800 dark:text-amber-300"
+                      : "text-amber-600/60 dark:text-amber-400/50 italic"
+                    }>
+                      {step.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {steps.length === 0 && (
+              <p className="text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
+                Your contacts are being notified.
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Home() {
   const [, setLocation] = useLocation();
@@ -28,6 +138,13 @@ export default function Home() {
 
   const { data: status, isLoading } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
+    refetchInterval: (query) => {
+      const data = query.state.data as UserStatus | undefined;
+      if (data?.openIncident && data.openIncident.status !== "resolved") {
+        return 15000;
+      }
+      return 60000;
+    },
   });
 
   const sendLocationToServer = async (position: GeolocationPosition) => {
@@ -92,7 +209,6 @@ export default function Home() {
         description: "Your emergency contacts were notified.",
       });
       
-      // Automatically try to capture and send location after SOS
       if (status?.settings?.locationMode !== "off") {
         navigator.geolocation.getCurrentPosition(
           (position) => {
@@ -184,7 +300,6 @@ export default function Home() {
     const d = new Date(date);
     const now = new Date();
     
-    // Compare calendar days, not hours
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
@@ -216,7 +331,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-primary text-primary-foreground px-6 py-4">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div>
@@ -250,7 +364,25 @@ export default function Home() {
       </header>
 
       <main className="max-w-md mx-auto px-6 py-8 space-y-8">
-        {/* Next Check-in */}
+        {hasOpenIncident && status && (
+          <div className="space-y-3">
+            <EscalationBanner status={status} />
+            <div className="text-center">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                onClick={() => resolveAlertMutation.mutate()}
+                disabled={resolveAlertMutation.isPending}
+                data-testid="button-resolve-alert"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                {resolveAlertMutation.isPending ? "Resolving..." : "I'm OK now"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <Card>
           <CardContent className="pt-6 text-center">
             <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
@@ -270,7 +402,6 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* I'm OK Button */}
         <div className="text-center">
           <button
             onClick={() => checkinMutation.mutate()}
@@ -289,7 +420,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* SOS Button */}
         <Card className="bg-destructive/5 border-destructive/20">
           <CardContent className="pt-6">
             <Button
@@ -306,7 +436,6 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* Location Status */}
         <div className="flex items-center justify-center gap-2 text-sm">
           <MapPin className={`h-4 w-4 ${locationEnabled ? "text-accent" : "text-destructive"}`} />
           <span className="text-muted-foreground">
@@ -321,43 +450,8 @@ export default function Home() {
             {locationEnabled ? "Turn off" : "Enable Location"}
           </button>
         </div>
-
-        {/* Open Incident Warning */}
-        {hasOpenIncident && (
-          <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium text-amber-800 dark:text-amber-400">
-                    {status.openIncident?.reason === "sos"
-                      ? "Help request sent"
-                      : "Check-in reminder sent"}
-                  </p>
-                  <p className="text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
-                    {status.openIncident?.status === "paused" 
-                      ? "Someone is checking on you. They'll reach out soon."
-                      : "Your contacts have been notified."}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-                    onClick={() => resolveAlertMutation.mutate()}
-                    disabled={resolveAlertMutation.isPending}
-                    data-testid="button-resolve-alert"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    {resolveAlertMutation.isPending ? "Resolving..." : "I'm OK now"}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </main>
 
-      {/* SOS Confirmation Dialog */}
       <AlertDialog open={showSosConfirm} onOpenChange={setShowSosConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
