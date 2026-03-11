@@ -31,6 +31,7 @@ function generateSessionToken(): string {
 // Allowed country codes for OTP
 const ALLOWED_COUNTRIES = [
   "+61",  // Australia
+  "+64",  // New Zealand
   "+1",   // USA/Canada
   "+44",  // UK
   "+33",  // France
@@ -49,6 +50,14 @@ const ALLOWED_COUNTRIES = [
   "+358", // Finland
   "+351", // Portugal
   "+30",  // Greece
+  "+81",  // Japan
+  "+82",  // South Korea
+  "+65",  // Singapore
+  "+91",  // India
+  "+420", // Czech Republic
+  "+36",  // Hungary
+  "+40",  // Romania
+  "+385", // Croatia
 ];
 
 // Normalize phone number to E.164 format
@@ -69,7 +78,6 @@ export function normalizePhone(phone: string): string {
   }
   
   // Australian landline: 02/03/07/08 XXXX XXXX (10 digits starting with 0)
-  // Only normalize 10-digit numbers starting with common AU area codes
   if (cleaned.length === 10 && /^0[2378]/.test(cleaned)) {
     return "+61" + cleaned.slice(1);
   }
@@ -79,20 +87,97 @@ export function normalizePhone(phone: string): string {
     return "+44" + cleaned.slice(1);
   }
   
+  // France: 06/07 mobile numbers (10 digits)
+  if (/^0[67]/.test(cleaned) && cleaned.length === 10) {
+    return "+33" + cleaned.slice(1);
+  }
+  
+  // Germany: 01x mobile numbers (11-12 digits starting with 01)
+  if (/^01[567]/.test(cleaned) && (cleaned.length === 11 || cleaned.length === 12)) {
+    return "+49" + cleaned.slice(1);
+  }
+  
+  // Italy: 3xx mobile numbers (10 digits starting with 3)
+  if (cleaned.startsWith("3") && cleaned.length === 10) {
+    return "+39" + cleaned;
+  }
+  
+  // Spain: 6/7 mobile numbers (9 digits)
+  if (/^[67]/.test(cleaned) && cleaned.length === 9) {
+    return "+34" + cleaned;
+  }
+  
+  // Netherlands: 06 mobile numbers (10 digits)
+  if (cleaned.startsWith("06") && cleaned.length === 10) {
+    return "+31" + cleaned.slice(1);
+  }
+  
+  // Belgium: 04 mobile numbers (10 digits)
+  if (cleaned.startsWith("04") && cleaned.length === 10) {
+    return "+32" + cleaned.slice(1);
+  }
+  
+  // Switzerland: 07 mobile numbers (10 digits)
+  if (cleaned.startsWith("07") && cleaned.length === 10) {
+    return "+41" + cleaned.slice(1);
+  }
+  
+  // Ireland: 08x mobile numbers (10 digits)
+  if (/^08[3-9]/.test(cleaned) && cleaned.length === 10) {
+    return "+353" + cleaned.slice(1);
+  }
+  
+  // Sweden: 07 mobile numbers (10 digits)
+  if (cleaned.startsWith("07") && cleaned.length === 10) {
+    return "+46" + cleaned.slice(1);
+  }
+  
+  // Norway: 4/9 mobile numbers (8 digits)
+  if (/^[49]/.test(cleaned) && cleaned.length === 8) {
+    return "+47" + cleaned;
+  }
+  
+  // Denmark: 8-digit mobile numbers (various prefixes 2-9)
+  if (/^[2-9]/.test(cleaned) && cleaned.length === 8) {
+    return "+45" + cleaned;
+  }
+  
+  // New Zealand: 02x mobile numbers (10-11 digits)
+  if (/^02[0-9]/.test(cleaned) && (cleaned.length === 10 || cleaned.length === 11)) {
+    return "+64" + cleaned.slice(1);
+  }
+  
+  // India: 10-digit mobile numbers starting with 6-9
+  if (/^[6-9]/.test(cleaned) && cleaned.length === 10) {
+    return "+91" + cleaned;
+  }
+  
+  // Japan: 0x0 mobile numbers (11 digits starting with 0)
+  if (/^0[789]0/.test(cleaned) && cleaned.length === 11) {
+    return "+81" + cleaned.slice(1);
+  }
+  
+  // South Korea: 01x mobile numbers (10-11 digits)
+  if (/^01[016789]/.test(cleaned) && (cleaned.length === 10 || cleaned.length === 11)) {
+    return "+82" + cleaned.slice(1);
+  }
+  
+  // Singapore: 8/9 digit mobile numbers (8 digits)
+  if (/^[89]/.test(cleaned) && cleaned.length === 8) {
+    return "+65" + cleaned;
+  }
+  
   // US/Canada: 10 digit number (no leading 0)
-  // e.g., 4155551234 -> +14155551234
   if (cleaned.length === 10 && !cleaned.startsWith("0")) {
     return "+1" + cleaned;
   }
   
   // US/Canada: 11 digit number starting with 1
-  // e.g., 14155551234 -> +14155551234
   if (cleaned.length === 11 && cleaned.startsWith("1")) {
     return "+" + cleaned;
   }
   
   // For all other formats, user must provide international format with +
-  // Add + prefix anyway so validation can catch it
   return "+" + cleaned;
 }
 

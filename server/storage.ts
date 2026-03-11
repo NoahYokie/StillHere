@@ -44,6 +44,9 @@ export interface IStorage {
   getContacts(userId: string): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
   upsertContacts(userId: string, contactsData: { contact1: InsertContact; contact2?: InsertContact }): Promise<Contact[]>;
+  saveContactsList(userId: string, contactsList: { name: string; phone: string; priority: number }[]): Promise<Contact[]>;
+  deleteContact(contactId: string): Promise<void>;
+  getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
   getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined>;
@@ -258,6 +261,66 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getContactLimit(userId: string): Promise<number> {
+    const user = await this.getUser(userId);
+    return user?.isPremium ? 999 : 2;
+  }
+
+  async saveContactsList(userId: string, contactsList: { name: string; phone: string; priority: number }[]): Promise<Contact[]> {
+    const existing = await this.getContacts(userId);
+    const result: Contact[] = [];
+    const processedIds = new Set<string>();
+
+    for (const contactData of contactsList) {
+      const existingMatch = existing.find(c => c.priority === contactData.priority);
+      
+      if (existingMatch) {
+        const [updated] = await db.update(contacts)
+          .set({
+            name: contactData.name,
+            phone: contactData.phone,
+            canViewLocation: true,
+          })
+          .where(eq(contacts.id, existingMatch.id))
+          .returning();
+        result.push(updated);
+        processedIds.add(existingMatch.id);
+        await db.delete(contactTokens).where(eq(contactTokens.contactId, existingMatch.id));
+        await this.generateToken(existingMatch.id);
+      } else {
+        const [newContact] = await db.insert(contacts).values({
+          userId,
+          name: contactData.name,
+          phone: contactData.phone,
+          priority: contactData.priority,
+          canViewLocation: true,
+        }).returning();
+        result.push(newContact);
+        await this.generateToken(newContact.id);
+      }
+    }
+
+    for (const existingContact of existing) {
+      if (!processedIds.has(existingContact.id) && !contactsList.some(c => c.priority === existingContact.priority)) {
+        await db.update(incidents)
+          .set({ handledByContactId: null })
+          .where(eq(incidents.handledByContactId, existingContact.id));
+        await db.delete(contactTokens).where(eq(contactTokens.contactId, existingContact.id));
+        await db.delete(contacts).where(eq(contacts.id, existingContact.id));
+      }
+    }
+
+    return result.sort((a, b) => a.priority - b.priority);
+  }
+
+  async deleteContact(contactId: string): Promise<void> {
+    await db.update(incidents)
+      .set({ handledByContactId: null })
+      .where(eq(incidents.handledByContactId, contactId));
+    await db.delete(contactTokens).where(eq(contactTokens.contactId, contactId));
+    await db.delete(contacts).where(eq(contacts.id, contactId));
+  }
+
   async getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined> {
     const [tokenRecord] = await db.select().from(contactTokens).where(
       and(eq(contactTokens.token, token), eq(contactTokens.revoked, false))
@@ -455,6 +518,8 @@ export class DatabaseStorage implements IStorage {
       nextCheckinDue = addHours(user.createdAt, userSettings.checkinIntervalHours);
     }
 
+    const contactLimit = await this.getContactLimit(userId);
+
     return {
       user,
       settings: userSettings,
@@ -463,6 +528,8 @@ export class DatabaseStorage implements IStorage {
       nextCheckinDue,
       openIncident: openIncident || null,
       activeLocationSession: activeLocationSession || null,
+      contactLimit,
+      isPremium: user.isPremium,
     };
   }
 

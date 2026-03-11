@@ -6,6 +6,7 @@ const fromPhone = process.env.TWILIO_PHONE_NUMBER;
 
 const ALPHA_SUPPORTED_PREFIXES = [
   "+61",  // Australia
+  "+64",  // New Zealand
   "+44",  // UK
   "+33",  // France
   "+49",  // Germany
@@ -23,6 +24,14 @@ const ALPHA_SUPPORTED_PREFIXES = [
   "+358", // Finland
   "+351", // Portugal
   "+30",  // Greece
+  "+81",  // Japan
+  "+82",  // South Korea
+  "+65",  // Singapore
+  "+91",  // India
+  "+420", // Czech Republic
+  "+36",  // Hungary
+  "+40",  // Romania
+  "+385", // Croatia
 ];
 
 function supportsAlphaSenderId(phone: string): boolean {

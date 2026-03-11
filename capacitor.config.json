@@ -22,9 +22,20 @@
     }
   },
   "ios": {
-    "contentInset": "automatic"
+    "contentInset": "automatic",
+    "watchCompanion": {
+      "enabled": true,
+      "bundleId": "com.stillhere.app.watchkitapp",
+      "complicationDataSource": "StillHereComplicationDataSource",
+      "sessionDelegateQueue": "com.stillhere.watchconnectivity"
+    }
   },
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "wearCompanion": {
+      "enabled": true,
+      "packageName": "com.stillhere.app.wear",
+      "capabilities": ["checkin", "status", "sos"]
+    }
   }
 }
