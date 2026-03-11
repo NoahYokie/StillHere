@@ -146,6 +146,10 @@ export class WebRTCConnection {
     }
   }
 
+  getLocalMediaStream(): MediaStream | null {
+    return this.localStream;
+  }
+
   close(): void {
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.pc.close();

@@ -10,13 +10,14 @@ export function getSocket(): Socket {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 10000,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 5000,
       transports: ["websocket", "polling"],
+      timeout: 20000,
     });
 
     socket.on("connect", () => {
-      console.log("[SOCKET] Connected:", socket?.id);
+      console.log("[SOCKET] Connected:", socket?.id, "transport:", socket?.io?.engine?.transport?.name);
     });
 
     socket.on("disconnect", (reason) => {
@@ -24,11 +25,15 @@ export function getSocket(): Socket {
     });
 
     socket.on("connect_error", (error) => {
-      console.error("[SOCKET] Connection error:", error.message);
+      console.warn("[SOCKET] Connection error:", error.message);
     });
 
-    socket.on("reconnect", (attemptNumber) => {
+    socket.on("reconnect", (attemptNumber: number) => {
       console.log("[SOCKET] Reconnected after", attemptNumber, "attempts");
+    });
+
+    socket.io.on("reconnect_attempt", (attempt: number) => {
+      console.log("[SOCKET] Reconnecting attempt:", attempt);
     });
   }
 
