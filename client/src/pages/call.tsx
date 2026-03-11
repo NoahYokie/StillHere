@@ -8,6 +8,7 @@ import { getSocket } from "@/lib/socket";
 import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
 import { useToast } from "@/hooks/use-toast";
 import { getPendingIncomingCall } from "@/components/incoming-call";
+import { startOutgoingRingtone, startIncomingRingtone, stopRingtone, playCallConnected, playCallEnded } from "@/lib/ringtone";
 
 type CallState = "connecting" | "ringing" | "active" | "ended";
 
@@ -24,12 +25,13 @@ export default function CallPage() {
   const [callState, setCallState] = useState<CallState>("connecting");
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [callId, setCallId] = useState<string | null>(null);
+  const callIdRef = useRef<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const rtcRef = useRef<WebRTCConnection | null>(null);
   const hasInitiatedRef = useRef(false);
+  const hasEndedRef = useRef(false);
 
   const { data: userProfile } = useQuery<{ id: string; name: string }>({
     queryKey: ["/api/users", otherUserId, "profile"],
@@ -38,7 +40,14 @@ export default function CallPage() {
 
   const otherUserName = userProfile?.name || "User";
 
+  const attachStream = useCallback((videoEl: HTMLVideoElement | null, stream: MediaStream) => {
+    if (!videoEl) return;
+    videoEl.srcObject = stream;
+    videoEl.play().catch(() => {});
+  }, []);
+
   const cleanup = useCallback(() => {
+    stopRingtone();
     if (rtcRef.current) {
       rtcRef.current.close();
       rtcRef.current = null;
@@ -51,15 +60,28 @@ export default function CallPage() {
     }
   }, []);
 
-  const endCall = useCallback(() => {
-    const socket = getSocket();
-    if (callId && otherUserId) {
-      socket.emit("call:end", { callId, targetUserId: otherUserId });
+  const handleCallEnd = useCallback((reason?: string, emitToServer = false) => {
+    if (hasEndedRef.current) return;
+    hasEndedRef.current = true;
+    stopRingtone();
+    playCallEnded();
+    if (emitToServer) {
+      const socket = getSocket();
+      if (callIdRef.current && otherUserId) {
+        socket.emit("call:end", { callId: callIdRef.current, targetUserId: otherUserId });
+      }
+    }
+    if (reason) {
+      toast({ title: "Call ended", description: reason });
     }
     cleanup();
     setCallState("ended");
     setTimeout(() => setLocation("/watched"), 1500);
-  }, [callId, otherUserId, cleanup, setLocation]);
+  }, [otherUserId, cleanup, setLocation, toast]);
+
+  const endCall = useCallback(() => {
+    handleCallEnd(undefined, true);
+  }, [handleCallEnd]);
 
   useEffect(() => {
     if (!currentUserId || !otherUserId || hasInitiatedRef.current) return;
@@ -73,9 +95,9 @@ export default function CallPage() {
       rtcRef.current = rtc;
 
       rtc.onRemoteStream = (stream) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
-        }
+        stopRingtone();
+        playCallConnected();
+        attachStream(remoteVideoRef.current, stream);
         setCallState("active");
       };
 
@@ -88,9 +110,7 @@ export default function CallPage() {
 
       rtc.onConnectionStateChange = (state) => {
         if (state === "disconnected" || state === "failed" || state === "closed") {
-          setCallState("ended");
-          cleanup();
-          setTimeout(() => setLocation("/watched"), 1500);
+          handleCallEnd("Connection lost");
         }
       };
 
@@ -108,17 +128,11 @@ export default function CallPage() {
     });
 
     socket.on("call:ended", () => {
-      toast({ title: "Call ended", description: `${otherUserName} ended the call` });
-      cleanup();
-      setCallState("ended");
-      setTimeout(() => setLocation("/watched"), 1500);
+      handleCallEnd(`${otherUserName} ended the call`);
     });
 
     socket.on("call:rejected", () => {
-      toast({ title: "Call declined", description: `${otherUserName} declined the call` });
-      cleanup();
-      setCallState("ended");
-      setTimeout(() => setLocation("/watched"), 1500);
+      handleCallEnd(`${otherUserName} declined the call`);
     });
 
     initCall();
@@ -142,11 +156,9 @@ export default function CallPage() {
 
     try {
       const localStream = await rtc.getLocalStream();
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
+      attachStream(localVideoRef.current, localStream);
 
-      setCallId(pendingCall.callId);
+      callIdRef.current = pendingCall.callId;
       const answer = await rtc.handleOffer(pendingCall.offer);
 
       socket.emit("call:answer", {
@@ -169,12 +181,11 @@ export default function CallPage() {
   async function initiateOutgoingCall(rtc: WebRTCConnection, socket: any) {
     try {
       const localStream = await rtc.getLocalStream();
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
+      attachStream(localVideoRef.current, localStream);
 
       const offer = await rtc.createOffer();
       setCallState("ringing");
+      startOutgoingRingtone();
 
       socket.emit("call:initiate", {
         receiverId: otherUserId,
@@ -182,20 +193,20 @@ export default function CallPage() {
         offer,
       }, (response: any) => {
         if (response?.success) {
-          setCallId(response.callId);
+          callIdRef.current = response.callId;
         } else {
-          toast({ title: "Call failed", description: "Could not connect", variant: "destructive" });
-          cleanup();
-          setLocation("/watched");
+          handleCallEnd("Could not connect");
         }
       });
 
       socket.on("call:answered", async (data: { callId: string; answer: any }) => {
+        stopRingtone();
         if (rtcRef.current) {
           await rtcRef.current.handleAnswer(data.answer);
         }
       });
     } catch (err: any) {
+      stopRingtone();
       toast({
         title: "Camera/Mic access denied",
         description: "Please allow camera and microphone access to make video calls.",
@@ -241,7 +252,7 @@ export default function CallPage() {
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
           <div className="text-center text-white">
             <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <Phone className="w-10 h-10 text-primary" />
+              <Phone className="w-10 h-10 text-primary animate-pulse" />
             </div>
             <h2 className="text-xl font-medium mb-2" data-testid="text-call-user">{otherUserName}</h2>
             <p className="text-white/60" data-testid="text-call-state">
@@ -249,6 +260,13 @@ export default function CallPage() {
               {callState === "ringing" && "Ringing..."}
               {callState === "ended" && "Call ended"}
             </p>
+            {callState === "ringing" && (
+              <div className="mt-4 flex justify-center gap-2">
+                <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:0ms]" />
+                <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:300ms]" />
+              </div>
+            )}
           </div>
         </div>
       )}

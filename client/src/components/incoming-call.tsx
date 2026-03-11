@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Phone, PhoneOff, Video } from "lucide-react";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
+import { startIncomingRingtone, stopRingtone } from "@/lib/ringtone";
 
 interface IncomingCallData {
   callId: string;
@@ -32,6 +33,7 @@ export function IncomingCallOverlay() {
     const socket = getSocket();
 
     const handleIncoming = (data: IncomingCallData) => {
+      startIncomingRingtone();
       setIncomingCall(data);
     };
 
@@ -44,6 +46,7 @@ export function IncomingCallOverlay() {
 
   function acceptCall() {
     if (!incomingCall) return;
+    stopRingtone();
     pendingIncomingCall = incomingCall;
     setIncomingCall(null);
     setLocation(`/call/${incomingCall.callerId}?mode=answer`);
@@ -51,6 +54,7 @@ export function IncomingCallOverlay() {
 
   function rejectCall() {
     if (!incomingCall) return;
+    stopRingtone();
 
     const socket = getSocket();
     socket.emit("call:reject", {
@@ -66,7 +70,7 @@ export function IncomingCallOverlay() {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" data-testid="incoming-call-overlay">
       <div className="bg-card rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-xl">
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <Video className="w-8 h-8 text-primary" />
+          <Video className="w-8 h-8 text-primary animate-pulse" />
         </div>
 
         <h2 className="text-lg font-semibold mb-1" data-testid="text-caller-name">

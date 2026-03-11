@@ -46,7 +46,11 @@ export class WebRTCConnection {
   }
 
   async getLocalStream(video = true, audio = true): Promise<MediaStream> {
-    this.localStream = await navigator.mediaDevices.getUserMedia({ video, audio });
+    const constraints: MediaStreamConstraints = {
+      audio: audio ? { echoCancellation: true, noiseSuppression: true } : false,
+      video: video ? { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } : false,
+    };
+    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
     this.localStream.getTracks().forEach((track) => {
       this.pc.addTrack(track, this.localStream!);
     });
