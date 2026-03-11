@@ -17,6 +17,7 @@ export async function fetchIceServers(): Promise<RTCIceServer[]> {
 export class WebRTCConnection {
   private pc: RTCPeerConnection;
   private localStream: MediaStream | null = null;
+  private remoteStream: MediaStream | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private hasRemoteDescription = false;
   public onRemoteStream: ((stream: MediaStream) => void) | null = null;
