@@ -39,7 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video } from "lucide-react";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
@@ -389,61 +389,114 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {contactEntries.map((contact, index) => (
-              <div key={index} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">
-                    {index === 0 ? "Primary contact" : `Contact ${index + 1}`}
-                  </Label>
-                  <div className="flex items-center gap-1">
-                    {contactEntries.length > 1 && (
-                      <>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => moveContactEntry(index, index - 1)}
-                          disabled={index === 0}
-                          data-testid={`button-move-up-${index}`}
-                        >
-                          <GripVertical className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-destructive"
-                          onClick={() => removeContactEntry(index)}
-                          data-testid={`button-remove-contact-${index}`}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </>
-                    )}
+            {contactEntries.map((contact, index) => {
+              const savedContact = status?.contacts?.find(c => c.priority === index + 1);
+              const linkedUserId = savedContact?.linkedUserId;
+              return (
+                <div key={index} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">
+                      {index === 0 ? "Primary contact" : `Contact ${index + 1}`}
+                    </Label>
+                    <div className="flex items-center gap-1">
+                      {contactEntries.length > 1 && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => moveContactEntry(index, index - 1)}
+                            disabled={index === 0}
+                            data-testid={`button-move-up-${index}`}
+                          >
+                            <GripVertical className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-destructive"
+                            onClick={() => removeContactEntry(index)}
+                            data-testid={`button-remove-contact-${index}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
+                  <Input
+                    placeholder="Name"
+                    value={contact.name}
+                    onChange={(e) => updateContactEntry(index, "name", e.target.value)}
+                    data-testid={`input-contact-name-${index}`}
+                  />
+                  <Input
+                    placeholder="Mobile number"
+                    type="tel"
+                    value={contact.phone}
+                    onChange={(e) => updateContactEntry(index, "phone", e.target.value)}
+                    data-testid={`input-contact-phone-${index}`}
+                  />
+                  {savedContact && contact.name.trim() && contact.phone.trim() && (
+                    <div className="flex items-center gap-2">
+                      {linkedUserId ? (
+                        <>
+                          <span className="text-xs text-green-600 font-medium flex items-center gap-1" data-testid={`badge-on-stillhere-${index}`}>
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                            On StillHere
+                          </span>
+                          <div className="ml-auto flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs"
+                              onClick={() => setLocation(`/chat/${linkedUserId}`)}
+                              data-testid={`button-message-contact-${index}`}
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              Message
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs"
+                              onClick={() => setLocation(`/call/${linkedUserId}`)}
+                              data-testid={`button-video-contact-${index}`}
+                            >
+                              <Video className="h-3.5 w-3.5" />
+                              Call
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`badge-sms-only-${index}`}>
+                            SMS only
+                          </span>
+                          <div className="ml-auto">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs"
+                              onClick={() => window.open(`tel:${contact.phone}`, "_self")}
+                              data-testid={`button-call-contact-${index}`}
+                            >
+                              <Phone className="h-3.5 w-3.5" />
+                              Call
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <Input
-                  placeholder="Name"
-                  value={contact.name}
-                  onChange={(e) => updateContactEntry(index, "name", e.target.value)}
-                  data-testid={`input-contact-name-${index}`}
-                />
-                <Input
-                  placeholder="Mobile number"
-                  type="tel"
-                  value={contact.phone}
-                  onChange={(e) => updateContactEntry(index, "phone", e.target.value)}
-                  data-testid={`input-contact-phone-${index}`}
-                />
-                {status?.contacts?.find(c => c.priority === index + 1)?.linkedUserId && (
-                  <span className="text-xs text-accent font-medium flex items-center gap-1" data-testid={`badge-on-stillhere-${index}`}>
-                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    On StillHere
-                  </span>
-                )}
-              </div>
-            ))}
+              );
+            })}
 
             {contactEntries.length < contactLimit && (
               <Button
