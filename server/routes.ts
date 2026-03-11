@@ -678,40 +678,39 @@ export async function registerRoutes(
       
       const now = new Date();
       
-      // Update incident - reset escalation state and restart the flow
+      const contacts = await storage.getContacts(data.user.id);
+      const tokens = await storage.getContactTokensForUser(data.user.id);
+      const baseUrl = getBaseUrl();
+      const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
+      const firstContact = sortedContacts[0];
+
       const incident = await storage.updateIncident(data.incident.id, {
         status: "open",
         handledByContactId: null,
-        // Reset all escalation tracking to restart the flow
         escalationLevel: 1,
+        notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
+        lastContactNotifiedAt: now,
+        allContactsNotifiedAt: null,
+        userNotifiedNoResponseAt: null,
         contact1NotifiedAt: now,
         contact2NotifiedAt: null,
-        userNotifiedNoResponseAt: null,
-        nextActionAt: addMinutes(now, 20), // Start fresh 20-min escalation window
+        nextActionAt: addMinutes(now, 20),
       });
       
       console.log(`\n[INCIDENT] ${data.contact.name} escalated the incident for ${data.user.name}\n`);
       
-      // Follow sequential escalation: notify only Contact 1, let cron handle Contact 2 after 20 min
-      const contacts = await storage.getContacts(data.user.id);
-      const tokens = await storage.getContactTokensForUser(data.user.id);
-      const baseUrl = getBaseUrl();
-      
-      // Notify Contact 1 only (sequential escalation)
-      const contact1 = contacts.find(c => c.priority === 1);
-      if (contact1) {
-        const tokenData = tokens.find(t => t.contact.id === contact1.id);
+      if (firstContact) {
+        const tokenData = tokens.find(t => t.contact.id === firstContact.id);
         if (tokenData) {
           const link = `${baseUrl}/emergency/${tokenData.token}`;
-          const normalizedPhone = normalizePhone(contact1.phone);
-          console.log(`\n[ESCALATION] Re-notifying Contact 1: ${contact1.name}...`);
-          // Use correct SMS template based on incident reason
+          const normalizedPhone = normalizePhone(firstContact.phone);
+          console.log(`\n[ESCALATION] Re-notifying Contact #${firstContact.priority}: ${firstContact.name}...`);
           if (data.incident!.reason === "sos") {
             await sendSosAlert(normalizedPhone, data.user.name, link);
           } else {
             await sendMissedCheckinAlert(normalizedPhone, data.user.name, link);
           }
-          console.log("[ESCALATION] Contact 1 re-notified, escalation will continue via cron\n");
+          console.log("[ESCALATION] Contact re-notified, escalation will continue via cron\n");
         }
       }
       

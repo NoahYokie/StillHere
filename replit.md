@@ -17,8 +17,9 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Color Scheme:** Primary blue (#0ea5e9) for trust/safety, accent green (#22c55e) for positive actions ("I'm OK"), and destructive red (#ef4444) for SOS and alerts.
 - **Key Elements:** A large green "I'm OK" button for daily check-ins and a prominent red "I Need Help" button for SOS alerts.
 - **Onboarding:** A 4-screen onboarding flow introduces new users to the app's purpose and functionality, followed by a 3-step registration process (name, contacts, preferences).
-- **In-App Banners:** Real-time status banners on the home page display alert status, contact handling, and notification progress.
-- **Haptic Feedback:** Implemented for check-in and SOS actions on supported devices to provide tactile confirmation.
+- **In-App Banners:** Real-time status banners on the home page display alert status, contact handling, and notification progress with dynamic contact names.
+- **Haptic Feedback:** Implemented for check-in, SOS, and fall detection actions on supported devices to provide tactile confirmation.
+- **Quote of the Day:** After each check-in, a daily motivational quote is displayed in a card below the check-in button (125 quotes, rotates by day-of-year).
 
 **Technical Implementations:**
 - **Frontend:** Built with React, TypeScript, Tailwind CSS, and shadcn/ui, utilizing `wouter` for routing and `TanStack Query` for data fetching.
@@ -27,19 +28,35 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Authentication:** Phone OTP (One-Time Password) login via SMS, with sessions lasting 30 days using httpOnly secure cookies. Rate limiting is applied to OTP requests and verification attempts.
 - **Check-in Mechanism:** Users can manually check-in or opt for automatic check-ins upon opening the app.
 - **Emergency System:** Configurable check-in schedules, grace periods before alerts, and reminders. An SOS alert button provides immediate notification.
-- **Escalation System:** A sequential escalation system notifies emergency contacts (priority 1 then 2) and subsequently the user if no response is received, with re-notification for unaddressed incidents.
+- **Escalation System:** Sequential escalation through the top 5 contacts by priority (20 minutes each), then all remaining contacts are notified simultaneously. Re-notification for unaddressed incidents. Tracked via `notifiedContactIds` JSON field on incidents.
+- **Fall Detection:** DeviceMotion API-based fall detection — detects high-G impact followed by stillness. Shows 60-second countdown dialog before auto-triggering SOS. Toggle in settings.
+- **Premium Contacts:** Free users: 2 contacts max. Premium users (`isPremium` flag): unlimited contacts with top-5 sequential escalation then blast-all remaining.
 - **Location Sharing:** Optional, user-controlled location sharing.
 - **Push Notifications:** Web push notifications are used for reminders to reduce SMS costs, with an "I'm OK" action button for one-tap check-ins directly from the notification. A service worker handles push events and offline capabilities.
 - **Security:** Comprehensive security measures including Helmet.js for HTTP headers, global API rate limiting, cron job security (`x-cron-secret`), and robust input validation.
 - **PWA Support:** Full Progressive Web App capabilities, including a manifest, service worker for caching and offline support, and installability.
-- **Wearable API:** Dedicated API endpoints for companion watch apps (Apple Watch, Wear OS) using Bearer token authentication for quick check-ins and minimal status updates.
+- **Wearable API:** Dedicated API endpoints for companion watch apps (Apple Watch, Wear OS) using Bearer token authentication (`x-api-token` header) for quick check-ins (`POST /api/checkin/quick`) and minimal status updates (`GET /api/status/simple`).
+- **International Phone Normalization:** 28+ countries supported with E.164 normalization (US, UK, AU, CA, NZ, JP, KR, SG, IN, FR, DE, IT, ES, NL, BE, CH, IE, SE, NO, DK, CZ, HU, RO, HR, and more).
 
 **Feature Specifications:**
 - **User Management:** Phone OTP authentication, user profiles, and settings.
-- **Check-in Features:** Manual "I'm OK" button, optional auto check-in on app open, configurable schedules (12-48+ hours), grace periods (10-30 min), and configurable reminders (none, one, or two).
-- **Emergency Management:** SOS alert button, up to 2 emergency contacts with priority levels, token-based contact pages for status viewing, responsibility system for contacts to pause escalation, and location sharing.
+- **Check-in Features:** Manual "I'm OK" button, optional auto check-in on app open, configurable schedules (12-48+ hours), grace periods (10-30 min), and configurable reminders (none, one, or two). Quote of the day shown after check-in.
+- **Emergency Management:** SOS alert button, dynamic emergency contacts with priority levels (free: 2, premium: unlimited), token-based contact pages for status viewing, responsibility system for contacts to pause escalation, fall detection with countdown, and location sharing.
 - **Notifications:** SMS and web push notifications for reminders and alerts.
-- **Account Security:** OTP rate limiting, phone number normalization for various countries, and staging environment whitelisting.
+- **Account Security:** OTP rate limiting, phone number normalization for 28+ countries, and staging environment whitelisting.
+
+### Key Files
+- `shared/schema.ts` — Database schema (users, settings, contacts, incidents, checkins, etc.)
+- `server/routes.ts` — All API routes including cron tick escalation logic
+- `server/storage.ts` — Storage interface and implementation (IStorage / DatabaseStorage)
+- `server/auth.ts` — Phone normalization, OTP generation, session management
+- `server/sms.ts` — Twilio SMS integration
+- `client/src/pages/home.tsx` — Main check-in page with escalation banner, fall detection, quote of the day
+- `client/src/pages/settings.tsx` — Settings page with dynamic contacts list, fall detection toggle
+- `client/src/pages/setup-contacts.tsx` — Onboarding contacts setup (dynamic list)
+- `client/src/lib/fall-detection.ts` — DeviceMotion-based fall detection module
+- `client/src/lib/quotes.ts` — 125 daily motivational quotes
+- `capacitor.config.json` — Capacitor config with watch companion app stubs
 
 ### External Dependencies
 - **SMS Gateway:** Twilio (for sending SMS messages)

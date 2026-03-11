@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,14 +36,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
@@ -69,21 +58,14 @@ export default function SettingsPage() {
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
   const [reminderMode, setReminderMode] = useState<ReminderMode>("one");
   const [autoCheckin, setAutoCheckin] = useState(false);
+  const [fallDetection, setFallDetection] = useState(false);
   const [customInterval, setCustomInterval] = useState("");
   const [customPauseHours, setCustomPauseHours] = useState("");
+  const [contactEntries, setContactEntries] = useState<ContactEntry[]>([]);
+  const [contactsInitialized, setContactsInitialized] = useState(false);
 
   const { data: status, isLoading } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
-  });
-
-  const form = useForm<ContactsForm>({
-    resolver: zodResolver(contactsSchema),
-    defaultValues: {
-      contact1Name: "",
-      contact1Phone: "",
-      contact2Name: "",
-      contact2Phone: "",
-    },
   });
 
   useEffect(() => {
@@ -94,21 +76,21 @@ export default function SettingsPage() {
       setLocationMode(status.settings?.locationMode || "off");
       setReminderMode((status.settings as any)?.reminderMode || "one");
       setAutoCheckin((status.settings as any)?.autoCheckin || false);
+      setFallDetection((status.settings as any)?.fallDetection || false);
 
-      const contact1 = status.contacts?.find((c) => c.priority === 1);
-      const contact2 = status.contacts?.find((c) => c.priority === 2);
-
-      form.reset({
-        contact1Name: contact1?.name || "",
-        contact1Phone: contact1?.phone || "",
-        contact2Name: contact2?.name || "",
-        contact2Phone: contact2?.phone || "",
-      });
+      if (!contactsInitialized && status.contacts?.length) {
+        const sorted = [...status.contacts].sort((a, b) => a.priority - b.priority);
+        setContactEntries(sorted.map(c => ({ name: c.name, phone: c.phone })));
+        setContactsInitialized(true);
+      } else if (!contactsInitialized && (!status.contacts || status.contacts.length === 0)) {
+        setContactEntries([{ name: "", phone: "" }]);
+        setContactsInitialized(true);
+      }
     }
-  }, [status, form]);
+  }, [status, contactsInitialized]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -121,8 +103,14 @@ export default function SettingsPage() {
   });
 
   const contactsMutation = useMutation({
-    mutationFn: async (data: ContactsForm) => {
-      return apiRequest("POST", "/api/contacts", data);
+    mutationFn: async (contactsList: ContactEntry[]) => {
+      return apiRequest("POST", "/api/contacts", {
+        contacts: contactsList.map((c, i) => ({
+          name: c.name,
+          phone: c.phone,
+          priority: i + 1,
+        })),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
@@ -213,8 +201,39 @@ export default function SettingsPage() {
     pauseMutation.mutate(null);
   };
 
-  const onContactsSubmit = (data: ContactsForm) => {
-    contactsMutation.mutate(data);
+  const contactLimit = status?.contactLimit ?? 2;
+
+  const addContactEntry = () => {
+    if (contactEntries.length >= contactLimit) return;
+    setContactEntries([...contactEntries, { name: "", phone: "" }]);
+  };
+
+  const removeContactEntry = (index: number) => {
+    if (contactEntries.length <= 1) return;
+    setContactEntries(contactEntries.filter((_, i) => i !== index));
+  };
+
+  const updateContactEntry = (index: number, field: keyof ContactEntry, value: string) => {
+    const updated = [...contactEntries];
+    updated[index] = { ...updated[index], [field]: value };
+    setContactEntries(updated);
+  };
+
+  const moveContactEntry = (from: number, to: number) => {
+    if (to < 0 || to >= contactEntries.length) return;
+    const updated = [...contactEntries];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    setContactEntries(updated);
+  };
+
+  const saveContacts = () => {
+    const valid = contactEntries.filter(c => c.name.trim() && c.phone.trim());
+    if (valid.length === 0) {
+      toast({ title: "Error", description: "At least one contact is required.", variant: "destructive" });
+      return;
+    }
+    contactsMutation.mutate(valid);
   };
 
   if (isLoading) {
@@ -362,77 +381,85 @@ export default function SettingsPage() {
               <Users className="h-5 w-5" />
               Emergency contacts
             </CardTitle>
-            <CardDescription>We'll notify these people if you don't respond.</CardDescription>
+            <CardDescription>
+              We'll notify these people if you don't respond.
+              {!status?.isPremium && (
+                <span className="block text-xs mt-1">Free plan: up to {contactLimit} contacts</span>
+              )}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onContactsSubmit)} className="space-y-4">
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Contact 1 (primary)</Label>
-                  <FormField
-                    control={form.control}
-                    name="contact1Name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input placeholder="Name" {...field} data-testid="input-contact1-name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+          <CardContent className="space-y-4">
+            {contactEntries.map((contact, index) => (
+              <div key={index} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    {index === 0 ? "Primary contact" : `Contact ${index + 1}`}
+                  </Label>
+                  <div className="flex items-center gap-1">
+                    {contactEntries.length > 1 && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => moveContactEntry(index, index - 1)}
+                          disabled={index === 0}
+                          data-testid={`button-move-up-${index}`}
+                        >
+                          <GripVertical className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive"
+                          onClick={() => removeContactEntry(index)}
+                          data-testid={`button-remove-contact-${index}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </>
                     )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="contact1Phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input placeholder="Mobile number" {...field} data-testid="input-contact1-phone" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  </div>
                 </div>
+                <Input
+                  placeholder="Name"
+                  value={contact.name}
+                  onChange={(e) => updateContactEntry(index, "name", e.target.value)}
+                  data-testid={`input-contact-name-${index}`}
+                />
+                <Input
+                  placeholder="Mobile number"
+                  type="tel"
+                  value={contact.phone}
+                  onChange={(e) => updateContactEntry(index, "phone", e.target.value)}
+                  data-testid={`input-contact-phone-${index}`}
+                />
+              </div>
+            ))}
 
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Contact 2 (backup)</Label>
-                  <FormField
-                    control={form.control}
-                    name="contact2Name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input placeholder="Name" {...field} data-testid="input-contact2-name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="contact2Phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input placeholder="Mobile number" {...field} data-testid="input-contact2-phone" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+            {contactEntries.length < contactLimit && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={addContactEntry}
+                data-testid="button-add-contact"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add another contact
+              </Button>
+            )}
 
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={contactsMutation.isPending}
-                  data-testid="button-save-contacts"
-                >
-                  {contactsMutation.isPending ? "Saving..." : "Save contacts"}
-                </Button>
-              </form>
-            </Form>
+            <Button
+              className="w-full"
+              onClick={saveContacts}
+              disabled={contactsMutation.isPending}
+              data-testid="button-save-contacts"
+            >
+              {contactsMutation.isPending ? "Saving..." : "Save contacts"}
+            </Button>
           </CardContent>
         </Card>
 
@@ -529,6 +556,34 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-3">
               Opening StillHere counts as a check-in. No button tap needed.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Fall Detection Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Activity className="h-5 w-5" />
+              Fall detection
+            </CardTitle>
+            <CardDescription>Detect falls and automatically alert your contacts.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="fall-detection">Enable fall detection</Label>
+              <Switch
+                id="fall-detection"
+                checked={fallDetection}
+                onCheckedChange={(checked) => {
+                  setFallDetection(checked);
+                  settingsMutation.mutate({ fallDetection: checked });
+                }}
+                data-testid="switch-fall-detection"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              Uses your device's motion sensors. If a fall is detected, you'll have 60 seconds to dismiss before an SOS is sent.
             </p>
           </CardContent>
         </Card>

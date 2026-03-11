@@ -15,10 +15,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
+import { createFallDetector, isDeviceMotionSupported } from "@/lib/fall-detection";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -31,8 +32,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
   if (!incident || incident.status === "resolved") return null;
 
   const contacts = status.contacts || [];
-  const contact1 = contacts.find(c => c.priority === 1);
-  const contact2 = contacts.find(c => c.priority === 2);
+  const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
   const handlingContact = incident.handledByContactId
     ? contacts.find(c => c.id === incident.handledByContactId)
     : null;
@@ -61,25 +61,25 @@ function EscalationBanner({ status }: { status: UserStatus }) {
     );
   }
 
-  const steps = [];
+  let notifiedIds: string[] = [];
+  try { notifiedIds = JSON.parse((incident as any).notifiedContactIds || "[]"); } catch { notifiedIds = []; }
 
-  if (incident.contact1NotifiedAt && contact1) {
-    steps.push({
-      label: `${contact1.name} notified`,
-      done: true,
-      icon: <Phone className="h-3.5 w-3.5" />,
-    });
+  const steps: { label: string; done: boolean; icon: JSX.Element }[] = [];
+
+  for (const contact of sortedContacts) {
+    if (notifiedIds.includes(contact.id)) {
+      steps.push({
+        label: `${contact.name} notified`,
+        done: true,
+        icon: <Phone className="h-3.5 w-3.5" />,
+      });
+    }
   }
 
-  if (incident.contact2NotifiedAt && contact2) {
+  const nextContact = sortedContacts.find(c => !notifiedIds.includes(c.id));
+  if (nextContact && !incident.userNotifiedNoResponseAt) {
     steps.push({
-      label: `${contact2.name} notified`,
-      done: true,
-      icon: <Phone className="h-3.5 w-3.5" />,
-    });
-  } else if (contact2 && incident.escalationLevel === 1) {
-    steps.push({
-      label: `${contact2.name} will be notified if no response`,
+      label: `${nextContact.name} will be notified if no response`,
       done: false,
       icon: <Clock className="h-3.5 w-3.5" />,
     });
@@ -241,6 +241,9 @@ export default function Home() {
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
+  const [fallCountdown, setFallCountdown] = useState<number | null>(null);
+  const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
   const locationWatchRef = useRef<number | null>(null);
 
   const { data: status, isLoading } = useQuery<UserStatus>({
@@ -303,6 +306,66 @@ export default function Home() {
       }).catch(() => {});
     }
   }, [status?.settings?.autoCheckin, isLoading, hasActiveIncident]);
+
+  const startFallCountdown = useCallback(() => {
+    triggerHaptic([200, 100, 200, 100, 200]);
+    setFallCountdown(60);
+    if (fallTimerRef.current) clearInterval(fallTimerRef.current);
+    fallTimerRef.current = setInterval(() => {
+      setFallCountdown(prev => {
+        if (prev === null) {
+          if (fallTimerRef.current) clearInterval(fallTimerRef.current);
+          fallTimerRef.current = null;
+          return null;
+        }
+        if (prev <= 1) {
+          if (fallTimerRef.current) clearInterval(fallTimerRef.current);
+          fallTimerRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  const dismissFallAlert = useCallback(() => {
+    if (fallTimerRef.current) {
+      clearInterval(fallTimerRef.current);
+      fallTimerRef.current = null;
+    }
+    setFallCountdown(null);
+  }, []);
+
+  useEffect(() => {
+    if (fallCountdown === 0 && fallCountdown !== null) {
+      apiRequest("POST", "/api/sos").then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+        toast({
+          title: "Fall detected - SOS sent",
+          description: "Your emergency contacts have been alerted.",
+        });
+      }).catch(() => {});
+      setFallCountdown(null);
+    }
+  }, [fallCountdown, toast]);
+
+  useEffect(() => {
+    const fallEnabled = (status?.settings as any)?.fallDetection;
+    if (fallEnabled && isDeviceMotionSupported() && !fallDetectorRef.current) {
+      fallDetectorRef.current = createFallDetector({
+        onFallDetected: startFallCountdown,
+      });
+      fallDetectorRef.current.start();
+    } else if (!fallEnabled && fallDetectorRef.current) {
+      fallDetectorRef.current.stop();
+      fallDetectorRef.current = null;
+    }
+    return () => {
+      if (fallDetectorRef.current) {
+        fallDetectorRef.current.stop();
+      }
+    };
+  }, [(status?.settings as any)?.fallDetection, startFallCountdown]);
 
   const checkinMutation = useMutation({
     mutationFn: async () => {
@@ -615,6 +678,37 @@ export default function Home() {
               data-testid="button-sos-confirm"
             >
               Send Alert
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={fallCountdown !== null} onOpenChange={(open) => { if (!open) dismissFallAlert(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-destructive" />
+              Fall detected
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              It looks like you may have fallen. We'll alert your emergency contacts in{" "}
+              <span className="font-bold text-destructive text-lg">{fallCountdown}</span>{" "}
+              seconds unless you dismiss this.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={dismissFallAlert} data-testid="button-fall-dismiss">
+              I'm fine
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                dismissFallAlert();
+                sosMutation.mutate();
+              }}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-fall-sos"
+            >
+              Send SOS now
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
