@@ -175,8 +175,27 @@ export default function CallPage() {
     socket.on("call:ice-restart", onIceRestart);
     socket.on("call:ice-restart-answer", onIceRestartAnswer);
 
+    async function waitForSocket(): Promise<void> {
+      if (socket.connected) return;
+      console.log("[CALL] Waiting for socket to connect...");
+      return new Promise((resolve) => {
+        const onConnect = () => {
+          socket.off("connect", onConnect);
+          resolve();
+        };
+        socket.on("connect", onConnect);
+        setTimeout(() => {
+          socket.off("connect", onConnect);
+          resolve();
+        }, 5000);
+      });
+    }
+
     async function startCall() {
       try {
+        await waitForSocket();
+        console.log("[CALL] Socket ready, id:", socket.id, "connected:", socket.connected);
+
         console.log("[CALL] Fetching ICE servers...");
         const iceServers = await fetchIceServers();
         console.log("[CALL] Got", iceServers.length, "ICE server configs");
