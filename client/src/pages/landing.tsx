@@ -1,18 +1,17 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Heart, Bell, Shield, Users, HelpCircle } from "lucide-react";
+import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle } from "lucide-react";
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-primary text-primary-foreground px-6 py-4">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
+      <header className="hidden md:block bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Heart className="h-6 w-6" />
-            <h1 className="text-xl font-semibold" data-testid="text-landing-title">StillHere</h1>
+            <span className="text-xl font-semibold" data-testid="text-landing-title">StillHere</span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -37,196 +36,283 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 py-12">
-        <section className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4" data-testid="text-hero-title">
-            Let your family know you're okay
-          </h2>
-          <p className="text-lg text-muted-foreground mb-8">
-            A simple daily check-in for people who live alone.
-            <br />
-            No tracking. No fuss. Just peace of mind.
-          </p>
-          <Button
-            size="lg"
-            className="px-8"
-            onClick={() => setLocation("/login")}
-            data-testid="button-get-started"
-          >
-            Get started
-          </Button>
-        </section>
+      <section className="relative min-h-[100dvh] md:min-h-0 flex flex-col bg-gradient-to-b md:bg-gradient-to-br from-primary via-primary to-primary/80 text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-16 left-8 md:top-20 md:left-20 w-32 md:w-64 h-32 md:h-64 rounded-full bg-white/20 blur-3xl" />
+          <div className="absolute bottom-32 right-4 md:bottom-10 md:right-20 w-48 md:w-80 h-48 md:h-80 rounded-full bg-white/15 blur-3xl" />
+        </div>
 
-        <section className="grid gap-6 md:grid-cols-3 mb-12">
-          <Card>
-            <CardContent className="pt-6 text-center">
-              <div className="w-12 h-12 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Bell className="h-6 w-6 text-accent" />
-              </div>
-              <h3 className="font-semibold mb-2">Simple check-in</h3>
-              <p className="text-sm text-muted-foreground">
-                Tap "I'm OK" once a day. That's it.
+        <div className="relative flex-1 md:flex-none flex flex-col md:block px-6 pt-14 pb-8 md:py-24 max-w-5xl md:mx-auto md:w-full">
+          <div className="flex items-center gap-2 md:hidden">
+            <Heart className="h-7 w-7" />
+            <span className="text-xl font-semibold" data-testid="text-landing-title-mobile">StillHere</span>
+          </div>
+
+          <div className="md:grid md:grid-cols-2 md:gap-12 md:items-center flex-1 flex flex-col md:flex-none">
+            <div className="flex-1 flex flex-col justify-center md:block -mt-8 md:mt-0">
+              <h1 className="text-[2rem] md:text-4xl lg:text-5xl leading-tight font-bold mb-4 md:mb-6" data-testid="text-hero-title">
+                Your family will always know you're okay.
+              </h1>
+              <p className="text-lg md:text-xl text-white/85 leading-relaxed mb-8">
+                One tap a day. That's all it takes to give your loved ones peace of mind.
               </p>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardContent className="pt-6 text-center">
-              <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="h-6 w-6 text-primary" />
+              <div className="md:hidden w-28 h-28 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mx-auto mb-6 ring-4 ring-white/30">
+                <div className="w-20 h-20 rounded-full bg-accent flex items-center justify-center shadow-lg">
+                  <Check className="h-10 w-10 text-white" />
+                </div>
               </div>
-              <h3 className="font-semibold mb-2">Your emergency contacts</h3>
-              <p className="text-sm text-muted-foreground">
-                Choose who gets notified if you don't respond.
-              </p>
-            </CardContent>
-          </Card>
+              <p className="md:hidden text-center text-white/70 text-sm mb-8">Tap "I'm OK" once a day</p>
 
-          <Card>
-            <CardContent className="pt-6 text-center">
-              <div className="w-12 h-12 bg-destructive/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Shield className="h-6 w-6 text-destructive" />
-              </div>
-              <h3 className="font-semibold mb-2">You stay in control</h3>
-              <p className="text-sm text-muted-foreground">
-                Location sharing is off by default. Pause anytime.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="mb-12">
-          <h3 className="text-xl font-semibold mb-6 text-center">How it works</h3>
-          <div className="space-y-4">
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 font-semibold">
-                1
-              </div>
-              <div>
-                <p className="font-medium">You check in each day</p>
-                <p className="text-sm text-muted-foreground">
-                  Just tap the green button to let us know you're okay.
-                </p>
+              <div className="space-y-3 md:space-y-0 md:flex md:flex-wrap md:gap-3">
+                <Button
+                  size="lg"
+                  className="w-full md:w-auto py-6 md:px-8 text-lg font-semibold bg-white text-primary hover:bg-white/90"
+                  onClick={() => setLocation("/login")}
+                  data-testid="button-get-started"
+                >
+                  Get started — it's free
+                </Button>
+                <button
+                  onClick={() => setLocation("/login")}
+                  className="w-full md:hidden text-center text-white/70 text-sm py-2"
+                  data-testid="button-sign-in-mobile"
+                >
+                  Already have an account? Sign in
+                </button>
               </div>
             </div>
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 font-semibold">
-                2
-              </div>
-              <div>
-                <p className="font-medium">We send you a reminder first</p>
-                <p className="text-sm text-muted-foreground">
-                  If you miss your check-in, we'll remind you before alerting anyone.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 font-semibold">
-                3
-              </div>
-              <div>
-                <p className="font-medium">Your emergency contacts are notified</p>
-                <p className="text-sm text-muted-foreground">
-                  They receive a message with a link to check on you. No app needed on their end.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-4">
-              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 font-semibold">
-                4
-              </div>
-              <div>
-                <p className="font-medium">They check on you first</p>
-                <p className="text-sm text-muted-foreground">
-                  Your family or friends can call, visit, or let us know they're handling it.
-                </p>
+
+            <div className="hidden md:flex justify-center">
+              <div className="relative">
+                <div className="w-64 h-[440px] bg-white/10 backdrop-blur-sm rounded-[2.5rem] border-2 border-white/20 p-4 flex flex-col">
+                  <div className="bg-white/10 rounded-full px-4 py-2 text-center text-sm mb-6">
+                    <span className="text-white/70">Next check-in: 9:00 AM tomorrow</span>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center justify-center gap-6">
+                    <div className="w-32 h-32 rounded-full bg-accent/80 flex items-center justify-center shadow-xl ring-4 ring-accent/30">
+                      <Check className="h-16 w-16 text-white" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-semibold text-lg">I'm OK</p>
+                      <p className="text-white/60 text-sm mt-1">Tap once a day</p>
+                    </div>
+                  </div>
+                  <div className="bg-destructive/60 rounded-xl py-3 text-center text-sm font-medium">
+                    I Need Help
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section className="mb-12">
-          <h3 className="text-xl font-semibold mb-6 text-center">What your emergency contacts see</h3>
-          <Card className="bg-muted/30">
-            <CardContent className="pt-6 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                When notified, your emergency contacts receive a text message with a link. On that page, they can see:
+        <div className="md:hidden flex justify-center pb-6 motion-safe:animate-bounce">
+          <ChevronDown className="h-5 w-5 text-white/50" />
+        </div>
+      </section>
+
+      <section className="px-6 py-14 md:py-20 bg-background max-w-5xl md:mx-auto">
+        <p className="text-center text-sm font-medium text-muted-foreground uppercase tracking-wider mb-8 md:mb-12">
+          For people who live alone
+        </p>
+
+        <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-3 md:gap-8">
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 md:flex-col md:items-center md:text-center md:bg-transparent md:p-6">
+            <div className="w-10 h-10 md:w-14 md:h-14 rounded-full md:rounded-2xl bg-accent/15 flex items-center justify-center flex-shrink-0 md:mb-4">
+              <Bell className="h-5 w-5 md:h-7 md:w-7 text-accent" />
+            </div>
+            <div>
+              <h2 className="font-semibold mb-1 md:text-lg md:mb-2">One tap check-in</h2>
+              <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                Tap the green button once a day. We'll remind you if you forget.
               </p>
-              <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
-                <li>Your name and status</li>
-                <li>When you last checked in</li>
-                <li>Your location on a map (if you've turned this on)</li>
-                <li>Your full address</li>
-                <li>A link to get directions</li>
-              </ul>
-              <p className="text-sm text-muted-foreground">
-                They also see simple guidance:
+            </div>
+          </div>
+
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 md:flex-col md:items-center md:text-center md:bg-transparent md:p-6">
+            <div className="w-10 h-10 md:w-14 md:h-14 rounded-full md:rounded-2xl bg-primary/15 flex items-center justify-center flex-shrink-0 md:mb-4">
+              <Users className="h-5 w-5 md:h-7 md:w-7 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold mb-1 md:text-lg md:mb-2">Your people get notified</h2>
+              <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                Choose up to 2 emergency contacts. They get a text if you don't check in.
               </p>
-              <div className="bg-background rounded-lg p-4">
-                <p className="text-sm font-medium mb-2">What to do next:</p>
-                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-                  <li>Try calling them</li>
-                  <li>If no answer, send them a text message</li>
-                  <li>If still no response, call local emergency services</li>
-                </ol>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-muted/50 md:flex-col md:items-center md:text-center md:bg-transparent md:p-6">
+            <div className="w-10 h-10 md:w-14 md:h-14 rounded-full md:rounded-2xl bg-destructive/15 flex items-center justify-center flex-shrink-0 md:mb-4">
+              <Shield className="h-5 w-5 md:h-7 md:w-7 text-destructive" />
+            </div>
+            <div>
+              <h2 className="font-semibold mb-1 md:text-lg md:mb-2">You stay in control</h2>
+              <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
+                Location sharing is off by default. Pause alerts anytime. No tracking, ever.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-14 md:py-20 bg-muted/30">
+        <div className="max-w-5xl md:mx-auto">
+          <h2 className="text-xl md:text-2xl font-bold mb-8 md:mb-12 text-center">How it works</h2>
+
+          <div className="space-y-8 md:hidden">
+            {[
+              { num: "1", title: "Check in each day", desc: "Open the app and tap \"I'm OK\". Takes less than 2 seconds.", last: false, accent: false },
+              { num: "2", title: "Miss a check-in?", desc: "We'll send you a reminder first. No panic, no rush.", last: false, accent: false },
+              { num: "3", title: "Your contacts are notified", desc: "They receive a text message with a link to check on you. No app needed on their end.", last: false, accent: false },
+              { num: "4", title: "Someone checks on you", desc: "Your family or friends can call, visit, or confirm they're on their way.", last: true, accent: true },
+            ].map((step) => (
+              <div key={step.num} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className={`w-9 h-9 rounded-full ${step.accent ? "bg-accent" : "bg-primary"} text-white flex items-center justify-center font-bold text-sm flex-shrink-0`}>
+                    {step.num}
+                  </div>
+                  {!step.last && <div className="w-0.5 flex-1 bg-primary/20 mt-2" />}
+                </div>
+                <div className={step.last ? "" : "pb-2"}>
+                  <h3 className="font-semibold mb-1">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </section>
+            ))}
+          </div>
 
-        <section className="text-center mb-12">
-          <Card className="bg-muted/50">
-            <CardContent className="pt-6">
-              <p className="text-lg font-medium mb-2">
-                "I don't want to be found weeks later. This gives me peace of mind."
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Someone who lives alone
-              </p>
-            </CardContent>
-          </Card>
-        </section>
+          <div className="hidden md:grid md:grid-cols-4 gap-8">
+            {[
+              { num: "1", title: "Check in each day", desc: "Open the app and tap \"I'm OK\". Takes 2 seconds.", accent: false },
+              { num: "2", title: "Miss a check-in?", desc: "We send you a friendly reminder first. No panic.", accent: false },
+              { num: "3", title: "Contacts notified", desc: "They get a text with a link to check on you.", accent: false },
+              { num: "4", title: "Someone checks on you", desc: "They can call, visit, or confirm they're handling it.", accent: true },
+            ].map((step) => (
+              <div key={step.num} className="text-center">
+                <div className={`w-12 h-12 rounded-full ${step.accent ? "bg-accent" : "bg-primary"} text-white flex items-center justify-center font-bold text-lg mx-auto mb-4`}>
+                  {step.num}
+                </div>
+                <h3 className="font-semibold mb-2">{step.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-        <section className="text-center">
-          <h3 className="text-xl font-semibold mb-4">Ready to get started?</h3>
-          <p className="text-muted-foreground mb-6">
-            It takes less than 2 minutes to set up.
+      <section className="px-6 py-14 md:py-20 bg-background">
+        <div className="max-w-5xl md:mx-auto md:grid md:grid-cols-2 md:gap-12 md:items-center">
+          <div className="md:block">
+            <h2 className="text-xl md:text-2xl font-bold mb-3 text-center md:text-left">What your contacts see</h2>
+            <p className="text-sm text-muted-foreground text-center md:text-left mb-8 md:mb-6">They don't need the app. Just a text message.</p>
+
+            <div className="hidden md:block space-y-3 mb-0">
+              {[
+                "Your name and current status",
+                "When you last checked in",
+                "Your location on a map (if enabled)",
+                "Clear steps on what to do next",
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-5 h-5 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+                    <Check className="h-3 w-3 text-accent" />
+                  </div>
+                  <span className="text-sm">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-muted/50 rounded-2xl p-5 md:p-6 space-y-4 border border-border">
+            <div className="flex items-center gap-3 pb-3 border-b border-border">
+              <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center">
+                <MessageCircle className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">StillHere Alert</p>
+                <p className="text-xs text-muted-foreground">Text message received</p>
+              </div>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-4 w-4 flex-shrink-0" />
+                <span>Last check-in: 9:15 AM yesterday</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <MapPin className="h-4 w-4 flex-shrink-0" />
+                <span>Location shared (if enabled)</span>
+              </div>
+            </div>
+            <div className="bg-background rounded-lg p-3 md:p-4">
+              <p className="text-xs md:text-sm font-medium mb-2">What to do:</p>
+              <div className="space-y-1 md:space-y-1.5 text-xs md:text-sm text-muted-foreground">
+                <p>1. Try calling them</p>
+                <p>2. Send a text message</p>
+                <p>3. Visit or call emergency services</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-14 md:py-20 bg-muted/30">
+        <div className="max-w-3xl md:mx-auto text-center">
+          <div className="inline-flex items-center gap-1 md:gap-1.5 px-3 md:px-4 py-1.5 md:py-2 bg-primary/10 rounded-full text-primary text-xs md:text-sm font-medium mb-4 md:mb-6">
+            <Shield className="h-3.5 md:h-4 w-3.5 md:w-4" />
+            <span>Private & Secure</span>
+          </div>
+          <h2 className="text-xl md:text-2xl font-bold mb-3 md:mb-4">Built for trust</h2>
+          <p className="text-sm md:text-base text-muted-foreground leading-relaxed mb-8 md:mb-10 max-w-xl mx-auto">
+            We don't track you. We don't sell your data. Location sharing is always your choice.
+          </p>
+
+          <div className="bg-background rounded-2xl p-5 md:p-8 border border-border max-w-lg mx-auto">
+            <p className="text-base md:text-lg leading-relaxed mb-3 font-medium">
+              "I live alone and I don't want to be found weeks later. This gives me real peace of mind."
+            </p>
+            <p className="text-sm text-muted-foreground">— Solo dweller</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-16 md:py-20 bg-gradient-to-b md:bg-gradient-to-br from-primary to-primary/80 text-white text-center">
+        <div className="max-w-3xl md:mx-auto">
+          <h2 className="text-2xl md:text-3xl font-bold mb-3 md:mb-4">Ready to get started?</h2>
+          <p className="text-white/80 md:text-xl mb-8">
+            Set up in under 2 minutes. Free forever.
           </p>
           <Button
             size="lg"
-            className="px-8"
+            className="w-full md:w-auto md:px-10 py-6 text-lg font-semibold bg-white text-primary hover:bg-white/90"
             onClick={() => setLocation("/login")}
             data-testid="button-get-started-bottom"
           >
-            Get started
+            Create your account
           </Button>
-        </section>
-      </main>
+        </div>
+      </section>
 
-      <footer className="border-t mt-12 py-6 px-6">
-        <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 text-sm text-muted-foreground">
-          <p className="text-center px-4 py-3 bg-muted/50 rounded-md" data-testid="text-security-notice">
-            <Shield className="h-4 w-4 inline mr-1" />
-            StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere and asks for this information, do not respond as this is likely a fraudulent attempt.
-          </p>
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 w-full">
-            <p>StillHere - A safety check-in app</p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setLocation("/help")}
-                className="hover:text-foreground"
-                data-testid="link-footer-help"
-              >
+      <footer className="px-6 py-6 md:py-8 bg-background border-t border-border">
+        <div className="max-w-5xl md:mx-auto">
+          <div className="flex items-center justify-between text-sm text-muted-foreground md:flex-row">
+            <div className="flex items-center gap-1.5 md:gap-2">
+              <Heart className="h-4 w-4 text-primary" />
+              <span className="hidden md:inline">StillHere — A safety check-in app</span>
+              <span className="md:hidden">StillHere</span>
+            </div>
+            <div className="flex gap-4 md:gap-6">
+              <button onClick={() => setLocation("/help")} className="hover:text-foreground" data-testid="link-footer-help">
                 Help
               </button>
-              <button
-                onClick={() => setLocation("/trust")}
-                className="hover:text-foreground"
-                data-testid="link-footer-trust"
-              >
+              <button onClick={() => setLocation("/trust")} className="hover:text-foreground" data-testid="link-footer-trust">
                 Trust & Safety
               </button>
             </div>
+          </div>
+          <div className="hidden md:block mt-4 px-4 py-3 bg-muted/50 rounded-md text-xs text-muted-foreground text-center">
+            <Shield className="h-3.5 w-3.5 inline mr-1" />
+            StillHere will never contact you asking for personal information, passwords, or payment. If someone does, do not respond.
           </div>
         </div>
       </footer>
