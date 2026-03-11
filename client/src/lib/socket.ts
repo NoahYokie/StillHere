@@ -8,6 +8,11 @@ export function getSocket(): Socket {
       path: "/socket.io",
       withCredentials: true,
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      transports: ["websocket", "polling"],
     });
 
     socket.on("connect", () => {
@@ -19,7 +24,11 @@ export function getSocket(): Socket {
     });
 
     socket.on("connect_error", (error) => {
-      console.log("[SOCKET] Connection error:", error.message);
+      console.error("[SOCKET] Connection error:", error.message);
+    });
+
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("[SOCKET] Reconnected after", attemptNumber, "attempts");
     });
   }
 

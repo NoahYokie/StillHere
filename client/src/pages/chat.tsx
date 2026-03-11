@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
 import { ArrowLeft, Send, Video, CheckCheck, Check } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
@@ -20,16 +19,18 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const currentUserId = auth?.user?.id;
 
+  const { data: userProfile } = useQuery<{ id: string; name: string }>({
+    queryKey: ["/api/users", otherUserId, "profile"],
+    enabled: !!otherUserId,
+  });
+
+  const otherUserName = userProfile?.name || "User";
+
   const { data: messages = [], isLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages", otherUserId],
-    refetchInterval: 10000,
+    refetchInterval: 5000,
+    enabled: !!otherUserId,
   });
-
-  const { data: watchedUsers } = useQuery<any[]>({
-    queryKey: ["/api/watched-users"],
-  });
-
-  const otherUserName = watchedUsers?.find((u: any) => u.userId === otherUserId)?.userName || "User";
 
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -43,6 +44,7 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
+    if (!otherUserId) return;
     const socket = getSocket();
 
     const handleNewMessage = (msg: any) => {
@@ -82,7 +84,7 @@ export default function ChatPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation("/watched")}
+          onClick={() => window.history.length > 1 ? window.history.back() : setLocation("/")}
           data-testid="button-back-chat"
         >
           <ArrowLeft className="w-5 h-5" />
