@@ -26,6 +26,42 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  const data = event.data.json();
+  const title = data.title || 'StillHere';
+  const options = {
+    body: data.body || '',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-96x96.png',
+    tag: data.tag || 'stillhere-notification',
+    renotify: true,
+    data: { url: data.url || '/' },
+    actions: data.tag === 'checkin-reminder'
+      ? [{ action: 'checkin', title: "I'm OK" }]
+      : [],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const url = event.notification.data?.url || '/';
+
+  if (event.action === 'checkin') {
+    event.waitUntil(
+      fetch('/api/checkin', { method: 'POST', credentials: 'same-origin' })
+        .then(() => clients.openWindow(url))
+        .catch(() => clients.openWindow(url))
+    );
+  } else {
+    event.waitUntil(clients.openWindow(url));
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   

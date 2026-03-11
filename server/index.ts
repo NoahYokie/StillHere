@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -13,6 +15,40 @@ declare module "http" {
     rawBody: unknown;
   }
 }
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        connectSrc: ["'self'", "https:", "wss:"],
+        workerSrc: ["'self'", "blob:"],
+        manifestSrc: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+app.set("trust proxy", 1);
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" },
+  skip: (req) => {
+    const fullPath = req.originalUrl || req.path;
+    return fullPath === "/api/health" || fullPath === "/api/cron/tick";
+  },
+});
+
+app.use("/api/", apiLimiter);
 
 app.use(
   express.json({
@@ -79,9 +115,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -89,10 +122,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
@@ -102,6 +131,22 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+
+      const CRON_INTERVAL_MS = 2 * 60 * 1000;
+      setInterval(async () => {
+        try {
+          const response = await fetch(`http://localhost:${port}/api/cron/tick`);
+          if (response.ok) {
+            const data = await response.json() as any;
+            if (data.reminders > 0 || data.alerts > 0 || data.escalations > 0) {
+              log(`cron: ${data.reminders} reminders, ${data.alerts} alerts, ${data.escalations} escalations`, "cron");
+            }
+          }
+        } catch (error) {
+          log(`cron tick failed: ${error}`, "cron");
+        }
+      }, CRON_INTERVAL_MS);
+      log("built-in cron scheduler started (every 2 minutes)", "cron");
     },
   );
 })();

@@ -9,6 +9,7 @@ import {
   checkins,
   incidents,
   locationSessions,
+  pushSubscriptions,
   type User,
   type InsertUser,
   type Settings,
@@ -23,6 +24,7 @@ import {
   type LocationSessionType,
   type UserStatus,
   type ContactPageData,
+  type PushSubscription,
 } from "@shared/schema";
 import { addHours } from "date-fns";
 
@@ -49,7 +51,7 @@ export interface IStorage {
   
   // Checkins
   getLastCheckin(userId: string): Promise<Checkin | undefined>;
-  createCheckin(userId: string): Promise<Checkin>;
+  createCheckin(userId: string, method?: "button" | "auto"): Promise<Checkin>;
   
   // Incidents
   getOpenIncident(userId: string): Promise<Incident | undefined>;
@@ -72,6 +74,12 @@ export interface IStorage {
   
   // Tokens
   getContactTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
+  
+  // Push Subscriptions
+  savePushSubscription(userId: string, endpoint: string, p256dh: string, auth: string): Promise<PushSubscription>;
+  getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
+  deletePushSubscription(endpoint: string): Promise<void>;
+  deletePushSubscriptionForUser(userId: string, endpoint: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -298,10 +306,10 @@ export class DatabaseStorage implements IStorage {
     return checkin || undefined;
   }
 
-  async createCheckin(userId: string): Promise<Checkin> {
+  async createCheckin(userId: string, method: "button" | "auto" = "button"): Promise<Checkin> {
     const [checkin] = await db.insert(checkins).values({
       userId,
-      method: "button",
+      method,
     }).returning();
 
     // Resolve any open incident
@@ -536,6 +544,42 @@ export class DatabaseStorage implements IStorage {
     }
 
     return result.sort((a, b) => a.contact.priority - b.contact.priority);
+  }
+
+  async savePushSubscription(userId: string, endpoint: string, p256dh: string, auth: string): Promise<PushSubscription> {
+    const existing = await db
+      .select()
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.endpoint, endpoint));
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(pushSubscriptions)
+        .set({ userId, p256dh, auth })
+        .where(eq(pushSubscriptions.endpoint, endpoint))
+        .returning();
+      return updated;
+    }
+
+    const [sub] = await db
+      .insert(pushSubscriptions)
+      .values({ userId, endpoint, p256dh, auth })
+      .returning();
+    return sub;
+  }
+
+  async getPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async deletePushSubscriptionForUser(userId: string, endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(
+      and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint))
+    );
   }
 }
 

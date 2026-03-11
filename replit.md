@@ -9,6 +9,7 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 ## Features
 
 - **Simple Check-in**: Big green "I'm OK" button for daily check-ins
+- **Auto Check-in**: Optional - opening the app counts as a check-in (toggle in settings)
 - **SOS Alert**: Red "I Need Help" button for immediate emergency notification
 - **Configurable Schedule**: Check-in intervals from 12 hours to 48+ hours
 - **Grace Period**: 10-30 minute buffer before alerting contacts
@@ -18,7 +19,25 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 - **Contact Pages**: Token-based pages for contacts to view status and take action
 - **Responsibility System**: Contacts can take responsibility, pausing escalation
 - **Phone OTP Authentication**: Secure passwordless login via SMS codes
+- **Push Notifications**: Web push reminders (reduces SMS costs)
+- **Haptic Feedback**: Vibration on check-in and SOS actions (supported devices)
 - **Trust & Safety Page**: Comprehensive transparency statement
+
+## Security
+
+### Helmet Security Headers
+Express Helmet middleware provides:
+- Content Security Policy (CSP)
+- HTTP Strict Transport Security (HSTS)
+- X-Content-Type-Options
+- X-Frame-Options
+- X-XSS-Protection
+- Referrer Policy
+
+### Global API Rate Limiting
+- 100 requests per 15 minutes per IP on all `/api/` routes
+- Health check and cron tick endpoints are exempt
+- OTP-specific rate limiting remains (1/60s, 5/hour per phone)
 
 ## Pages
 
@@ -27,7 +46,7 @@ StillHere is a calm, reassuring safety app with an extremely simple UX. Users ta
 3. `/login/code` - OTP code verification
 4. `/setup` - 4-screen onboarding flow for new users
 5. `/setup/name` - Name entry to complete setup
-6. `/settings` - Check-in schedule, contacts, location, pause alerts (protected)
+6. `/settings` - Check-in schedule, contacts, location, pause alerts, auto check-in (protected)
 7. `/help` - FAQ explaining how the app works (public)
 8. `/trust` - Trust & Safety statement (public)
 9. `/emergency/:token` - Contact status page (public, no login required)
@@ -81,18 +100,22 @@ Users cannot access the home page until all three steps are completed.
 - `GET /api/status` - Get user status, settings, and next check-in time
 - `POST /api/checkin` - Record a check-in
 - `POST /api/sos` - Trigger SOS alert
-- `POST /api/settings` - Update settings
+- `POST /api/settings` - Update settings (including autoCheckin)
 - `POST /api/settings/pause` - Pause alerts temporarily
 - `POST /api/contacts` - Save emergency contacts
 - `POST /api/test` - Send test notification
 - `POST /api/setup` - Complete user setup (name)
 - `POST /api/location/update` - Update location
+- `POST /api/push/subscribe` - Save push notification subscription
+- `POST /api/push/unsubscribe` - Remove push subscription
 
 ### Public Routes
 - `GET /api/emergency/:token` - Get contact page data
 - `POST /api/emergency/:token/handle` - Contact takes responsibility
 - `POST /api/emergency/:token/escalate` - Contact escalates alert
-- `GET /api/cron/tick` - Check for overdue users (scheduler)
+- `GET /api/cron/tick` - Check for overdue users (also called by built-in scheduler)
+- `GET /api/push/vapid-key` - Get VAPID public key for push subscriptions
+- `GET /api/health` - Health check
 
 ## Contact Token Security
 
@@ -111,20 +134,23 @@ Users cannot access the home page until all three steps are completed.
 
 ### App Tables
 - `users` - User profiles
-- `settings` - Check-in preferences
+- `settings` - Check-in preferences (includes `auto_checkin` boolean)
 - `contacts` - Emergency contacts
 - `contact_tokens` - Access tokens for contact pages
-- `checkins` - Check-in records
+- `checkins` - Check-in records (method: "button" or "auto")
 - `incidents` - Alert incidents
 - `location_sessions` - Location sharing sessions
+- `push_subscriptions` - Web push notification subscriptions
 
 ## Tech Stack
 
 - Frontend: React + TypeScript + Tailwind CSS + shadcn/ui
-- Backend: Express.js
+- Backend: Express.js + Helmet + express-rate-limit
 - Database: PostgreSQL with Drizzle ORM
 - Routing: wouter
 - Data fetching: TanStack Query
+- Push: web-push (VAPID)
+- SMS: Twilio
 
 ## Color Theme
 
@@ -136,11 +162,55 @@ Users cannot access the home page until all three steps are completed.
 
 - `DATABASE_URL` - PostgreSQL connection string
 - `SESSION_SECRET` - Secret for session signing
+- `BASE_URL` - Base URL for SMS links (default: `https://stillhere.health`)
 - `APP_ENV` - Environment mode (staging/production)
 - `WHITELIST_NUMBERS` - Comma-separated E.164 phone numbers for staging
 - `TWILIO_ACCOUNT_SID` - Twilio Account SID for SMS
 - `TWILIO_AUTH_TOKEN` - Twilio Auth Token for SMS
 - `TWILIO_PHONE_NUMBER` - Twilio phone number (E.164 format)
+- `TWILIO_ALPHA_SENDER` - Alpha sender ID (e.g., "StillHere")
+- `VAPID_PUBLIC_KEY` - VAPID public key for web push
+- `VAPID_PRIVATE_KEY` - VAPID private key for web push
+- `VAPID_SUBJECT` - VAPID subject (default: `mailto:support@stillhere.health`)
+
+## Built-in Cron Scheduler
+
+The server runs a built-in cron scheduler that calls `/api/cron/tick` every 2 minutes via `setInterval`. No external scheduler is needed. The endpoint is also available for manual triggering.
+
+The cron handles:
+- Sending reminders to overdue users (SMS + push notifications)
+- Creating incidents for users past their grace period
+- Escalation: Contact 1 → Contact 2 (after 20 min) → user banner (after 20 min)
+- Handling timeout re-notifications (after 45 min)
+
+## Push Notifications
+
+Web push notifications reduce SMS costs by sending check-in reminders via the browser:
+- Users see a prompt on the home page to enable notifications
+- Notifications include an "I'm OK" action button for one-tap check-in
+- VAPID keys required (generate with `npx web-push generate-vapid-keys`)
+- Falls back gracefully when not configured
+
+### Service Worker
+- Handles push events with native notification display
+- "I'm OK" action from notification auto-triggers check-in via API
+- Click opens the app to the relevant page
+
+## Haptic Feedback
+
+- Check-in button: 50ms vibration on success
+- SOS button: Pattern vibration (100-50-100-50-200ms) on alert sent
+- Auto check-in: 30ms subtle vibration
+- Graceful no-op on devices without vibration support
+
+## Auto Check-in
+
+Users can enable "Check in when I open the app" in settings:
+- Opening the home page automatically triggers a check-in
+- Uses "auto" method in the checkins table (vs "button" for manual)
+- Includes subtle haptic feedback
+- Only triggers once per page load (ref-guarded)
+- Skipped if there's an active incident
 
 ## SMS Configuration
 
@@ -174,54 +244,6 @@ For testing:
 - Contact page URLs are logged when contacts are saved
 - Check server logs for debugging
 
-## SMS Message Templates
-
-Messages sent to emergency contacts follow these templates:
-
-**Missed Check-in:**
-```
-StillHere alert:
-{Name} hasn't checked in yet.
-Tap here to see their status and check on them:
-{secure link}
-```
-
-**SOS Button Pressed:**
-```
-StillHere alert:
-{Name} has asked for help.
-Please check on them now:
-{secure link}
-```
-
-**Test Message:**
-```
-StillHere test:
-This is a test message from {Name}.
-No action is needed.
-```
-
-**Reminder (sent to user):**
-```
-StillHere reminder:
-You haven't checked in yet.
-Tap below to let us know you're OK:
-{link to home page}
-```
-
-## Reminder System
-
-Users can configure how many reminders they receive before their emergency contacts are notified:
-- **None**: No reminders, contacts are alerted immediately after the grace period
-- **One (recommended)**: One reminder during the grace period
-- **Two**: Two reminders during the grace period
-
-Reminders are throttled to prevent spamming (minimum 5 minutes between reminders). If the grace period expires, contacts are alerted regardless of how many reminders were sent.
-
-Reminder state (remindersSent, lastReminderAt) is reset when:
-- User checks in
-- An incident is created
-
 ## Escalation System
 
 StillHere uses a sequential escalation system to ensure someone responds to alerts:
@@ -235,74 +257,44 @@ StillHere uses a sequential escalation system to ensure someone responds to aler
 2. **Escalation to Contact 2 (if no response)**
    - If Contact 1 doesn't respond within 20 minutes, Contact 2 is automatically notified
    - Another 20-minute timer starts
-   - SMS: "{Name} {reason} and the first contact hasn't responded. Please check on them: {link}"
 
 3. **User Notification (if no contacts respond)**
    - If neither contact responds, the user sees an in-app status banner (no SMS)
    - Banner: "No contacts have responded yet"
 
 4. **Handling Timeout (45 minutes)**
-   - If a contact clicks "I'm handling this" but doesn't resolve the alert within 45 minutes
+   - If a contact clicks "I'm handling this" but doesn't resolve within 45 minutes
    - All contacts are re-notified with a follow-up message
-   - SMS: "Follow-up: {Name}'s alert is still active. Please confirm you've reached them: {link}"
-
-### Contact Response Flow
-
-When a contact clicks "I'm handling this":
-1. The incident status changes to "paused"
-2. The user sees an in-app banner: "{Contact Name} is checking on you" (no SMS)
-3. A 45-minute timer starts
-4. If resolved within 45 min, escalation ends
-5. If not resolved, all contacts are re-notified
-
-When the user clicks "I'm OK now":
-1. The incident is resolved
-2. All contacts receive an SMS: "{Name} is OK now. No action needed."
 
 ### In-App Status Banners
 
-The home page shows real-time escalation status banners (replacing user-facing SMS to reduce costs):
-- **Alert active (open)**: Shows which contacts have been notified with step-by-step progress
+The home page shows real-time escalation status banners:
+- **Alert active (open)**: Amber banner with step-by-step contact notification progress
 - **Contact handling (paused)**: Blue banner showing "{Contact Name} is checking on you"
 - **No response**: Warning that no contacts have responded yet
 - Auto-refreshes every 15 seconds during active incidents (60 seconds otherwise)
 
-SMS is reserved for emergency contact notifications only:
-- Initial alerts to contacts (SOS or missed check-in)
-- Escalation to Contact 2 (after 20 min)
-- Handling timeout re-notifications
-- "All clear" when user resolves alert
-- Check-in reminders to user (essential - user not in app)
+## Reminder System
 
-### Database Fields (incidents table)
+Users can configure how many reminders they receive before their emergency contacts are notified:
+- **None**: No reminders, contacts are alerted immediately after the grace period
+- **One (recommended)**: One reminder during the grace period
+- **Two**: Two reminders during the grace period
 
-- `escalationLevel` - Current escalation level (1 or 2)
-- `contact1NotifiedAt` - When Contact 1 was notified
-- `contact2NotifiedAt` - When Contact 2 was notified (if escalated)
-- `userNotifiedNoResponseAt` - When user was notified of no response
-- `nextActionAt` - When to check for escalation (used by cron)
+Reminders are sent via both SMS and push notifications (if enabled). Throttled to 5 minutes minimum between reminders.
 
 ## PWA (Progressive Web App)
 
 StillHere is a fully installable PWA with offline support:
 
 - **Manifest**: `/manifest.json` with app metadata and icons
-- **Service Worker**: `/sw.js` caches static assets, network-first for API calls
+- **Service Worker**: `/sw.js` caches static assets, handles push notifications, network-first for API calls
 - **Icons**: 8 sizes (72px to 512px) in `/icons/`
 - **Install**: Users can add to home screen from browser
-
-### Browser Install
-- **iOS Safari**: Share → Add to Home Screen
-- **Android Chrome**: Menu → Add to Home Screen
-- **Desktop Chrome**: Install icon in address bar
 
 ## Native App Build (Capacitor)
 
 StillHere uses Capacitor for native iOS and Android builds.
-
-### Prerequisites
-- **iOS**: Mac with Xcode, Apple Developer account ($99/year)
-- **Android**: Android Studio, Google Play Developer account ($25 one-time)
 
 ### Configuration
 - `capacitor.config.json` - App ID: `com.stillhere.app`
@@ -317,49 +309,14 @@ StillHere uses Capacitor for native iOS and Android builds.
    npm install @capacitor/ios @capacitor/android
    ```
 
-2. **Build the web app**:
-   ```bash
-   npm run build
-   ```
-
-3. **Initialize platforms**:
-   ```bash
-   npx cap add ios
-   npx cap add android
-   ```
-
-4. **Sync web assets**:
-   ```bash
-   npx cap sync
-   ```
-
-5. **Open in IDE**:
-   ```bash
-   npx cap open ios     # Opens Xcode
-   npx cap open android # Opens Android Studio
-   ```
-
-6. **Build and submit**:
-   - iOS: Archive in Xcode → Upload to App Store Connect
-   - Android: Generate signed APK/AAB → Upload to Google Play Console
-
-### App Store Assets Needed
-- App icon (1024x1024 for iOS, 512x512 for Android)
-- Screenshots (various device sizes)
-- App description, privacy policy URL
-- Support URL, marketing website
-
-### Capacitor Plugins (optional)
-Add these for native features:
-```bash
-npm install @capacitor/push-notifications
-npm install @capacitor/local-notifications
-npm install @capacitor/geolocation
-npm install @capacitor/haptics
-```
+2. **Build the web app**: `npm run build`
+3. **Initialize platforms**: `npx cap add ios && npx cap add android`
+4. **Sync web assets**: `npx cap sync`
+5. **Open in IDE**: `npx cap open ios` or `npx cap open android`
 
 ## Future Enhancements (planned)
 
 - Biometric unlock (Face ID / fingerprint) after first login
-- Push notifications
 - Apple Watch / wearable integration
+- Fall detection via device sensors
+- Professional dispatcher/monitoring service
