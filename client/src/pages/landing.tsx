@@ -49,20 +49,13 @@ export default function LandingPage() {
           </div>
 
           <div className="md:grid md:grid-cols-2 md:gap-12 md:items-center flex-1 flex flex-col md:flex-none">
-            <div className="flex-1 flex flex-col justify-center md:block -mt-8 md:mt-0">
-              <h1 className="text-[2rem] md:text-4xl lg:text-5xl leading-tight font-bold mb-4 md:mb-6" data-testid="text-hero-title">
+            <div className="flex-1 flex flex-col justify-center md:block -mt-8 md:mt-0 order-2 md:order-1">
+              <h1 className="text-[2rem] md:text-4xl lg:text-5xl leading-tight font-bold mb-4 md:mb-6 text-center md:text-left" data-testid="text-hero-title">
                 Your family will always know you're okay.
               </h1>
-              <p className="text-lg md:text-xl text-white/85 leading-relaxed mb-8">
+              <p className="text-lg md:text-xl text-white/85 leading-relaxed mb-8 text-center md:text-left">
                 One tap a day. That's all it takes to give your loved ones peace of mind.
               </p>
-
-              <div className="md:hidden w-28 h-28 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center mx-auto mb-6 ring-4 ring-white/30">
-                <div className="w-20 h-20 rounded-full bg-accent flex items-center justify-center shadow-lg">
-                  <Check className="h-10 w-10 text-white" />
-                </div>
-              </div>
-              <p className="md:hidden text-center text-white/70 text-sm mb-8">Tap "I'm OK" once a day</p>
 
               <div className="space-y-3 md:space-y-0 md:flex md:flex-wrap md:gap-3">
                 <Button
@@ -83,31 +76,31 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="hidden md:flex justify-center">
+            <div className="flex justify-center order-1 md:order-2 mb-6 md:mb-0">
               <div className="relative">
-                <div className="w-[270px] h-[540px] bg-gray-900 rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-2 flex flex-col">
-                  <div className="w-24 h-5 bg-gray-900 rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[2.25rem] overflow-hidden flex flex-col">
-                    <div className="bg-primary text-white px-5 pt-8 pb-4">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Heart className="h-4 w-4" />
-                        <span className="text-sm font-semibold">StillHere</span>
+                <div className="w-[200px] h-[400px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2.25rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col">
+                  <div className="w-20 md:w-24 h-4 md:h-5 bg-gray-900 rounded-b-xl md:rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
+                  <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[1.75rem] md:rounded-[2.25rem] overflow-hidden flex flex-col">
+                    <div className="bg-primary text-white px-4 md:px-5 pt-6 md:pt-8 pb-3 md:pb-4">
+                      <div className="flex items-center gap-1.5 mb-0.5 md:mb-1">
+                        <Heart className="h-3.5 md:h-4 w-3.5 md:w-4" />
+                        <span className="text-xs md:text-sm font-semibold">StillHere</span>
                       </div>
-                      <p className="text-xs text-white/70">Welcome, Sarah</p>
+                      <p className="text-[10px] md:text-xs text-white/70">Welcome, Sarah</p>
                     </div>
-                    <div className="flex-1 px-5 py-4 flex flex-col gap-4">
-                      <div className="bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-100 text-center">
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Next check-in</p>
-                        <p className="text-sm font-medium text-gray-800">9:00 AM tomorrow</p>
+                    <div className="flex-1 px-3.5 md:px-5 py-3 md:py-4 flex flex-col gap-3 md:gap-4">
+                      <div className="bg-white rounded-lg md:rounded-xl px-3 md:px-4 py-2 md:py-3 shadow-sm border border-gray-100 text-center">
+                        <p className="text-[8px] md:text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Next check-in</p>
+                        <p className="text-xs md:text-sm font-medium text-gray-800">9:00 AM tomorrow</p>
                       </div>
                       <div className="flex-1 flex flex-col items-center justify-center">
-                        <div className="w-24 h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
-                          <Check className="h-12 w-12 text-white" />
+                        <div className="w-[4.5rem] h-[4.5rem] md:w-24 md:h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
+                          <Check className="h-9 w-9 md:h-12 md:w-12 text-white" />
                         </div>
-                        <p className="font-bold text-gray-800 text-base mt-3">I'm OK</p>
-                        <p className="text-[11px] text-gray-400 mt-1">Tap once a day</p>
+                        <p className="font-bold text-gray-800 text-sm md:text-base mt-2 md:mt-3">I'm OK</p>
+                        <p className="text-[9px] md:text-[11px] text-gray-400 mt-0.5 md:mt-1">Tap once a day</p>
                       </div>
-                      <div className="bg-red-500 rounded-xl py-2.5 text-center text-white text-sm font-semibold shadow-sm">
+                      <div className="bg-red-500 rounded-lg md:rounded-xl py-2 md:py-2.5 text-center text-white text-xs md:text-sm font-semibold shadow-sm">
                         I Need Help
                       </div>
                     </div>
