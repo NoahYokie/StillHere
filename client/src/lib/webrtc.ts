@@ -33,8 +33,19 @@ export class WebRTCConnection {
     };
 
     this.pc.ontrack = (event) => {
-      if (event.streams[0] && this.onRemoteStream) {
-        this.onRemoteStream(event.streams[0]);
+      if (event.streams[0]) {
+        if (!this.remoteStream) {
+          this.remoteStream = event.streams[0];
+        } else {
+          event.streams[0].getTracks().forEach((track) => {
+            if (!this.remoteStream!.getTrackById(track.id)) {
+              this.remoteStream!.addTrack(track);
+            }
+          });
+        }
+        if (this.onRemoteStream) {
+          this.onRemoteStream(this.remoteStream!);
+        }
       }
     };
 
