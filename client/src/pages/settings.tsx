@@ -50,18 +50,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity } from "lucide-react";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
-const contactsSchema = z.object({
-  contact1Name: z.string().min(1, "Name is required"),
-  contact1Phone: z.string().min(1, "Phone is required"),
-  contact2Name: z.string().optional(),
-  contact2Phone: z.string().optional(),
-});
-
-type ContactsForm = z.infer<typeof contactsSchema>;
+interface ContactEntry {
+  name: string;
+  phone: string;
+}
 
 export default function SettingsPage() {
   const [, setLocation] = useLocation();

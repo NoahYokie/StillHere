@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   phone: text("phone"),
   timezone: text("timezone").notNull().default("Australia/Melbourne"),
+  isPremium: boolean("is_premium").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -37,6 +38,7 @@ export const settings = pgTable("settings", {
   locationMode: locationModeEnum("location_mode").notNull().default("off"),
   reminderMode: reminderModeEnum("reminder_mode").notNull().default("one"),
   autoCheckin: boolean("auto_checkin").notNull().default(false),
+  fallDetection: boolean("fall_detection").notNull().default(false),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
   pauseUntil: timestamp("pause_until"),
@@ -112,10 +114,14 @@ export const incidents = pgTable("incidents", {
   handledByContactId: uuid("handled_by_contact_id").references(() => contacts.id),
   nextActionAt: timestamp("next_action_at"),
   // Escalation tracking
-  escalationLevel: integer("escalation_level").notNull().default(1),
+  escalationLevel: integer("escalation_level").notNull().default(0),
+  notifiedContactIds: text("notified_contact_ids").notNull().default("[]"),
+  lastContactNotifiedAt: timestamp("last_contact_notified_at"),
+  allContactsNotifiedAt: timestamp("all_contacts_notified_at"),
+  userNotifiedNoResponseAt: timestamp("user_notified_no_response_at"),
+  // Legacy columns kept for backward compatibility
   contact1NotifiedAt: timestamp("contact1_notified_at"),
   contact2NotifiedAt: timestamp("contact2_notified_at"),
-  userNotifiedNoResponseAt: timestamp("user_notified_no_response_at"),
 });
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
@@ -254,6 +260,8 @@ export interface UserStatus {
   nextCheckinDue: Date;
   openIncident: Incident | null;
   activeLocationSession: LocationSession | null;
+  contactLimit: number;
+  isPremium: boolean;
 }
 
 export interface ContactPageData {

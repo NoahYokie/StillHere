@@ -1,51 +1,35 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormMessage,
-} from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Users, UserPlus } from "lucide-react";
+import { Users, UserPlus, Trash2, GripVertical } from "lucide-react";
 
-const contactsSchema = z.object({
-  contact1Name: z.string().min(1, "Name is required"),
-  contact1Phone: z.string().min(1, "Phone number is required"),
-  contact2Name: z.string().optional(),
-  contact2Phone: z.string().optional(),
-});
-
-type ContactsForm = z.infer<typeof contactsSchema>;
+interface ContactEntry {
+  name: string;
+  phone: string;
+}
 
 export default function SetupContactsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [showContact2, setShowContact2] = useState(false);
-
-  const form = useForm<ContactsForm>({
-    resolver: zodResolver(contactsSchema),
-    defaultValues: {
-      contact1Name: "",
-      contact1Phone: "",
-      contact2Name: "",
-      contact2Phone: "",
-    },
-  });
+  const [contacts, setContacts] = useState<ContactEntry[]>([
+    { name: "", phone: "" },
+  ]);
 
   const contactsMutation = useMutation({
-    mutationFn: async (data: ContactsForm) => {
-      return apiRequest("POST", "/api/contacts", data);
+    mutationFn: async (contactsList: ContactEntry[]) => {
+      return apiRequest("POST", "/api/contacts", {
+        contacts: contactsList.map((c, i) => ({
+          name: c.name,
+          phone: c.phone,
+          priority: i + 1,
+        })),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
@@ -64,8 +48,40 @@ export default function SetupContactsPage() {
     },
   });
 
-  const onSubmit = (data: ContactsForm) => {
-    contactsMutation.mutate(data);
+  const addContact = () => {
+    if (contacts.length >= 2) return;
+    setContacts([...contacts, { name: "", phone: "" }]);
+  };
+
+  const removeContact = (index: number) => {
+    if (contacts.length <= 1) return;
+    setContacts(contacts.filter((_, i) => i !== index));
+  };
+
+  const updateContact = (index: number, field: keyof ContactEntry, value: string) => {
+    const updated = [...contacts];
+    updated[index] = { ...updated[index], [field]: value };
+    setContacts(updated);
+  };
+
+  const moveContact = (from: number, to: number) => {
+    if (to < 0 || to >= contacts.length) return;
+    const updated = [...contacts];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    setContacts(updated);
+  };
+
+  const canSubmit = contacts.length > 0 && contacts[0].name.trim() && contacts[0].phone.trim();
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const valid = contacts.filter(c => c.name.trim() && c.phone.trim());
+    if (valid.length === 0) {
+      toast({ title: "Error", description: "At least one contact is required.", variant: "destructive" });
+      return;
+    }
+    contactsMutation.mutate(valid);
   };
 
   return (
@@ -83,106 +99,80 @@ export default function SetupContactsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Primary contact</Label>
-                <FormField
-                  control={form.control}
-                  name="contact1Name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input 
-                          placeholder="Name" 
-                          {...field} 
-                          data-testid="input-contact1-name" 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+          <form onSubmit={onSubmit} className="space-y-6">
+            {contacts.map((contact, index) => (
+              <div key={index} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    {index === 0 ? "Primary contact" : `Contact ${index + 1}`}
+                  </Label>
+                  <div className="flex items-center gap-1">
+                    {contacts.length > 1 && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => moveContact(index, index - 1)}
+                          disabled={index === 0}
+                          data-testid={`button-move-up-${index}`}
+                        >
+                          <GripVertical className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive"
+                          onClick={() => removeContact(index)}
+                          data-testid={`button-remove-contact-${index}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <Input
+                  placeholder="Name"
+                  value={contact.name}
+                  onChange={(e) => updateContact(index, "name", e.target.value)}
+                  data-testid={`input-contact-name-${index}`}
                 />
-                <FormField
-                  control={form.control}
-                  name="contact1Phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input 
-                          placeholder="Mobile number" 
-                          type="tel"
-                          {...field} 
-                          data-testid="input-contact1-phone" 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                <Input
+                  placeholder="Mobile number"
+                  type="tel"
+                  value={contact.phone}
+                  onChange={(e) => updateContact(index, "phone", e.target.value)}
+                  data-testid={`input-contact-phone-${index}`}
                 />
               </div>
+            ))}
 
-              {showContact2 ? (
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Backup contact (optional)</Label>
-                  <FormField
-                    control={form.control}
-                    name="contact2Name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            placeholder="Name" 
-                            {...field} 
-                            data-testid="input-contact2-name" 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="contact2Phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            placeholder="Mobile number" 
-                            type="tel"
-                            {...field} 
-                            data-testid="input-contact2-phone" 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full text-muted-foreground"
-                  onClick={() => setShowContact2(true)}
-                  data-testid="button-add-contact2"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Add a backup contact
-                </Button>
-              )}
-
+            {contacts.length < 2 && (
               <Button
-                type="submit"
-                className="w-full"
-                size="lg"
-                disabled={contactsMutation.isPending}
-                data-testid="button-continue"
+                type="button"
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={addContact}
+                data-testid="button-add-contact"
               >
-                {contactsMutation.isPending ? "Saving..." : "Continue"}
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add a backup contact
               </Button>
-            </form>
-          </Form>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={contactsMutation.isPending || !canSubmit}
+              data-testid="button-continue"
+            >
+              {contactsMutation.isPending ? "Saving..." : "Continue"}
+            </Button>
+          </form>
 
           <div className="flex justify-center gap-2 mt-6">
             <div className="w-2 h-2 rounded-full bg-primary" />

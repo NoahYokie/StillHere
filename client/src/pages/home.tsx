@@ -18,6 +18,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
+import { getQuoteOfTheDay } from "@/lib/quotes";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -239,6 +240,7 @@ export default function Home() {
   const { toast } = useToast();
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const [showQuote, setShowQuote] = useState(false);
   const locationWatchRef = useRef<number | null>(null);
 
   const { data: status, isLoading } = useQuery<UserStatus>({
@@ -296,6 +298,7 @@ export default function Home() {
       autoCheckedRef.current = true;
       apiRequest("POST", "/api/checkin", { method: "auto" }).then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+        setShowQuote(true);
         triggerHaptic(30);
       }).catch(() => {});
     }
@@ -308,6 +311,7 @@ export default function Home() {
     onSuccess: () => {
       triggerHaptic(50);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      setShowQuote(true);
       toast({
         title: "Checked in",
         description: "Your emergency contacts know you're okay.",
@@ -546,6 +550,19 @@ export default function Home() {
             This lets your family know you're okay.
           </p>
         </div>
+
+        {showQuote && (
+          <Card className="border-accent/30" data-testid="card-quote">
+            <CardContent className="pt-6 text-center">
+              <p className="text-base italic text-foreground leading-relaxed" data-testid="text-quote">
+                &ldquo;{getQuoteOfTheDay()}&rdquo;
+              </p>
+              <p className="text-xs text-muted-foreground mt-3">
+                Quote of the day
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="bg-destructive/5 border-destructive/20">
           <CardContent className="pt-6">
