@@ -25,7 +25,8 @@ export default function LoginCodePage() {
 
   const verifyCodeMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/auth/verify-code", { phone, code });
+      const res = await apiRequest("POST", "/api/auth/verify-code", { phone, code });
+      return res.json();
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });

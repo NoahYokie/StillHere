@@ -36,8 +36,19 @@ Express Helmet middleware provides:
 
 ### Global API Rate Limiting
 - 100 requests per 15 minutes per IP on all `/api/` routes
-- Health check and cron tick endpoints are exempt
-- OTP-specific rate limiting remains (1/60s, 5/hour per phone)
+- Health check endpoint is exempt from rate limiting
+- OTP send rate limiting: 1/60s, 5/hour per phone number
+- OTP verify rate limiting: 5 attempts per 10 minutes per phone (brute-force protection)
+
+### Cron Security
+- `/api/cron/tick` requires `x-cron-secret` header matching `SESSION_SECRET`
+- External calls without the secret receive 403 Forbidden
+- Only the built-in internal scheduler has the secret
+
+### Input Validation
+- Settings: range checks on intervals (12-48h), grace (10-30min), enum validation
+- SOS: duplicate incident prevention (returns existing if active)
+- Contacts: Contact 1 required, phone normalization applied
 
 ## Pages
 

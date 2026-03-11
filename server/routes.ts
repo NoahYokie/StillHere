@@ -86,7 +86,11 @@ export async function registerRoutes(
     }
   });
   
-  // Verify OTP code
+  // Verify OTP code — rate limited to prevent brute force
+  const verifyAttempts = new Map<string, { count: number; resetAt: number }>();
+  const MAX_VERIFY_ATTEMPTS = 5;
+  const VERIFY_WINDOW_MS = 10 * 60 * 1000;
+
   app.post("/api/auth/verify-code", async (req, res) => {
     try {
       const { phone, code } = req.body;
@@ -94,12 +98,27 @@ export async function registerRoutes(
       if (!phone || !code) {
         return res.status(400).json({ error: "Phone and code are required" });
       }
+
+      const normalizedPhone = normalizePhone(phone);
+      const now = Date.now();
+      const attempts = verifyAttempts.get(normalizedPhone);
+      if (attempts && now < attempts.resetAt) {
+        if (attempts.count >= MAX_VERIFY_ATTEMPTS) {
+          return res.status(429).json({ error: "Too many attempts. Please request a new code." });
+        }
+      } else {
+        verifyAttempts.set(normalizedPhone, { count: 0, resetAt: now + VERIFY_WINDOW_MS });
+      }
       
       const result = await verifyOtp(phone, code);
       
       if (!result.success) {
+        const entry = verifyAttempts.get(normalizedPhone)!;
+        entry.count++;
         return res.status(401).json({ error: "Invalid or expired code" });
       }
+      
+      verifyAttempts.delete(normalizedPhone);
       
       // Set session cookie
       setSessionCookie(res, result.sessionToken!);
@@ -249,6 +268,12 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       
+      // Prevent duplicate incidents
+      const existingIncident = await storage.getOpenIncident(userId);
+      if (existingIncident) {
+        return res.json({ success: true, incident: existingIncident, alreadyActive: true });
+      }
+      
       // Create SOS incident
       let incident = await storage.createIncident(userId, "sos");
       
@@ -353,6 +378,22 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin } = req.body;
+      
+      if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
+        return res.status(400).json({ error: "Check-in interval must be between 12 and 48 hours" });
+      }
+      if (graceMinutes !== undefined && (typeof graceMinutes !== "number" || graceMinutes < 10 || graceMinutes > 30)) {
+        return res.status(400).json({ error: "Grace period must be between 10 and 30 minutes" });
+      }
+      if (locationMode !== undefined && !["off", "emergency_only", "both"].includes(locationMode)) {
+        return res.status(400).json({ error: "Invalid location mode" });
+      }
+      if (reminderMode !== undefined && !["none", "one", "two"].includes(reminderMode)) {
+        return res.status(400).json({ error: "Invalid reminder mode" });
+      }
+      if (autoCheckin !== undefined && typeof autoCheckin !== "boolean") {
+        return res.status(400).json({ error: "Auto check-in must be a boolean" });
+      }
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -668,9 +709,15 @@ export async function registerRoutes(
     }
   });
 
-  // Cron tick - check for due users
+  // Cron tick - check for due users (internal only)
   app.get("/api/cron/tick", async (req, res) => {
     try {
+      const cronSecret = process.env.SESSION_SECRET || "internal-cron-key";
+      const providedSecret = req.headers["x-cron-secret"];
+      if (providedSecret !== cronSecret) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       const overdueUsers = await storage.getOverdueUsersWithSettings();
       const baseUrl = getBaseUrl();
       

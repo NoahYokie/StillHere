@@ -21,7 +21,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
@@ -44,7 +44,7 @@ const apiLimiter = rateLimit({
   message: { error: "Too many requests, please try again later" },
   skip: (req) => {
     const fullPath = req.originalUrl || req.path;
-    return fullPath === "/api/health" || fullPath === "/api/cron/tick";
+    return fullPath === "/api/health";
   },
 });
 
@@ -133,9 +133,12 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
 
       const CRON_INTERVAL_MS = 2 * 60 * 1000;
+      const cronSecret = process.env.SESSION_SECRET || "internal-cron-key";
       setInterval(async () => {
         try {
-          const response = await fetch(`http://localhost:${port}/api/cron/tick`);
+          const response = await fetch(`http://localhost:${port}/api/cron/tick`, {
+            headers: { "x-cron-secret": cronSecret },
+          });
           if (response.ok) {
             const data = await response.json() as any;
             if (data.reminders > 0 || data.alerts > 0 || data.escalations > 0) {
