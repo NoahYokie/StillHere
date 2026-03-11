@@ -1,0 +1,190 @@
+Message to Replit Agent
+
+Thanks — this is detailed and useful. Before GPT leads the AI team discussion and writes implementation instructions, please paste the following exact code and fresh logs from one new failed test call.
+
+1) Paste these exact code sections
+A. client/src/lib/webrtc.ts
+
+Please paste:
+
+the WebRTCConnection class in full, or at minimum:
+
+constructor
+
+RTCPeerConnection creation
+
+all event handlers assigned on pc
+
+createOffer
+
+createAnswer
+
+setRemoteDescription
+
+addIceCandidate
+
+any local media acquisition code
+
+any ontrack, onicecandidate, oniceconnectionstatechange, onconnectionstatechange, onsignalingstatechange, onnegotiationneeded handlers
+
+B. client/src/pages/call.tsx
+
+Please paste:
+
+startCall()
+
+caller flow
+
+answer flow
+
+socket listeners setup/cleanup for:
+
+call:answered
+
+call:ice-candidate
+
+call:ice-restart
+
+call:ice-restart-answer
+
+call:ended
+
+the code that sets local/remote video refs
+
+the code that calls rtc.onIceCandidate
+
+the code that stores pending offer / offer from incoming call
+
+any useEffect related to call lifecycle
+
+C. client/src/components/incoming-call.tsx
+
+Please paste:
+
+the code that receives and stores the incoming offer
+
+the code that navigates to /call/...?...
+
+any state handoff to call.tsx
+
+D. server/socket.ts
+
+Please paste the full handlers for:
+
+call:initiate
+
+call:answer
+
+call:answered
+
+call:ice-candidate
+
+call:ice-restart
+
+call:ice-restart-answer
+
+call:end
+
+any room join / user socket mapping logic
+
+2) Run one fresh failed test and paste logs from both client devices
+
+We now need client-side logs, not only server logs.
+
+Please add temporary logs and paste the results from both caller and callee for one failed call attempt.
+
+For each side, log:
+
+when local media is acquired
+
+when RTCPeerConnection is created
+
+signaling state changes
+
+ice gathering state changes
+
+ice connection state changes
+
+connection state changes
+
+every generated ICE candidate
+
+every received ICE candidate
+
+when setLocalDescription runs
+
+when setRemoteDescription runs
+
+when addIceCandidate runs
+
+when ontrack fires, including track kind and stream count
+
+whether remote video element gets a srcObject
+
+whether .play() succeeds or throws
+
+Please format logs like:
+
+[CALLER] onicecandidate ...
+
+[CALLEE] ontrack ...
+
+3) Confirm these state/timing questions
+
+Please answer explicitly:
+
+On the caller, after receiving call:answered, do we call pc.setRemoteDescription(answer) exactly once?
+
+On the callee, before creating the answer, do we call pc.setRemoteDescription(offer) exactly once?
+
+Are ICE candidates ever received before remote description is set?
+
+If yes, do we queue them and flush after remote description is set, or do we immediately call addIceCandidate?
+
+Is there any chance the RTCPeerConnection instance is recreated after socket listeners are attached?
+
+Is there any chance rtc.onIceCandidate is assigned after candidate generation has already started?
+
+Are socket listeners duplicated or cleaned up incorrectly on rerender/navigation?
+
+Are both local tracks definitely added to the peer connection before offer/answer creation?
+
+4) Confirm navigation / state handoff details
+
+I want to verify the callee flow specifically.
+
+Please explain exactly how the incoming offer survives this sequence:
+
+incoming overlay receives call:incoming
+
+user taps accept
+
+app navigates to /call/...?...
+
+call.tsx loads
+
+answer is created
+
+Where is the offer stored during that handoff?
+
+React state?
+
+Zustand/store?
+
+context?
+
+localStorage/sessionStorage?
+
+socket memory?
+
+URL params?
+
+Paste that exact code path.
+
+5) One architecture question
+
+Please answer this directly:
+
+Does the current implementation create one RTCPeerConnection per call page load and reuse it for the full call, or can multiple peer connections exist during the accept flow / rerenders / reconnects?
+
+That answer matters a lot.
