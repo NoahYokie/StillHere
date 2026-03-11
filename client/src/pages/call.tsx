@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, SwitchCamera, Phone } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
-import { WebRTCConnection } from "@/lib/webrtc";
+import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
 import { useToast } from "@/hooks/use-toast";
 import { getPendingIncomingCall } from "@/components/incoming-call";
 
@@ -65,30 +65,40 @@ export default function CallPage() {
     hasInitiatedRef.current = true;
 
     const socket = getSocket();
-    const rtc = new WebRTCConnection();
-    rtcRef.current = rtc;
 
-    rtc.onRemoteStream = (stream) => {
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
+    async function initCall() {
+      const iceServers = await fetchIceServers();
+      const rtc = new WebRTCConnection(iceServers);
+      rtcRef.current = rtc;
+
+      rtc.onRemoteStream = (stream) => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+        }
+        setCallState("active");
+      };
+
+      rtc.onIceCandidate = (candidate) => {
+        socket.emit("call:ice-candidate", {
+          targetUserId: otherUserId,
+          candidate: candidate.toJSON(),
+        });
+      };
+
+      rtc.onConnectionStateChange = (state) => {
+        if (state === "disconnected" || state === "failed" || state === "closed") {
+          setCallState("ended");
+          cleanup();
+          setTimeout(() => setLocation("/watched"), 1500);
+        }
+      };
+
+      if (isAnswerMode) {
+        answerIncomingCall(rtc, socket);
+      } else {
+        initiateOutgoingCall(rtc, socket);
       }
-      setCallState("active");
-    };
-
-    rtc.onIceCandidate = (candidate) => {
-      socket.emit("call:ice-candidate", {
-        targetUserId: otherUserId,
-        candidate: candidate.toJSON(),
-      });
-    };
-
-    rtc.onConnectionStateChange = (state) => {
-      if (state === "disconnected" || state === "failed" || state === "closed") {
-        setCallState("ended");
-        cleanup();
-        setTimeout(() => setLocation("/watched"), 1500);
-      }
-    };
+    }
 
     socket.on("call:ice-candidate", async (data: { candidate: any }) => {
       if (rtcRef.current && data.candidate) {
@@ -110,11 +120,7 @@ export default function CallPage() {
       setTimeout(() => setLocation("/watched"), 1500);
     });
 
-    if (isAnswerMode) {
-      answerIncomingCall(rtc, socket);
-    } else {
-      initiateOutgoingCall(rtc, socket);
-    }
+    initCall();
 
     return () => {
       socket.off("call:answered");

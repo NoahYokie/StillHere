@@ -192,6 +192,33 @@ export async function sendHandlingTimeoutAlert(
   return sendSms(contactPhone, body);
 }
 
+export async function getTurnCredentials(): Promise<RTCIceServer[]> {
+  const client = getClient();
+  if (!client) {
+    return [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+  }
+
+  try {
+    const token = await client.tokens.create({ ttl: 3600 });
+    return token.iceServers as RTCIceServer[];
+  } catch (error: any) {
+    console.error("[TURN] Failed to fetch Twilio TURN credentials:", error.message);
+    return [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+  }
+}
+
+interface RTCIceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
 export function isTwilioConfigured(): boolean {
   return !!(accountSid && authToken && fromPhone);
 }

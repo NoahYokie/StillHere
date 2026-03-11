@@ -1,9 +1,18 @@
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+
+export async function fetchIceServers(): Promise<RTCIceServer[]> {
+  try {
+    const res = await fetch("/api/turn-credentials", { credentials: "include" });
+    if (!res.ok) return DEFAULT_ICE_SERVERS;
+    const data = await res.json();
+    return data.iceServers || DEFAULT_ICE_SERVERS;
+  } catch {
+    return DEFAULT_ICE_SERVERS;
+  }
+}
 
 export class WebRTCConnection {
   private pc: RTCPeerConnection;
@@ -14,8 +23,8 @@ export class WebRTCConnection {
   public onIceCandidate: ((candidate: RTCIceCandidate) => void) | null = null;
   public onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
 
-  constructor() {
-    this.pc = new RTCPeerConnection(ICE_SERVERS);
+  constructor(iceServers?: RTCIceServer[]) {
+    this.pc = new RTCPeerConnection({ iceServers: iceServers || DEFAULT_ICE_SERVERS });
 
     this.pc.onicecandidate = (event) => {
       if (event.candidate && this.onIceCandidate) {

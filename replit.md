@@ -39,7 +39,7 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **International Phone Normalization:** 28+ countries supported with E.164 normalization (US, UK, AU, CA, NZ, JP, KR, SG, IN, FR, DE, IT, ES, NL, BE, CH, IE, SE, NO, DK, CZ, HU, RO, HR, and more).
 - **WebSocket Communication:** Socket.IO for real-time messaging and video call signaling, with cookie-based authentication matching the existing session system.
 - **In-App Messaging:** Real-time chat between users and emergency contacts who have the app, with message persistence, read receipts, and push notification fallback for offline users.
-- **In-App Video Calling:** WebRTC-based peer-to-peer video calling with Socket.IO signaling. Uses free Google STUN servers for NAT traversal. Features include mute, camera toggle, camera flip, and incoming call notifications.
+- **In-App Video Calling:** WebRTC-based peer-to-peer video calling with Socket.IO signaling. Uses Twilio Network Traversal Service for STUN/TURN servers (falls back to free Google STUN if Twilio unavailable). TURN relay ensures calls connect even behind strict firewalls and symmetric NATs. Features include mute, camera toggle, camera flip, and incoming call notifications.
 - **Contact Detection & Watcher System:** Automatic detection of emergency contacts who are also StillHere users (via phone number matching). Contacts with the app get push notifications instead of SMS during incidents. Watcher dashboard shows real-time status of people being monitored.
 - **Smart Notification Routing:** When an emergency contact has the app (linked via `linkedUserId`), notifications are sent via push + in-app message instead of SMS, reducing costs and enabling richer communication.
 
