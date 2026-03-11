@@ -85,21 +85,32 @@ export default function LandingPage() {
 
             <div className="hidden md:flex justify-center">
               <div className="relative">
-                <div className="w-64 h-[440px] bg-white/10 backdrop-blur-sm rounded-[2.5rem] border-2 border-white/20 p-4 flex flex-col">
-                  <div className="bg-white/10 rounded-full px-4 py-2 text-center text-sm mb-6">
-                    <span className="text-white/70">Next check-in: 9:00 AM tomorrow</span>
-                  </div>
-                  <div className="flex-1 flex flex-col items-center justify-center gap-6">
-                    <div className="w-32 h-32 rounded-full bg-accent/80 flex items-center justify-center shadow-xl ring-4 ring-accent/30">
-                      <Check className="h-16 w-16 text-white" />
+                <div className="w-[270px] h-[540px] bg-gray-900 rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-2 flex flex-col">
+                  <div className="w-24 h-5 bg-gray-900 rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
+                  <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[2.25rem] overflow-hidden flex flex-col">
+                    <div className="bg-primary text-white px-5 pt-8 pb-4">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Heart className="h-4 w-4" />
+                        <span className="text-sm font-semibold">StillHere</span>
+                      </div>
+                      <p className="text-xs text-white/70">Welcome, Sarah</p>
                     </div>
-                    <div className="text-center">
-                      <p className="font-semibold text-lg">I'm OK</p>
-                      <p className="text-white/60 text-sm mt-1">Tap once a day</p>
+                    <div className="flex-1 px-5 py-4 flex flex-col gap-4">
+                      <div className="bg-white rounded-xl px-4 py-3 shadow-sm border border-gray-100 text-center">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Next check-in</p>
+                        <p className="text-sm font-medium text-gray-800">9:00 AM tomorrow</p>
+                      </div>
+                      <div className="flex-1 flex flex-col items-center justify-center">
+                        <div className="w-24 h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
+                          <Check className="h-12 w-12 text-white" />
+                        </div>
+                        <p className="font-bold text-gray-800 text-base mt-3">I'm OK</p>
+                        <p className="text-[11px] text-gray-400 mt-1">Tap once a day</p>
+                      </div>
+                      <div className="bg-red-500 rounded-xl py-2.5 text-center text-white text-sm font-semibold shadow-sm">
+                        I Need Help
+                      </div>
                     </div>
-                  </div>
-                  <div className="bg-destructive/60 rounded-xl py-3 text-center text-sm font-medium">
-                    I Need Help
                   </div>
                 </div>
               </div>
