@@ -8,7 +8,7 @@ import { getSocket } from "@/lib/socket";
 import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
 import { useToast } from "@/hooks/use-toast";
 import { getPendingIncomingCall } from "@/components/incoming-call";
-import { startOutgoingRingtone, startIncomingRingtone, stopRingtone, playCallConnected, playCallEnded } from "@/lib/ringtone";
+import { startOutgoingRingtone, stopRingtone, playCallConnected, playCallEnded } from "@/lib/ringtone";
 
 type CallState = "connecting" | "ringing" | "active" | "ended";
 
@@ -25,11 +25,11 @@ export default function CallPage() {
   const [callState, setCallState] = useState<CallState>("connecting");
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const callIdRef = useRef<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const rtcRef = useRef<WebRTCConnection | null>(null);
+  const callIdRef = useRef<string | null>(null);
   const hasInitiatedRef = useRef(false);
   const hasEndedRef = useRef(false);
 
@@ -40,59 +40,63 @@ export default function CallPage() {
 
   const otherUserName = userProfile?.name || "User";
 
-  const attachLocalStream = useCallback((stream: MediaStream) => {
+  const showLocalVideo = useCallback((stream: MediaStream) => {
     const el = localVideoRef.current;
     if (!el) return;
     el.srcObject = stream;
     el.muted = true;
-    el.play().catch(() => {});
+    el.play().catch((e) => console.warn("[CALL] Local video play failed:", e));
   }, []);
 
-  const attachRemoteStream = useCallback((stream: MediaStream) => {
+  const showRemoteVideo = useCallback((stream: MediaStream) => {
+    console.log("[CALL] Got remote stream, tracks:", stream.getTracks().map(t => `${t.kind}:${t.enabled}`));
     const el = remoteVideoRef.current;
     if (!el) return;
     el.srcObject = stream;
     el.muted = false;
     el.volume = 1.0;
-    el.play().catch(() => {});
+    const playPromise = el.play();
+    if (playPromise) {
+      playPromise.catch((e) => {
+        console.warn("[CALL] Remote video play failed, retrying on interaction:", e);
+        const retryPlay = () => {
+          el.play().catch(() => {});
+          document.removeEventListener("touchstart", retryPlay);
+          document.removeEventListener("click", retryPlay);
+        };
+        document.addEventListener("touchstart", retryPlay, { once: true });
+        document.addEventListener("click", retryPlay, { once: true });
+      });
+    }
   }, []);
 
-  const cleanup = useCallback(() => {
+  const doCleanup = useCallback(() => {
     stopRingtone();
     if (rtcRef.current) {
       rtcRef.current.close();
       rtcRef.current = null;
     }
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   }, []);
 
   const handleCallEnd = useCallback((reason?: string, emitToServer = false) => {
     if (hasEndedRef.current) return;
     hasEndedRef.current = true;
+    console.log("[CALL] Call ending:", reason, "emit:", emitToServer);
     stopRingtone();
     playCallEnded();
-    if (emitToServer) {
+    if (emitToServer && callIdRef.current && otherUserId) {
       const socket = getSocket();
-      if (callIdRef.current && otherUserId) {
-        socket.emit("call:end", { callId: callIdRef.current, targetUserId: otherUserId });
-      }
+      socket.emit("call:end", { callId: callIdRef.current, targetUserId: otherUserId });
     }
     if (reason) {
       toast({ title: "Call ended", description: reason });
     }
-    cleanup();
+    doCleanup();
     setCallState("ended");
     setTimeout(() => setLocation("/watched"), 1500);
-  }, [otherUserId, cleanup, setLocation, toast]);
-
-  const endCall = useCallback(() => {
-    handleCallEnd(undefined, true);
-  }, [handleCallEnd]);
+  }, [otherUserId, doCleanup, setLocation, toast]);
 
   useEffect(() => {
     if (!currentUserId || !otherUserId || hasInitiatedRef.current) return;
@@ -100,132 +104,145 @@ export default function CallPage() {
 
     const socket = getSocket();
 
-    async function initCall() {
-      const iceServers = await fetchIceServers();
-      const rtc = new WebRTCConnection(iceServers);
-      rtcRef.current = rtc;
+    console.log("[CALL] Page mounted. Mode:", isAnswerMode ? "answer" : "caller", "Socket connected:", socket.connected);
 
-      rtc.onRemoteStream = (stream) => {
-        stopRingtone();
-        playCallConnected();
-        attachRemoteStream(stream);
-        setCallState("active");
-      };
-
-      rtc.onIceCandidate = (candidate) => {
-        socket.emit("call:ice-candidate", {
-          targetUserId: otherUserId,
-          candidate: candidate.toJSON(),
+    function onCallAnswered(data: { callId: string; answer: any }) {
+      console.log("[CALL] Received call:answered for callId:", data.callId);
+      stopRingtone();
+      playCallConnected();
+      if (rtcRef.current) {
+        rtcRef.current.handleAnswer(data.answer).then(() => {
+          console.log("[CALL] Remote description set from answer");
+        }).catch((err) => {
+          console.error("[CALL] Failed to set remote description:", err);
         });
-      };
-
-      rtc.onConnectionStateChange = (state) => {
-        if (state === "disconnected" || state === "failed" || state === "closed") {
-          handleCallEnd("Connection lost");
-        }
-      };
-
-      if (isAnswerMode) {
-        answerIncomingCall(rtc, socket);
-      } else {
-        initiateOutgoingCall(rtc, socket);
       }
     }
 
-    socket.on("call:ice-candidate", async (data: { candidate: any }) => {
+    function onIceCandidate(data: { candidate: any; fromUserId: string }) {
       if (rtcRef.current && data.candidate) {
-        await rtcRef.current.addIceCandidate(data.candidate);
+        rtcRef.current.addIceCandidate(data.candidate).catch((err) => {
+          console.error("[CALL] ICE candidate error:", err);
+        });
       }
-    });
+    }
 
-    socket.on("call:ended", () => {
+    function onCallEnded() {
       handleCallEnd(`${otherUserName} ended the call`);
-    });
+    }
 
-    socket.on("call:rejected", () => {
+    function onCallRejected() {
       handleCallEnd(`${otherUserName} declined the call`);
-    });
+    }
 
-    initCall();
+    socket.on("call:answered", onCallAnswered);
+    socket.on("call:ice-candidate", onIceCandidate);
+    socket.on("call:ended", onCallEnded);
+    socket.on("call:rejected", onCallRejected);
+
+    async function startCall() {
+      try {
+        console.log("[CALL] Fetching ICE servers...");
+        const iceServers = await fetchIceServers();
+        console.log("[CALL] Got ICE servers:", iceServers.length);
+
+        const rtc = new WebRTCConnection(iceServers);
+        rtcRef.current = rtc;
+
+        rtc.onRemoteStream = (stream) => {
+          console.log("[CALL] onRemoteStream fired");
+          stopRingtone();
+          playCallConnected();
+          showRemoteVideo(stream);
+          setCallState("active");
+        };
+
+        rtc.onIceCandidate = (candidate) => {
+          socket.emit("call:ice-candidate", {
+            targetUserId: otherUserId,
+            candidate: candidate.toJSON(),
+          });
+        };
+
+        rtc.onConnectionStateChange = (state) => {
+          console.log("[CALL] Connection state:", state);
+          if (state === "connected") {
+            setCallState("active");
+          }
+          if (state === "disconnected" || state === "failed" || state === "closed") {
+            handleCallEnd("Connection lost");
+          }
+        };
+
+        console.log("[CALL] Getting local media...");
+        const localStream = await rtc.getLocalStream();
+        console.log("[CALL] Got local stream, tracks:", localStream.getTracks().map(t => `${t.kind}:${t.enabled}`));
+        showLocalVideo(localStream);
+
+        if (isAnswerMode) {
+          const pendingCall = getPendingIncomingCall();
+          if (!pendingCall) {
+            console.error("[CALL] No pending call data found");
+            toast({ title: "Call not found", variant: "destructive" });
+            setLocation("/watched");
+            return;
+          }
+
+          console.log("[CALL] Answering call:", pendingCall.callId);
+          callIdRef.current = pendingCall.callId;
+
+          const answer = await rtc.handleOffer(pendingCall.offer);
+          console.log("[CALL] Created answer, sending to caller:", pendingCall.callerId);
+
+          socket.emit("call:answer", {
+            callId: pendingCall.callId,
+            callerId: pendingCall.callerId,
+            answer,
+          });
+
+          setCallState("active");
+        } else {
+          console.log("[CALL] Creating offer...");
+          const offer = await rtc.createOffer();
+          console.log("[CALL] Offer created, initiating call to:", otherUserId);
+          setCallState("ringing");
+          startOutgoingRingtone();
+
+          socket.emit("call:initiate", {
+            receiverId: otherUserId,
+            callType: "video",
+            offer,
+          }, (response: any) => {
+            console.log("[CALL] call:initiate response:", response);
+            if (response?.success) {
+              callIdRef.current = response.callId;
+            } else {
+              handleCallEnd(response?.error || "Could not connect");
+            }
+          });
+        }
+      } catch (err: any) {
+        console.error("[CALL] Failed to start call:", err);
+        toast({
+          title: "Camera/Mic access denied",
+          description: "Please allow camera and microphone access.",
+          variant: "destructive",
+        });
+        setLocation("/watched");
+      }
+    }
+
+    startCall();
 
     return () => {
-      socket.off("call:answered");
-      socket.off("call:ice-candidate");
-      socket.off("call:ended");
-      socket.off("call:rejected");
-      cleanup();
+      console.log("[CALL] Page unmounting, cleaning up listeners");
+      socket.off("call:answered", onCallAnswered);
+      socket.off("call:ice-candidate", onIceCandidate);
+      socket.off("call:ended", onCallEnded);
+      socket.off("call:rejected", onCallRejected);
+      doCleanup();
     };
   }, [currentUserId, otherUserId]);
-
-  async function answerIncomingCall(rtc: WebRTCConnection, socket: any) {
-    const pendingCall = getPendingIncomingCall();
-    if (!pendingCall) {
-      toast({ title: "Call not found", variant: "destructive" });
-      setLocation("/watched");
-      return;
-    }
-
-    try {
-      const localStream = await rtc.getLocalStream();
-      attachLocalStream(localStream);
-
-      callIdRef.current = pendingCall.callId;
-      const answer = await rtc.handleOffer(pendingCall.offer);
-
-      socket.emit("call:answer", {
-        callId: pendingCall.callId,
-        callerId: pendingCall.callerId,
-        answer,
-      });
-
-      setCallState("active");
-    } catch (err: any) {
-      toast({
-        title: "Camera/Mic access denied",
-        description: "Please allow camera and microphone access.",
-        variant: "destructive",
-      });
-      setLocation("/watched");
-    }
-  }
-
-  async function initiateOutgoingCall(rtc: WebRTCConnection, socket: any) {
-    try {
-      const localStream = await rtc.getLocalStream();
-      attachLocalStream(localStream);
-
-      const offer = await rtc.createOffer();
-      setCallState("ringing");
-      startOutgoingRingtone();
-
-      socket.emit("call:initiate", {
-        receiverId: otherUserId,
-        callType: "video",
-        offer,
-      }, (response: any) => {
-        if (response?.success) {
-          callIdRef.current = response.callId;
-        } else {
-          handleCallEnd("Could not connect");
-        }
-      });
-
-      socket.on("call:answered", async (data: { callId: string; answer: any }) => {
-        stopRingtone();
-        if (rtcRef.current) {
-          await rtcRef.current.handleAnswer(data.answer);
-        }
-      });
-    } catch (err: any) {
-      stopRingtone();
-      toast({
-        title: "Camera/Mic access denied",
-        description: "Please allow camera and microphone access to make video calls.",
-        variant: "destructive",
-      });
-      setLocation("/watched");
-    }
-  }
 
   function toggleMute() {
     setIsMuted((prev) => {
@@ -244,6 +261,10 @@ export default function CallPage() {
   async function flipCamera() {
     try {
       await rtcRef.current?.switchCamera();
+      if (rtcRef.current) {
+        const stream = rtcRef.current.getLocalMediaStream();
+        if (stream) showLocalVideo(stream);
+      }
     } catch {
       toast({ title: "Could not switch camera", variant: "destructive" });
     }
@@ -327,7 +348,7 @@ export default function CallPage() {
             variant="destructive"
             size="icon"
             className="w-14 h-14 rounded-full"
-            onClick={endCall}
+            onClick={() => handleCallEnd(undefined, true)}
             data-testid="button-end-call"
           >
             <PhoneOff className="w-6 h-6" />

@@ -65,11 +65,14 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
   io = new SocketServer(httpServer, {
     path: "/socket.io",
     transports: ["websocket", "polling"],
+    pingTimeout: 30000,
+    pingInterval: 15000,
   });
 
   io.on("connection", async (socket: Socket) => {
     const userId = await authenticateSocket(socket);
     if (!userId) {
+      console.log(`[SOCKET] Unauthenticated connection rejected`);
       socket.disconnect();
       return;
     }
@@ -82,7 +85,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     }
     onlineUsers.get(userId)!.add(socket.id);
 
-    console.log(`[SOCKET] User ${userId} connected (socket: ${socket.id}, total sockets: ${onlineUsers.get(userId)!.size})`);
+    console.log(`[SOCKET] User ${userId} connected (socket: ${socket.id}, total: ${onlineUsers.get(userId)!.size})`);
 
     socket.on("message:send", async (data: { receiverId: string; content: string }, callback?: Function) => {
       try {
@@ -93,7 +96,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         }
 
         const msg = await storage.saveMessage(userId, data.receiverId, data.content);
-        socket.to(`user:${data.receiverId}`).emit("message:new", msg);
+        io!.to(`user:${data.receiverId}`).emit("message:new", msg);
         if (callback) callback({ success: true, message: msg });
 
         if (!isUserOnline(data.receiverId)) {
@@ -106,6 +109,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           });
         }
       } catch (error) {
+        console.error("[SOCKET] message:send error:", error);
         if (callback) callback({ success: false, error: "Failed to send message" });
       }
     });
@@ -113,14 +117,16 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     socket.on("message:read", async (data: { senderId: string }) => {
       try {
         await storage.markMessagesRead(data.senderId, userId);
-        socket.to(`user:${data.senderId}`).emit("message:read-receipt", { readBy: userId });
+        io!.to(`user:${data.senderId}`).emit("message:read-receipt", { readBy: userId });
       } catch {}
     });
 
     socket.on("call:initiate", async (data: { receiverId: string; callType: "video" | "audio"; offer: any }, callback?: Function) => {
+      console.log(`[CALL] ${userId} initiating ${data.callType} call to ${data.receiverId}`);
       try {
         const canCall = await checkCommunicationPermission(userId, data.receiverId);
         if (!canCall) {
+          console.log(`[CALL] Permission denied: ${userId} -> ${data.receiverId}`);
           if (callback) callback({ success: false, error: "Not authorized to call this user" });
           return;
         }
@@ -128,7 +134,10 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         const call = await storage.createCall(userId, data.receiverId, data.callType);
         const caller = await storage.getUser(userId);
 
-        socket.to(`user:${data.receiverId}`).emit("call:incoming", {
+        const receiverOnline = isUserOnline(data.receiverId);
+        console.log(`[CALL] Call ${call.id} created. Receiver online: ${receiverOnline}`);
+
+        io!.to(`user:${data.receiverId}`).emit("call:incoming", {
           callId: call.id,
           callerId: userId,
           callerName: caller?.name || "Unknown",
@@ -138,7 +147,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
         if (callback) callback({ success: true, callId: call.id });
 
-        if (!isUserOnline(data.receiverId)) {
+        if (!receiverOnline) {
           await sendPushNotification(data.receiverId, {
             title: `${data.callType === "video" ? "Video" : "Audio"} call from ${caller?.name || "Someone"}`,
             body: "Tap to answer",
@@ -147,46 +156,61 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           });
         }
       } catch (error) {
+        console.error("[CALL] initiate error:", error);
         if (callback) callback({ success: false, error: "Failed to initiate call" });
       }
     });
 
     socket.on("call:answer", async (data: { callId: string; callerId: string; answer: any }) => {
+      console.log(`[CALL] ${userId} answering call ${data.callId} from ${data.callerId}`);
       try {
         const canCall = await checkCommunicationPermission(userId, data.callerId);
-        if (!canCall) return;
+        if (!canCall) {
+          console.log(`[CALL] Answer permission denied`);
+          return;
+        }
         await storage.updateCall(data.callId, { status: "active", answeredAt: new Date() });
-        socket.to(`user:${data.callerId}`).emit("call:answered", {
+
+        const callerOnline = isUserOnline(data.callerId);
+        console.log(`[CALL] Sending answer to caller ${data.callerId}. Caller online: ${callerOnline}`);
+
+        io!.to(`user:${data.callerId}`).emit("call:answered", {
           callId: data.callId,
           answer: data.answer,
+        });
+      } catch (error) {
+        console.error("[CALL] answer error:", error);
+      }
+    });
+
+    socket.on("call:ice-candidate", async (data: { targetUserId: string; candidate: any }) => {
+      try {
+        const canCall = await checkCommunicationPermission(userId, data.targetUserId);
+        if (!canCall) return;
+        io!.to(`user:${data.targetUserId}`).emit("call:ice-candidate", {
+          candidate: data.candidate,
+          fromUserId: userId,
         });
       } catch {}
     });
 
-    socket.on("call:ice-candidate", async (data: { targetUserId: string; candidate: any }) => {
-      const canCall = await checkCommunicationPermission(userId, data.targetUserId);
-      if (!canCall) return;
-      socket.to(`user:${data.targetUserId}`).emit("call:ice-candidate", {
-        candidate: data.candidate,
-        fromUserId: userId,
-      });
-    });
-
     socket.on("call:end", async (data: { callId: string; targetUserId: string }) => {
+      console.log(`[CALL] ${userId} ending call ${data.callId}`);
       try {
         const canCall = await checkCommunicationPermission(userId, data.targetUserId);
         if (!canCall) return;
         await storage.updateCall(data.callId, { status: "ended", endedAt: new Date() });
-        socket.to(`user:${data.targetUserId}`).emit("call:ended", { callId: data.callId });
+        io!.to(`user:${data.targetUserId}`).emit("call:ended", { callId: data.callId });
       } catch {}
     });
 
     socket.on("call:reject", async (data: { callId: string; callerId: string }) => {
+      console.log(`[CALL] ${userId} rejecting call ${data.callId}`);
       try {
         const canCall = await checkCommunicationPermission(userId, data.callerId);
         if (!canCall) return;
         await storage.updateCall(data.callId, { status: "missed", endedAt: new Date() });
-        socket.to(`user:${data.callerId}`).emit("call:rejected", { callId: data.callId });
+        io!.to(`user:${data.callerId}`).emit("call:rejected", { callId: data.callId });
       } catch {}
     });
 
