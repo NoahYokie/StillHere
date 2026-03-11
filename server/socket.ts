@@ -63,8 +63,8 @@ async function checkCommunicationPermission(userId: string, targetUserId: string
 
 export function setupSocketServer(httpServer: HttpServer): SocketServer {
   io = new SocketServer(httpServer, {
-    cors: { origin: "*", credentials: true },
     path: "/socket.io",
+    transports: ["websocket", "polling"],
   });
 
   io.on("connection", async (socket: Socket) => {
@@ -81,6 +81,8 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       onlineUsers.set(userId, new Set());
     }
     onlineUsers.get(userId)!.add(socket.id);
+
+    console.log(`[SOCKET] User ${userId} connected (socket: ${socket.id}, total sockets: ${onlineUsers.get(userId)!.size})`);
 
     socket.on("message:send", async (data: { receiverId: string; content: string }, callback?: Function) => {
       try {
@@ -188,7 +190,8 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       } catch {}
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason) => {
+      console.log(`[SOCKET] User ${userId} disconnected (socket: ${socket.id}, reason: ${reason})`);
       const userSockets = onlineUsers.get(userId);
       if (userSockets) {
         userSockets.delete(socket.id);

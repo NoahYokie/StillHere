@@ -31,11 +31,12 @@ export default function CallPage() {
   const rtcRef = useRef<WebRTCConnection | null>(null);
   const hasInitiatedRef = useRef(false);
 
-  const { data: watchedUsers } = useQuery<any[]>({
-    queryKey: ["/api/watched-users"],
+  const { data: userProfile } = useQuery<{ id: string; name: string }>({
+    queryKey: ["/api/users", otherUserId, "profile"],
+    enabled: !!otherUserId,
   });
 
-  const otherUserName = watchedUsers?.find((u: any) => u.userId === otherUserId)?.userName || "User";
+  const otherUserName = userProfile?.name || "User";
 
   const cleanup = useCallback(() => {
     if (rtcRef.current) {

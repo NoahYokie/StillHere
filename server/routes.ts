@@ -883,6 +883,24 @@ export async function registerRoutes(
   // WATCHER & MESSAGING ROUTES
   // ============================================
 
+  app.get("/api/users/:userId/profile", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const targetUserId = req.params.userId;
+      const user = await storage.getUser(targetUserId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json({ id: user.id, name: user.name });
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ error: "Failed to fetch user profile" });
+    }
+  });
+
   app.get("/api/messages/unread/count", async (req, res) => {
     try {
       const userId = getUserId(req);
