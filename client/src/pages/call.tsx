@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, SwitchCamera, Phone } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, PhoneOff, SwitchCamera, Phone, Volume2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
@@ -25,6 +25,7 @@ export default function CallPage() {
   const [callState, setCallState] = useState<CallState>("connecting");
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [needsTap, setNeedsTap] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -40,33 +41,45 @@ export default function CallPage() {
 
   const otherUserName = userProfile?.name || "User";
 
+  const playVideo = useCallback((el: HTMLVideoElement, muted: boolean) => {
+    el.muted = muted;
+    if (!muted) el.volume = 1.0;
+    const p = el.play();
+    if (p) {
+      p.catch(() => {
+        if (!muted) {
+          console.warn("[CALL] Autoplay blocked, playing muted first");
+          el.muted = true;
+          el.play().then(() => {
+            setNeedsTap(true);
+          }).catch(() => {});
+        }
+      });
+    }
+  }, []);
+
   const showLocalVideo = useCallback((stream: MediaStream) => {
     const el = localVideoRef.current;
     if (!el) return;
     el.srcObject = stream;
-    el.muted = true;
-    el.play().catch((e) => console.warn("[CALL] Local video play failed:", e));
-  }, []);
+    playVideo(el, true);
+  }, [playVideo]);
 
   const showRemoteVideo = useCallback((stream: MediaStream) => {
-    console.log("[CALL] Got remote stream, tracks:", stream.getTracks().map(t => `${t.kind}:${t.enabled}`));
     const el = remoteVideoRef.current;
     if (!el) return;
+    console.log("[CALL] Showing remote stream, tracks:", stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`).join(", "));
     el.srcObject = stream;
-    el.muted = false;
-    el.volume = 1.0;
-    const playPromise = el.play();
-    if (playPromise) {
-      playPromise.catch((e) => {
-        console.warn("[CALL] Remote video play failed, retrying on interaction:", e);
-        const retryPlay = () => {
-          el.play().catch(() => {});
-          document.removeEventListener("touchstart", retryPlay);
-          document.removeEventListener("click", retryPlay);
-        };
-        document.addEventListener("touchstart", retryPlay, { once: true });
-        document.addEventListener("click", retryPlay, { once: true });
-      });
+    playVideo(el, false);
+  }, [playVideo]);
+
+  const handleTapToUnmute = useCallback(() => {
+    const el = remoteVideoRef.current;
+    if (el && el.muted) {
+      el.muted = false;
+      el.volume = 1.0;
+      el.play().catch(() => {});
+      setNeedsTap(false);
     }
   }, []);
 
@@ -83,12 +96,14 @@ export default function CallPage() {
   const handleCallEnd = useCallback((reason?: string, emitToServer = false) => {
     if (hasEndedRef.current) return;
     hasEndedRef.current = true;
-    console.log("[CALL] Call ending:", reason, "emit:", emitToServer);
+    console.log("[CALL] Ending:", reason);
     stopRingtone();
     playCallEnded();
     if (emitToServer && callIdRef.current && otherUserId) {
-      const socket = getSocket();
-      socket.emit("call:end", { callId: callIdRef.current, targetUserId: otherUserId });
+      try {
+        const socket = getSocket();
+        socket.emit("call:end", { callId: callIdRef.current, targetUserId: otherUserId });
+      } catch {}
     }
     if (reason) {
       toast({ title: "Call ended", description: reason });
@@ -103,27 +118,24 @@ export default function CallPage() {
     hasInitiatedRef.current = true;
 
     const socket = getSocket();
-
-    console.log("[CALL] Page mounted. Mode:", isAnswerMode ? "answer" : "caller", "Socket connected:", socket.connected);
+    console.log("[CALL] Init. Mode:", isAnswerMode ? "answer" : "caller", "connected:", socket.connected, "id:", socket.id);
 
     function onCallAnswered(data: { callId: string; answer: any }) {
-      console.log("[CALL] Received call:answered for callId:", data.callId);
+      console.log("[CALL] Received call:answered");
       stopRingtone();
       playCallConnected();
       if (rtcRef.current) {
-        rtcRef.current.handleAnswer(data.answer).then(() => {
-          console.log("[CALL] Remote description set from answer");
-        }).catch((err) => {
-          console.error("[CALL] Failed to set remote description:", err);
-        });
+        rtcRef.current.handleAnswer(data.answer)
+          .then(() => console.log("[CALL] Answer applied successfully"))
+          .catch((err) => console.error("[CALL] Failed to apply answer:", err));
+      } else {
+        console.error("[CALL] No RTC connection when answer received");
       }
     }
 
     function onIceCandidate(data: { candidate: any; fromUserId: string }) {
       if (rtcRef.current && data.candidate) {
-        rtcRef.current.addIceCandidate(data.candidate).catch((err) => {
-          console.error("[CALL] ICE candidate error:", err);
-        });
+        rtcRef.current.addIceCandidate(data.candidate);
       }
     }
 
@@ -135,24 +147,45 @@ export default function CallPage() {
       handleCallEnd(`${otherUserName} declined the call`);
     }
 
+    function onIceRestart(data: { offer: any; fromUserId: string }) {
+      console.log("[CALL] Received ICE restart offer");
+      if (rtcRef.current) {
+        rtcRef.current.handleOffer(data.offer).then((answer) => {
+          socket.emit("call:ice-restart-answer", {
+            targetUserId: data.fromUserId,
+            answer,
+          });
+        }).catch((err) => console.error("[CALL] ICE restart failed:", err));
+      }
+    }
+
+    function onIceRestartAnswer(data: { answer: any }) {
+      console.log("[CALL] Received ICE restart answer");
+      if (rtcRef.current) {
+        rtcRef.current.handleAnswer(data.answer).catch((err) => 
+          console.error("[CALL] ICE restart answer failed:", err)
+        );
+      }
+    }
+
     socket.on("call:answered", onCallAnswered);
     socket.on("call:ice-candidate", onIceCandidate);
     socket.on("call:ended", onCallEnded);
     socket.on("call:rejected", onCallRejected);
+    socket.on("call:ice-restart", onIceRestart);
+    socket.on("call:ice-restart-answer", onIceRestartAnswer);
 
     async function startCall() {
       try {
         console.log("[CALL] Fetching ICE servers...");
         const iceServers = await fetchIceServers();
-        console.log("[CALL] Got ICE servers:", iceServers.length);
+        console.log("[CALL] Got", iceServers.length, "ICE server configs");
 
         const rtc = new WebRTCConnection(iceServers);
         rtcRef.current = rtc;
 
         rtc.onRemoteStream = (stream) => {
-          console.log("[CALL] onRemoteStream fired");
-          stopRingtone();
-          playCallConnected();
+          console.log("[CALL] Remote stream updated, tracks:", stream.getTracks().length);
           showRemoteVideo(stream);
           setCallState("active");
         };
@@ -164,25 +197,36 @@ export default function CallPage() {
           });
         };
 
+        rtc.onNegotiationNeeded = (offer) => {
+          console.log("[CALL] Sending ICE restart offer");
+          socket.emit("call:ice-restart", {
+            targetUserId: otherUserId,
+            offer,
+          });
+        };
+
         rtc.onConnectionStateChange = (state) => {
-          console.log("[CALL] Connection state:", state);
+          console.log("[CALL] PeerConnection state:", state);
           if (state === "connected") {
+            stopRingtone();
             setCallState("active");
           }
-          if (state === "disconnected" || state === "failed" || state === "closed") {
-            handleCallEnd("Connection lost");
+          if (state === "failed") {
+            handleCallEnd("Connection failed");
+          }
+          if (state === "closed") {
+            handleCallEnd();
           }
         };
 
         console.log("[CALL] Getting local media...");
         const localStream = await rtc.getLocalStream();
-        console.log("[CALL] Got local stream, tracks:", localStream.getTracks().map(t => `${t.kind}:${t.enabled}`));
         showLocalVideo(localStream);
 
         if (isAnswerMode) {
           const pendingCall = getPendingIncomingCall();
           if (!pendingCall) {
-            console.error("[CALL] No pending call data found");
+            console.error("[CALL] No pending call data");
             toast({ title: "Call not found", variant: "destructive" });
             setLocation("/watched");
             return;
@@ -192,7 +236,7 @@ export default function CallPage() {
           callIdRef.current = pendingCall.callId;
 
           const answer = await rtc.handleOffer(pendingCall.offer);
-          console.log("[CALL] Created answer, sending to caller:", pendingCall.callerId);
+          console.log("[CALL] Sending answer back to caller");
 
           socket.emit("call:answer", {
             callId: pendingCall.callId,
@@ -202,9 +246,8 @@ export default function CallPage() {
 
           setCallState("active");
         } else {
-          console.log("[CALL] Creating offer...");
           const offer = await rtc.createOffer();
-          console.log("[CALL] Offer created, initiating call to:", otherUserId);
+          console.log("[CALL] Calling", otherUserId);
           setCallState("ringing");
           startOutgoingRingtone();
 
@@ -213,7 +256,7 @@ export default function CallPage() {
             callType: "video",
             offer,
           }, (response: any) => {
-            console.log("[CALL] call:initiate response:", response);
+            console.log("[CALL] Initiate response:", JSON.stringify(response));
             if (response?.success) {
               callIdRef.current = response.callId;
             } else {
@@ -222,10 +265,10 @@ export default function CallPage() {
           });
         }
       } catch (err: any) {
-        console.error("[CALL] Failed to start call:", err);
+        console.error("[CALL] Start failed:", err);
         toast({
-          title: "Camera/Mic access denied",
-          description: "Please allow camera and microphone access.",
+          title: "Camera/Mic access needed",
+          description: "Please allow camera and microphone access to make calls.",
           variant: "destructive",
         });
         setLocation("/watched");
@@ -235,11 +278,12 @@ export default function CallPage() {
     startCall();
 
     return () => {
-      console.log("[CALL] Page unmounting, cleaning up listeners");
       socket.off("call:answered", onCallAnswered);
       socket.off("call:ice-candidate", onIceCandidate);
       socket.off("call:ended", onCallEnded);
       socket.off("call:rejected", onCallRejected);
+      socket.off("call:ice-restart", onIceRestart);
+      socket.off("call:ice-restart-answer", onIceRestartAnswer);
       doCleanup();
     };
   }, [currentUserId, otherUserId]);
@@ -261,17 +305,15 @@ export default function CallPage() {
   async function flipCamera() {
     try {
       await rtcRef.current?.switchCamera();
-      if (rtcRef.current) {
-        const stream = rtcRef.current.getLocalMediaStream();
-        if (stream) showLocalVideo(stream);
-      }
+      const stream = rtcRef.current?.getLocalMediaStream();
+      if (stream) showLocalVideo(stream);
     } catch {
       toast({ title: "Could not switch camera", variant: "destructive" });
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black flex flex-col" data-testid="call-screen">
+    <div className="fixed inset-0 bg-black flex flex-col" data-testid="call-screen" onClick={needsTap ? handleTapToUnmute : undefined}>
       <video
         ref={remoteVideoRef}
         autoPlay
@@ -300,6 +342,13 @@ export default function CallPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {needsTap && callState === "active" && (
+        <div className="absolute top-4 left-4 z-30 bg-black/70 rounded-lg px-3 py-2 flex items-center gap-2 text-white text-sm" data-testid="tap-to-unmute">
+          <Volume2 className="w-4 h-4" />
+          <span>Tap anywhere to hear audio</span>
         </div>
       )}
 

@@ -20,13 +20,29 @@ export class WebRTCConnection {
   private remoteStream: MediaStream | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private hasRemoteDescription = false;
+  private iceServers: RTCIceServer[];
+  private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private callEstablished = false;
+  private isRestarting = false;
+
   public onRemoteStream: ((stream: MediaStream) => void) | null = null;
   public onIceCandidate: ((candidate: RTCIceCandidate) => void) | null = null;
   public onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
+  public onNegotiationNeeded: ((offer: RTCSessionDescriptionInit) => void) | null = null;
 
   constructor(iceServers?: RTCIceServer[]) {
-    this.pc = new RTCPeerConnection({ iceServers: iceServers || DEFAULT_ICE_SERVERS });
+    this.iceServers = iceServers || DEFAULT_ICE_SERVERS;
 
+    this.pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 2,
+    });
+
+    this.setupListeners();
+    this.setupNetworkMonitor();
+  }
+
+  private setupListeners() {
     this.pc.onicecandidate = (event) => {
       if (event.candidate && this.onIceCandidate) {
         this.onIceCandidate(event.candidate);
@@ -34,35 +50,134 @@ export class WebRTCConnection {
     };
 
     this.pc.ontrack = (event) => {
-      if (event.streams[0]) {
-        if (!this.remoteStream) {
-          this.remoteStream = event.streams[0];
-        } else {
-          event.streams[0].getTracks().forEach((track) => {
-            if (!this.remoteStream!.getTrackById(track.id)) {
-              this.remoteStream!.addTrack(track);
-            }
-          });
+      console.log("[WebRTC] ontrack fired, kind:", event.track.kind, "readyState:", event.track.readyState);
+
+      if (!this.remoteStream) {
+        this.remoteStream = new MediaStream();
+      }
+
+      this.remoteStream.addTrack(event.track);
+
+      event.track.onunmute = () => {
+        console.log("[WebRTC] Track unmuted:", event.track.kind);
+        if (this.onRemoteStream && this.remoteStream) {
+          this.onRemoteStream(this.remoteStream);
         }
-        if (this.onRemoteStream) {
-          this.onRemoteStream(this.remoteStream!);
+      };
+
+      if (this.onRemoteStream) {
+        this.onRemoteStream(this.remoteStream);
+      }
+    };
+
+    this.pc.oniceconnectionstatechange = () => {
+      const state = this.pc.iceConnectionState;
+      console.log("[WebRTC] ICE connection state:", state);
+
+      if (state === "connected" || state === "completed") {
+        this.callEstablished = true;
+        this.isRestarting = false;
+        if (this.disconnectTimer) {
+          clearTimeout(this.disconnectTimer);
+          this.disconnectTimer = null;
         }
+      }
+
+      if (state === "disconnected" && this.callEstablished) {
+        this.disconnectTimer = setTimeout(() => {
+          if (this.pc.iceConnectionState === "disconnected") {
+            console.log("[WebRTC] Still disconnected after 3s, restarting ICE");
+            this.restartIce();
+          }
+        }, 3000);
+      }
+
+      if (state === "failed" && this.callEstablished) {
+        console.log("[WebRTC] ICE failed, attempting restart");
+        this.restartIce();
       }
     };
 
     this.pc.onconnectionstatechange = () => {
+      const state = this.pc.connectionState;
+      console.log("[WebRTC] Connection state:", state);
       if (this.onConnectionStateChange) {
-        this.onConnectionStateChange(this.pc.connectionState);
+        this.onConnectionStateChange(state);
       }
     };
+
+    this.pc.onnegotiationneeded = async () => {
+      if (!this.callEstablished || this.isRestarting) {
+        console.log("[WebRTC] Skipping negotiation (not established or already restarting)");
+        return;
+      }
+      if (this.pc.signalingState !== "stable") {
+        console.log("[WebRTC] Skipping negotiation (signaling state:", this.pc.signalingState, ")");
+        return;
+      }
+      console.log("[WebRTC] Negotiation needed (ICE restart)");
+      if (this.onNegotiationNeeded) {
+        try {
+          this.isRestarting = true;
+          const offer = await this.pc.createOffer({ iceRestart: true });
+          await this.pc.setLocalDescription(offer);
+          this.onNegotiationNeeded(offer);
+        } catch (err) {
+          this.isRestarting = false;
+          console.error("[WebRTC] ICE restart negotiation failed:", err);
+        }
+      }
+    };
+
+    this.pc.onicegatheringstatechange = () => {
+      console.log("[WebRTC] ICE gathering state:", this.pc.iceGatheringState);
+    };
+  }
+
+  private networkHandler = () => {
+    console.log("[WebRTC] Network change detected, online:", navigator.onLine);
+    if (navigator.onLine && this.pc.iceConnectionState !== "connected" && this.pc.iceConnectionState !== "completed") {
+      setTimeout(() => this.restartIce(), 1000);
+    }
+  };
+
+  private setupNetworkMonitor() {
+    window.addEventListener("online", this.networkHandler);
+  }
+
+  private removeNetworkMonitor() {
+    window.removeEventListener("online", this.networkHandler);
+  }
+
+  private restartIce() {
+    try {
+      if (this.pc.signalingState === "closed" || this.isRestarting) return;
+      console.log("[WebRTC] Triggering ICE restart");
+      this.pc.restartIce();
+    } catch (err) {
+      console.error("[WebRTC] restartIce error:", err);
+    }
   }
 
   async getLocalStream(video = true, audio = true): Promise<MediaStream> {
     const constraints: MediaStreamConstraints = {
-      audio: audio ? { echoCancellation: true, noiseSuppression: true } : false,
-      video: video ? { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } : false,
+      audio: audio ? {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      } : false,
+      video: video ? {
+        facingMode: "user",
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 24, max: 30 },
+      } : false,
     };
+
+    console.log("[WebRTC] Requesting media with constraints:", JSON.stringify(constraints));
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    console.log("[WebRTC] Got local stream, tracks:", this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(", "));
+
     this.localStream.getTracks().forEach((track) => {
       this.pc.addTrack(track, this.localStream!);
     });
@@ -70,24 +185,35 @@ export class WebRTCConnection {
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
-    const offer = await this.pc.createOffer();
+    const offer = await this.pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
     await this.pc.setLocalDescription(offer);
+    console.log("[WebRTC] Created offer, SDP length:", offer.sdp?.length);
     return offer;
   }
 
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
+    console.log("[WebRTC] Setting remote description (offer), SDP length:", offer.sdp?.length);
     await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
     this.hasRemoteDescription = true;
     await this.flushPendingCandidates();
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
+    console.log("[WebRTC] Created answer, SDP length:", answer.sdp?.length);
     return answer;
   }
 
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
-    await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
-    this.hasRemoteDescription = true;
-    await this.flushPendingCandidates();
+    console.log("[WebRTC] Setting remote description (answer), SDP length:", answer.sdp?.length);
+    if (this.pc.signalingState === "have-local-offer") {
+      await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
+      this.hasRemoteDescription = true;
+      await this.flushPendingCandidates();
+    } else {
+      console.warn("[WebRTC] Unexpected signaling state for answer:", this.pc.signalingState);
+    }
   }
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
@@ -103,6 +229,10 @@ export class WebRTCConnection {
   }
 
   private async flushPendingCandidates(): Promise<void> {
+    const count = this.pendingCandidates.length;
+    if (count > 0) {
+      console.log(`[WebRTC] Flushing ${count} buffered ICE candidates`);
+    }
     for (const candidate of this.pendingCandidates) {
       try {
         await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -151,11 +281,21 @@ export class WebRTCConnection {
   }
 
   close(): void {
+    if (this.disconnectTimer) {
+      clearTimeout(this.disconnectTimer);
+      this.disconnectTimer = null;
+    }
+    this.removeNetworkMonitor();
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.pc.close();
+    console.log("[WebRTC] Connection closed");
   }
 
   get connectionState(): RTCPeerConnectionState {
     return this.pc.connectionState;
+  }
+
+  get iceConnectionState(): RTCIceConnectionState {
+    return this.pc.iceConnectionState;
   }
 }
