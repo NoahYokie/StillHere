@@ -24,17 +24,20 @@ import {
   sendHandlingTimeoutAlert,
   isTwilioConfigured,
 } from "./sms";
+import {
+  isPushConfigured,
+  getVapidPublicKey,
+  sendReminderPush,
+  sendPushNotification,
+} from "./push";
 
 // Helper to get userId from session
 const getUserId = (req: Request): string | null => {
   return (req as any).userId || null;
 };
 
-// Helper to get base URL for links (custom domain in production, dev domain otherwise)
 const getBaseUrl = (): string => {
-  // Always use custom domain for SMS links (both dev and production)
-  // This ensures emergency contacts always get the professional URL
-  return "https://stillhere.health";
+  return process.env.BASE_URL || "https://stillhere.health";
 };
 
 export async function registerRoutes(
@@ -225,7 +228,8 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const checkin = await storage.createCheckin(userId);
+      const method = req.body?.method === "auto" ? "auto" : "button";
+      const checkin = await storage.createCheckin(userId, method);
       
       // Reset reminder state when user checks in
       await storage.resetReminderState(userId);
@@ -348,7 +352,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin } = req.body;
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -356,6 +360,7 @@ export async function registerRoutes(
       if (locationMode !== undefined) updates.locationMode = locationMode;
       if (reminderMode !== undefined) updates.reminderMode = reminderMode;
       if (preferredCheckinTime !== undefined) updates.preferredCheckinTime = preferredCheckinTime;
+      if (autoCheckin !== undefined) updates.autoCheckin = autoCheckin;
       
       // Update user timezone if provided
       if (timezone) {
@@ -607,6 +612,62 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // PUSH NOTIFICATION ROUTES
+  // ============================================
+
+  app.get("/api/push/vapid-key", (req, res) => {
+    res.json({ key: getVapidPublicKey(), configured: isPushConfigured() });
+  });
+
+  app.post("/api/push/subscribe", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+
+      const { subscription } = req.body;
+      if (!subscription || !subscription.endpoint || !subscription.keys) {
+        return res.status(400).json({ error: "Invalid push subscription" });
+      }
+
+      await storage.savePushSubscription(
+        userId,
+        subscription.endpoint,
+        subscription.keys.p256dh,
+        subscription.keys.auth
+      );
+
+      console.log(`[PUSH] Subscription saved for user ${userId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving push subscription:", error);
+      res.status(500).json({ error: "Failed to save subscription" });
+    }
+  });
+
+  app.post("/api/push/unsubscribe", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+
+      const { endpoint } = req.body;
+      if (!endpoint) {
+        return res.status(400).json({ error: "Endpoint is required" });
+      }
+
+      await storage.deletePushSubscriptionForUser(userId, endpoint);
+      console.log(`[PUSH] Subscription removed for user ${userId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing push subscription:", error);
+      res.status(500).json({ error: "Failed to remove subscription" });
+    }
+  });
+
   // Cron tick - check for due users
   app.get("/api/cron/tick", async (req, res) => {
     try {
@@ -683,13 +744,12 @@ export async function registerRoutes(
             
             // Use home page as the check-in link
             const checkInLink = `${baseUrl}/`;
+            await sendReminderPush(user.id, user.name);
             if (user.phone) {
               await sendReminderSms(user.phone, checkInLink);
-              await storage.incrementRemindersSent(user.id);
-              remindersSent++;
-            } else {
-              console.log("[REMINDER] No phone number, skipping");
             }
+            await storage.incrementRemindersSent(user.id);
+            remindersSent++;
             
             console.log("[REMINDER] Sent\n");
           } else {

@@ -9,7 +9,7 @@ export const reminderModeEnum = pgEnum("reminder_mode", ["none", "one", "two"]);
 export const incidentStatusEnum = pgEnum("incident_status", ["open", "paused", "resolved"]);
 export const incidentReasonEnum = pgEnum("incident_reason", ["missed_checkin", "sos", "test"]);
 export const locationSessionTypeEnum = pgEnum("location_session_type", ["emergency", "shift"]);
-export const checkinMethodEnum = pgEnum("checkin_method", ["button"]);
+export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -36,6 +36,7 @@ export const settings = pgTable("settings", {
   graceMinutes: integer("grace_minutes").notNull().default(15),
   locationMode: locationModeEnum("location_mode").notNull().default("off"),
   reminderMode: reminderModeEnum("reminder_mode").notNull().default("one"),
+  autoCheckin: boolean("auto_checkin").notNull().default(false),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
   pauseUntil: timestamp("pause_until"),
@@ -162,6 +163,23 @@ export const otpRateLimits = pgTable("otp_rate_limits", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Push Subscriptions table
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
 // Location Sessions table
 export const locationSessions = pgTable("location_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -197,6 +215,7 @@ export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: tru
 export const insertLocationSessionSchema = createInsertSchema(locationSessions).omit({ id: true, updatedAt: true });
 export const insertOtpCodeSchema = createInsertSchema(otpCodes).omit({ id: true, createdAt: true });
 export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({ id: true, createdAt: true });
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -223,6 +242,8 @@ export type ReminderMode = Settings["reminderMode"];
 
 export type AuthSession = typeof authSessions.$inferSelect;
 export type OtpCode = typeof otpCodes.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 
 // API Response Types
 export interface UserStatus {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -15,9 +15,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
+
+const triggerHaptic = (pattern: number | number[] = 50) => {
+  if ("vibrate" in navigator) {
+    navigator.vibrate(pattern);
+  }
+};
 
 function EscalationBanner({ status }: { status: UserStatus }) {
   const incident = status.openIncident;
@@ -129,6 +135,105 @@ function EscalationBanner({ status }: { status: UserStatus }) {
   );
 }
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+function PushNotificationBanner() {
+  const { toast } = useToast();
+  const [pushState, setPushState] = useState<"loading" | "unsupported" | "denied" | "granted" | "prompt">("loading");
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushState("unsupported");
+      return;
+    }
+    const permission = Notification.permission;
+    if (permission === "granted") {
+      setPushState("granted");
+    } else if (permission === "denied") {
+      setPushState("denied");
+    } else {
+      setPushState("prompt");
+    }
+  }, []);
+
+  const subscribeToPush = useCallback(async () => {
+    try {
+      const res = await fetch("/api/push/vapid-key");
+      const { key, configured } = await res.json();
+      if (!configured || !key) {
+        toast({ title: "Push notifications not available", description: "Server is not configured for push notifications.", variant: "destructive" });
+        return;
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState("denied");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      } as any);
+
+      await apiRequest("POST", "/api/push/subscribe", {
+        subscription: subscription.toJSON(),
+      });
+
+      setPushState("granted");
+      toast({ title: "Notifications enabled", description: "You'll receive check-in reminders." });
+    } catch (error) {
+      console.error("Push subscription failed:", error);
+      toast({ title: "Could not enable notifications", variant: "destructive" });
+    }
+  }, [toast]);
+
+  if (pushState === "loading" || pushState === "unsupported" || pushState === "denied") {
+    return null;
+  }
+
+  if (pushState === "granted") {
+    return null;
+  }
+
+  return (
+    <Card data-testid="card-push-prompt">
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-3">
+          <Bell className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium text-sm" data-testid="text-push-title">
+              Enable notifications
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Get reminded to check in, even when the app is closed.
+            </p>
+            <Button
+              size="sm"
+              className="mt-3"
+              onClick={subscribeToPush}
+              data-testid="button-enable-notifications"
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              Turn on notifications
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -178,11 +283,30 @@ export default function Home() {
     };
   }, [locationEnabled, status?.activeLocationSession]);
 
+  const autoCheckedRef = useRef(false);
+  const hasActiveIncident = status?.openIncident && status.openIncident.status !== "resolved";
+
+  useEffect(() => {
+    if (
+      status?.settings?.autoCheckin &&
+      !autoCheckedRef.current &&
+      !hasActiveIncident &&
+      !isLoading
+    ) {
+      autoCheckedRef.current = true;
+      apiRequest("POST", "/api/checkin", { method: "auto" }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+        triggerHaptic(30);
+      }).catch(() => {});
+    }
+  }, [status?.settings?.autoCheckin, isLoading, hasActiveIncident]);
+
   const checkinMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/checkin");
     },
     onSuccess: () => {
+      triggerHaptic(50);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
         title: "Checked in",
@@ -203,6 +327,7 @@ export default function Home() {
       return apiRequest("POST", "/api/sos");
     },
     onSuccess: () => {
+      triggerHaptic([100, 50, 100, 50, 200]);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
         title: "Alert sent",
@@ -327,7 +452,7 @@ export default function Home() {
   }
 
   const isPaused = status?.settings?.pauseUntil && new Date(status.settings.pauseUntil) > new Date();
-  const hasOpenIncident = status?.openIncident && status.openIncident.status !== "resolved";
+  const hasOpenIncident = hasActiveIncident;
 
   return (
     <div className="min-h-screen bg-background">
@@ -364,6 +489,8 @@ export default function Home() {
       </header>
 
       <main className="max-w-md mx-auto px-6 py-8 space-y-8">
+        <PushNotificationBanner />
+
         {hasOpenIncident && status && (
           <div className="space-y-3">
             <EscalationBanner status={status} />

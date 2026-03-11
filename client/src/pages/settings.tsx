@@ -49,7 +49,8 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone } from "lucide-react";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
@@ -71,6 +72,7 @@ export default function SettingsPage() {
   const [graceMinutes, setGraceMinutes] = useState(15);
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
   const [reminderMode, setReminderMode] = useState<ReminderMode>("one");
+  const [autoCheckin, setAutoCheckin] = useState(false);
   const [customInterval, setCustomInterval] = useState("");
   const [customPauseHours, setCustomPauseHours] = useState("");
 
@@ -95,6 +97,7 @@ export default function SettingsPage() {
       setGraceMinutes(status.settings?.graceMinutes || 15);
       setLocationMode(status.settings?.locationMode || "off");
       setReminderMode((status.settings as any)?.reminderMode || "one");
+      setAutoCheckin((status.settings as any)?.autoCheckin || false);
 
       const contact1 = status.contacts?.find((c) => c.priority === 1);
       const contact2 = status.contacts?.find((c) => c.priority === 2);
@@ -109,7 +112,7 @@ export default function SettingsPage() {
   }, [status, form]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -503,6 +506,34 @@ export default function SettingsPage() {
                 <Label htmlFor="rem-two">Two reminders</Label>
               </div>
             </RadioGroup>
+          </CardContent>
+        </Card>
+
+        {/* Auto Check-in Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Smartphone className="h-5 w-5" />
+              Auto check-in
+            </CardTitle>
+            <CardDescription>Check in automatically when you open the app.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="auto-checkin">Check in when I open the app</Label>
+              <Switch
+                id="auto-checkin"
+                checked={autoCheckin}
+                onCheckedChange={(checked) => {
+                  setAutoCheckin(checked);
+                  settingsMutation.mutate({ autoCheckin: checked });
+                }}
+                data-testid="switch-auto-checkin"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              Opening StillHere counts as a check-in. No button tap needed.
+            </p>
           </CardContent>
         </Card>
 
