@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth, useAuth } from "@/lib/auth";
+import { IncomingCallOverlay } from "@/components/incoming-call";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import LandingPage from "@/pages/landing";
@@ -17,6 +18,9 @@ import SetupNamePage from "@/pages/setup-name";
 import SetupContactsPage from "@/pages/setup-contacts";
 import SetupPreferencesPage from "@/pages/setup-preferences";
 import TrustPage from "@/pages/trust";
+import WatchedPage from "@/pages/watched";
+import ChatPage from "@/pages/chat";
+import CallPage from "@/pages/call";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -91,6 +95,27 @@ function Router() {
           </RequireSetup>
         </RequireAuth>
       </Route>
+      <Route path="/watched">
+        <RequireAuth>
+          <RequireSetup>
+            <WatchedPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/chat/:userId">
+        <RequireAuth>
+          <RequireSetup>
+            <ChatPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/call/:userId">
+        <RequireAuth>
+          <RequireSetup>
+            <CallPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
       <Route path="/help" component={HelpPage} />
       <Route path="/trust" component={TrustPage} />
       <Route path="/emergency/:token" component={ContactPage} />
@@ -105,6 +130,7 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <Toaster />
+          <IncomingCallOverlay />
           <Router />
         </AuthProvider>
       </TooltipProvider>

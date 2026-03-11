@@ -436,6 +436,12 @@ export default function SettingsPage() {
                   onChange={(e) => updateContactEntry(index, "phone", e.target.value)}
                   data-testid={`input-contact-phone-${index}`}
                 />
+                {status?.contacts?.find(c => c.priority === index + 1)?.linkedUserId && (
+                  <span className="text-xs text-accent font-medium flex items-center gap-1" data-testid={`badge-on-stillhere-${index}`}>
+                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
+                    On StillHere
+                  </span>
+                )}
               </div>
             ))}
 

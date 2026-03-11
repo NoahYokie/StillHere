@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User } from "lucide-react";
+import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Video } from "lucide-react";
 import type { ContactPageData } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -235,6 +235,32 @@ export default function ContactPage() {
             <a href={`sms:${user.phone || ""}`}>
               <MessageSquare className="h-5 w-5" />
               Message {user.name}
+            </a>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full justify-start gap-3"
+            asChild
+            data-testid="button-in-app-chat"
+          >
+            <a href={`/chat/${user.id}`}>
+              <MessageSquare className="h-5 w-5 text-primary" />
+              In-App Chat with {user.name}
+            </a>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full justify-start gap-3"
+            asChild
+            data-testid="button-video-call"
+          >
+            <a href={`/call/${user.id}`}>
+              <Video className="h-5 w-5 text-primary" />
+              Video Call {user.name}
             </a>
           </Button>
         </div>

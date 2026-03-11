@@ -10,6 +10,8 @@ export const incidentStatusEnum = pgEnum("incident_status", ["open", "paused", "
 export const incidentReasonEnum = pgEnum("incident_reason", ["missed_checkin", "sos", "test"]);
 export const locationSessionTypeEnum = pgEnum("location_session_type", ["emergency", "shift"]);
 export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto"]);
+export const callStatusEnum = pgEnum("call_status", ["ringing", "active", "ended", "missed"]);
+export const callTypeEnum = pgEnum("call_type", ["video", "audio"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -60,6 +62,7 @@ export const contacts = pgTable("contacts", {
   phone: text("phone").notNull(),
   priority: integer("priority").notNull(),
   canViewLocation: boolean("can_view_location").notNull().default(true),
+  linkedUserId: uuid("linked_user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -212,6 +215,54 @@ export const locationSessionsRelations = relations(locationSessions, ({ one }) =
   }),
 }));
 
+// Messages table
+export const messages = pgTable("messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  senderId: uuid("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  receiverId: uuid("receiver_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+    relationName: "sentMessages",
+  }),
+  receiver: one(users, {
+    fields: [messages.receiverId],
+    references: [users.id],
+    relationName: "receivedMessages",
+  }),
+}));
+
+// Calls table
+export const calls = pgTable("calls", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  callerId: uuid("caller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  receiverId: uuid("receiver_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: callStatusEnum("status").notNull().default("ringing"),
+  callType: callTypeEnum("call_type").notNull().default("video"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  answeredAt: timestamp("answered_at"),
+  endedAt: timestamp("ended_at"),
+});
+
+export const callsRelations = relations(calls, ({ one }) => ({
+  caller: one(users, {
+    fields: [calls.callerId],
+    references: [users.id],
+    relationName: "outgoingCalls",
+  }),
+  receiver: one(users, {
+    fields: [calls.receiverId],
+    references: [users.id],
+    relationName: "incomingCalls",
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -222,6 +273,8 @@ export const insertLocationSessionSchema = createInsertSchema(locationSessions).
 export const insertOtpCodeSchema = createInsertSchema(otpCodes).omit({ id: true, createdAt: true });
 export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({ id: true, createdAt: true });
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
+export const insertCallSchema = createInsertSchema(calls).omit({ id: true, startedAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -251,6 +304,14 @@ export type OtpCode = typeof otpCodes.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export type Call = typeof calls.$inferSelect;
+export type InsertCall = z.infer<typeof insertCallSchema>;
+export type CallStatus = Call["status"];
+export type CallType = Call["callType"];
+
 // API Response Types
 export interface UserStatus {
   user: User;
@@ -262,6 +323,16 @@ export interface UserStatus {
   activeLocationSession: LocationSession | null;
   contactLimit: number;
   isPremium: boolean;
+}
+
+export interface WatchedUser {
+  userId: string;
+  userName: string;
+  lastCheckinAt: Date | null;
+  nextCheckinDue: Date;
+  hasOpenIncident: boolean;
+  incidentReason: string | null;
+  contactId: string;
 }
 
 export interface ContactPageData {
