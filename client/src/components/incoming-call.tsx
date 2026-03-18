@@ -15,11 +15,44 @@ interface IncomingCallData {
 }
 
 let pendingIncomingCall: IncomingCallData | null = null;
+let bufferedIceCandidates: RTCIceCandidateInit[] = [];
+let iceCandidateBufferActive = false;
 
 export function getPendingIncomingCall(): IncomingCallData | null {
   const call = pendingIncomingCall;
   pendingIncomingCall = null;
   return call;
+}
+
+export function getBufferedIceCandidates(): RTCIceCandidateInit[] {
+  const candidates = [...bufferedIceCandidates];
+  bufferedIceCandidates = [];
+  iceCandidateBufferActive = false;
+  console.log(`[CALL-BUFFER] Flushing ${candidates.length} buffered ICE candidates to call page`);
+  return candidates;
+}
+
+function startBufferingIceCandidates(callerId: string) {
+  bufferedIceCandidates = [];
+  iceCandidateBufferActive = true;
+  console.log("[CALL-BUFFER] Started buffering ICE candidates from", callerId);
+
+  const socket = getSocket();
+  const bufferHandler = (data: { candidate: any; fromUserId: string }) => {
+    if (data.fromUserId === callerId && data.candidate && iceCandidateBufferActive) {
+      bufferedIceCandidates.push(data.candidate);
+      console.log(`[CALL-BUFFER] Buffered ICE candidate #${bufferedIceCandidates.length} from ${callerId}`);
+    }
+  };
+
+  socket.on("call:ice-candidate", bufferHandler);
+
+  setTimeout(() => {
+    socket.off("call:ice-candidate", bufferHandler);
+    if (iceCandidateBufferActive) {
+      console.log("[CALL-BUFFER] Buffer timeout, stopping. Total buffered:", bufferedIceCandidates.length);
+    }
+  }, 15000);
 }
 
 export function IncomingCallOverlay() {
@@ -34,6 +67,7 @@ export function IncomingCallOverlay() {
 
     const handleIncoming = (data: IncomingCallData) => {
       startIncomingRingtone();
+      startBufferingIceCandidates(data.callerId);
       setIncomingCall(data);
     };
 
@@ -55,6 +89,8 @@ export function IncomingCallOverlay() {
   function rejectCall() {
     if (!incomingCall) return;
     stopRingtone();
+    bufferedIceCandidates = [];
+    iceCandidateBufferActive = false;
 
     const socket = getSocket();
     socket.emit("call:reject", {

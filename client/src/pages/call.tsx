@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
 import { useToast } from "@/hooks/use-toast";
-import { getPendingIncomingCall } from "@/components/incoming-call";
+import { getPendingIncomingCall, getBufferedIceCandidates } from "@/components/incoming-call";
 import { startOutgoingRingtone, stopRingtone, playCallConnected, playCallEnded } from "@/lib/ringtone";
 
 type CallState = "connecting" | "ringing" | "active" | "ended";
@@ -262,6 +262,14 @@ export default function CallPage() {
             callerId: pendingCall.callerId,
             answer,
           });
+
+          const buffered = getBufferedIceCandidates();
+          if (buffered.length > 0) {
+            console.log(`[CALL] Applying ${buffered.length} buffered ICE candidates from caller`);
+            for (const candidate of buffered) {
+              await rtc.addIceCandidate(candidate);
+            }
+          }
 
           setCallState("active");
         } else {
