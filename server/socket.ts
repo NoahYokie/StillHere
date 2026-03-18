@@ -207,6 +207,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:ice-candidate", (data: { targetUserId: string; candidate: any }) => {
+      const targetOnline = isUserOnline(data.targetUserId);
+      const targetSockets = onlineUsers.get(data.targetUserId);
+      console.log(`[CALL] ICE candidate ${userId} -> ${data.targetUserId} (target online: ${targetOnline}, sockets: ${targetSockets?.size || 0}, candidate: ${data.candidate?.candidate?.substring(0, 50) || 'null'})`);
       io!.to(`user:${data.targetUserId}`).emit("call:ice-candidate", {
         candidate: data.candidate,
         fromUserId: userId,
