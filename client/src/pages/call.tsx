@@ -135,7 +135,10 @@ export default function CallPage() {
 
     function onIceCandidate(data: { candidate: any; fromUserId: string }) {
       if (rtcRef.current && data.candidate) {
+        console.log("[CALL] Received ICE candidate from", data.fromUserId, "type:", data.candidate.candidate?.substring(0, 60));
         rtcRef.current.addIceCandidate(data.candidate);
+      } else if (!rtcRef.current) {
+        console.warn("[CALL] Received ICE candidate but no RTC connection yet");
       }
     }
 
@@ -210,6 +213,7 @@ export default function CallPage() {
         };
 
         rtc.onIceCandidate = (candidate) => {
+          console.log("[CALL] Sending ICE candidate to", otherUserId, "type:", candidate.candidate?.substring(0, 60));
           socket.emit("call:ice-candidate", {
             targetUserId: otherUserId,
             candidate: candidate.toJSON(),

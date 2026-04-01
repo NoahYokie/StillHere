@@ -190,26 +190,29 @@ export class WebRTCConnection {
       offerToReceiveVideo: true,
     });
     await this.pc.setLocalDescription(offer);
-    console.log("[WebRTC] Created offer, SDP length:", offer.sdp?.length);
-    return offer;
+    const localDesc = this.pc.localDescription;
+    console.log("[WebRTC] Created offer, SDP length:", localDesc?.sdp?.length, "signalingState:", this.pc.signalingState);
+    return localDesc as RTCSessionDescriptionInit;
   }
 
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
-    console.log("[WebRTC] Setting remote description (offer), SDP length:", offer.sdp?.length);
-    await this.pc.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("[WebRTC] Setting remote description (offer), type:", offer.type, "SDP length:", offer.sdp?.length, "signalingState:", this.pc.signalingState);
+    await this.pc.setRemoteDescription(offer);
     this.hasRemoteDescription = true;
+    console.log("[WebRTC] Remote description set, signalingState:", this.pc.signalingState);
     await this.flushPendingCandidates();
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
-    console.log("[WebRTC] Created answer, SDP length:", answer.sdp?.length);
-    return answer;
+    console.log("[WebRTC] Created answer, SDP length:", answer.sdp?.length, "signalingState:", this.pc.signalingState);
+    return this.pc.localDescription as RTCSessionDescriptionInit;
   }
 
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
-    console.log("[WebRTC] Setting remote description (answer), SDP length:", answer.sdp?.length);
+    console.log("[WebRTC] Setting remote description (answer), type:", answer.type, "SDP length:", answer.sdp?.length, "signalingState:", this.pc.signalingState);
     if (this.pc.signalingState === "have-local-offer") {
-      await this.pc.setRemoteDescription(new RTCSessionDescription(answer));
+      await this.pc.setRemoteDescription(answer);
       this.hasRemoteDescription = true;
+      console.log("[WebRTC] Remote description set, signalingState:", this.pc.signalingState);
       await this.flushPendingCandidates();
     } else {
       console.warn("[WebRTC] Unexpected signaling state for answer:", this.pc.signalingState);
@@ -218,11 +221,12 @@ export class WebRTCConnection {
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
     if (!this.hasRemoteDescription) {
+      console.log("[WebRTC] Queuing ICE candidate (no remote desc yet), total queued:", this.pendingCandidates.length + 1);
       this.pendingCandidates.push(candidate);
       return;
     }
     try {
-      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      await this.pc.addIceCandidate(candidate);
     } catch (err) {
       console.error("[WebRTC] Error adding ICE candidate:", err);
     }
@@ -235,7 +239,7 @@ export class WebRTCConnection {
     }
     for (const candidate of this.pendingCandidates) {
       try {
-        await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await this.pc.addIceCandidate(candidate);
       } catch (err) {
         console.error("[WebRTC] Error adding buffered ICE candidate:", err);
       }
