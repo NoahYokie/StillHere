@@ -107,7 +107,7 @@ export default function LoginPage() {
           </div>
           <div className="mt-6 p-3 bg-muted/50 rounded-md">
             <p className="text-xs text-muted-foreground text-center" data-testid="text-security-notice">
-              StillHere will never call, text, or email you asking for personal information, passwords, or payment. If someone contacts you claiming to be from StillHere and asks for this information, do not respond as this is likely a fraudulent attempt.
+              The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.
             </p>
           </div>
         </CardContent>
