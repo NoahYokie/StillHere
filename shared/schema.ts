@@ -263,6 +263,22 @@ export const callsRelations = relations(calls, ({ one }) => ({
   }),
 }));
 
+// VoIP Push Tokens table (for iOS CallKit / Android ConnectionService)
+export const voipTokens = pgTable("voip_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  platform: text("platform").notNull(), // 'ios' or 'android'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const voipTokensRelations = relations(voipTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [voipTokens.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -275,6 +291,7 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({ i
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertCallSchema = createInsertSchema(calls).omit({ id: true, startedAt: true });
+export const insertVoipTokenSchema = createInsertSchema(voipTokens).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -306,6 +323,9 @@ export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export type VoipToken = typeof voipTokens.$inferSelect;
+export type InsertVoipToken = z.infer<typeof insertVoipTokenSchema>;
 
 export type Call = typeof calls.$inferSelect;
 export type InsertCall = z.infer<typeof insertCallSchema>;

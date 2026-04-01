@@ -12,6 +12,7 @@ import {
   pushSubscriptions,
   messages,
   calls,
+  voipTokens,
   type User,
   type InsertUser,
   type Settings,
@@ -107,6 +108,11 @@ export interface IStorage {
   findContactsByPhone(phone: string): Promise<Contact[]>;
   getWatchedUsers(watcherUserId: string): Promise<WatchedUser[]>;
   getContactsLinkedToUser(linkedUserId: string): Promise<Contact[]>;
+
+  // VoIP Tokens
+  saveVoipToken(userId: string, token: string, platform: string): Promise<void>;
+  getVoipTokens(userId: string): Promise<{ token: string; platform: string }[]>;
+  deleteVoipToken(userId: string, token: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -780,6 +786,27 @@ export class DatabaseStorage implements IStorage {
 
   async getContactsLinkedToUser(linkedUserId: string): Promise<Contact[]> {
     return db.select().from(contacts).where(eq(contacts.linkedUserId, linkedUserId));
+  }
+
+  async saveVoipToken(userId: string, token: string, platform: string): Promise<void> {
+    await db.delete(voipTokens).where(
+      and(eq(voipTokens.userId, userId), eq(voipTokens.token, token))
+    );
+    await db.insert(voipTokens).values({ userId, token, platform });
+  }
+
+  async getVoipTokens(userId: string): Promise<{ token: string; platform: string }[]> {
+    const rows = await db.select({
+      token: voipTokens.token,
+      platform: voipTokens.platform,
+    }).from(voipTokens).where(eq(voipTokens.userId, userId));
+    return rows;
+  }
+
+  async deleteVoipToken(userId: string, token: string): Promise<void> {
+    await db.delete(voipTokens).where(
+      and(eq(voipTokens.userId, userId), eq(voipTokens.token, token))
+    );
   }
 }
 

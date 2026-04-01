@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth, useAuth } from "@/lib/auth";
 import { IncomingCallOverlay } from "@/components/incoming-call";
+import { initNativeCall, isNativePlatform } from "@/lib/native-call";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import LandingPage from "@/pages/landing";
@@ -124,6 +125,20 @@ function Router() {
   );
 }
 
+function NativeCallInit() {
+  const { auth } = useAuth();
+
+  useEffect(() => {
+    if (auth?.authenticated && isNativePlatform()) {
+      initNativeCall().catch((err) =>
+        console.error("[App] Native call init failed:", err)
+      );
+    }
+  }, [auth?.authenticated]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -131,6 +146,7 @@ function App() {
         <AuthProvider>
           <Toaster />
           <IncomingCallOverlay />
+          <NativeCallInit />
           <Router />
         </AuthProvider>
       </TooltipProvider>

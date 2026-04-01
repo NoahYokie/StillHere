@@ -39,7 +39,8 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **International Phone Normalization:** 28+ countries supported with E.164 normalization (US, UK, AU, CA, NZ, JP, KR, SG, IN, FR, DE, IT, ES, NL, BE, CH, IE, SE, NO, DK, CZ, HU, RO, HR, and more).
 - **WebSocket Communication:** Socket.IO for real-time messaging and video call signaling, with cookie-based authentication matching the existing session system.
 - **In-App Messaging:** Real-time chat between users and emergency contacts who have the app, with message persistence, read receipts, and push notification fallback for offline users.
-- **In-App Video Calling:** WebRTC-based peer-to-peer video calling with Socket.IO signaling. Uses Twilio Network Traversal Service for STUN/TURN servers (falls back to free Google STUN if Twilio unavailable). TURN relay ensures calls connect even behind strict firewalls and symmetric NATs. Features include mute, camera toggle, camera flip, and incoming call notifications.
+- **In-App Video Calling:** WhatsApp-style WebRTC video calling with relay-first architecture. Forces `iceTransportPolicy: "relay"` when TURN servers are available (Twilio Network Traversal Service) for guaranteed connectivity behind any firewall/NAT. Uses full ICE gathering (candidates baked into SDP) instead of trickle ICE to eliminate timing bugs. Caller queues trickle candidates until call:initiate confirms. 45-second ring timeout. ICE restart on disconnect/network change. Features: mute, camera toggle, camera flip, incoming call overlay with ICE candidate buffering.
+- **Native Call Integration (iOS/Android):** CallKit (iOS) and ConnectionService (Android) integration via Capacitor plugins for native incoming call UI. VoIP push tokens (APNs for iOS, FCM for Android) registered on server. Server sends VoIP pushes to wake app for incoming calls when in background. Falls back to web overlay when not running natively.
 - **Contact Detection & Watcher System:** Automatic detection of emergency contacts who are also StillHere users (via phone number matching). Contacts with the app get push notifications instead of SMS during incidents. Watcher dashboard shows real-time status of people being monitored.
 - **Smart Notification Routing:** When an emergency contact has the app (linked via `linkedUserId`), notifications are sent via push + in-app message instead of SMS, reducing costs and enabling richer communication.
 
@@ -70,9 +71,11 @@ The application features an extremely simple, calm, and reassuring user interfac
 - `client/src/pages/setup-contacts.tsx` — Onboarding contacts setup (dynamic list)
 - `client/src/components/incoming-call.tsx` — Incoming call overlay (works on any page)
 - `client/src/lib/socket.ts` — Socket.IO client singleton
-- `client/src/lib/webrtc.ts` — WebRTC peer connection management
+- `client/src/lib/webrtc.ts` — WebRTC peer connection management (relay-first, full ICE gathering)
+- `client/src/lib/native-call.ts` — Native CallKit/ConnectionService integration for iOS/Android
 - `client/src/lib/fall-detection.ts` — DeviceMotion-based fall detection module
 - `client/src/lib/quotes.ts` — 125 daily motivational quotes
+- `server/voip-push.ts` — VoIP push notifications (APNs for iOS, FCM for Android)
 - `capacitor.config.json` — Capacitor config with watch companion app stubs
 
 ### External Dependencies

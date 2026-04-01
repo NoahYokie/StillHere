@@ -5,6 +5,7 @@ import { authSessions, users } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { storage } from "./storage";
 import { sendPushNotification } from "./push";
+import { sendVoipPush } from "./voip-push";
 import cookie from "cookie";
 
 let io: SocketServer | null = null;
@@ -172,6 +173,19 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         if (callback) callback({ success: true, callId: call.id });
 
         if (!receiverOnline) {
+          const voipTokens = await storage.getVoipTokens(data.receiverId);
+          if (voipTokens.length > 0) {
+            console.log(`[CALL] Receiver has ${voipTokens.length} VoIP token(s), sending VoIP push`);
+            for (const vt of voipTokens) {
+              await sendVoipPush(vt.token, vt.platform, {
+                callId: call.id,
+                callerId: userId,
+                callerName: caller?.name || "Someone",
+                callType: data.callType,
+              });
+            }
+          }
+
           await sendPushNotification(data.receiverId, {
             title: `${data.callType === "video" ? "Video" : "Audio"} call from ${caller?.name || "Someone"}`,
             body: "Tap to answer",
