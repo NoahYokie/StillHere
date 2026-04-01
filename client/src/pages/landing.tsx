@@ -316,7 +316,7 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:block mt-4 px-4 py-3 bg-muted/50 rounded-md text-xs text-muted-foreground text-center">
             <Shield className="h-3.5 w-3.5 inline mr-1" />
-            StillHere will never contact you asking for personal information, passwords, or payment. If someone does, do not respond.
+            The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.
           </div>
         </div>
       </footer>
