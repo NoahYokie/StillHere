@@ -63,12 +63,7 @@ export async function sendSms(to: string, body: string): Promise<SendSmsResult> 
   const client = getClient();
   
   if (!client || !fromPhone) {
-    console.log("\n========================================");
-    console.log("[SMS - NO TWILIO] Message would be sent:");
-    console.log(`To: ${to}`);
-    console.log(`From: ${fromPhone || "(not configured)"}`);
-    console.log(`Body:\n${body}`);
-    console.log("========================================\n");
+    console.log(`[SMS - NO TWILIO] Would send to ***${to.slice(-4)} (${body.length} chars)`);
     return { success: true, messageId: "console-only" };
   }
   
@@ -87,7 +82,7 @@ export async function sendSms(to: string, body: string): Promise<SendSmsResult> 
           from: alphaSender,
           to,
         });
-        console.log(`[SMS] Sent to ${to} from "${alphaSender}", SID: ${message.sid}`);
+        console.log(`[SMS] Sent to ***${to.slice(-4)} via alpha, SID: ${message.sid}`);
         return { success: true, messageId: message.sid };
       } catch (alphaError: any) {
         console.log(`[SMS] Alpha sender failed, falling back to phone number: ${alphaError.message}`);
@@ -101,10 +96,10 @@ export async function sendSms(to: string, body: string): Promise<SendSmsResult> 
       to,
     });
     
-    console.log(`[SMS] Sent to ${to} from "${fromPhone}", SID: ${message.sid}`);
+    console.log(`[SMS] Sent to ***${to.slice(-4)}, SID: ${message.sid}`);
     return { success: true, messageId: message.sid };
   } catch (error: any) {
-    console.error(`[SMS] Failed to send to ${to}:`, error.message);
+    console.error(`[SMS] Failed to send to ***${to.slice(-4)}:`, error.message);
     return { success: false, error: error.message };
   }
 }

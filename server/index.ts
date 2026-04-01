@@ -30,9 +30,14 @@ app.use(
         workerSrc: ["'self'", "blob:"],
         manifestSrc: ["'self'"],
         mediaSrc: ["'self'", "blob:"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        objectSrc: ["'none'"],
       },
     },
     crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
   })
 );
 
@@ -75,26 +80,20 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+function sanitizePath(p: string): string {
+  return p
+    .replace(/\/emergency\/[a-zA-Z0-9_-]+/g, "/emergency/[REDACTED]")
+    .replace(/\/api\/auth\/passkey\/[a-zA-Z0-9_-]+/g, "/api/auth/passkey/[REDACTED]");
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      log(`${req.method} ${sanitizePath(path)} ${res.statusCode} in ${duration}ms`);
     }
   });
 
@@ -136,7 +135,11 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
 
       const CRON_INTERVAL_MS = 2 * 60 * 1000;
-      const cronSecret = process.env.SESSION_SECRET || "internal-cron-key";
+      const cronSecret = process.env.SESSION_SECRET;
+      if (!cronSecret) {
+        log("WARNING: SESSION_SECRET not set, cron scheduler disabled", "cron");
+        return;
+      }
       setInterval(async () => {
         try {
           const response = await fetch(`http://localhost:${port}/api/cron/tick`, {

@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
@@ -77,11 +78,11 @@ async function notifyContact(
         link,
       });
     } catch {}
-    console.log(`[NOTIFY] Sent push notification to ${contact.name} (in-app user)`);
+    console.log(`[NOTIFY] Sent push notification to contact (in-app user)`);
   } else {
     const normalizedPhone = normalizePhone(contact.phone);
     await sendSmsFn(normalizedPhone, userName, link);
-    console.log(`[NOTIFY] Sent SMS to ${contact.name}`);
+    console.log(`[NOTIFY] Sent SMS to contact`);
   }
 }
 
@@ -105,9 +106,17 @@ export async function registerRoutes(
   // ============================================
   // AUTH ROUTES (public)
   // ============================================
-  
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many authentication attempts, please try again later" },
+  });
+
   // Send OTP code
-  app.post("/api/auth/send-code", async (req, res) => {
+  app.post("/api/auth/send-code", authLimiter, async (req, res) => {
     try {
       const { phone } = req.body;
       
@@ -136,7 +145,7 @@ export async function registerRoutes(
   const MAX_VERIFY_ATTEMPTS = 5;
   const VERIFY_WINDOW_MS = 10 * 60 * 1000;
 
-  app.post("/api/auth/verify-code", async (req, res) => {
+  app.post("/api/auth/verify-code", authLimiter, async (req, res) => {
     try {
       const { phone, code } = req.body;
       
@@ -335,7 +344,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/passkey/auth-options", async (req, res) => {
+  app.post("/api/auth/passkey/auth-options", authLimiter, async (req, res) => {
     try {
       const options = await generateAuthenticationOptions({
         rpID: getRpId(req),
@@ -363,7 +372,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/passkey/auth-verify", async (req, res) => {
+  app.post("/api/auth/passkey/auth-verify", authLimiter, async (req, res) => {
     try {
       const txnId = req.cookies?.["__passkey_txn"];
       if (!txnId) return res.status(400).json({ error: "Session expired. Please try again." });
@@ -412,7 +421,7 @@ export async function registerRoutes(
 
       const needsSetup = !user.name || user.name.trim() === "";
 
-      console.log(`[AUTH] Passkey login for user ${user.phone || user.id}`);
+      console.log(`[AUTH] Passkey login for user ***${(user.phone || user.id).slice(-4)}`);
 
       res.json({
         success: true,
@@ -484,12 +493,7 @@ export async function registerRoutes(
         .where(eq(users.id, userId))
         .returning();
       
-      console.log("\n========================================");
-      console.log("StillHere - User Setup Complete");
-      console.log("========================================");
-      console.log(`User: ${updatedUser.name}`);
-      console.log(`Phone: ${updatedUser.phone || "Not set"}`);
-      console.log("========================================\n");
+      console.log(`[AUTH] User setup complete for ***${(updatedUser.phone || updatedUser.id).slice(-4)}`);
       
       res.json({ success: true, user: updatedUser });
     } catch (error) {
@@ -576,7 +580,7 @@ export async function registerRoutes(
         const token = tokens.find(t => t.contact.id === firstContact.id);
         if (token) {
           const link = `${baseUrl}/emergency/${token.token}`;
-          console.log(`\n[SOS] Alerting Contact #${firstContact.priority}: ${firstContact.name}...`);
+          console.log(`[SOS] Alerting Contact #${firstContact.priority}`);
           await notifyContact(firstContact, user?.name || "User", link, "sos", sendSosAlert);
           console.log("[SOS] Alert sent\n");
         }
@@ -760,12 +764,7 @@ export async function registerRoutes(
 
         const tokens = await storage.getContactTokensForUser(userId);
         if (tokens.length > 0) {
-          console.log("\n========================================");
-          console.log("Contact Page URLs:");
-          for (const t of tokens) {
-            console.log(`  ${t.contact.name}: /emergency/${t.token}`);
-          }
-          console.log("========================================\n");
+          console.log(`[CONTACTS] ${tokens.length} contact token(s) generated`);
         }
 
         return res.json({ success: true, contacts: updatedContacts });
@@ -795,12 +794,7 @@ export async function registerRoutes(
       
       const tokens = await storage.getContactTokensForUser(userId);
       if (tokens.length > 0) {
-        console.log("\n========================================");
-        console.log("Contact Page URLs:");
-        for (const t of tokens) {
-          console.log(`  ${t.contact.name}: /emergency/${t.token}`);
-        }
-        console.log("========================================\n");
+        console.log(`[CONTACTS] ${tokens.length} contact token(s) generated`);
       }
       
       res.json({ success: true, contacts: savedContacts });
@@ -900,8 +894,16 @@ export async function registerRoutes(
   // PUBLIC ROUTES (no auth required)
   // ============================================
 
+  const emergencyLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later" },
+  });
+
   // Contact page - get data
-  app.get("/api/emergency/:token", async (req, res) => {
+  app.get("/api/emergency/:token", emergencyLimiter, async (req, res) => {
     try {
       const { token } = req.params;
       const data = await storage.getContactPageData(token);
@@ -938,7 +940,7 @@ export async function registerRoutes(
         nextActionAt: addMinutes(new Date(), 45),
       });
       
-      console.log(`\n[INCIDENT] ${data.contact.name} is now handling the incident for ${data.user.name}\n`);
+      console.log(`[INCIDENT] Contact handling incident for user`);
       
       // User will see in-app banner that contact responded (no SMS needed)
       
@@ -984,13 +986,13 @@ export async function registerRoutes(
         nextActionAt: addMinutes(now, 20),
       });
       
-      console.log(`\n[INCIDENT] ${data.contact.name} escalated the incident for ${data.user.name}\n`);
+      console.log(`[INCIDENT] Contact escalated incident for user`);
       
       if (firstContact) {
         const tokenData = tokens.find(t => t.contact.id === firstContact.id);
         if (tokenData) {
           const link = `${baseUrl}/emergency/${tokenData.token}`;
-          console.log(`\n[ESCALATION] Re-notifying Contact #${firstContact.priority}: ${firstContact.name}...`);
+          console.log(`[ESCALATION] Re-notifying Contact #${firstContact.priority}`);
           const reason = data.incident!.reason as "sos" | "missed_checkin";
           const smsFn = reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
           await notifyContact(firstContact, data.user.name, link, reason, smsFn);
@@ -1272,7 +1274,11 @@ export async function registerRoutes(
   // Cron tick - check for due users (internal only)
   app.get("/api/cron/tick", async (req, res) => {
     try {
-      const cronSecret = process.env.SESSION_SECRET || "internal-cron-key";
+      const cronSecret = process.env.SESSION_SECRET;
+      if (!cronSecret) {
+        console.error("[CRON] SESSION_SECRET not configured, rejecting cron request");
+        return res.status(500).json({ error: "Server misconfigured" });
+      }
       const providedSecret = req.headers["x-cron-secret"];
       if (providedSecret !== cronSecret) {
         return res.status(403).json({ error: "Forbidden" });
@@ -1312,7 +1318,7 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === firstContact.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`\n[MISSED CHECK-IN] ${user.name} - alerting Contact #${firstContact.priority}: ${firstContact.name}...`);
+              console.log(`[MISSED CHECK-IN] Alerting Contact #${firstContact.priority}`);
               await notifyContact(firstContact, user.name, link, "missed_checkin", sendMissedCheckinAlert);
               console.log("[MISSED CHECK-IN] Alert sent\n");
             }
@@ -1340,7 +1346,7 @@ export async function registerRoutes(
           
           if (timeSinceLastReminder >= REMINDER_THROTTLE_MINUTES) {
             // Send reminder to the user
-            console.log(`\n[REMINDER] ${user.name} - sending reminder ${remindersSentSoFar + 1}/${maxReminders}...`);
+            console.log(`[REMINDER] Sending reminder ${remindersSentSoFar + 1}/${maxReminders}`);
             
             // Use home page as the check-in link
             const checkInLink = `${baseUrl}/`;
@@ -1353,7 +1359,7 @@ export async function registerRoutes(
             
             console.log("[REMINDER] Sent\n");
           } else {
-            console.log(`[REMINDER] ${user.name} - throttled, ${Math.round(REMINDER_THROTTLE_MINUTES - timeSinceLastReminder)} min until next reminder`);
+            console.log(`[REMINDER] Throttled, ${Math.round(REMINDER_THROTTLE_MINUTES - timeSinceLastReminder)} min until next reminder`);
           }
         }
       }
@@ -1377,7 +1383,7 @@ export async function registerRoutes(
         
         // Case 1: Status is "paused" - handling timeout (45 min)
         if (incident.status === "paused") {
-          console.log(`\n[ESCALATION] ${user.name} - handling timeout, re-notifying all contacts...`);
+          console.log(`[ESCALATION] Handling timeout, re-notifying all contacts`);
           
           for (const contact of contacts) {
             const token = tokens.find(t => t.contact.id === contact.id);
@@ -1416,7 +1422,7 @@ export async function registerRoutes(
               const token = tokens.find(t => t.contact.id === firstContact.id);
               if (token) {
                 const link = `${baseUrl}/emergency/${token.token}`;
-                console.log(`\n[ESCALATION] ${user.name} - initializing, notifying Contact #${firstContact.priority}: ${firstContact.name}...`);
+                console.log(`[ESCALATION] Initializing, notifying Contact #${firstContact.priority}`);
                 const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
                 await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
               }
@@ -1460,7 +1466,7 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === nextSequential.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`\n[ESCALATION] ${user.name} - escalating to Contact #${nextSequential.priority}: ${nextSequential.name}...`);
+              console.log(`[ESCALATION] Escalating to Contact #${nextSequential.priority}`);
               const reason = incident.reason as "sos" | "missed_checkin";
               await notifyContact(nextSequential, user.name, link, reason, (p, n, l) => sendEscalationAlert(p, n, l, reason));
               console.log("[ESCALATION] Alert sent\n");
@@ -1486,7 +1492,7 @@ export async function registerRoutes(
           const remainingContacts = sortedContacts.filter(c => !notifiedIds.includes(c.id));
           
           if (remainingContacts.length > 0 && !incident.allContactsNotifiedAt) {
-            console.log(`\n[ESCALATION] ${user.name} - top ${MAX_SEQUENTIAL} exhausted, blasting ${remainingContacts.length} remaining contacts...`);
+            console.log(`[ESCALATION] Top ${MAX_SEQUENTIAL} exhausted, blasting ${remainingContacts.length} remaining contacts`);
             
             for (const contact of remainingContacts) {
               const token = tokens.find(t => t.contact.id === contact.id);
@@ -1513,7 +1519,7 @@ export async function registerRoutes(
           
           // All contacts notified — check if we should show user banner
           if (!incident.userNotifiedNoResponseAt) {
-            console.log(`\n[ESCALATION] ${user.name} - no contacts responded, updating in-app status...`);
+            console.log(`[ESCALATION] No contacts responded, updating in-app status`);
             await storage.updateIncident(incident.id, {
               userNotifiedNoResponseAt: now,
               nextActionAt: addMinutes(now, 30),
