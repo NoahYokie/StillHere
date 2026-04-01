@@ -3,39 +3,39 @@
   "appName": "StillHere",
   "webDir": "dist/public",
   "server": {
+    "iosScheme": "capacitor",
     "androidScheme": "https"
   },
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 2000,
+      "launchAutoHide": true,
       "backgroundColor": "#0ea5e9",
       "showSpinner": false,
-      "androidSpinnerStyle": "small",
-      "spinnerColor": "#ffffff"
+      "iosSpinnerStyle": "small",
+      "spinnerColor": "#ffffff",
+      "launchFadeOutDuration": 300
     },
     "StatusBar": {
       "style": "Light",
-      "backgroundColor": "#0ea5e9"
+      "backgroundColor": "#0ea5e9",
+      "overlaysWebView": false
     },
     "PushNotifications": {
       "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
     }
   },
   "ios": {
     "contentInset": "automatic",
-    "watchCompanion": {
-      "enabled": true,
-      "bundleId": "com.stillhere.app.watchkitapp",
-      "complicationDataSource": "StillHereComplicationDataSource",
-      "sessionDelegateQueue": "com.stillhere.watchconnectivity"
-    }
+    "backgroundColor": "#0ea5e9",
+    "preferredContentMode": "mobile",
+    "scheme": "stillhere"
   },
   "android": {
-    "allowMixedContent": false,
-    "wearCompanion": {
-      "enabled": true,
-      "packageName": "com.stillhere.app.wear",
-      "capabilities": ["checkin", "status", "sos"]
-    }
+    "allowMixedContent": false
   }
 }

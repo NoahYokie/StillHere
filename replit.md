@@ -53,6 +53,14 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Watcher Dashboard:** Emergency contacts who have the app can see a dashboard of all people they monitor — showing names, last check-in times, status (OK/overdue/alert), with direct message and video call buttons.
 - **Account Security:** OTP rate limiting (10 req/15min on all auth endpoints including passkey), phone number normalization for 28+ countries, staging environment whitelisting, PII-free server logs (all names/phones/tokens/SMS bodies redacted), emergency token path sanitization in request logs, no hardcoded cron secret fallback (SESSION_SECRET required).
 
+**iOS App Store Preparation:**
+- **Capacitor v8:** All Capacitor packages aligned at v8 (@capacitor/core, cli, app, haptics, keyboard, status-bar, splash-screen, push-notifications).
+- **Native Plugin Init:** `client/src/lib/capacitor.ts` initializes StatusBar, SplashScreen, Keyboard, and App plugins when running natively.
+- **iOS Safe Areas:** CSS safe-area-inset padding on `<html>`, `capacitor-ios` body class for iOS-specific overrides, keyboard-open class for keyboard visibility.
+- **App Icons:** All 13 iOS icon sizes generated in `client/public/ios-icons/` from 1024x1024 source. Xcode asset catalog JSON in `ios-app-store/AppIcon-Contents.json`.
+- **Build Guide:** Complete iOS App Store submission guide at `ios-app-store/IOS_BUILD_GUIDE.md`.
+- **Build Flow:** `npm run build` → `npx cap sync ios` → Open in Xcode → Archive → Submit.
+
 ### Key Files
 - `shared/schema.ts` — Database schema (users, settings, contacts, incidents, checkins, messages, calls, etc.)
 - `server/routes.ts` — All API routes including cron tick escalation logic, messaging, watcher endpoints
