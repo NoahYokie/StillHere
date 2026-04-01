@@ -867,6 +867,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const iceServers = await getTurnCredentials();
+      console.log(`[TURN] Serving ${iceServers.length} ICE servers to ${userId}: ${iceServers.map((s: any) => typeof s.urls === 'string' ? s.urls.split('?')[0] : s.urls?.[0]?.split('?')[0]).join(', ')}`);
       res.json({ iceServers });
     } catch (error) {
       console.error("Error fetching TURN credentials:", error);
