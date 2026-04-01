@@ -308,6 +308,13 @@ export default function CallPage() {
                 }
                 queuedCandidates.length = 0;
               }
+
+              setTimeout(() => {
+                if (!hasEndedRef.current && rtcRef.current?.connectionState !== "connected") {
+                  console.log("[CALL] Ring timeout (45s), no answer");
+                  handleCallEnd("No answer", true);
+                }
+              }, 45000);
             } else {
               handleCallEnd(response?.error || "Could not connect");
             }
