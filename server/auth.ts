@@ -283,7 +283,7 @@ export async function createOtp(phone: string): Promise<{
   // Check country and whitelist
   const canSend = canSendOtp(normalizedPhone);
   if (!canSend.allowed) {
-    console.log(`[AUTH] Blocked: ${normalizedPhone} - ${canSend.error}`);
+    console.log(`[AUTH] Blocked: ***${normalizedPhone.slice(-4)} - ${canSend.error}`);
     return {
       success: false,
       error: canSend.error,
@@ -322,7 +322,7 @@ export async function createOtp(phone: string): Promise<{
     console.error(`[AUTH] Failed to send OTP SMS: ${smsResult.error}`);
   }
   
-  console.log(`[AUTH] OTP created for ${normalizedPhone}, expires ${expiresAt.toLocaleTimeString()}`);
+  console.log(`[AUTH] OTP created for ***${normalizedPhone.slice(-4)}, expires ${expiresAt.toLocaleTimeString()}`);
   
   return { success: true, phone: normalizedPhone };
 }
@@ -404,7 +404,7 @@ export async function verifyOtp(phone: string, code: string): Promise<{
     expiresAt,
   });
   
-  console.log(`\n[AUTH] User ${user.phone} logged in (isNew: ${isNewUser})\n`);
+  console.log(`[AUTH] User ***${normalizedPhone.slice(-4)} logged in (isNew: ${isNewUser})`);
   
   return {
     success: true,

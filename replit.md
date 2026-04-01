@@ -51,7 +51,7 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Notifications:** SMS (via Twilio) and web push notifications for reminders and alerts. Smart routing sends push to contacts who have the app, SMS to those who don't.
 - **Communication:** In-app messaging with real-time delivery, read receipts, and message history. In-app video calling via WebRTC with camera/mic controls and incoming call overlay.
 - **Watcher Dashboard:** Emergency contacts who have the app can see a dashboard of all people they monitor — showing names, last check-in times, status (OK/overdue/alert), with direct message and video call buttons.
-- **Account Security:** OTP rate limiting, phone number normalization for 28+ countries, and staging environment whitelisting.
+- **Account Security:** OTP rate limiting (10 req/15min on all auth endpoints including passkey), phone number normalization for 28+ countries, staging environment whitelisting, PII-free server logs (all names/phones/tokens/SMS bodies redacted), emergency token path sanitization in request logs, no hardcoded cron secret fallback (SESSION_SECRET required).
 
 ### Key Files
 - `shared/schema.ts` — Database schema (users, settings, contacts, incidents, checkins, messages, calls, etc.)
