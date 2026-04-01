@@ -64,17 +64,36 @@ export function IncomingCallOverlay() {
     if (!auth?.authenticated) return;
 
     const socket = getSocket();
+    let ringTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const handleIncoming = (data: IncomingCallData) => {
       startIncomingRingtone();
       startBufferingIceCandidates(data.callerId);
       setIncomingCall(data);
+
+      ringTimeout = setTimeout(() => {
+        stopRingtone();
+        bufferedIceCandidates = [];
+        iceCandidateBufferActive = false;
+        setIncomingCall(null);
+      }, 45000);
+    };
+
+    const handleCallEnded = () => {
+      if (ringTimeout) clearTimeout(ringTimeout);
+      stopRingtone();
+      bufferedIceCandidates = [];
+      iceCandidateBufferActive = false;
+      setIncomingCall(null);
     };
 
     socket.on("call:incoming", handleIncoming);
+    socket.on("call:ended", handleCallEnded);
 
     return () => {
       socket.off("call:incoming", handleIncoming);
+      socket.off("call:ended", handleCallEnded);
+      if (ringTimeout) clearTimeout(ringTimeout);
     };
   }, [auth?.authenticated]);
 
