@@ -273,7 +273,7 @@ export default function LandingPage() {
 
           <div className="bg-background rounded-2xl p-5 md:p-8 border border-border max-w-lg mx-auto">
             <p className="text-base md:text-lg leading-relaxed mb-3 font-medium">
-              "I live alone and I don't want to be found weeks later. This gives me real peace of mind."
+              "I live alone and this gives me real peace of mind knowing someone will check on me."
             </p>
             <p className="text-sm text-muted-foreground">— Solo dweller</p>
           </div>
