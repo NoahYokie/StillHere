@@ -200,10 +200,10 @@ export default function CallPage() {
         console.log("[CALL] Socket ready, id:", socket.id, "connected:", socket.connected);
 
         console.log("[CALL] Fetching ICE servers...");
-        const iceServers = await fetchIceServers();
-        console.log("[CALL] Got", iceServers.length, "ICE server configs");
+        const { iceServers, hasTurn } = await fetchIceServers();
+        console.log("[CALL] Got", iceServers.length, "ICE server configs, hasTurn:", hasTurn);
 
-        const rtc = new WebRTCConnection(iceServers);
+        const rtc = new WebRTCConnection(iceServers, hasTurn);
         rtcRef.current = rtc;
 
         rtc.onRemoteStream = (stream) => {
@@ -212,8 +212,15 @@ export default function CallPage() {
           setCallState("active");
         };
 
+        const queuedCandidates: RTCIceCandidate[] = [];
+        let callInitiated = false;
+
         rtc.onIceCandidate = (candidate) => {
-          console.log("[CALL] Sending ICE candidate to", otherUserId, "type:", candidate.candidate?.substring(0, 60));
+          if (!callInitiated && !isAnswerMode) {
+            queuedCandidates.push(candidate);
+            return;
+          }
+          console.log("[CALL] Sending ICE candidate to", otherUserId);
           socket.emit("call:ice-candidate", {
             targetUserId: otherUserId,
             candidate: candidate.toJSON(),
@@ -278,7 +285,7 @@ export default function CallPage() {
           setCallState("active");
         } else {
           const offer = await rtc.createOffer();
-          console.log("[CALL] Calling", otherUserId);
+          console.log("[CALL] Calling", otherUserId, "offer has", (offer.sdp?.match(/a=candidate:/g) || []).length, "embedded candidates");
           setCallState("ringing");
           startOutgoingRingtone();
 
@@ -290,6 +297,17 @@ export default function CallPage() {
             console.log("[CALL] Initiate response:", JSON.stringify(response));
             if (response?.success) {
               callIdRef.current = response.callId;
+              callInitiated = true;
+              if (queuedCandidates.length > 0) {
+                console.log(`[CALL] Flushing ${queuedCandidates.length} queued ICE candidates after initiate`);
+                for (const c of queuedCandidates) {
+                  socket.emit("call:ice-candidate", {
+                    targetUserId: otherUserId,
+                    candidate: c.toJSON(),
+                  });
+                }
+                queuedCandidates.length = 0;
+              }
             } else {
               handleCallEnd(response?.error || "Could not connect");
             }
