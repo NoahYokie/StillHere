@@ -39,7 +39,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X } from "lucide-react";
+import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
@@ -158,6 +159,55 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: "Error logging out", variant: "destructive" });
+    },
+  });
+
+  const passkeysQuery = useQuery<any[]>({
+    queryKey: ["/api/auth/passkeys"],
+    enabled: browserSupportsWebAuthn(),
+  });
+
+  const registerPasskeyMutation = useMutation({
+    mutationFn: async () => {
+      const optionsRes = await fetch("/api/auth/passkey/register-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (!optionsRes.ok) throw new Error("Failed to get options");
+      const options = await optionsRes.json();
+
+      const regResponse = await startRegistration({ optionsJSON: options });
+
+      const verifyRes = await fetch("/api/auth/passkey/register-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(regResponse),
+      });
+      if (!verifyRes.ok) throw new Error("Failed to register passkey");
+      return verifyRes.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/passkeys"] });
+      toast({ title: "Biometric sign-in added" });
+    },
+    onError: (error: Error) => {
+      if (error.name === "NotAllowedError") return;
+      toast({ title: "Could not set up biometrics", variant: "destructive" });
+    },
+  });
+
+  const deletePasskeyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/auth/passkeys/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/passkeys"] });
+      toast({ title: "Passkey removed" });
+    },
+    onError: () => {
+      toast({ title: "Error removing passkey", variant: "destructive" });
     },
   });
 
@@ -774,6 +824,63 @@ export default function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Biometric Sign-in */}
+        {browserSupportsWebAuthn() && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Fingerprint className="h-5 w-5" />
+                Biometric sign-in
+              </CardTitle>
+              <CardDescription>
+                Use Face ID, Touch ID, fingerprint, or screen lock to sign in instantly.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {passkeysQuery.data && passkeysQuery.data.length > 0 ? (
+                <div className="space-y-2">
+                  {passkeysQuery.data.map((pk: any) => (
+                    <div key={pk.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg" data-testid={`passkey-item-${pk.id}`}>
+                      <div className="flex items-center gap-2">
+                        <Fingerprint className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">
+                            {pk.deviceType === "multiDevice" ? "Synced passkey" : "Device passkey"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Added {new Date(pk.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deletePasskeyMutation.mutate(pk.id)}
+                        disabled={deletePasskeyMutation.isPending}
+                        data-testid={`button-delete-passkey-${pk.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No passkeys set up yet.</p>
+              )}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => registerPasskeyMutation.mutate()}
+                disabled={registerPasskeyMutation.isPending}
+                data-testid="button-add-passkey"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {registerPasskeyMutation.isPending ? "Setting up..." : "Add biometric sign-in"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Logout */}
         <Card 

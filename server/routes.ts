@@ -1,9 +1,16 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { addMinutes, addHours } from "date-fns";
+import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
-import { users } from "@shared/schema";
+import { users, settings, authSessions } from "@shared/schema";
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from "@simplewebauthn/server";
+import { randomBytes } from "crypto";
 import {
   createOtp,
   verifyOtp,
@@ -227,6 +234,226 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error logging out:", error);
       res.status(500).json({ error: "Failed to logout" });
+    }
+  });
+
+  // ============================================
+  // PASSKEY (WebAuthn) ROUTES
+  // ============================================
+
+  const RP_NAME = "StillHere";
+  const getRpId = (req: Request): string => {
+    const host = req.hostname;
+    return host.includes("localhost") ? "localhost" : host;
+  };
+  const getOrigin = (req: Request): string => {
+    return `${req.protocol}://${req.hostname}${req.hostname === "localhost" ? ":5000" : ""}`;
+  };
+
+  const challengeStore = new Map<string, { challenge: string; expiresAt: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of challengeStore) {
+      if (now > v.expiresAt) challengeStore.delete(k);
+    }
+  }, 60_000);
+
+  app.post("/api/auth/passkey/register-options", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const user = (req as any).user;
+      const existingPasskeys = await storage.getPasskeysByUserId(userId);
+
+      const options = await generateRegistrationOptions({
+        rpName: RP_NAME,
+        rpID: getRpId(req),
+        userName: user.phone || user.name || userId,
+        userDisplayName: user.name || "StillHere User",
+        userID: new TextEncoder().encode(userId),
+        attestationType: "none",
+        excludeCredentials: existingPasskeys.map((pk) => ({
+          id: pk.credentialId,
+          transports: pk.transports ? (JSON.parse(pk.transports) as AuthenticatorTransport[]) : undefined,
+        })),
+        authenticatorSelection: {
+          residentKey: "preferred",
+          userVerification: "preferred",
+        },
+      });
+
+      challengeStore.set(`reg:${userId}`, {
+        challenge: options.challenge,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+
+      res.json(options);
+    } catch (error) {
+      console.error("Error generating passkey registration options:", error);
+      res.status(500).json({ error: "Failed to generate options" });
+    }
+  });
+
+  app.post("/api/auth/passkey/register-verify", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const stored = challengeStore.get(`reg:${userId}`);
+      if (!stored) return res.status(400).json({ error: "No challenge found. Please try again." });
+      challengeStore.delete(`reg:${userId}`);
+
+      const verification = await verifyRegistrationResponse({
+        response: req.body,
+        expectedChallenge: stored.challenge,
+        expectedOrigin: getOrigin(req),
+        expectedRPID: getRpId(req),
+      });
+
+      if (!verification.verified || !verification.registrationInfo) {
+        return res.status(400).json({ error: "Verification failed" });
+      }
+
+      const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+
+      await storage.createPasskey({
+        userId,
+        credentialId: credential.id,
+        publicKey: Buffer.from(credential.publicKey).toString("base64url"),
+        counter: credential.counter,
+        transports: req.body.response?.transports ? JSON.stringify(req.body.response.transports) : undefined,
+        deviceType: credentialDeviceType,
+        backedUp: credentialBackedUp,
+      });
+
+      console.log(`[AUTH] Passkey registered for user ${userId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error verifying passkey registration:", error);
+      res.status(500).json({ error: "Failed to verify registration" });
+    }
+  });
+
+  app.post("/api/auth/passkey/auth-options", async (req, res) => {
+    try {
+      const options = await generateAuthenticationOptions({
+        rpID: getRpId(req),
+        userVerification: "preferred",
+      });
+
+      const txnId = randomBytes(32).toString("hex");
+      challengeStore.set(`auth:${txnId}`, {
+        challenge: options.challenge,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+
+      res.cookie("__passkey_txn", txnId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 5 * 60 * 1000,
+        path: "/",
+      });
+
+      res.json(options);
+    } catch (error) {
+      console.error("Error generating passkey auth options:", error);
+      res.status(500).json({ error: "Failed to generate options" });
+    }
+  });
+
+  app.post("/api/auth/passkey/auth-verify", async (req, res) => {
+    try {
+      const txnId = req.cookies?.["__passkey_txn"];
+      if (!txnId) return res.status(400).json({ error: "Session expired. Please try again." });
+
+      const stored = challengeStore.get(`auth:${txnId}`);
+      if (!stored) return res.status(400).json({ error: "Challenge expired. Please try again." });
+      challengeStore.delete(`auth:${txnId}`);
+      res.clearCookie("__passkey_txn", { path: "/" });
+
+      const credentialId = req.body.id;
+      const passkey = await storage.getPasskeyByCredentialId(credentialId);
+      if (!passkey) return res.status(400).json({ error: "Passkey not found" });
+
+      const verification = await verifyAuthenticationResponse({
+        response: req.body,
+        expectedChallenge: stored.challenge,
+        expectedOrigin: getOrigin(req),
+        expectedRPID: getRpId(req),
+        credential: {
+          id: passkey.credentialId,
+          publicKey: Buffer.from(passkey.publicKey, "base64url"),
+          counter: passkey.counter,
+          transports: passkey.transports ? (JSON.parse(passkey.transports) as AuthenticatorTransport[]) : undefined,
+        },
+      });
+
+      if (!verification.verified) {
+        return res.status(401).json({ error: "Authentication failed" });
+      }
+
+      await storage.updatePasskeyCounter(passkey.credentialId, verification.authenticationInfo.newCounter);
+
+      const user = await storage.getUser(passkey.userId);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const sessionToken = randomBytes(32).toString("hex");
+      const expiresAt = addDays(new Date(), 30);
+
+      await db.insert(authSessions).values({
+        userId: user.id,
+        token: sessionToken,
+        expiresAt,
+      });
+
+      setSessionCookie(res, sessionToken);
+
+      const needsSetup = !user.name || user.name.trim() === "";
+
+      console.log(`[AUTH] Passkey login for user ${user.phone || user.id}`);
+
+      res.json({
+        success: true,
+        userId: user.id,
+        isNewUser: false,
+        needsSetup,
+      });
+    } catch (error) {
+      console.error("Error verifying passkey auth:", error);
+      res.status(500).json({ error: "Failed to verify authentication" });
+    }
+  });
+
+  app.get("/api/auth/passkeys", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const pks = await storage.getPasskeysByUserId(userId);
+      res.json(pks.map((pk) => ({
+        id: pk.id,
+        deviceType: pk.deviceType,
+        backedUp: pk.backedUp,
+        createdAt: pk.createdAt,
+      })));
+    } catch (error) {
+      console.error("Error listing passkeys:", error);
+      res.status(500).json({ error: "Failed to list passkeys" });
+    }
+  });
+
+  app.delete("/api/auth/passkeys/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      await storage.deletePasskey(req.params.id, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting passkey:", error);
+      res.status(500).json({ error: "Failed to delete passkey" });
     }
   });
 

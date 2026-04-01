@@ -13,6 +13,7 @@ import {
   messages,
   calls,
   voipTokens,
+  passkeys,
   type User,
   type InsertUser,
   type Settings,
@@ -33,6 +34,7 @@ import {
   type Call,
   type CallStatus,
   type CallType,
+  type Passkey,
 } from "@shared/schema";
 import { addHours } from "date-fns";
 
@@ -113,6 +115,13 @@ export interface IStorage {
   saveVoipToken(userId: string, token: string, platform: string): Promise<void>;
   getVoipTokens(userId: string): Promise<{ token: string; platform: string }[]>;
   deleteVoipToken(userId: string, token: string): Promise<void>;
+
+  // Passkeys
+  getPasskeysByUserId(userId: string): Promise<Passkey[]>;
+  getPasskeyByCredentialId(credentialId: string): Promise<Passkey | undefined>;
+  createPasskey(data: { userId: string; credentialId: string; publicKey: string; counter: number; transports?: string; deviceType?: string; backedUp: boolean }): Promise<Passkey>;
+  updatePasskeyCounter(credentialId: string, counter: number): Promise<void>;
+  deletePasskey(id: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -807,6 +816,28 @@ export class DatabaseStorage implements IStorage {
     await db.delete(voipTokens).where(
       and(eq(voipTokens.userId, userId), eq(voipTokens.token, token))
     );
+  }
+
+  async getPasskeysByUserId(userId: string): Promise<Passkey[]> {
+    return db.select().from(passkeys).where(eq(passkeys.userId, userId));
+  }
+
+  async getPasskeyByCredentialId(credentialId: string): Promise<Passkey | undefined> {
+    const [row] = await db.select().from(passkeys).where(eq(passkeys.credentialId, credentialId));
+    return row || undefined;
+  }
+
+  async createPasskey(data: { userId: string; credentialId: string; publicKey: string; counter: number; transports?: string; deviceType?: string; backedUp: boolean }): Promise<Passkey> {
+    const [row] = await db.insert(passkeys).values(data).returning();
+    return row;
+  }
+
+  async updatePasskeyCounter(credentialId: string, counter: number): Promise<void> {
+    await db.update(passkeys).set({ counter }).where(eq(passkeys.credentialId, credentialId));
+  }
+
+  async deletePasskey(id: string, userId: string): Promise<void> {
+    await db.delete(passkeys).where(and(eq(passkeys.id, id), eq(passkeys.userId, userId)));
   }
 }
 

@@ -25,7 +25,7 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Frontend:** Built with React, TypeScript, Tailwind CSS, and shadcn/ui, utilizing `wouter` for routing and `TanStack Query` for data fetching.
 - **Backend:** Powered by Express.js, integrating Helmet for security headers and `express-rate-limit` for API rate limiting.
 - **Database:** PostgreSQL managed with Drizzle ORM.
-- **Authentication:** Phone OTP (One-Time Password) login via SMS, with sessions lasting 30 days using httpOnly secure cookies. Rate limiting is applied to OTP requests and verification attempts.
+- **Authentication:** Passkey (WebAuthn/FIDO2) as primary login with Face ID, Touch ID, fingerprint, or screen lock. Phone OTP as fallback. Sessions last 30 days using httpOnly secure cookies. Rate limiting on OTP requests. Passkey challenges bound to server-side httpOnly cookies for security.
 - **Check-in Mechanism:** Users can manually check-in or opt for automatic check-ins upon opening the app.
 - **Emergency System:** Configurable check-in schedules, grace periods before alerts, and reminders. An SOS alert button provides immediate notification.
 - **Escalation System:** Sequential escalation through the top 5 contacts by priority (20 minutes each), then all remaining contacts are notified simultaneously. Re-notification for unaddressed incidents. Tracked via `notifiedContactIds` JSON field on incidents.
@@ -45,7 +45,7 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Smart Notification Routing:** When an emergency contact has the app (linked via `linkedUserId`), notifications are sent via push + in-app message instead of SMS, reducing costs and enabling richer communication.
 
 **Feature Specifications:**
-- **User Management:** Phone OTP authentication, user profiles, and settings.
+- **User Management:** Passkey + phone OTP authentication, user profiles, and settings. Passkey setup prompt after first OTP login. Passkey management in settings.
 - **Check-in Features:** Manual "I'm OK" button, optional auto check-in on app open, configurable schedules (12-48+ hours), grace periods (10-30 min), and configurable reminders (none, one, or two). Quote of the day shown after check-in.
 - **Emergency Management:** SOS alert button, dynamic emergency contacts with priority levels (free: 2, premium: unlimited), token-based contact pages for status viewing, responsibility system for contacts to pause escalation, fall detection with countdown, and location sharing.
 - **Notifications:** SMS (via Twilio) and web push notifications for reminders and alerts. Smart routing sends push to contacts who have the app, SMS to those who don't.

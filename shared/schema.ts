@@ -279,6 +279,26 @@ export const voipTokensRelations = relations(voipTokens, ({ one }) => ({
   }),
 }));
 
+// Passkeys table (WebAuthn/FIDO2 credentials)
+export const passkeys = pgTable("passkeys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  credentialId: text("credential_id").notNull().unique(),
+  publicKey: text("public_key").notNull(),
+  counter: integer("counter").notNull().default(0),
+  transports: text("transports"),
+  deviceType: text("device_type"),
+  backedUp: boolean("backed_up").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const passkeysRelations = relations(passkeys, ({ one }) => ({
+  user: one(users, {
+    fields: [passkeys.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -292,6 +312,7 @@ export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
 export const insertCallSchema = createInsertSchema(calls).omit({ id: true, startedAt: true });
 export const insertVoipTokenSchema = createInsertSchema(voipTokens).omit({ id: true, createdAt: true });
+export const insertPasskeySchema = createInsertSchema(passkeys).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -331,6 +352,9 @@ export type Call = typeof calls.$inferSelect;
 export type InsertCall = z.infer<typeof insertCallSchema>;
 export type CallStatus = Call["status"];
 export type CallType = Call["callType"];
+
+export type Passkey = typeof passkeys.$inferSelect;
+export type InsertPasskey = z.infer<typeof insertPasskeySchema>;
 
 // API Response Types
 export interface UserStatus {
