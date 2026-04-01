@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth, useAuth } from "@/lib/auth";
 import { IncomingCallOverlay } from "@/components/incoming-call";
 import { initNativeCall, isNativePlatform } from "@/lib/native-call";
+import { initCapacitorPlugins, isNative } from "@/lib/capacitor";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import LandingPage from "@/pages/landing";
@@ -125,8 +126,16 @@ function Router() {
   );
 }
 
-function NativeCallInit() {
+function CapacitorInit() {
   const { auth } = useAuth();
+
+  useEffect(() => {
+    if (isNative()) {
+      initCapacitorPlugins().catch((err) =>
+        console.error("[App] Capacitor init failed:", err)
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (auth?.authenticated && isNativePlatform()) {
@@ -146,7 +155,7 @@ function App() {
         <AuthProvider>
           <Toaster />
           <IncomingCallOverlay />
-          <NativeCallInit />
+          <CapacitorInit />
           <Router />
         </AuthProvider>
       </TooltipProvider>
