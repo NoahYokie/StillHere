@@ -857,6 +857,46 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // VOIP TOKEN REGISTRATION
+  // ============================================
+
+  app.post("/api/voip-token", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { token, platform } = req.body;
+      if (!token || !platform || !["ios", "android"].includes(platform)) {
+        return res.status(400).json({ error: "Invalid token or platform" });
+      }
+      await storage.saveVoipToken(userId, token, platform);
+      console.log(`[VOIP] Token registered for ${userId} (${platform})`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[VOIP] Token registration error:", error);
+      res.status(500).json({ error: "Failed to register token" });
+    }
+  });
+
+  app.delete("/api/voip-token", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ error: "Token required" });
+      }
+      await storage.deleteVoipToken(userId, token);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete token" });
+    }
+  });
+
+  // ============================================
   // TURN CREDENTIALS FOR VIDEO CALLS
   // ============================================
 
