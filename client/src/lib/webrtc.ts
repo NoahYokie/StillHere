@@ -3,14 +3,20 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
-export async function fetchIceServers(): Promise<RTCIceServer[]> {
+export async function fetchIceServers(): Promise<{ iceServers: RTCIceServer[]; hasTurn: boolean }> {
   try {
     const res = await fetch("/api/turn-credentials", { credentials: "include" });
-    if (!res.ok) return DEFAULT_ICE_SERVERS;
+    if (!res.ok) return { iceServers: DEFAULT_ICE_SERVERS, hasTurn: false };
     const data = await res.json();
-    return data.iceServers || DEFAULT_ICE_SERVERS;
+    const servers = data.iceServers || DEFAULT_ICE_SERVERS;
+    const hasTurn = servers.some((s: any) => {
+      const urlList = typeof s.urls === "string" ? [s.urls] : (Array.isArray(s.urls) ? s.urls : []);
+      return urlList.some((u: string) => u.startsWith("turn:") || u.startsWith("turns:"));
+    });
+    console.log("[WebRTC] ICE servers fetched:", servers.length, "hasTurn:", hasTurn);
+    return { iceServers: servers, hasTurn };
   } catch {
-    return DEFAULT_ICE_SERVERS;
+    return { iceServers: DEFAULT_ICE_SERVERS, hasTurn: false };
   }
 }
 
@@ -20,7 +26,6 @@ export class WebRTCConnection {
   private remoteStream: MediaStream | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private hasRemoteDescription = false;
-  private iceServers: RTCIceServer[];
   private disconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private callEstablished = false;
   private isRestarting = false;
@@ -30,13 +35,19 @@ export class WebRTCConnection {
   public onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
   public onNegotiationNeeded: ((offer: RTCSessionDescriptionInit) => void) | null = null;
 
-  constructor(iceServers?: RTCIceServer[]) {
-    this.iceServers = iceServers || DEFAULT_ICE_SERVERS;
-
-    this.pc = new RTCPeerConnection({
-      iceServers: this.iceServers,
+  constructor(iceServers: RTCIceServer[], forceRelay: boolean) {
+    const config: RTCConfiguration = {
+      iceServers,
       iceCandidatePoolSize: 2,
-    });
+    };
+
+    if (forceRelay) {
+      config.iceTransportPolicy = "relay";
+      console.log("[WebRTC] Forcing TURN relay mode (WhatsApp-style)");
+    }
+
+    this.pc = new RTCPeerConnection(config);
+    console.log("[WebRTC] PeerConnection created, iceTransportPolicy:", forceRelay ? "relay" : "all");
 
     this.setupListeners();
     this.setupNetworkMonitor();
@@ -45,12 +56,16 @@ export class WebRTCConnection {
   private setupListeners() {
     this.pc.onicecandidate = (event) => {
       if (event.candidate && this.onIceCandidate) {
+        console.log("[WebRTC] Local ICE candidate:", event.candidate.candidate?.substring(0, 80));
         this.onIceCandidate(event.candidate);
+      }
+      if (!event.candidate) {
+        console.log("[WebRTC] ICE gathering complete (null candidate)");
       }
     };
 
     this.pc.ontrack = (event) => {
-      console.log("[WebRTC] ontrack fired, kind:", event.track.kind, "readyState:", event.track.readyState);
+      console.log("[WebRTC] ontrack fired, kind:", event.track.kind, "readyState:", event.track.readyState, "muted:", event.track.muted);
 
       if (!this.remoteStream) {
         this.remoteStream = new MediaStream();
@@ -63,6 +78,10 @@ export class WebRTCConnection {
         if (this.onRemoteStream && this.remoteStream) {
           this.onRemoteStream(this.remoteStream);
         }
+      };
+
+      event.track.onended = () => {
+        console.log("[WebRTC] Track ended:", event.track.kind);
       };
 
       if (this.onRemoteStream) {
@@ -92,9 +111,16 @@ export class WebRTCConnection {
         }, 3000);
       }
 
-      if (state === "failed" && this.callEstablished) {
-        console.log("[WebRTC] ICE failed, attempting restart");
-        this.restartIce();
+      if (state === "failed") {
+        if (this.callEstablished) {
+          console.log("[WebRTC] ICE failed after established, attempting restart");
+          this.restartIce();
+        } else {
+          console.error("[WebRTC] ICE failed during initial connection");
+          if (this.onConnectionStateChange) {
+            this.onConnectionStateChange("failed");
+          }
+        }
       }
     };
 
@@ -106,13 +132,15 @@ export class WebRTCConnection {
       }
     };
 
+    this.pc.onsignalingstatechange = () => {
+      console.log("[WebRTC] Signaling state:", this.pc.signalingState);
+    };
+
     this.pc.onnegotiationneeded = async () => {
       if (!this.callEstablished || this.isRestarting) {
-        console.log("[WebRTC] Skipping negotiation (not established or already restarting)");
         return;
       }
       if (this.pc.signalingState !== "stable") {
-        console.log("[WebRTC] Skipping negotiation (signaling state:", this.pc.signalingState, ")");
         return;
       }
       console.log("[WebRTC] Negotiation needed (ICE restart)");
@@ -121,7 +149,9 @@ export class WebRTCConnection {
           this.isRestarting = true;
           const offer = await this.pc.createOffer({ iceRestart: true });
           await this.pc.setLocalDescription(offer);
-          this.onNegotiationNeeded(offer);
+          await this.waitForIceGathering(3000);
+          const finalDesc = this.pc.localDescription!;
+          this.onNegotiationNeeded({ type: finalDesc.type, sdp: finalDesc.sdp });
         } catch (err) {
           this.isRestarting = false;
           console.error("[WebRTC] ICE restart negotiation failed:", err);
@@ -136,7 +166,7 @@ export class WebRTCConnection {
 
   private networkHandler = () => {
     console.log("[WebRTC] Network change detected, online:", navigator.onLine);
-    if (navigator.onLine && this.pc.iceConnectionState !== "connected" && this.pc.iceConnectionState !== "completed") {
+    if (navigator.onLine && this.callEstablished && this.pc.iceConnectionState !== "connected" && this.pc.iceConnectionState !== "completed") {
       setTimeout(() => this.restartIce(), 1000);
     }
   };
@@ -159,6 +189,35 @@ export class WebRTCConnection {
     }
   }
 
+  private waitForIceGathering(timeout = 5000): Promise<void> {
+    return new Promise((resolve) => {
+      if (this.pc.iceGatheringState === "complete") {
+        console.log("[WebRTC] ICE gathering already complete");
+        resolve();
+        return;
+      }
+
+      let timer: ReturnType<typeof setTimeout>;
+
+      const checkComplete = () => {
+        if (this.pc.iceGatheringState === "complete") {
+          console.log("[WebRTC] ICE gathering completed");
+          clearTimeout(timer);
+          this.pc.removeEventListener("icegatheringstatechange", checkComplete);
+          resolve();
+        }
+      };
+
+      this.pc.addEventListener("icegatheringstatechange", checkComplete);
+
+      timer = setTimeout(() => {
+        console.log("[WebRTC] ICE gathering timeout after", timeout, "ms, proceeding with current candidates");
+        this.pc.removeEventListener("icegatheringstatechange", checkComplete);
+        resolve();
+      }, timeout);
+    });
+  }
+
   async getLocalStream(video = true, audio = true): Promise<MediaStream> {
     const constraints: MediaStreamConstraints = {
       audio: audio ? {
@@ -174,13 +233,16 @@ export class WebRTCConnection {
       } : false,
     };
 
-    console.log("[WebRTC] Requesting media with constraints:", JSON.stringify(constraints));
+    console.log("[WebRTC] Requesting getUserMedia...");
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    console.log("[WebRTC] Got local stream, tracks:", this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(", "));
+    const trackInfo = this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`).join(", ");
+    console.log("[WebRTC] Got local stream, tracks:", trackInfo);
 
     this.localStream.getTracks().forEach((track) => {
       this.pc.addTrack(track, this.localStream!);
     });
+
+    console.log("[WebRTC] Added", this.pc.getSenders().length, "senders to peer connection");
     return this.localStream;
   }
 
@@ -190,25 +252,41 @@ export class WebRTCConnection {
       offerToReceiveVideo: true,
     });
     await this.pc.setLocalDescription(offer);
-    const localDesc = this.pc.localDescription;
-    console.log("[WebRTC] Created offer, SDP length:", localDesc?.sdp?.length, "signalingState:", this.pc.signalingState);
-    return localDesc as RTCSessionDescriptionInit;
+    console.log("[WebRTC] Offer created, waiting for ICE gathering...");
+
+    await this.waitForIceGathering(3000);
+
+    const finalDesc = this.pc.localDescription!;
+    const candidateCount = (finalDesc.sdp?.match(/a=candidate:/g) || []).length;
+    console.log("[WebRTC] Final offer SDP length:", finalDesc.sdp?.length, "embedded candidates:", candidateCount);
+    return { type: finalDesc.type, sdp: finalDesc.sdp };
   }
 
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
-    console.log("[WebRTC] Setting remote description (offer), type:", offer.type, "SDP length:", offer.sdp?.length, "signalingState:", this.pc.signalingState);
+    const offerCandidates = (offer.sdp?.match(/a=candidate:/g) || []).length;
+    console.log("[WebRTC] Received offer, SDP length:", offer.sdp?.length, "embedded candidates:", offerCandidates, "signalingState:", this.pc.signalingState);
+
     await this.pc.setRemoteDescription(offer);
     this.hasRemoteDescription = true;
     console.log("[WebRTC] Remote description set, signalingState:", this.pc.signalingState);
     await this.flushPendingCandidates();
+
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
-    console.log("[WebRTC] Created answer, SDP length:", answer.sdp?.length, "signalingState:", this.pc.signalingState);
-    return this.pc.localDescription as RTCSessionDescriptionInit;
+    console.log("[WebRTC] Answer created, waiting for ICE gathering...");
+
+    await this.waitForIceGathering(3000);
+
+    const finalDesc = this.pc.localDescription!;
+    const candidateCount = (finalDesc.sdp?.match(/a=candidate:/g) || []).length;
+    console.log("[WebRTC] Final answer SDP length:", finalDesc.sdp?.length, "embedded candidates:", candidateCount);
+    return { type: finalDesc.type, sdp: finalDesc.sdp };
   }
 
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
-    console.log("[WebRTC] Setting remote description (answer), type:", answer.type, "SDP length:", answer.sdp?.length, "signalingState:", this.pc.signalingState);
+    const answerCandidates = (answer.sdp?.match(/a=candidate:/g) || []).length;
+    console.log("[WebRTC] Received answer, SDP length:", answer.sdp?.length, "embedded candidates:", answerCandidates, "signalingState:", this.pc.signalingState);
+
     if (this.pc.signalingState === "have-local-offer") {
       await this.pc.setRemoteDescription(answer);
       this.hasRemoteDescription = true;
@@ -221,7 +299,6 @@ export class WebRTCConnection {
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
     if (!this.hasRemoteDescription) {
-      console.log("[WebRTC] Queuing ICE candidate (no remote desc yet), total queued:", this.pendingCandidates.length + 1);
       this.pendingCandidates.push(candidate);
       return;
     }
@@ -235,13 +312,13 @@ export class WebRTCConnection {
   private async flushPendingCandidates(): Promise<void> {
     const count = this.pendingCandidates.length;
     if (count > 0) {
-      console.log(`[WebRTC] Flushing ${count} buffered ICE candidates`);
+      console.log(`[WebRTC] Flushing ${count} pending ICE candidates`);
     }
     for (const candidate of this.pendingCandidates) {
       try {
         await this.pc.addIceCandidate(candidate);
       } catch (err) {
-        console.error("[WebRTC] Error adding buffered ICE candidate:", err);
+        console.error("[WebRTC] Error adding pending ICE candidate:", err);
       }
     }
     this.pendingCandidates = [];
@@ -291,7 +368,9 @@ export class WebRTCConnection {
     }
     this.removeNetworkMonitor();
     this.localStream?.getTracks().forEach((t) => t.stop());
-    this.pc.close();
+    try {
+      this.pc.close();
+    } catch {}
     console.log("[WebRTC] Connection closed");
   }
 
