@@ -88,6 +88,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
   if (!req.path.startsWith("/api/")) return next();
   if (req.path === "/api/cron/tick") return next();
+  if (req.path === "/api/auth/logout") return next();
+  if (req.path === "/api/sms/incoming") return next();
   if (req.path.startsWith("/api/checkin/quick") || req.path.startsWith("/api/status/simple")) return next();
 
   const ct = req.headers["content-type"] || "";
