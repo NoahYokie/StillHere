@@ -93,7 +93,7 @@ function getCallPairKey(userA: string, userB: string): string {
 }
 
 export function setupSocketServer(httpServer: HttpServer): SocketServer {
-  const allowedOrigins = process.env.BASE_URL
+  const allowedOrigins: (string | RegExp)[] = process.env.BASE_URL
     ? [process.env.BASE_URL]
     : [/^https?:\/\/localhost(:\d+)?$/, /\.replit\.dev$/, /\.repl\.co$/];
 
@@ -113,9 +113,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         callback(null, true);
         return;
       }
-      const isAllowed = typeof allowedOrigins[0] === "string"
-        ? allowedOrigins.includes(origin)
-        : (allowedOrigins as RegExp[]).some(r => r.test(origin));
+      const isAllowed = allowedOrigins.some(o =>
+        typeof o === "string" ? o === origin : o.test(origin!)
+      );
       if (!isAllowed) {
         console.log(`[SOCKET] Rejected connection from origin: ${origin}`);
         callback("Origin not allowed", false);

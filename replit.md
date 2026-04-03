@@ -21,7 +21,7 @@ The frontend uses React, TypeScript, Tailwind CSS, and shadcn/ui. The backend is
 Key features include:
 - **Check-in Mechanism:** Manual or optional automatic check-ins, with configurable schedules, grace periods, and reminders.
 - **Emergency System:** SOS alerts, sequential escalation through prioritized contacts, and fall detection with a countdown.
-- **Notifications:** Web push notifications are prioritized to reduce SMS costs, with SMS fallback. Smart routing sends push to app users and SMS to others.
+- **Notifications:** SMS is always sent to every emergency contact as the primary channel. Push notifications (VAPID web-push) are sent additionally to contacts who also use the app. This ensures contacts are always reached regardless of app usage.
 - **Communication:** Socket.IO enables real-time in-app messaging with persistence and read receipts, and WhatsApp-style WebRTC video calling with a relay-first architecture. Native call integration via Capacitor plugins (CallKit/ConnectionService) provides a native incoming call UI.
 - **Watcher System:** Automatic detection of emergency contacts who are also StillHere users, enabling push notifications and a watcher dashboard for monitoring.
 - **Security:** Comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free server logs, and bank-level security hardening (e.g., HSTS, Permissions-Policy, content-type enforcement, OTP hashing).
