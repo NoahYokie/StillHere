@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, real, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, real, pgEnum, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -64,7 +64,11 @@ export const contacts = pgTable("contacts", {
   canViewLocation: boolean("can_view_location").notNull().default(true),
   linkedUserId: uuid("linked_user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("contacts_user_id_idx").on(table.userId),
+  index("contacts_linked_user_id_idx").on(table.linkedUserId),
+  index("contacts_phone_idx").on(table.phone),
+]);
 
 export const contactsRelations = relations(contacts, ({ one, many }) => ({
   user: one(users, {
@@ -116,16 +120,18 @@ export const incidents = pgTable("incidents", {
   resolvedAt: timestamp("resolved_at"),
   handledByContactId: uuid("handled_by_contact_id").references(() => contacts.id),
   nextActionAt: timestamp("next_action_at"),
-  // Escalation tracking
   escalationLevel: integer("escalation_level").notNull().default(0),
   notifiedContactIds: text("notified_contact_ids").notNull().default("[]"),
   lastContactNotifiedAt: timestamp("last_contact_notified_at"),
   allContactsNotifiedAt: timestamp("all_contacts_notified_at"),
   userNotifiedNoResponseAt: timestamp("user_notified_no_response_at"),
-  // Legacy columns kept for backward compatibility
   contact1NotifiedAt: timestamp("contact1_notified_at"),
   contact2NotifiedAt: timestamp("contact2_notified_at"),
-});
+}, (table) => [
+  index("incidents_user_id_idx").on(table.userId),
+  index("incidents_status_idx").on(table.status),
+  index("incidents_status_next_action_idx").on(table.status, table.nextActionAt),
+]);
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
   user: one(users, {
@@ -223,7 +229,10 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("messages_sender_receiver_idx").on(table.senderId, table.receiverId),
+  index("messages_receiver_read_idx").on(table.receiverId, table.read),
+]);
 
 export const messagesRelations = relations(messages, ({ one }) => ({
   sender: one(users, {

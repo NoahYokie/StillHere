@@ -101,6 +101,7 @@ export interface IStorage {
   getUnreadCount(userId: string): Promise<number>;
 
   // Calls
+  getCall(id: string): Promise<Call | undefined>;
   createCall(callerId: string, receiverId: string, callType: CallType): Promise<Call>;
   updateCall(id: string, updates: Partial<Call>): Promise<Call>;
 
@@ -719,6 +720,11 @@ export class DatabaseStorage implements IStorage {
       and(eq(messages.receiverId, userId), eq(messages.read, false))
     );
     return result.length;
+  }
+
+  async getCall(id: string): Promise<Call | undefined> {
+    const [call] = await db.select().from(calls).where(eq(calls.id, id));
+    return call;
   }
 
   async createCall(callerId: string, receiverId: string, callType: CallType): Promise<Call> {
