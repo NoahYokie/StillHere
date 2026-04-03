@@ -1,6 +1,40 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle } from "lucide-react";
+import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch } from "lucide-react";
+
+function WatchMockup() {
+  return (
+    <div className="w-[88px] h-[108px] md:w-[110px] md:h-[135px] bg-gray-900 rounded-[1.75rem] md:rounded-[2.25rem] border-[2.5px] border-gray-700 shadow-2xl shadow-black/40 p-1 flex flex-col relative">
+      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-3 h-5 md:w-3.5 md:h-6 bg-gray-700 rounded-sm" />
+      <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-3 h-5 md:w-3.5 md:h-6 bg-gray-700 rounded-sm" />
+      <div className="absolute top-1/2 -right-[3px] -translate-y-1/2 w-[4px] h-5 bg-gray-600 rounded-r-sm" />
+      <div className="flex-1 bg-black rounded-[1.4rem] md:rounded-[1.75rem] overflow-hidden flex flex-col">
+        <div className="px-2 pt-2 md:pt-2.5">
+          <div className="flex items-center gap-1">
+            <Heart className="h-2 w-2 md:h-2.5 md:w-2.5 text-cyan-400" />
+            <span className="text-[6px] md:text-[7px] font-semibold text-cyan-400">StillHere</span>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-1.5 gap-1">
+          <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
+            <Check className="h-5 w-5 md:h-6 md:w-6 text-white" />
+          </div>
+          <p className="text-[7px] md:text-[8px] font-bold text-white">I'm OK</p>
+        </div>
+        <div className="px-2 pb-1.5 md:pb-2 space-y-1">
+          <div className="flex items-center justify-center gap-1">
+            <Heart className="h-2 w-2 text-red-500" />
+            <span className="text-[7px] md:text-[8px] font-bold text-red-400">72</span>
+            <span className="text-[5px] md:text-[6px] text-gray-400">BPM</span>
+          </div>
+          <div className="bg-red-500 rounded-md py-0.5 text-center">
+            <span className="text-[6px] md:text-[7px] text-white font-semibold">SOS</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
@@ -64,7 +98,7 @@ export default function LandingPage() {
                   onClick={() => setLocation("/login")}
                   data-testid="button-get-started"
                 >
-                  Get started — it's free
+                  Get started, it's free
                 </Button>
                 <Button
                   size="lg"
@@ -86,7 +120,7 @@ export default function LandingPage() {
             </div>
 
             <div className="flex justify-center order-1 md:order-2 mb-6 md:mb-0">
-              <div className="relative">
+              <div className="relative flex items-end gap-3 md:gap-4">
                 <div className="w-[200px] h-[400px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2.25rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col">
                   <div className="w-20 md:w-24 h-4 md:h-5 bg-gray-900 rounded-b-xl md:rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
                   <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[1.75rem] md:rounded-[2.25rem] overflow-hidden flex flex-col">
@@ -115,6 +149,10 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
+
+                <div className="mb-8 md:mb-12">
+                  <WatchMockup />
+                </div>
               </div>
             </div>
           </div>
@@ -127,7 +165,7 @@ export default function LandingPage() {
 
       <section className="px-6 py-14 md:py-20 bg-background max-w-5xl md:mx-auto">
         <p className="text-center text-sm font-medium text-muted-foreground uppercase tracking-wider mb-8 md:mb-12">
-          For people who live alone
+          Complete safety for people who live alone
         </p>
 
         <div className="space-y-6 md:space-y-0 md:grid md:grid-cols-3 md:gap-8">
@@ -164,6 +202,98 @@ export default function LandingPage() {
               <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
                 Location sharing is off by default. Pause alerts anytime. No tracking, ever.
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-14 md:py-20 bg-gradient-to-b from-rose-50/50 to-cyan-50/50 dark:from-rose-950/10 dark:to-cyan-950/10">
+        <div className="max-w-5xl md:mx-auto">
+          <div className="text-center mb-10 md:mb-14">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 text-xs font-medium mb-4">
+              <Watch className="h-3.5 w-3.5" />
+              <span>Apple Watch Companion</span>
+            </div>
+            <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">Safety that never sleeps</h2>
+            <p className="text-sm md:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
+              Your Apple Watch monitors you around the clock, even when your phone is in the other room.
+            </p>
+          </div>
+
+          <div className="md:grid md:grid-cols-2 md:gap-12 md:items-center">
+            <div className="flex justify-center mb-10 md:mb-0">
+              <div className="relative">
+                <div className="w-[140px] h-[175px] md:w-[180px] md:h-[220px] bg-gray-900 rounded-[2.5rem] md:rounded-[3.25rem] border-[3px] border-gray-700 shadow-2xl shadow-black/30 p-1.5 md:p-2 flex flex-col relative">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-5 h-8 md:w-6 md:h-10 bg-gray-700 rounded-sm" />
+                  <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-5 h-8 md:w-6 md:h-10 bg-gray-700 rounded-sm" />
+                  <div className="absolute top-1/2 -right-[4px] -translate-y-1/2 w-[5px] h-8 bg-gray-600 rounded-r-sm" />
+                  <div className="flex-1 bg-black rounded-[2rem] md:rounded-[2.5rem] overflow-hidden flex flex-col p-3 md:p-4">
+                    <div className="flex items-center gap-1.5 mb-3 md:mb-4">
+                      <Heart className="h-3 w-3 md:h-3.5 md:w-3.5 text-cyan-400" />
+                      <span className="text-[8px] md:text-[10px] font-semibold text-cyan-400">StillHere</span>
+                      <div className="ml-auto flex items-center gap-1">
+                        <Activity className="h-2.5 w-2.5 text-green-400" />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-center gap-2 md:gap-3">
+                      <div className="w-14 h-14 md:w-[4.5rem] md:h-[4.5rem] rounded-full bg-green-500 flex items-center justify-center shadow-lg">
+                        <Check className="h-7 w-7 md:h-9 md:w-9 text-white" />
+                      </div>
+                      <p className="text-[10px] md:text-xs font-bold text-white">I'm OK</p>
+                    </div>
+
+                    <div className="space-y-1.5 md:space-y-2">
+                      <div className="flex items-center justify-center gap-1.5 bg-gray-900 rounded-lg py-1.5 md:py-2">
+                        <Heart className="h-3 w-3 md:h-3.5 md:w-3.5 text-red-500 animate-pulse" />
+                        <span className="text-sm md:text-base font-bold text-red-400">72</span>
+                        <span className="text-[8px] md:text-[9px] text-gray-400">BPM</span>
+                      </div>
+                      <div className="bg-red-500 rounded-lg py-1 md:py-1.5 text-center">
+                        <span className="text-[9px] md:text-[10px] text-white font-semibold">I Need Help</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5 md:space-y-6">
+              <div className="flex items-start gap-4 p-4 rounded-xl bg-background border border-border">
+                <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
+                  <Activity className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Fall Detection</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    If you fall and can't get up, your watch detects it automatically. After a 60 second countdown, it sends an SOS to your contacts.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-xl bg-background border border-border">
+                <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                  <Heart className="h-5 w-5 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Heart Rate Monitoring</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Your watch tracks your heart rate all day. If it goes too high or too low, you and your contacts are alerted right away.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-xl bg-background border border-border">
+                <div className="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center flex-shrink-0">
+                  <Watch className="h-5 w-5 text-cyan-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Wrist Checkin</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Check in directly from your Apple Watch with one tap. No need to reach for your phone.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -284,7 +414,7 @@ export default function LandingPage() {
             <p className="text-base md:text-lg leading-relaxed mb-3 font-medium">
               "I live alone and this gives me real peace of mind knowing someone will check on me."
             </p>
-            <p className="text-sm text-muted-foreground">— Solo dweller</p>
+            <p className="text-sm text-muted-foreground">Solo dweller</p>
           </div>
         </div>
       </section>
@@ -311,7 +441,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between text-sm text-muted-foreground md:flex-row">
             <div className="flex items-center gap-1.5 md:gap-2">
               <Heart className="h-4 w-4 text-primary" />
-              <span className="hidden md:inline">StillHere — A safety checkin app</span>
+              <span className="hidden md:inline">StillHere, a safety checkin app</span>
               <span className="md:hidden">StillHere</span>
             </div>
             <div className="flex gap-4 md:gap-6">
