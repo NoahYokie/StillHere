@@ -39,7 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
@@ -63,6 +63,7 @@ export default function SettingsPage() {
   const [fallDetection, setFallDetection] = useState(false);
   const [discreetSos, setDiscreetSos] = useState(false);
   const [smsCheckinEnabled, setSmsCheckinEnabled] = useState(false);
+  const [allowReports, setAllowReports] = useState(true);
   const [escalationMinutes, setEscalationMinutes] = useState(20);
   const [customInterval, setCustomInterval] = useState("");
   const [customPauseHours, setCustomPauseHours] = useState("");
@@ -84,6 +85,7 @@ export default function SettingsPage() {
       setFallDetection((status.settings as any)?.fallDetection || false);
       setDiscreetSos((status.settings as any)?.discreetSos || false);
       setSmsCheckinEnabled((status.settings as any)?.smsCheckinEnabled || false);
+      setAllowReports((status.settings as any)?.allowReports !== false);
       setEscalationMinutes((status.settings as any)?.escalationMinutes || 20);
 
       if (!contactsInitialized && status.contacts?.length) {
@@ -98,7 +100,7 @@ export default function SettingsPage() {
   }, [status, contactsInitialized]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; escalationMinutes?: number }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; escalationMinutes?: number; allowReports?: boolean }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -764,6 +766,34 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-3">
               When enabled, you can check in by replying YES to your reminder text message. You can also text HELP to trigger an SOS.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Report Sharing Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileText className="h-5 w-5" />
+              Report sharing
+            </CardTitle>
+            <CardDescription>Allow your watchers to receive periodic safety reports about your checkins and activity.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="allow-reports" className="font-medium">Allow safety reports</Label>
+              <Switch
+                id="allow-reports"
+                checked={allowReports}
+                onCheckedChange={(checked) => {
+                  setAllowReports(checked);
+                  settingsMutation.mutate({ allowReports: checked });
+                }}
+                data-testid="switch-allow-reports"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              When enabled, your guardians and emergency contacts can receive reports with your checkin history, incidents, and health data. You can turn this off at any time.
             </p>
           </CardContent>
         </Card>
