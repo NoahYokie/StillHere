@@ -147,7 +147,7 @@ export default function SettingsPage() {
 
   const testMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/test");
+      return apiRequest("POST", "/api/test", {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
