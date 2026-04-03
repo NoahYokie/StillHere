@@ -161,11 +161,11 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           return;
         }
         const msg = await storage.saveMessage(userId, data.receiverId, data.content);
-        io!.to(`user:${data.receiverId}`).emit("message:new", msg);
+        const sender = await storage.getUser(userId);
+        io!.to(`user:${data.receiverId}`).emit("message:new", { ...msg, senderName: sender?.name || "Someone" });
         if (callback) callback({ success: true, message: msg });
 
         if (!isUserOnline(data.receiverId)) {
-          const sender = await storage.getUser(userId);
           await sendPushNotification(data.receiverId, {
             title: `Message from ${sender?.name || "Someone"}`,
             body: data.content.substring(0, 100),

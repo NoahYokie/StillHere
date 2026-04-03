@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth, useAuth } from "@/lib/auth";
 import { IncomingCallOverlay } from "@/components/incoming-call";
+import { NotificationBanner } from "@/components/notification-banner";
 import { initNativeCall, isNativePlatform } from "@/lib/native-call";
 import { initCapacitorPlugins, isNative } from "@/lib/capacitor";
 import NotFound from "@/pages/not-found";
@@ -157,6 +158,7 @@ function App() {
         <AuthProvider>
           <Toaster />
           <IncomingCallOverlay />
+          <NotificationBanner />
           <CapacitorInit />
           <Router />
         </AuthProvider>

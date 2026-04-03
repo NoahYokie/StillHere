@@ -1416,10 +1416,10 @@ export async function registerRoutes(
       const msg = await storage.saveMessage(currentUserId, receiverId, content.trim());
 
       const { emitToUser, isUserOnline } = await import("./socket");
-      emitToUser(receiverId, "message:new", msg);
+      const sender = await storage.getUser(currentUserId);
+      emitToUser(receiverId, "message:new", { ...msg, senderName: sender?.name || "Someone" });
 
       if (!isUserOnline(receiverId)) {
-        const sender = await storage.getUser(currentUserId);
         await sendPushNotification(receiverId, {
           title: `Message from ${sender?.name || "Someone"}`,
           body: content.substring(0, 100),
