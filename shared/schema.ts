@@ -21,6 +21,7 @@ export const users = pgTable("users", {
   phone: text("phone"),
   timezone: text("timezone").notNull().default("Australia/Melbourne"),
   isPremium: boolean("is_premium").notNull().default(false),
+  publicKey: text("public_key"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -234,6 +235,8 @@ export const messages = pgTable("messages", {
   receiverId: uuid("receiver_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
   read: boolean("read").notNull().default(false),
+  encrypted: boolean("encrypted").notNull().default(false),
+  iv: text("iv"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("messages_sender_receiver_idx").on(table.senderId, table.receiverId),
