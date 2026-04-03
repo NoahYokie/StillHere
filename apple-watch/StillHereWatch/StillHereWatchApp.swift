@@ -7,6 +7,7 @@ struct StillHereWatchApp: App {
     @StateObject private var sessionManager = SessionManager.shared
     @StateObject private var fallDetectionService = FallDetectionService.shared
     @StateObject private var connectivityManager = PhoneConnectivityManager.shared
+    @StateObject private var heartRateService = HeartRateService.shared
 
     var body: some Scene {
         WindowGroup {
@@ -15,6 +16,7 @@ struct StillHereWatchApp: App {
                     .environmentObject(sessionManager)
                     .environmentObject(fallDetectionService)
                     .environmentObject(connectivityManager)
+                    .environmentObject(heartRateService)
             } else {
                 PairingView()
                     .environmentObject(sessionManager)

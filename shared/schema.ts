@@ -308,6 +308,46 @@ export const passkeysRelations = relations(passkeys, ({ one }) => ({
   }),
 }));
 
+// Heart Rate Readings table
+export const heartRateReadings = pgTable("heart_rate_readings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  bpm: integer("bpm").notNull(),
+  source: text("source").notNull().default("watch"),
+  recordedAt: timestamp("recorded_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("heart_rate_user_id_idx").on(table.userId),
+  index("heart_rate_recorded_at_idx").on(table.userId, table.recordedAt),
+]);
+
+export const heartRateReadingsRelations = relations(heartRateReadings, ({ one }) => ({
+  user: one(users, {
+    fields: [heartRateReadings.userId],
+    references: [users.id],
+  }),
+}));
+
+// Heart Rate Alerts table
+export const heartRateAlerts = pgTable("heart_rate_alerts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  alertType: text("alert_type").notNull(),
+  bpm: integer("bpm").notNull(),
+  resolved: boolean("resolved").notNull().default(false),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("heart_rate_alerts_user_id_idx").on(table.userId),
+]);
+
+export const heartRateAlertsRelations = relations(heartRateAlerts, ({ one }) => ({
+  user: one(users, {
+    fields: [heartRateAlerts.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -322,6 +362,8 @@ export const insertMessageSchema = createInsertSchema(messages).omit({ id: true,
 export const insertCallSchema = createInsertSchema(calls).omit({ id: true, startedAt: true });
 export const insertVoipTokenSchema = createInsertSchema(voipTokens).omit({ id: true, createdAt: true });
 export const insertPasskeySchema = createInsertSchema(passkeys).omit({ id: true, createdAt: true });
+export const insertHeartRateReadingSchema = createInsertSchema(heartRateReadings).omit({ id: true, createdAt: true });
+export const insertHeartRateAlertSchema = createInsertSchema(heartRateAlerts).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -364,6 +406,12 @@ export type CallType = Call["callType"];
 
 export type Passkey = typeof passkeys.$inferSelect;
 export type InsertPasskey = z.infer<typeof insertPasskeySchema>;
+
+export type HeartRateReading = typeof heartRateReadings.$inferSelect;
+export type InsertHeartRateReading = z.infer<typeof insertHeartRateReadingSchema>;
+
+export type HeartRateAlert = typeof heartRateAlerts.$inferSelect;
+export type InsertHeartRateAlert = z.infer<typeof insertHeartRateAlertSchema>;
 
 // API Response Types
 export interface UserStatus {

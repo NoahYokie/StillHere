@@ -891,6 +891,129 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // HEART RATE ENDPOINTS (wearable token auth)
+  // ============================================
+
+  app.post("/api/heartrate", async (req, res) => {
+    try {
+      const token = req.headers["authorization"]?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ error: "Missing Authorization header" });
+      }
+      const result = await getUserFromSession(token);
+      if (!result) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+
+      const { readings } = req.body;
+      if (!Array.isArray(readings) || readings.length === 0) {
+        return res.status(400).json({ error: "readings array required" });
+      }
+      if (readings.length > 100) {
+        return res.status(400).json({ error: "Max 100 readings per request" });
+      }
+
+      const validated = [];
+      for (const r of readings) {
+        const bpm = Number(r.bpm);
+        if (!Number.isInteger(bpm) || bpm < 20 || bpm > 300) {
+          continue;
+        }
+        const recordedAt = new Date(r.recordedAt);
+        if (isNaN(recordedAt.getTime())) {
+          continue;
+        }
+        const allowedSources = ["watch", "phone", "manual"];
+        const source = allowedSources.includes(r.source) ? r.source : "watch";
+        validated.push({ bpm, recordedAt, source });
+      }
+
+      if (validated.length === 0) {
+        return res.status(400).json({ error: "No valid readings" });
+      }
+
+      const saved = await storage.saveHeartRateReadings(result.userId, validated);
+
+      const latestBpm = validated[validated.length - 1].bpm;
+      let alert = null;
+      if (latestBpm > 120) {
+        const existing = await storage.getActiveHeartRateAlerts(result.userId);
+        const hasHighAlert = existing.some(a => a.alertType === "high");
+        if (!hasHighAlert) {
+          alert = await storage.createHeartRateAlert(result.userId, "high", latestBpm);
+          console.log(`[HeartRate] HIGH alert for user (bpm: ${latestBpm})`);
+        }
+      } else if (latestBpm < 40) {
+        const existing = await storage.getActiveHeartRateAlerts(result.userId);
+        const hasLowAlert = existing.some(a => a.alertType === "low");
+        if (!hasLowAlert) {
+          alert = await storage.createHeartRateAlert(result.userId, "low", latestBpm);
+          console.log(`[HeartRate] LOW alert for user (bpm: ${latestBpm})`);
+        }
+      }
+
+      res.json({ ok: true, saved: saved.length, alert: alert ? alert.alertType : null });
+    } catch (error) {
+      console.error("Error saving heart rate:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/heartrate/latest", async (req, res) => {
+    try {
+      const token = req.headers["authorization"]?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ error: "Missing Authorization header" });
+      }
+      const result = await getUserFromSession(token);
+      if (!result) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+
+      const latest = await storage.getLatestHeartRate(result.userId);
+      const alerts = await storage.getActiveHeartRateAlerts(result.userId);
+
+      res.json({
+        ok: true,
+        heartRate: latest ? { bpm: latest.bpm, recordedAt: latest.recordedAt, source: latest.source } : null,
+        alerts: alerts.map(a => ({ id: a.id, type: a.alertType, bpm: a.bpm, createdAt: a.createdAt })),
+      });
+    } catch (error) {
+      console.error("Error getting heart rate:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/heartrate/history", async (req, res) => {
+    try {
+      const token = req.headers["authorization"]?.replace("Bearer ", "");
+      if (!token) {
+        return res.status(401).json({ error: "Missing Authorization header" });
+      }
+      const result = await getUserFromSession(token);
+      if (!result) {
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+
+      const rawHours = Number(req.query.hours) || 24;
+      const hours = Math.max(1, Math.min(rawHours, 168));
+      const history = await storage.getHeartRateHistory(result.userId, hours);
+
+      const limitedHistory = history.slice(0, 500);
+
+      res.json({
+        ok: true,
+        readings: limitedHistory.map(r => ({ bpm: r.bpm, recordedAt: r.recordedAt, source: r.source })),
+        count: limitedHistory.length,
+        total: history.length,
+      });
+    } catch (error) {
+      console.error("Error getting heart rate history:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ============================================
   // PUBLIC ROUTES (no auth required)
   // ============================================
 

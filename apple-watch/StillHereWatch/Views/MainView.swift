@@ -4,6 +4,7 @@ import WatchKit
 struct MainView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @EnvironmentObject var fallDetection: FallDetectionService
+    @EnvironmentObject var heartRate: HeartRateService
     @State private var showSOS = false
 
     var body: some View {
@@ -22,16 +23,26 @@ struct MainView: View {
                 if fallDetection.isEnabled && fallDetection.isAvailable {
                     fallDetection.startMonitoring()
                 }
+                Task {
+                    if heartRate.isAvailable {
+                        let authorized = await heartRate.requestAuthorization()
+                        if authorized {
+                            heartRate.startMonitoring()
+                        }
+                    }
+                }
             }
         }
     }
 
     private var checkinView: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 statusHeader
 
                 checkinButton
+
+                heartRateDisplay
 
                 if !sessionManager.status.userName.isEmpty {
                     nextDueInfo
@@ -53,10 +64,18 @@ struct MainView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(.cyan)
             Spacer()
-            if fallDetection.isEnabled && fallDetection.isAvailable {
-                Image(systemName: "figure.fall")
-                    .foregroundColor(.green)
-                    .font(.system(size: 10))
+            HStack(spacing: 4) {
+                if heartRate.isMonitoring {
+                    Image(systemName: "heart.fill")
+                        .foregroundColor(.red)
+                        .font(.system(size: 9))
+                        .symbolEffect(.pulse)
+                }
+                if fallDetection.isEnabled && fallDetection.isAvailable {
+                    Image(systemName: "figure.fall")
+                        .foregroundColor(.green)
+                        .font(.system(size: 10))
+                }
             }
         }
         .padding(.horizontal, 4)
@@ -67,11 +86,11 @@ struct MainView: View {
             WKInterfaceDevice.current().play(.click)
             Task { await sessionManager.performCheckin() }
         }) {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 ZStack {
                     Circle()
                         .fill(sessionManager.checkinSuccess ? Color.green : Color.green.opacity(0.85))
-                        .frame(width: 80, height: 80)
+                        .frame(width: 72, height: 72)
                         .shadow(color: .green.opacity(0.3), radius: 8)
 
                     if sessionManager.isLoading {
@@ -79,22 +98,66 @@ struct MainView: View {
                             .tint(.white)
                     } else if sessionManager.checkinSuccess {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 36, weight: .bold))
+                            .font(.system(size: 32, weight: .bold))
                             .foregroundColor(.white)
                     } else {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 32, weight: .bold))
+                            .font(.system(size: 28, weight: .bold))
                             .foregroundColor(.white)
                     }
                 }
 
                 Text(sessionManager.checkinSuccess ? "You're OK!" : "I'm OK")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(sessionManager.checkinSuccess ? .green : .primary)
             }
         }
         .buttonStyle(.plain)
         .disabled(sessionManager.isLoading)
+    }
+
+    private var heartRateDisplay: some View {
+        Group {
+            if heartRate.currentBPM > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "heart.fill")
+                        .foregroundColor(heartRateColor)
+                        .font(.system(size: 12))
+                        .symbolEffect(.pulse)
+
+                    Text("\(heartRate.currentBPM)")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(heartRateColor)
+                        .monospacedDigit()
+
+                    Text("BPM")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(heartRateColor.opacity(0.15))
+                )
+            } else if heartRate.isMonitoring {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .tint(.red)
+                        .scaleEffect(0.6)
+                    Text("Reading heart rate...")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    private var heartRateColor: Color {
+        if let alert = heartRate.alertActive {
+            return alert == "high" ? .orange : .blue
+        }
+        return .red
     }
 
     private var nextDueInfo: some View {

@@ -14,6 +14,8 @@ import {
   calls,
   voipTokens,
   passkeys,
+  heartRateReadings,
+  heartRateAlerts,
   type User,
   type InsertUser,
   type Settings,
@@ -35,6 +37,8 @@ import {
   type CallStatus,
   type CallType,
   type Passkey,
+  type HeartRateReading,
+  type HeartRateAlert,
 } from "@shared/schema";
 import { addHours } from "date-fns";
 
@@ -123,6 +127,14 @@ export interface IStorage {
   createPasskey(data: { userId: string; credentialId: string; publicKey: string; counter: number; transports?: string; deviceType?: string; backedUp: boolean }): Promise<Passkey>;
   updatePasskeyCounter(credentialId: string, counter: number): Promise<void>;
   deletePasskey(id: string, userId: string): Promise<void>;
+
+  // Heart Rate
+  saveHeartRateReadings(userId: string, readings: { bpm: number; recordedAt: Date; source?: string }[]): Promise<HeartRateReading[]>;
+  getLatestHeartRate(userId: string): Promise<HeartRateReading | undefined>;
+  getHeartRateHistory(userId: string, hours?: number): Promise<HeartRateReading[]>;
+  createHeartRateAlert(userId: string, alertType: string, bpm: number): Promise<HeartRateAlert>;
+  getActiveHeartRateAlerts(userId: string): Promise<HeartRateAlert[]>;
+  resolveHeartRateAlert(alertId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -844,6 +856,63 @@ export class DatabaseStorage implements IStorage {
 
   async deletePasskey(id: string, userId: string): Promise<void> {
     await db.delete(passkeys).where(and(eq(passkeys.id, id), eq(passkeys.userId, userId)));
+  }
+
+  async saveHeartRateReadings(userId: string, readings: { bpm: number; recordedAt: Date; source?: string }[]): Promise<HeartRateReading[]> {
+    if (readings.length === 0) return [];
+    const values = readings.map(r => ({
+      userId,
+      bpm: r.bpm,
+      source: r.source || "watch",
+      recordedAt: r.recordedAt,
+    }));
+    return db.insert(heartRateReadings).values(values).returning();
+  }
+
+  async getLatestHeartRate(userId: string): Promise<HeartRateReading | undefined> {
+    const [row] = await db.select()
+      .from(heartRateReadings)
+      .where(eq(heartRateReadings.userId, userId))
+      .orderBy(desc(heartRateReadings.recordedAt))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async getHeartRateHistory(userId: string, hours: number = 24): Promise<HeartRateReading[]> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    return db.select()
+      .from(heartRateReadings)
+      .where(and(
+        eq(heartRateReadings.userId, userId),
+        gt(heartRateReadings.recordedAt, since)
+      ))
+      .orderBy(desc(heartRateReadings.recordedAt));
+  }
+
+  async createHeartRateAlert(userId: string, alertType: string, bpm: number): Promise<HeartRateAlert> {
+    const [row] = await db.insert(heartRateAlerts).values({
+      userId,
+      alertType,
+      bpm,
+    }).returning();
+    return row;
+  }
+
+  async getActiveHeartRateAlerts(userId: string): Promise<HeartRateAlert[]> {
+    return db.select()
+      .from(heartRateAlerts)
+      .where(and(
+        eq(heartRateAlerts.userId, userId),
+        eq(heartRateAlerts.resolved, false)
+      ))
+      .orderBy(desc(heartRateAlerts.createdAt));
+  }
+
+  async resolveHeartRateAlert(alertId: string): Promise<void> {
+    await db.update(heartRateAlerts).set({
+      resolved: true,
+      resolvedAt: new Date(),
+    }).where(eq(heartRateAlerts.id, alertId));
   }
 }
 

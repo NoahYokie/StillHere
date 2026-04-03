@@ -7,6 +7,7 @@ The StillHere Watch app provides wrist-level safety features:
 - **One-tap checkin** — Large green "I'm OK" button for instant safety confirmation
 - **SOS alert** — Emergency button that immediately notifies all contacts
 - **Native fall detection** — Custom accelerometer-based algorithm detects falls with 60-second countdown before auto-SOS
+- **Heart rate monitoring** — Continuous HealthKit heart rate reading with abnormal BPM alerts (>120 high, <40 low)
 - **Watch face complications** — Quick-glance status and one-tap access
 - **iPhone connectivity** — Syncs auth and relays actions via WatchConnectivity
 - **Background refresh** — Periodic status updates every 15 minutes
@@ -22,8 +23,10 @@ StillHereWatch/
 ├── Models/
 │   └── Models.swift                 — API response types + local state models
 ├── Services/
-│   ├── SessionManager.swift         — Auth token, API calls (checkin/SOS/status)
+│   ├── SessionManager.swift         — Auth token (Keychain), API calls (checkin/SOS/status)
 │   ├── FallDetectionService.swift   — CMMotionManager fall detection algorithm
+│   ├── HeartRateService.swift       — HealthKit heart rate monitoring + server sync
+│   ├── KeychainHelper.swift         — Secure Keychain storage for auth tokens
 │   └── PhoneConnectivityManager.swift — WatchConnectivity to iPhone
 └── Views/
     ├── MainView.swift               — Primary checkin + SOS interface
@@ -89,8 +92,34 @@ The watch uses the existing wearable API with Bearer token auth:
 | `/api/checkin/quick` | POST | Quick one-tap checkin |
 | `/api/status/simple` | GET | Minimal status (overdue, incident) |
 | `/api/sos` | POST | Trigger SOS alert |
+| `/api/heartrate` | POST | Upload batch of heart rate readings (max 100) |
+| `/api/heartrate/latest` | GET | Get latest heart rate + active alerts |
+| `/api/heartrate/history` | GET | Get heart rate history (query: `?hours=24`, max 168) |
 
 All requests include `Authorization: Bearer <token>` header.
+
+## Heart Rate Monitoring
+
+The watch app reads heart rate data from HealthKit and syncs it to the server.
+
+### How It Works
+1. On app launch, HealthKit authorization is requested (read-only for heart rate)
+2. An `HKAnchoredObjectQuery` streams real-time heart rate samples
+3. Current BPM is displayed on the main screen with a pulsing heart icon
+4. Readings are batched locally and synced to the server every 5 minutes
+5. If sync fails, readings are retained and retried on the next sync cycle
+
+### Abnormal Heart Rate Alerts
+- **High BPM** (>120): Orange alert with haptic notification, server-side alert created
+- **Low BPM** (<40): Blue alert with haptic notification, server-side alert created
+- Alerts are deduplicated — only one active alert per type at a time
+- Server stores all readings in `heart_rate_readings` table with indexes for efficient history queries
+
+### Server-Side Data
+- `heart_rate_readings` table: userId, bpm, source, recordedAt (indexed by user + time)
+- `heart_rate_alerts` table: userId, alertType (high/low), bpm, resolved flag
+- Readings validated server-side: BPM must be 20-300, valid timestamp required
+- Max 100 readings per upload request
 
 ## Xcode Project Setup
 
@@ -127,6 +156,8 @@ In Xcode, select the StillHereWatch target:
 
 3. **Entitlements** (in StillHereWatch.entitlements):
    - `com.apple.developer.health.fall-detection` (requires Apple approval)
+   - `com.apple.developer.healthkit` (standard — no special approval needed)
+   - HealthKit capability with heart rate read access
 
 ### 4. Configure the Companion iPhone App
 
