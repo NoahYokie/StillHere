@@ -1332,7 +1332,7 @@ export async function registerRoutes(
       if (currentUserId === targetUserId) {
         const user = await storage.getUser(targetUserId);
         if (!user) return res.status(404).json({ error: "User not found" });
-        return res.json({ id: user.id, name: user.name, publicKey: user.publicKey || null });
+        return res.json({ id: user.id, name: user.name });
       }
       const myContacts = await storage.getContacts(currentUserId);
       const hasAsContact = myContacts.some(c => c.linkedUserId === targetUserId);
@@ -1347,7 +1347,7 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json({ id: user.id, name: user.name, publicKey: user.publicKey || null });
+      res.json({ id: user.id, name: user.name });
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ error: "Failed to fetch user profile" });

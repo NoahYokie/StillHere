@@ -109,7 +109,7 @@ export interface IStorage {
   deletePushSubscriptionForUser(userId: string, endpoint: string): Promise<void>;
 
   // Messages
-  saveMessage(senderId: string, receiverId: string, content: string, encrypted?: boolean, iv?: string): Promise<Message>;
+  saveMessage(senderId: string, receiverId: string, content: string): Promise<Message>;
   getMessages(userId1: string, userId2: string, limit?: number): Promise<Message[]>;
   markMessagesRead(senderId: string, receiverId: string): Promise<void>;
   getUnreadCount(userId: string): Promise<number>;
@@ -745,14 +745,14 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  async saveMessage(senderId: string, receiverId: string, content: string, encrypted = false, iv?: string): Promise<Message> {
+  async saveMessage(senderId: string, receiverId: string, content: string): Promise<Message> {
     const [msg] = await db.insert(messages).values({
       senderId,
       receiverId,
       content,
       read: false,
-      encrypted,
-      iv: iv || null,
+      encrypted: false,
+      iv: null,
     }).returning();
     return msg;
   }
@@ -764,7 +764,12 @@ export class DatabaseStorage implements IStorage {
         and(eq(messages.senderId, userId2), eq(messages.receiverId, userId1))
       )
     ).orderBy(desc(messages.createdAt)).limit(limit);
-    return result.reverse();
+    return result.reverse().map(m => {
+      if (m.encrypted) {
+        return { ...m, content: "This message is no longer available", encrypted: false, iv: null };
+      }
+      return m;
+    });
   }
 
   async markMessagesRead(senderId: string, receiverId: string): Promise<void> {
@@ -790,7 +795,7 @@ export class DatabaseStorage implements IStorage {
     for (const msg of allMessages) {
       const partnerId = msg.senderId === userId ? msg.receiverId : msg.senderId;
       if (!partnerMap.has(partnerId)) {
-        const preview = msg.encrypted ? "Encrypted message" : msg.content;
+        const preview = msg.encrypted ? "This message is no longer available" : msg.content;
         partnerMap.set(partnerId, {
           lastMessage: preview,
           lastMessageAt: msg.createdAt,
