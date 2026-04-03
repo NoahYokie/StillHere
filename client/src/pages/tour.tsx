@@ -27,7 +27,7 @@ const tourSteps = [
   {
     id: "reminder",
     title: "We remind you first",
-    description: "If you forget, we'll send you a friendly reminder. No panic — you'll have extra time to respond.",
+    description: "If you forget, we'll send you a friendly reminder. No panic, you'll have extra time to respond.",
     mockup: "reminder",
   },
   {
@@ -45,7 +45,7 @@ const tourSteps = [
   {
     id: "contacts",
     title: "Choose who gets notified",
-    description: "Add your trusted people — family, friends, neighbours. They'll only hear from us if something's wrong.",
+    description: "Add your trusted people: family, friends, neighbours. They'll only hear from us if something's wrong.",
     mockup: "contacts",
   },
   {
@@ -147,7 +147,7 @@ function ReminderScreen() {
           </div>
         </div>
         <p className="text-[9px] text-gray-400 text-center px-4">
-          You can check in right from this notification — one tap and done!
+          You can check in right from this notification, one tap and done!
         </p>
       </div>
     </div>
