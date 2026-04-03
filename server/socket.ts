@@ -97,11 +97,22 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
   if (process.env.BASE_URL) {
     allowedOrigins.push(process.env.BASE_URL);
   }
+  if (process.env.REPLIT_DOMAINS) {
+    for (const domain of process.env.REPLIT_DOMAINS.split(",")) {
+      const trimmed = domain.trim();
+      if (trimmed) allowedOrigins.push(`https://${trimmed}`);
+    }
+  }
+  if (process.env.REPLIT_DEV_DOMAIN) {
+    allowedOrigins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
+  }
   allowedOrigins.push(
     /^https?:\/\/localhost(:\d+)?$/,
     /\.replit\.dev$/,
     /\.repl\.co$/,
-    /\.replit\.app$/
+    /\.replit\.app$/,
+    /\.stillhere\.health$/,
+    /^https:\/\/stillhere\.health$/
   );
 
   io = new SocketServer(httpServer, {
@@ -352,6 +363,12 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         userSockets.delete(socket.id);
         if (userSockets.size === 0) {
           onlineUsers.delete(userId);
+          for (const [pairKey, callId] of activeCallPairs.entries()) {
+            if (pairKey.includes(userId)) {
+              activeCallPairs.delete(pairKey);
+              console.log(`[CALL] Cleaned up stale call pair ${pairKey} on disconnect`);
+            }
+          }
         }
       }
     });
