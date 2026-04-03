@@ -15,11 +15,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
 import { createFallDetector, isDeviceMotionSupported } from "@/lib/fall-detection";
+import { getSocket } from "@/lib/socket";
+import { useAuth } from "@/lib/auth";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -246,6 +248,8 @@ export default function Home() {
   const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
   const locationWatchRef = useRef<number | null>(null);
 
+  const { auth } = useAuth();
+
   const { data: status, isLoading } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
     refetchInterval: (query) => {
@@ -256,6 +260,22 @@ export default function Home() {
       return 60000;
     },
   });
+
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/messages/unread/count"],
+    refetchInterval: 30000,
+  });
+  const unreadCount = unreadData?.count || 0;
+
+  useEffect(() => {
+    if (!auth?.authenticated) return;
+    const socket = getSocket();
+    const handleNewMessage = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread/count"] });
+    };
+    socket.on("message:new", handleNewMessage);
+    return () => { socket.off("message:new", handleNewMessage); };
+  }, [auth?.authenticated]);
 
   const sendLocationToServer = async (position: GeolocationPosition) => {
     try {
@@ -575,6 +595,20 @@ export default function Home() {
             </p>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground relative"
+              onClick={() => setLocation("/inbox")}
+              data-testid="button-inbox"
+            >
+              <MessageCircle className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 leading-none" data-testid="badge-unread-count">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Button>
             <Button
               variant="ghost"
               size="icon"

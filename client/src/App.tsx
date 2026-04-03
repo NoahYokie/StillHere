@@ -26,6 +26,7 @@ import WatchedPage from "@/pages/watched";
 import ChatPage from "@/pages/chat";
 import CallPage from "@/pages/call";
 import ReportPage from "@/pages/report";
+import InboxPage from "@/pages/inbox";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -104,6 +105,13 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <WatchedPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/inbox">
+        <RequireAuth>
+          <RequireSetup>
+            <InboxPage />
           </RequireSetup>
         </RequireAuth>
       </Route>
