@@ -6,3 +6,9 @@ id = "KIHSnRb4Sh7ggJEJAvFB_"
 uri = "file://FULL_APP_REPORT.md"
 type = "text"
 title = "StillHere - Full Application Report"
+
+[[outputs]]
+id = "PUsr03WUY9XX0rz2hXGPP"
+uri = "file://.local/competitive-review.md"
+type = "text"
+title = "StillHere Competitive Review"
