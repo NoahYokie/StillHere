@@ -12,6 +12,7 @@ export const locationSessionTypeEnum = pgEnum("location_session_type", ["emergen
 export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto", "sms"]);
 export const callStatusEnum = pgEnum("call_status", ["ringing", "active", "ended", "missed"]);
 export const callTypeEnum = pgEnum("call_type", ["video", "audio"]);
+export const reportFrequencyEnum = pgEnum("report_frequency", ["daily", "weekly", "fortnightly", "monthly"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -44,6 +45,7 @@ export const settings = pgTable("settings", {
   discreetSos: boolean("discreet_sos").notNull().default(false),
   escalationMinutes: integer("escalation_minutes").notNull().default(20),
   smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(false),
+  allowReports: boolean("allow_reports").notNull().default(true),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
   pauseUntil: timestamp("pause_until"),
@@ -423,6 +425,28 @@ export const satelliteDevicesRelations = relations(satelliteDevices, ({ one }) =
   }),
 }));
 
+// Report Preferences table (watcher configures per watched user)
+export const reportPreferences = pgTable("report_preferences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  watcherId: uuid("watcher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  watchedUserId: uuid("watched_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  frequency: reportFrequencyEnum("frequency").notNull().default("weekly"),
+  enabled: boolean("enabled").notNull().default(true),
+  email: text("email"),
+  lastSentAt: timestamp("last_sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("report_preferences_watcher_idx").on(table.watcherId),
+  index("report_preferences_watched_idx").on(table.watchedUserId),
+]);
+
+export const reportPreferencesRelations = relations(reportPreferences, ({ one }) => ({
+  watcher: one(users, {
+    fields: [reportPreferences.watcherId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -442,6 +466,7 @@ export const insertHeartRateAlertSchema = createInsertSchema(heartRateAlerts).om
 export const insertGeofenceSchema = createInsertSchema(geofences).omit({ id: true, createdAt: true });
 export const insertLocationBreadcrumbSchema = createInsertSchema(locationBreadcrumbs).omit({ id: true });
 export const insertSatelliteDeviceSchema = createInsertSchema(satelliteDevices).omit({ id: true, createdAt: true });
+export const insertReportPreferenceSchema = createInsertSchema(reportPreferences).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -499,6 +524,35 @@ export type InsertLocationBreadcrumb = z.infer<typeof insertLocationBreadcrumbSc
 
 export type SatelliteDevice = typeof satelliteDevices.$inferSelect;
 export type InsertSatelliteDevice = z.infer<typeof insertSatelliteDeviceSchema>;
+
+export type ReportPreference = typeof reportPreferences.$inferSelect;
+export type InsertReportPreference = z.infer<typeof insertReportPreferenceSchema>;
+
+export interface ReportData {
+  userName: string;
+  periodStart: string;
+  periodEnd: string;
+  checkins: { date: string; time: string; method: string }[];
+  totalCheckins: number;
+  missedCheckins: number;
+  complianceRate: number;
+  incidents: { date: string; reason: string; resolved: boolean; duration: string | null }[];
+  heartRateSummary: { avgBpm: number; minBpm: number; maxBpm: number; alerts: number } | null;
+  locationEnabled: boolean;
+  fallDetectionEnabled: boolean;
+  fallAlerts: number;
+}
+
+export interface DailyStatus {
+  userId: string;
+  userName: string;
+  checkedInToday: boolean;
+  todayCheckins: { time: string; method: string }[];
+  lastCheckinAt: string | null;
+  hasOpenIncident: boolean;
+  incidentReason: string | null;
+  heartRate: { bpm: number; recordedAt: string } | null;
+}
 
 // API Response Types
 export interface UserStatus {
