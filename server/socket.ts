@@ -13,6 +13,19 @@ const onlineUsers = new Map<string, Set<string>>();
 const permissionCache = new Map<string, { result: boolean; timestamp: number }>();
 const PERMISSION_CACHE_TTL = 60000;
 
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_SDP_LENGTH = 50000;
+const MAX_ICE_LENGTH = 5000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(val: unknown): val is string {
+  return typeof val === "string" && UUID_PATTERN.test(val);
+}
+
+function isValidString(val: unknown, maxLen: number): val is string {
+  return typeof val === "string" && val.length > 0 && val.length <= maxLen;
+}
+
 export function getIO(): SocketServer | null {
   return io;
 }
@@ -80,12 +93,36 @@ function getCallPairKey(userA: string, userB: string): string {
 }
 
 export function setupSocketServer(httpServer: HttpServer): SocketServer {
+  const allowedOrigins = process.env.BASE_URL
+    ? [process.env.BASE_URL]
+    : [/^https?:\/\/localhost(:\d+)?$/, /\.replit\.dev$/, /\.repl\.co$/];
+
   io = new SocketServer(httpServer, {
     path: "/socket.io",
     transports: ["websocket", "polling"],
     pingTimeout: 30000,
     pingInterval: 15000,
     maxHttpBufferSize: 1e6,
+    cors: {
+      origin: allowedOrigins,
+      credentials: true,
+    },
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const isAllowed = typeof allowedOrigins[0] === "string"
+        ? allowedOrigins.includes(origin)
+        : (allowedOrigins as RegExp[]).some(r => r.test(origin));
+      if (!isAllowed) {
+        console.log(`[SOCKET] Rejected connection from origin: ${origin}`);
+        callback("Origin not allowed", false);
+        return;
+      }
+      callback(null, true);
+    },
   });
 
   io.on("connection", async (socket: Socket) => {
@@ -107,6 +144,10 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
     socket.on("message:send", async (data: { receiverId: string; content: string }, callback?: Function) => {
       try {
+        if (!data || !isValidUUID(data.receiverId) || !isValidString(data.content, MAX_MESSAGE_LENGTH)) {
+          if (callback) callback({ success: false, error: "Invalid payload" });
+          return;
+        }
         const canCommunicate = await checkCommunicationPermission(userId, data.receiverId);
         if (!canCommunicate) {
           if (callback) callback({ success: false, error: "Not authorized" });
@@ -133,14 +174,24 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
     socket.on("message:read", async (data: { senderId: string }) => {
       try {
+        if (!data || !isValidUUID(data.senderId)) return;
         await storage.markMessagesRead(data.senderId, userId);
         io!.to(`user:${data.senderId}`).emit("message:read-receipt", { readBy: userId });
       } catch {}
     });
 
     socket.on("call:initiate", async (data: { receiverId: string; callType: "video" | "audio"; offer: any }, callback?: Function) => {
-      console.log(`[CALL] ${userId} initiating ${data.callType} call to ${data.receiverId}`);
       try {
+        if (!data || !isValidUUID(data.receiverId) || !["video", "audio"].includes(data.callType)) {
+          if (callback) callback({ success: false, error: "Invalid payload" });
+          return;
+        }
+        const offerStr = typeof data.offer === "string" ? data.offer : JSON.stringify(data.offer || "");
+        if (offerStr.length > MAX_SDP_LENGTH) {
+          if (callback) callback({ success: false, error: "Payload too large" });
+          return;
+        }
+        console.log(`[CALL] ${userId} initiating ${data.callType} call to ${data.receiverId}`);
         const canCall = await checkCommunicationPermission(userId, data.receiverId);
         if (!canCall) {
           console.log(`[CALL] Permission denied`);
@@ -201,6 +252,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
     socket.on("call:answer", async (data: { callId: string; callerId: string; answer: any }) => {
       try {
+        if (!data || !isValidUUID(data.callId) || !isValidUUID(data.callerId)) return;
+        const answerStr = typeof data.answer === "string" ? data.answer : JSON.stringify(data.answer || "");
+        if (answerStr.length > MAX_SDP_LENGTH) return;
         const call = await storage.getCall(data.callId);
         if (!call || call.receiverId !== userId || call.callerId !== data.callerId) {
           console.log(`[CALL] Unauthorized answer attempt by ${userId}`);
@@ -218,6 +272,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:ice-candidate", async (data: { targetUserId: string; candidate: any }) => {
+      if (!data || !isValidUUID(data.targetUserId)) return;
+      const candidateStr = typeof data.candidate === "string" ? data.candidate : JSON.stringify(data.candidate || "");
+      if (candidateStr.length > MAX_ICE_LENGTH) return;
       const pairKey = getCallPairKey(userId, data.targetUserId);
       if (!activeCallPairs.has(pairKey)) {
         return;
@@ -230,6 +287,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
     socket.on("call:end", async (data: { callId: string; targetUserId: string }) => {
       try {
+        if (!data || !isValidUUID(data.callId) || !isValidUUID(data.targetUserId)) return;
         const call = await storage.getCall(data.callId);
         if (!call || (call.callerId !== userId && call.receiverId !== userId)) {
           return;
@@ -243,6 +301,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:ice-restart", async (data: { targetUserId: string; offer: any }) => {
+      if (!data || !isValidUUID(data.targetUserId)) return;
+      const offerStr = typeof data.offer === "string" ? data.offer : JSON.stringify(data.offer || "");
+      if (offerStr.length > MAX_SDP_LENGTH) return;
       const pairKey = getCallPairKey(userId, data.targetUserId);
       if (!activeCallPairs.has(pairKey)) {
         return;
@@ -254,6 +315,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:ice-restart-answer", async (data: { targetUserId: string; answer: any }) => {
+      if (!data || !isValidUUID(data.targetUserId)) return;
+      const answerStr = typeof data.answer === "string" ? data.answer : JSON.stringify(data.answer || "");
+      if (answerStr.length > MAX_SDP_LENGTH) return;
       const pairKey = getCallPairKey(userId, data.targetUserId);
       if (!activeCallPairs.has(pairKey)) {
         return;
@@ -266,6 +330,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
     socket.on("call:reject", async (data: { callId: string; callerId: string }) => {
       try {
+        if (!data || !isValidUUID(data.callId) || !isValidUUID(data.callerId)) return;
         const call = await storage.getCall(data.callId);
         if (!call || call.receiverId !== userId || call.callerId !== data.callerId) {
           console.log(`[CALL] Unauthorized reject attempt by ${userId}`);

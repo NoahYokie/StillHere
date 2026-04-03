@@ -34,12 +34,26 @@ app.use(
         baseUri: ["'self'"],
         formAction: ["'self'"],
         objectSrc: ["'none'"],
+        upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null,
       },
     },
     crossOriginEmbedderPolicy: false,
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    hsts: process.env.NODE_ENV === "production" ? {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    } : false,
   })
 );
+
+app.use((_req, res, next) => {
+  res.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=(self), accelerometer=(self), gyroscope=(self)");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.removeHeader("X-Powered-By");
+  next();
+});
 
 app.set("trust proxy", 1);
 
@@ -59,15 +73,29 @@ app.use("/api/", apiLimiter);
 
 app.use(
   express.json({
+    limit: "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(cookieParser());
 app.use(authMiddleware);
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  if (!req.path.startsWith("/api/")) return next();
+  if (req.path === "/api/cron/tick") return next();
+  if (req.path.startsWith("/api/checkin/quick") || req.path.startsWith("/api/status/simple")) return next();
+
+  const ct = req.headers["content-type"] || "";
+  if (!ct.includes("application/json")) {
+    return res.status(415).json({ error: "Content-Type must be application/json" });
+  }
+  next();
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -106,7 +134,6 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
 
@@ -114,7 +141,8 @@ app.use((req, res, next) => {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    const safeMessage = status < 500 ? (err.message || "Bad Request") : "Internal Server Error";
+    return res.status(status).json({ error: safeMessage });
   });
 
   if (process.env.NODE_ENV === "production") {
