@@ -24,6 +24,8 @@
     <string>StillHere uses motion sensors to detect falls and alert your emergency contacts automatically.</string>
     <key>NSFallDetectionUsageDescription</key>
     <string>StillHere monitors for fall events to automatically alert your emergency contacts if you need help.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>StillHere reads your heart rate to monitor your wellbeing and alert emergency contacts if an abnormal reading is detected.</string>
     <key>WKApplication</key>
     <true/>
     <key>WKCompanionAppBundleIdentifier</key>

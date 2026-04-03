@@ -28,7 +28,8 @@ Key features include:
 - **PWA Support:** Full Progressive Web App capabilities for offline support and installability.
 - **Wearable API:** Dedicated API endpoints support companion watch apps (Apple Watch, Wear OS) for quick check-ins and status updates.
 - **Internationalization:** E.164 phone number normalization supports 28+ countries.
-- **Apple Watch Companion App:** A SwiftUI watchOS app provides one-tap check-in, SOS, and a custom 2-phase fall detection algorithm. It uses WatchConnectivity for iPhone relay and WidgetKit for watch face complications.
+- **Apple Watch Companion App:** A SwiftUI watchOS app (`apple-watch/StillHereWatch/`) provides one-tap checkin, SOS, custom 2-phase fall detection, and continuous heart rate monitoring via HealthKit. Uses WatchConnectivity for iPhone relay, WidgetKit for watch face complications, and Keychain for secure token storage.
+- **Heart Rate Monitoring:** HealthKit integration on Apple Watch reads real-time BPM via HKAnchoredObjectQuery. Displays live BPM on watch face. Batches readings locally, syncs to server every 5 minutes. Server-side abnormal BPM alerts: >120 (high) or <40 (low). DB tables: `heart_rate_readings`, `heart_rate_alerts`. API: `POST /api/heartrate`, `GET /api/heartrate/latest`, `GET /api/heartrate/history`.
 
 ### External Dependencies
 - **SMS Gateway:** Twilio
