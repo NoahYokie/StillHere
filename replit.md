@@ -34,6 +34,7 @@ Key features include:
 - **Internationalization:** E.164 phone number normalization supports 28+ countries.
 - **Apple Watch Companion App:** A SwiftUI watchOS app (`apple-watch/StillHereWatch/`) provides one-tap checkin, SOS, custom 2-phase fall detection, and continuous heart rate monitoring via HealthKit. Uses WatchConnectivity for iPhone relay, WidgetKit for watch face complications, and Keychain for secure token storage.
 - **Heart Rate Monitoring:** HealthKit integration on Apple Watch reads real-time BPM via HKAnchoredObjectQuery. Displays live BPM on watch face. Batches readings locally, syncs to server every 5 minutes. Server-side abnormal BPM alerts: >120 (high) or <40 (low). DB tables: `heart_rate_readings`, `heart_rate_alerts`. API: `POST /api/heartrate`, `GET /api/heartrate/latest`, `GET /api/heartrate/history`.
+- **Watcher Reporting:** Configurable scheduled safety reports sent via email to watchers. Daily quick-status panel on watcher dashboard cards shows today's checkins, heart rate, and incident status. Report view page (`/report/:userId`) with printable layout, period selector (day/week/fortnight/month), compliance stats, checkin history, incidents, heart rate summary, and feature status. Report preferences per watched user (frequency, email). User consent via `allowReports` toggle in settings. DB table: `report_preferences`. API: `GET /api/watched-users/:userId/daily`, `GET/PUT /api/reports/preferences`, `GET /api/reports/:watchedUserId`.
 
 ### External Dependencies
 - **SMS Gateway:** Twilio

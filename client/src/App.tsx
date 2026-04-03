@@ -25,6 +25,7 @@ import TourPage from "@/pages/tour";
 import WatchedPage from "@/pages/watched";
 import ChatPage from "@/pages/chat";
 import CallPage from "@/pages/call";
+import ReportPage from "@/pages/report";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -117,6 +118,13 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <CallPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/report/:userId">
+        <RequireAuth>
+          <RequireSetup>
+            <ReportPage />
           </RequireSetup>
         </RequireAuth>
       </Route>

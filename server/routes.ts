@@ -684,7 +684,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports } = req.body;
       
       if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
         return res.status(400).json({ error: "Checkin interval must be between 12 and 48 hours" });
@@ -713,6 +713,9 @@ export async function registerRoutes(
       if (escalationMinutes !== undefined && (typeof escalationMinutes !== "number" || ![5, 10, 15, 20, 30, 45, 60].includes(escalationMinutes))) {
         return res.status(400).json({ error: "Escalation minutes must be 5, 10, 15, 20, 30, 45, or 60" });
       }
+      if (allowReports !== undefined && typeof allowReports !== "boolean") {
+        return res.status(400).json({ error: "Allow reports must be a boolean" });
+      }
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -725,6 +728,7 @@ export async function registerRoutes(
       if (discreetSos !== undefined) updates.discreetSos = discreetSos;
       if (smsCheckinEnabled !== undefined) updates.smsCheckinEnabled = smsCheckinEnabled;
       if (escalationMinutes !== undefined) updates.escalationMinutes = escalationMinutes;
+      if (allowReports !== undefined) updates.allowReports = allowReports;
       
       // Update user timezone if provided
       if (timezone) {
@@ -1796,6 +1800,170 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // REPORT ENDPOINTS
+  // ============================================
+
+  app.get("/api/watched-users/:userId/daily", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const watchedUserId = req.params.userId;
+      const canView = await checkWatcherPermission(currentUserId, watchedUserId);
+      if (!canView) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      const watchedSettings = await storage.getSettings(watchedUserId);
+      if (watchedSettings && !watchedSettings.allowReports) {
+        return res.status(403).json({ error: "User has disabled report sharing" });
+      }
+      const daily = await storage.getDailyStatus(currentUserId, watchedUserId);
+      res.json(daily);
+    } catch (error) {
+      console.error("Error fetching daily status:", error);
+      res.status(500).json({ error: "Failed to fetch daily status" });
+    }
+  });
+
+  app.get("/api/reports/preferences", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const prefs = await storage.getReportPreferences(userId);
+      res.json(prefs);
+    } catch (error) {
+      console.error("Error fetching report preferences:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.put("/api/reports/preferences/:watchedUserId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const watchedUserId = req.params.watchedUserId;
+      const canView = await checkWatcherPermission(currentUserId, watchedUserId);
+      if (!canView) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      const { frequency, enabled, email } = req.body;
+      if (frequency && !["daily", "weekly", "fortnightly", "monthly"].includes(frequency)) {
+        return res.status(400).json({ error: "Invalid frequency" });
+      }
+      const pref = await storage.upsertReportPreference({
+        watcherId: currentUserId,
+        watchedUserId,
+        frequency: frequency || "weekly",
+        enabled: enabled !== false,
+        email: email || null,
+      });
+      res.json(pref);
+    } catch (error) {
+      console.error("Error updating report preference:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/reports/:watchedUserId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const watchedUserId = req.params.watchedUserId;
+      const canView = await checkWatcherPermission(currentUserId, watchedUserId);
+      if (!canView) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      const watchedSettings = await storage.getSettings(watchedUserId);
+      if (watchedSettings && !watchedSettings.allowReports) {
+        return res.status(403).json({ error: "User has disabled report sharing" });
+      }
+
+      const periodParam = (req.query.period as string) || "week";
+      const now = new Date();
+      let from: Date;
+      switch (periodParam) {
+        case "day": from = new Date(now.getTime() - 86400000); break;
+        case "fortnight": from = new Date(now.getTime() - 14 * 86400000); break;
+        case "month": from = new Date(now.getTime() - 30 * 86400000); break;
+        case "week":
+        default: from = new Date(now.getTime() - 7 * 86400000); break;
+      }
+
+      const user = await storage.getUser(watchedUserId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const userSettings = await storage.getSettings(watchedUserId);
+      const checkinList = await storage.getCheckinHistory(watchedUserId, from, now);
+      const incidentList = await storage.getIncidentHistory(watchedUserId, from, now);
+
+      const dayCount = Math.max(1, Math.ceil((now.getTime() - from.getTime()) / 86400000));
+      const expectedCheckins = dayCount;
+      const missedCheckins = Math.max(0, expectedCheckins - checkinList.length);
+      const complianceRate = checkinList.length > 0 ? Math.round((checkinList.length / expectedCheckins) * 100) : 0;
+
+      let heartRateSummary = null;
+      const hrHistory = await storage.getHeartRateHistory(watchedUserId, dayCount * 24);
+      if (hrHistory.length > 0) {
+        const bpms = hrHistory.map(r => r.bpm);
+        const hrAlerts = await storage.getActiveHeartRateAlerts(watchedUserId);
+        heartRateSummary = {
+          avgBpm: Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length),
+          minBpm: Math.min(...bpms),
+          maxBpm: Math.max(...bpms),
+          alerts: hrAlerts.length,
+        };
+      }
+
+      const fallAlerts = incidentList.filter(i => i.reason === "sos").length;
+
+      const { format: fmtDate } = await import("date-fns");
+
+      const report = {
+        userName: user.name,
+        periodStart: fmtDate(from, "yyyy-MM-dd"),
+        periodEnd: fmtDate(now, "yyyy-MM-dd"),
+        checkins: checkinList.map(c => ({
+          date: fmtDate(c.createdAt, "yyyy-MM-dd"),
+          time: fmtDate(c.createdAt, "h:mm a"),
+          method: c.method,
+        })),
+        totalCheckins: checkinList.length,
+        missedCheckins,
+        complianceRate: Math.min(100, complianceRate),
+        incidents: incidentList.map(i => ({
+          date: fmtDate(i.startedAt, "yyyy-MM-dd"),
+          reason: i.reason,
+          resolved: i.status === "resolved",
+          duration: i.resolvedAt
+            ? `${Math.round((i.resolvedAt.getTime() - i.startedAt.getTime()) / 60000)} min`
+            : null,
+        })),
+        heartRateSummary,
+        locationEnabled: userSettings?.locationMode !== "off",
+        fallDetectionEnabled: userSettings?.fallDetection || false,
+        fallAlerts,
+      };
+
+      res.json(report);
+    } catch (error) {
+      console.error("Error generating report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
+  async function checkWatcherPermission(watcherUserId: string, watchedUserId: string): Promise<boolean> {
+    const linkedContacts = await storage.getContactsLinkedToUser(watcherUserId);
+    return linkedContacts.some(c => c.userId === watchedUserId);
+  }
+
   let cronRunning = false;
 
   // Cron tick - check for due users (internal only)
@@ -2070,8 +2238,67 @@ export async function registerRoutes(
         }
       }
       
+      let reportsSent = 0;
+      try {
+        const dueReports = await storage.getDueReports();
+        for (const pref of dueReports) {
+          try {
+            const watchedUser = await storage.getUser(pref.watchedUserId);
+            const watcherUser = await storage.getUser(pref.watcherId);
+            if (!watchedUser || !watcherUser) continue;
+
+            const watchedSettings = await storage.getSettings(pref.watchedUserId);
+            if (watchedSettings && !watchedSettings.allowReports) continue;
+
+            const periodDays = pref.frequency === "daily" ? 1 : pref.frequency === "weekly" ? 7 : pref.frequency === "fortnightly" ? 14 : 30;
+            const from = new Date(Date.now() - periodDays * 86400000);
+            const now = new Date();
+            const checkinList = await storage.getCheckinHistory(pref.watchedUserId, from, now);
+            const incidentList = await storage.getIncidentHistory(pref.watchedUserId, from, now);
+
+            const recipientEmail = pref.email || null;
+            if (recipientEmail) {
+              const { sendEmail } = await import("./email");
+              const { format: fmtDate } = await import("date-fns");
+
+              const checkinRows = checkinList.map(c =>
+                `<tr><td>${fmtDate(c.createdAt, "MMM d, yyyy")}</td><td>${fmtDate(c.createdAt, "h:mm a")}</td><td>${c.method}</td></tr>`
+              ).join("");
+              const incidentRows = incidentList.map(i =>
+                `<tr><td>${fmtDate(i.startedAt, "MMM d, yyyy")}</td><td>${i.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</td><td>${i.status === "resolved" ? "Resolved" : "Open"}</td></tr>`
+              ).join("");
+
+              const complianceRate = Math.min(100, Math.round((checkinList.length / Math.max(1, periodDays)) * 100));
+
+              const html = `
+                <h2>StillHere Safety Report for ${watchedUser.name}</h2>
+                <p>Report period: ${fmtDate(from, "MMM d, yyyy")} - ${fmtDate(now, "MMM d, yyyy")}</p>
+                <h3>Summary</h3>
+                <ul>
+                  <li>Total checkins: ${checkinList.length}</li>
+                  <li>Compliance rate: ${complianceRate}%</li>
+                  <li>Incidents: ${incidentList.length}</li>
+                </ul>
+                ${checkinList.length > 0 ? `<h3>Checkin History</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Time</th><th>Method</th></tr>${checkinRows}</table>` : ""}
+                ${incidentList.length > 0 ? `<h3>Incidents</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Type</th><th>Status</th></tr>${incidentRows}</table>` : ""}
+                <p style="color:#888;font-size:12px;margin-top:20px;">This report was generated automatically by StillHere. ${watchedUser.name} has consented to share this information.</p>
+              `;
+
+              await sendEmail(recipientEmail, `StillHere Report: ${watchedUser.name} (${pref.frequency})`, html);
+              reportsSent++;
+            }
+
+            await storage.updateReportLastSent(pref.id);
+          } catch (err) {
+            console.error(`[CRON] Report send failed for pref ${pref.id}:`, err);
+          }
+        }
+      } catch (err) {
+        console.error("[CRON] Report processing failed:", err);
+      }
+
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);

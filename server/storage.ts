@@ -45,8 +45,12 @@ import {
   type Geofence,
   type LocationBreadcrumb,
   type SatelliteDevice,
+  reportPreferences,
+  type ReportPreference,
+  type DailyStatus,
 } from "@shared/schema";
-import { addHours } from "date-fns";
+import { addHours, startOfDay, format } from "date-fns";
+import { gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -160,6 +164,18 @@ export interface IStorage {
 
   // SMS Checkin
   getUserByPhone(phone: string): Promise<User | undefined>;
+
+  // Report Preferences
+  getReportPreferences(watcherId: string): Promise<ReportPreference[]>;
+  getReportPreference(watcherId: string, watchedUserId: string): Promise<ReportPreference | undefined>;
+  upsertReportPreference(data: { watcherId: string; watchedUserId: string; frequency: string; enabled: boolean; email?: string | null }): Promise<ReportPreference>;
+  getDueReports(): Promise<ReportPreference[]>;
+  updateReportLastSent(id: string): Promise<void>;
+
+  // Report Data
+  getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
+  getIncidentHistory(userId: string, from: Date, to: Date): Promise<Incident[]>;
+  getDailyStatus(watcherUserId: string, watchedUserId: string): Promise<DailyStatus>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1023,6 +1039,101 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSatelliteDevice(id: string, userId: string): Promise<void> {
     await db.delete(satelliteDevices).where(and(eq(satelliteDevices.id, id), eq(satelliteDevices.userId, userId)));
+  }
+
+  async getReportPreferences(watcherId: string): Promise<ReportPreference[]> {
+    return db.select().from(reportPreferences).where(eq(reportPreferences.watcherId, watcherId));
+  }
+
+  async getReportPreference(watcherId: string, watchedUserId: string): Promise<ReportPreference | undefined> {
+    const [pref] = await db.select().from(reportPreferences)
+      .where(and(eq(reportPreferences.watcherId, watcherId), eq(reportPreferences.watchedUserId, watchedUserId)));
+    return pref || undefined;
+  }
+
+  async upsertReportPreference(data: { watcherId: string; watchedUserId: string; frequency: string; enabled: boolean; email?: string | null }): Promise<ReportPreference> {
+    const existing = await this.getReportPreference(data.watcherId, data.watchedUserId);
+    if (existing) {
+      const [updated] = await db.update(reportPreferences)
+        .set({ frequency: data.frequency as any, enabled: data.enabled, email: data.email || null })
+        .where(eq(reportPreferences.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(reportPreferences).values({
+      watcherId: data.watcherId,
+      watchedUserId: data.watchedUserId,
+      frequency: data.frequency as any,
+      enabled: data.enabled,
+      email: data.email || null,
+    }).returning();
+    return created;
+  }
+
+  async getDueReports(): Promise<ReportPreference[]> {
+    const allEnabled = await db.select().from(reportPreferences).where(eq(reportPreferences.enabled, true));
+    const now = new Date();
+    return allEnabled.filter(pref => {
+      if (!pref.lastSentAt) return true;
+      const elapsed = now.getTime() - pref.lastSentAt.getTime();
+      const msPerDay = 86400000;
+      switch (pref.frequency) {
+        case "daily": return elapsed >= msPerDay;
+        case "weekly": return elapsed >= 7 * msPerDay;
+        case "fortnightly": return elapsed >= 14 * msPerDay;
+        case "monthly": return elapsed >= 30 * msPerDay;
+        default: return false;
+      }
+    });
+  }
+
+  async updateReportLastSent(id: string): Promise<void> {
+    await db.update(reportPreferences).set({ lastSentAt: new Date() }).where(eq(reportPreferences.id, id));
+  }
+
+  async getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]> {
+    return db.select().from(checkins)
+      .where(and(eq(checkins.userId, userId), gte(checkins.createdAt, from), lte(checkins.createdAt, to)))
+      .orderBy(desc(checkins.createdAt));
+  }
+
+  async getIncidentHistory(userId: string, from: Date, to: Date): Promise<Incident[]> {
+    return db.select().from(incidents)
+      .where(and(eq(incidents.userId, userId), gte(incidents.startedAt, from), lte(incidents.startedAt, to)))
+      .orderBy(desc(incidents.startedAt));
+  }
+
+  async getDailyStatus(watcherUserId: string, watchedUserId: string): Promise<DailyStatus> {
+    const user = await this.getUser(watchedUserId);
+    if (!user) throw new Error("User not found");
+
+    const today = startOfDay(new Date());
+    const todayCheckins = await db.select().from(checkins)
+      .where(and(eq(checkins.userId, watchedUserId), gte(checkins.createdAt, today)))
+      .orderBy(desc(checkins.createdAt));
+
+    const lastCheckin = await this.getLastCheckin(watchedUserId);
+    const openIncident = await this.getOpenIncident(watchedUserId);
+
+    let heartRate: { bpm: number; recordedAt: string } | null = null;
+    const latestHr = await this.getLatestHeartRate(watchedUserId);
+    if (latestHr) {
+      heartRate = { bpm: latestHr.bpm, recordedAt: latestHr.recordedAt.toISOString() };
+    }
+
+    return {
+      userId: watchedUserId,
+      userName: user.name,
+      checkedInToday: todayCheckins.length > 0,
+      todayCheckins: todayCheckins.map(c => ({
+        time: format(c.createdAt, "h:mm a"),
+        method: c.method,
+      })),
+      lastCheckinAt: lastCheckin?.createdAt?.toISOString() || null,
+      hasOpenIncident: !!openIncident,
+      incidentReason: openIncident?.reason || null,
+      heartRate,
+    };
   }
 }
 

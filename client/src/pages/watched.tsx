@@ -1,18 +1,34 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MessageSquare, Video, CheckCircle2, AlertTriangle, Clock, Users, Shield, Heart, MapPin, Phone } from "lucide-react";
-import type { WatchedUser } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import {
+  ArrowLeft, MessageSquare, Video, CheckCircle2, AlertTriangle, Clock,
+  Shield, FileText, ChevronDown, ChevronUp, Heart, Mail,
+} from "lucide-react";
+import type { WatchedUser, DailyStatus, ReportPreference } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function WatchedPage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
   const { data: watchedUsers, isLoading } = useQuery<WatchedUser[]>({
     queryKey: ["/api/watched-users"],
     refetchInterval: 15000,
+  });
+
+  const { data: reportPrefs } = useQuery<ReportPreference[]>({
+    queryKey: ["/api/reports/preferences"],
   });
 
   function getStatusBadge(user: WatchedUser) {
@@ -124,18 +140,28 @@ export default function WatchedPage() {
   );
 
   function renderUserCard(user: WatchedUser) {
+    const isExpanded = expandedUser === user.userId;
+    const userPref = reportPrefs?.find(p => p.watchedUserId === user.userId);
+
     return (
       <Card key={user.userId} data-testid={`card-watched-user-${user.userId}`} className={user.hasOpenIncident ? "border-red-200 dark:border-red-800" : ""}>
         <CardContent className="py-4">
           <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-3 cursor-pointer flex-1"
+              onClick={() => setExpandedUser(isExpanded ? null : user.userId)}
+              data-testid={`toggle-expand-${user.userId}`}
+            >
               <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                 user.hasOpenIncident ? "bg-red-100 dark:bg-red-900/30" : "bg-primary/10"
               }`}>
                 {getStatusIcon(user)}
               </div>
-              <div>
-                <h3 className="font-medium" data-testid={`text-user-name-${user.userId}`}>{user.userName}</h3>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium" data-testid={`text-user-name-${user.userId}`}>{user.userName}</h3>
+                  {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                </div>
                 {getStatusBadge(user)}
               </div>
             </div>
@@ -155,6 +181,8 @@ export default function WatchedPage() {
               <span>Next due: {format(new Date(user.nextCheckinDue), "h:mm a")}</span>
             </div>
           </div>
+
+          {isExpanded && <DailyStatusPanel userId={user.userId} />}
 
           <div className="flex gap-2">
             <Button
@@ -178,8 +206,180 @@ export default function WatchedPage() {
               Video Call
             </Button>
           </div>
+
+          <div className="flex gap-2 mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setLocation(`/report/${user.userId}`)}
+              data-testid={`button-report-${user.userId}`}
+            >
+              <FileText className="w-4 h-4 mr-1.5" />
+              View Report
+            </Button>
+          </div>
+
+          {isExpanded && (
+            <ReportPreferencePanel userId={user.userId} existingPref={userPref} />
+          )}
         </CardContent>
       </Card>
     );
   }
+}
+
+function DailyStatusPanel({ userId }: { userId: string }) {
+  const { data: daily, isLoading } = useQuery<DailyStatus>({
+    queryKey: ["/api/watched-users", userId, "daily"],
+    queryFn: async () => {
+      const res = await fetch(`/api/watched-users/${userId}/daily`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-2 mb-3 flex justify-center">
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!daily) return null;
+
+  return (
+    <div className="bg-muted/50 rounded-lg p-3 mb-3 space-y-2" data-testid={`panel-daily-${userId}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">Today's Status</span>
+        {daily.checkedInToday ? (
+          <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs" data-testid={`badge-today-${userId}`}>
+            Checked in
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 text-xs" data-testid={`badge-today-${userId}`}>
+            Not yet
+          </Badge>
+        )}
+      </div>
+
+      {daily.todayCheckins.length > 0 && (
+        <div className="text-xs text-muted-foreground space-y-0.5">
+          {daily.todayCheckins.map((c, i) => (
+            <div key={i} className="flex items-center gap-2" data-testid={`today-checkin-${userId}-${i}`}>
+              <CheckCircle2 className="w-3 h-3 text-green-500" />
+              <span>{c.time} via {c.method}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {daily.heartRate && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={`hr-reading-${userId}`}>
+          <Heart className="w-3 h-3 text-red-400" />
+          <span>{daily.heartRate.bpm} BPM</span>
+        </div>
+      )}
+
+      {daily.hasOpenIncident && (
+        <div className="flex items-center gap-1.5 text-xs text-red-500" data-testid={`incident-status-${userId}`}>
+          <AlertTriangle className="w-3 h-3" />
+          <span>{daily.incidentReason === "sos" ? "Active SOS alert" : "Active missed checkin alert"}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportPreferencePanel({ userId, existingPref }: { userId: string; existingPref?: ReportPreference }) {
+  const { toast } = useToast();
+  const [frequency, setFrequency] = useState(existingPref?.frequency || "weekly");
+  const [enabled, setEnabled] = useState(existingPref?.enabled !== false);
+  const [email, setEmail] = useState(existingPref?.email || "");
+  const [synced, setSynced] = useState(false);
+
+  if (existingPref && !synced) {
+    setFrequency(existingPref.frequency);
+    setEnabled(existingPref.enabled);
+    setEmail(existingPref.email || "");
+    setSynced(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { frequency: string; enabled: boolean; email: string | null }) => {
+      const res = await apiRequest("PUT", `/api/reports/preferences/${userId}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports/preferences"] });
+      toast({ title: "Report preferences saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save preferences", variant: "destructive" });
+    },
+  });
+
+  function handleToggle(checked: boolean) {
+    setEnabled(checked);
+    saveMutation.mutate({ frequency, enabled: checked, email: email || null });
+  }
+
+  return (
+    <div className="border-t border-border mt-3 pt-3 space-y-3" data-testid={`panel-report-pref-${userId}`}>
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5" />
+          Scheduled reports
+        </Label>
+        <Switch
+          checked={enabled}
+          onCheckedChange={handleToggle}
+          data-testid={`switch-report-enabled-${userId}`}
+        />
+      </div>
+
+      {enabled && (
+        <>
+          <div>
+            <Label className="text-xs text-muted-foreground">Frequency</Label>
+            <Select value={frequency} onValueChange={setFrequency}>
+              <SelectTrigger className="mt-1" data-testid={`select-report-freq-${userId}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="daily">Daily</SelectItem>
+                <SelectItem value="weekly">Weekly</SelectItem>
+                <SelectItem value="fortnightly">Every 2 weeks</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              <Mail className="w-3 h-3" />
+              Email for reports
+            </Label>
+            <Input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1"
+              data-testid={`input-report-email-${userId}`}
+            />
+          </div>
+          <Button
+            size="sm"
+            onClick={() => saveMutation.mutate({ frequency, enabled, email: email || null })}
+            disabled={saveMutation.isPending}
+            className="w-full"
+            data-testid={`button-save-report-pref-${userId}`}
+          >
+            {saveMutation.isPending ? "Saving..." : "Save Report Preferences"}
+          </Button>
+        </>
+      )}
+    </div>
+  );
 }
