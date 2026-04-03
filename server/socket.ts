@@ -93,9 +93,16 @@ function getCallPairKey(userA: string, userB: string): string {
 }
 
 export function setupSocketServer(httpServer: HttpServer): SocketServer {
-  const allowedOrigins: (string | RegExp)[] = process.env.BASE_URL
-    ? [process.env.BASE_URL]
-    : [/^https?:\/\/localhost(:\d+)?$/, /\.replit\.dev$/, /\.repl\.co$/];
+  const allowedOrigins: (string | RegExp)[] = [];
+  if (process.env.BASE_URL) {
+    allowedOrigins.push(process.env.BASE_URL);
+  }
+  allowedOrigins.push(
+    /^https?:\/\/localhost(:\d+)?$/,
+    /\.replit\.dev$/,
+    /\.repl\.co$/,
+    /\.replit\.app$/
+  );
 
   io = new SocketServer(httpServer, {
     path: "/socket.io",
@@ -275,10 +282,8 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       if (!data || !isValidUUID(data.targetUserId)) return;
       const candidateStr = typeof data.candidate === "string" ? data.candidate : JSON.stringify(data.candidate || "");
       if (candidateStr.length > MAX_ICE_LENGTH) return;
-      const pairKey = getCallPairKey(userId, data.targetUserId);
-      if (!activeCallPairs.has(pairKey)) {
-        return;
-      }
+      const canRelay = await checkCommunicationPermission(userId, data.targetUserId);
+      if (!canRelay) return;
       io!.to(`user:${data.targetUserId}`).emit("call:ice-candidate", {
         candidate: data.candidate,
         fromUserId: userId,
@@ -304,10 +309,8 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       if (!data || !isValidUUID(data.targetUserId)) return;
       const offerStr = typeof data.offer === "string" ? data.offer : JSON.stringify(data.offer || "");
       if (offerStr.length > MAX_SDP_LENGTH) return;
-      const pairKey = getCallPairKey(userId, data.targetUserId);
-      if (!activeCallPairs.has(pairKey)) {
-        return;
-      }
+      const canRelay = await checkCommunicationPermission(userId, data.targetUserId);
+      if (!canRelay) return;
       io!.to(`user:${data.targetUserId}`).emit("call:ice-restart", {
         offer: data.offer,
         fromUserId: userId,
@@ -318,10 +321,8 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       if (!data || !isValidUUID(data.targetUserId)) return;
       const answerStr = typeof data.answer === "string" ? data.answer : JSON.stringify(data.answer || "");
       if (answerStr.length > MAX_SDP_LENGTH) return;
-      const pairKey = getCallPairKey(userId, data.targetUserId);
-      if (!activeCallPairs.has(pairKey)) {
-        return;
-      }
+      const canRelay = await checkCommunicationPermission(userId, data.targetUserId);
+      if (!canRelay) return;
       io!.to(`user:${data.targetUserId}`).emit("call:ice-restart-answer", {
         answer: data.answer,
         fromUserId: userId,

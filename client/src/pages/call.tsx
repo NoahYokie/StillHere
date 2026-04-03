@@ -120,13 +120,17 @@ export default function CallPage() {
     const socket = getSocket();
     console.log("[CALL] Init. Mode:", isAnswerMode ? "answer" : "caller", "connected:", socket.connected, "id:", socket.id);
 
+    let startConnectionTimeoutFn: (() => void) | null = null;
+
     function onCallAnswered(data: { callId: string; answer: any }) {
       console.log("[CALL] Received call:answered");
       stopRingtone();
-      playCallConnected();
       if (rtcRef.current) {
         rtcRef.current.handleAnswer(data.answer)
-          .then(() => console.log("[CALL] Answer applied successfully"))
+          .then(() => {
+            console.log("[CALL] Answer applied, starting connection timeout");
+            if (startConnectionTimeoutFn) startConnectionTimeoutFn();
+          })
           .catch((err) => console.error("[CALL] Failed to apply answer:", err));
       } else {
         console.error("[CALL] No RTC connection when answer received");
@@ -203,13 +207,12 @@ export default function CallPage() {
         const { iceServers, hasTurn } = await fetchIceServers();
         console.log("[CALL] Got", iceServers.length, "ICE server configs, hasTurn:", hasTurn);
 
-        const rtc = new WebRTCConnection(iceServers, hasTurn);
+        const rtc = new WebRTCConnection(iceServers);
         rtcRef.current = rtc;
 
         rtc.onRemoteStream = (stream) => {
           console.log("[CALL] Remote stream updated, tracks:", stream.getTracks().length);
           showRemoteVideo(stream);
-          setCallState("active");
         };
 
         const queuedCandidates: RTCIceCandidate[] = [];
@@ -235,19 +238,36 @@ export default function CallPage() {
           });
         };
 
+        let connectionTimer: ReturnType<typeof setTimeout> | null = null;
+
         rtc.onConnectionStateChange = (state) => {
           console.log("[CALL] PeerConnection state:", state);
           if (state === "connected") {
+            if (connectionTimer) { clearTimeout(connectionTimer); connectionTimer = null; }
             stopRingtone();
+            playCallConnected();
             setCallState("active");
           }
           if (state === "failed") {
-            handleCallEnd("Connection failed");
+            if (connectionTimer) { clearTimeout(connectionTimer); connectionTimer = null; }
+            handleCallEnd("Connection failed. Please check your internet and try again.");
           }
           if (state === "closed") {
+            if (connectionTimer) { clearTimeout(connectionTimer); connectionTimer = null; }
             handleCallEnd();
           }
         };
+
+        function startConnectionTimeout() {
+          if (connectionTimer) clearTimeout(connectionTimer);
+          connectionTimer = setTimeout(() => {
+            if (rtcRef.current && rtcRef.current.connectionState !== "connected") {
+              console.log("[CALL] Connection stalled after 20s post-answer, state:", rtcRef.current.connectionState);
+              handleCallEnd("Could not connect. Please try again.", true);
+            }
+          }, 20000);
+        }
+        startConnectionTimeoutFn = startConnectionTimeout;
 
         console.log("[CALL] Getting local media...");
         const localStream = await rtc.getLocalStream();
@@ -282,7 +302,8 @@ export default function CallPage() {
             }
           }
 
-          setCallState("active");
+          setCallState("connecting");
+          startConnectionTimeout();
         } else {
           const offer = await rtc.createOffer();
           console.log("[CALL] Calling", otherUserId, "offer has", (offer.sdp?.match(/a=candidate:/g) || []).length, "embedded candidates");
