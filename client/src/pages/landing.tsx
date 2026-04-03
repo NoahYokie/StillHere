@@ -66,6 +66,15 @@ export default function LandingPage() {
                 >
                   Get started — it's free
                 </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full md:w-auto py-6 md:px-8 text-lg font-semibold border-white/30 text-white bg-white/10 hover:bg-white/20"
+                  onClick={() => setLocation("/tour")}
+                  data-testid="button-see-tour"
+                >
+                  See how it works
+                </Button>
                 <button
                   onClick={() => setLocation("/login")}
                   className="w-full md:hidden text-center text-white/70 text-sm py-2"

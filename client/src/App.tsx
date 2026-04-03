@@ -20,6 +20,7 @@ import SetupNamePage from "@/pages/setup-name";
 import SetupContactsPage from "@/pages/setup-contacts";
 import SetupPreferencesPage from "@/pages/setup-preferences";
 import TrustPage from "@/pages/trust";
+import TourPage from "@/pages/tour";
 import WatchedPage from "@/pages/watched";
 import ChatPage from "@/pages/chat";
 import CallPage from "@/pages/call";
@@ -118,6 +119,7 @@ function Router() {
           </RequireSetup>
         </RequireAuth>
       </Route>
+      <Route path="/tour" component={TourPage} />
       <Route path="/help" component={HelpPage} />
       <Route path="/trust" component={TrustPage} />
       <Route path="/emergency/:token" component={ContactPage} />
