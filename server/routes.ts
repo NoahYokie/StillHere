@@ -1354,6 +1354,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/conversations", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const conversations = await storage.getConversations(userId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error getting conversations:", error);
+      res.status(500).json({ error: "Failed to get conversations" });
+    }
+  });
+
   app.get("/api/messages/unread/count", async (req, res) => {
     try {
       const userId = getUserId(req);

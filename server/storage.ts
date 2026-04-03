@@ -113,6 +113,7 @@ export interface IStorage {
   getMessages(userId1: string, userId2: string, limit?: number): Promise<Message[]>;
   markMessagesRead(senderId: string, receiverId: string): Promise<void>;
   getUnreadCount(userId: string): Promise<number>;
+  getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[]>;
 
   // Calls
   getCall(id: string): Promise<Call | undefined>;
@@ -775,6 +776,44 @@ export class DatabaseStorage implements IStorage {
       and(eq(messages.receiverId, userId), eq(messages.read, false))
     );
     return result.length;
+  }
+
+  async getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[]> {
+    const allMessages = await db.select().from(messages).where(
+      or(eq(messages.senderId, userId), eq(messages.receiverId, userId))
+    ).orderBy(desc(messages.createdAt));
+
+    const partnerMap = new Map<string, { lastMessage: string; lastMessageAt: Date; unreadCount: number }>();
+
+    for (const msg of allMessages) {
+      const partnerId = msg.senderId === userId ? msg.receiverId : msg.senderId;
+      if (!partnerMap.has(partnerId)) {
+        partnerMap.set(partnerId, {
+          lastMessage: msg.content,
+          lastMessageAt: msg.createdAt,
+          unreadCount: 0,
+        });
+      }
+      if (msg.receiverId === userId && !msg.read) {
+        const entry = partnerMap.get(partnerId)!;
+        entry.unreadCount++;
+      }
+    }
+
+    const conversations: { partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[] = [];
+    for (const [partnerId, data] of partnerMap) {
+      const partner = await this.getUser(partnerId);
+      conversations.push({
+        partnerId,
+        partnerName: partner?.name || "Unknown",
+        lastMessage: data.lastMessage,
+        lastMessageAt: data.lastMessageAt,
+        unreadCount: data.unreadCount,
+      });
+    }
+
+    conversations.sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
+    return conversations;
   }
 
   async getCall(id: string): Promise<Call | undefined> {

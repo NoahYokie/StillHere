@@ -55,7 +55,10 @@ export default function ChatPage() {
 
     socket.on("message:new", handleNewMessage);
 
-    apiRequest("POST", `/api/messages/${otherUserId}/read`, {}).catch(() => {});
+    apiRequest("POST", `/api/messages/${otherUserId}/read`, {}).then(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread/count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    }).catch(() => {});
 
     return () => {
       socket.off("message:new", handleNewMessage);
