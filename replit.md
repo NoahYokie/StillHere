@@ -52,6 +52,21 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Communication:** In-app messaging with real-time delivery, read receipts, and message history. In-app video calling via WebRTC with camera/mic controls and incoming call overlay.
 - **Watcher Dashboard:** Emergency contacts who have the app can see a dashboard of all people they monitor — showing names, last check-in times, status (OK/overdue/alert), with direct message and video call buttons.
 - **Account Security:** OTP rate limiting (10 req/15min on all auth endpoints including passkey), phone number normalization for 28+ countries, staging environment whitelisting, PII-free server logs (all names/phones/tokens/SMS bodies redacted), emergency token path sanitization in request logs, no hardcoded cron secret fallback (SESSION_SECRET required).
+- **Bank-Level Security Hardening:**
+  - HSTS with 1-year max-age, includeSubDomains, preload (production)
+  - Permissions-Policy restricting camera/mic/geolocation/sensors to self only
+  - X-Content-Type-Options: nosniff, X-Frame-Options: DENY, X-Powered-By removed
+  - Content-Type enforcement: all POST/PUT/DELETE API requests must be application/json
+  - Request body size capped at 1MB (JSON + URL-encoded)
+  - OTP codes stored as HMAC-SHA256 hashes (never plaintext in DB), timing-safe comparison
+  - Socket.IO origin allowlist (rejects cross-origin connections), strict payload validation (UUID format, message length 2KB, SDP 50KB, ICE 5KB limits)
+  - Error handler sanitizes 5xx responses (no internal error leakage to clients)
+  - CSP upgrade-insecure-requests in production
+  - Cron overlap guard prevents double-send of alerts
+  - WebSocket call signaling authorization (all events verify call ownership)
+  - User profile endpoint requires contact relationship check
+  - DB indexes on hot query paths (contacts, incidents, messages)
+- **New User Tour:** Interactive 7-step visual walkthrough at `/tour` with phone mockups showing checkin, reminders, alerts, SOS, contacts, contact response page, and settings. Accessible via "See how it works" button on landing page.
 
 **iOS App Store Preparation:**
 - **Capacitor v8:** All Capacitor packages aligned at v8 (@capacitor/core, cli, app, haptics, keyboard, status-bar, splash-screen, push-notifications).

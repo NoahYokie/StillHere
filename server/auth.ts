@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { authSessions, otpCodes, otpRateLimits, users, settings } from "@shared/schema";
 import { eq, and, gt, gte } from "drizzle-orm";
-import { randomBytes } from "crypto";
+import { randomBytes, timingSafeEqual, createHmac } from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import { addMinutes, addDays, subMinutes, subHours } from "date-fns";
 import { sendOtpSms } from "./sms";
@@ -21,6 +21,11 @@ function generateOtp(): string {
   const bytes = randomBytes(4);
   const num = bytes.readUInt32BE(0) % 900000 + 100000;
   return num.toString();
+}
+
+function hashOtp(code: string, phone: string): string {
+  const secret = process.env.SESSION_SECRET || "dev-fallback-secret";
+  return createHmac("sha256", secret).update(`${phone}:${code}`).digest("hex");
 }
 
 // Generate session token
@@ -306,11 +311,12 @@ export async function createOtp(phone: string): Promise<{
   });
   
   const code = generateOtp();
+  const hashedCode = hashOtp(code, normalizedPhone);
   const expiresAt = addMinutes(new Date(), OTP_EXPIRY_MINUTES);
   
   await db.insert(otpCodes).values({
     phone: normalizedPhone,
-    code,
+    code: hashedCode,
     expiresAt,
     used: false,
   });
@@ -337,20 +343,30 @@ export async function verifyOtp(phone: string, code: string): Promise<{
 }> {
   const normalizedPhone = normalizePhone(phone);
   
-  // Find valid OTP
-  const [otp] = await db
+  const hashedInput = hashOtp(code, normalizedPhone);
+
+  const otpCandidates = await db
     .select()
     .from(otpCodes)
     .where(
       and(
         eq(otpCodes.phone, normalizedPhone),
-        eq(otpCodes.code, code),
         eq(otpCodes.used, false),
         gt(otpCodes.expiresAt, new Date())
       )
     )
-    .limit(1);
-  
+    .limit(5);
+
+  const otp = otpCandidates.find(candidate => {
+    try {
+      const a = Buffer.from(candidate.code);
+      const b = Buffer.from(hashedInput);
+      return a.length === b.length && timingSafeEqual(a, b);
+    } catch {
+      return false;
+    }
+  });
+
   if (!otp) {
     return { success: false };
   }
