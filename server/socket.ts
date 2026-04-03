@@ -160,7 +160,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
     console.log(`[SOCKET] User ${userId} connected (socket: ${socket.id}, total: ${onlineUsers.get(userId)!.size})`);
 
-    socket.on("message:send", async (data: { receiverId: string; content: string }, callback?: Function) => {
+    socket.on("message:send", async (data: { receiverId: string; content: string; encrypted?: boolean; iv?: string }, callback?: Function) => {
       try {
         if (!data || !isValidUUID(data.receiverId) || !isValidString(data.content, MAX_MESSAGE_LENGTH)) {
           if (callback) callback({ success: false, error: "Invalid payload" });
@@ -171,15 +171,17 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           if (callback) callback({ success: false, error: "Not authorized" });
           return;
         }
-        const msg = await storage.saveMessage(userId, data.receiverId, data.content);
+        const msg = await storage.saveMessage(userId, data.receiverId, data.content, data.encrypted || false, data.iv);
         const sender = await storage.getUser(userId);
         io!.to(`user:${data.receiverId}`).emit("message:new", { ...msg, senderName: sender?.name || "Someone" });
+        io!.to(`user:${userId}`).emit("message:sent", msg);
         if (callback) callback({ success: true, message: msg });
 
         if (!isUserOnline(data.receiverId)) {
+          const pushBody = data.encrypted ? "New encrypted message" : data.content.substring(0, 100);
           await sendPushNotification(data.receiverId, {
             title: `Message from ${sender?.name || "Someone"}`,
-            body: data.content.substring(0, 100),
+            body: pushBody,
             url: `/chat/${userId}`,
             tag: "new-message",
           });
@@ -196,6 +198,20 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         await storage.markMessagesRead(data.senderId, userId);
         io!.to(`user:${data.senderId}`).emit("message:read-receipt", { readBy: userId });
       } catch {}
+    });
+
+    socket.on("typing:start", async (data: { receiverId: string }) => {
+      if (!data || !isValidUUID(data.receiverId)) return;
+      const canType = await checkCommunicationPermission(userId, data.receiverId);
+      if (!canType) return;
+      io!.to(`user:${data.receiverId}`).emit("typing:start", { userId });
+    });
+
+    socket.on("typing:stop", async (data: { receiverId: string }) => {
+      if (!data || !isValidUUID(data.receiverId)) return;
+      const canType = await checkCommunicationPermission(userId, data.receiverId);
+      if (!canType) return;
+      io!.to(`user:${data.receiverId}`).emit("typing:stop", { userId });
     });
 
     socket.on("call:initiate", async (data: { receiverId: string; callType: "video" | "audio"; offer: any }, callback?: Function) => {

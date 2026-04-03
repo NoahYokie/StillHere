@@ -109,7 +109,7 @@ export interface IStorage {
   deletePushSubscriptionForUser(userId: string, endpoint: string): Promise<void>;
 
   // Messages
-  saveMessage(senderId: string, receiverId: string, content: string): Promise<Message>;
+  saveMessage(senderId: string, receiverId: string, content: string, encrypted?: boolean, iv?: string): Promise<Message>;
   getMessages(userId1: string, userId2: string, limit?: number): Promise<Message[]>;
   markMessagesRead(senderId: string, receiverId: string): Promise<void>;
   getUnreadCount(userId: string): Promise<number>;
@@ -745,12 +745,14 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  async saveMessage(senderId: string, receiverId: string, content: string): Promise<Message> {
+  async saveMessage(senderId: string, receiverId: string, content: string, encrypted = false, iv?: string): Promise<Message> {
     const [msg] = await db.insert(messages).values({
       senderId,
       receiverId,
       content,
       read: false,
+      encrypted,
+      iv: iv || null,
     }).returning();
     return msg;
   }
@@ -788,8 +790,9 @@ export class DatabaseStorage implements IStorage {
     for (const msg of allMessages) {
       const partnerId = msg.senderId === userId ? msg.receiverId : msg.senderId;
       if (!partnerMap.has(partnerId)) {
+        const preview = msg.encrypted ? "Encrypted message" : msg.content;
         partnerMap.set(partnerId, {
-          lastMessage: msg.content,
+          lastMessage: preview,
           lastMessageAt: msg.createdAt,
           unreadCount: 0,
         });

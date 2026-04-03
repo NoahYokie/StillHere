@@ -1332,7 +1332,7 @@ export async function registerRoutes(
       if (currentUserId === targetUserId) {
         const user = await storage.getUser(targetUserId);
         if (!user) return res.status(404).json({ error: "User not found" });
-        return res.json({ id: user.id, name: user.name });
+        return res.json({ id: user.id, name: user.name, publicKey: user.publicKey || null });
       }
       const myContacts = await storage.getContacts(currentUserId);
       const hasAsContact = myContacts.some(c => c.linkedUserId === targetUserId);
@@ -1347,7 +1347,7 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json({ id: user.id, name: user.name });
+      res.json({ id: user.id, name: user.name, publicKey: user.publicKey || null });
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ error: "Failed to fetch user profile" });
@@ -1365,6 +1365,24 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting conversations:", error);
       res.status(500).json({ error: "Failed to get conversations" });
+    }
+  });
+
+  app.post("/api/users/public-key", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { publicKey } = req.body;
+      if (!publicKey || typeof publicKey !== "string" || publicKey.length > 2000) {
+        return res.status(400).json({ error: "Invalid public key" });
+      }
+      await storage.updateUser(userId, { publicKey } as any);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving public key:", error);
+      res.status(500).json({ error: "Failed to save public key" });
     }
   });
 
@@ -1431,16 +1449,18 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Not authorized to message this user" });
       }
 
-      const msg = await storage.saveMessage(currentUserId, receiverId, content.trim());
+      const { encrypted, iv } = req.body;
+      const msg = await storage.saveMessage(currentUserId, receiverId, content.trim(), encrypted || false, iv);
 
       const { emitToUser, isUserOnline } = await import("./socket");
       const sender = await storage.getUser(currentUserId);
       emitToUser(receiverId, "message:new", { ...msg, senderName: sender?.name || "Someone" });
 
       if (!isUserOnline(receiverId)) {
+        const pushBody = encrypted ? "New encrypted message" : content.substring(0, 100);
         await sendPushNotification(receiverId, {
           title: `Message from ${sender?.name || "Someone"}`,
-          body: content.substring(0, 100),
+          body: pushBody,
           url: `/chat/${currentUserId}`,
           tag: "new-message",
         });

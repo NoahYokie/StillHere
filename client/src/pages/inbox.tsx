@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -21,10 +21,10 @@ interface Conversation {
 export default function InboxPage() {
   const [, setLocation] = useLocation();
   const { auth } = useAuth();
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
 
   const { data: conversations, isLoading } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
-    refetchInterval: 30000,
   });
 
   const totalUnread = conversations?.reduce((sum, c) => sum + c.unreadCount, 0) || 0;
@@ -38,8 +38,46 @@ export default function InboxPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/messages/unread/count"] });
     };
 
+    const handleMessageSent = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    };
+
+    const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+    const handleTypingStart = (data: { userId: string }) => {
+      setTypingUsers(prev => new Set(prev).add(data.userId));
+      if (typingTimers.has(data.userId)) clearTimeout(typingTimers.get(data.userId)!);
+      typingTimers.set(data.userId, setTimeout(() => {
+        setTypingUsers(prev => {
+          const next = new Set(prev);
+          next.delete(data.userId);
+          return next;
+        });
+        typingTimers.delete(data.userId);
+      }, 5000));
+    };
+
+    const handleTypingStop = (data: { userId: string }) => {
+      if (typingTimers.has(data.userId)) { clearTimeout(typingTimers.get(data.userId)!); typingTimers.delete(data.userId); }
+      setTypingUsers(prev => {
+        const next = new Set(prev);
+        next.delete(data.userId);
+        return next;
+      });
+    };
+
     socket.on("message:new", handleNewMessage);
-    return () => { socket.off("message:new", handleNewMessage); };
+    socket.on("message:sent", handleMessageSent);
+    socket.on("typing:start", handleTypingStart);
+    socket.on("typing:stop", handleTypingStop);
+    return () => {
+      socket.off("message:new", handleNewMessage);
+      socket.off("message:sent", handleMessageSent);
+      socket.off("typing:start", handleTypingStart);
+      socket.off("typing:stop", handleTypingStop);
+      typingTimers.forEach(t => clearTimeout(t));
+      typingTimers.clear();
+    };
   }, [auth?.authenticated]);
 
   return (
@@ -82,42 +120,51 @@ export default function InboxPage() {
 
         {conversations && conversations.length > 0 && (
           <div className="space-y-2">
-            {conversations.map((convo) => (
-              <Card
-                key={convo.partnerId}
-                className={`cursor-pointer transition-colors hover:bg-accent/50 ${convo.unreadCount > 0 ? "border-primary/30 bg-primary/5" : ""}`}
-                onClick={() => setLocation(`/chat/${convo.partnerId}`)}
-                data-testid={`conversation-${convo.partnerId}`}
-              >
-                <CardContent className="py-3 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${convo.unreadCount > 0 ? "bg-primary/10" : "bg-muted"}`}>
-                      <MessageCircle className={`w-5 h-5 ${convo.unreadCount > 0 ? "text-primary" : "text-muted-foreground"}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"}`} data-testid={`text-partner-name-${convo.partnerId}`}>
-                          {convo.partnerName}
-                        </span>
-                        <span className="text-xs text-muted-foreground shrink-0 ml-2" data-testid={`text-time-${convo.partnerId}`}>
-                          {formatDistanceToNow(new Date(convo.lastMessageAt), { addSuffix: true })}
-                        </span>
+            {conversations.map((convo) => {
+              const isTyping = typingUsers.has(convo.partnerId);
+              return (
+                <Card
+                  key={convo.partnerId}
+                  className={`cursor-pointer transition-colors hover:bg-accent/50 ${convo.unreadCount > 0 ? "border-primary/30 bg-primary/5" : ""}`}
+                  onClick={() => setLocation(`/chat/${convo.partnerId}`)}
+                  data-testid={`conversation-${convo.partnerId}`}
+                >
+                  <CardContent className="py-3 px-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${convo.unreadCount > 0 ? "bg-primary/10" : "bg-muted"}`}>
+                        <MessageCircle className={`w-5 h-5 ${convo.unreadCount > 0 ? "text-primary" : "text-muted-foreground"}`} />
                       </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className={`text-sm truncate ${convo.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"}`} data-testid={`text-preview-${convo.partnerId}`}>
-                          {convo.lastMessage.length > 60 ? convo.lastMessage.substring(0, 60) + "..." : convo.lastMessage}
-                        </p>
-                        {convo.unreadCount > 0 && (
-                          <Badge className="ml-2 shrink-0 bg-primary text-primary-foreground text-xs min-w-[20px] h-5 flex items-center justify-center rounded-full" data-testid={`badge-unread-${convo.partnerId}`}>
-                            {convo.unreadCount}
-                          </Badge>
-                        )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm truncate ${convo.unreadCount > 0 ? "font-semibold" : "font-medium"}`} data-testid={`text-partner-name-${convo.partnerId}`}>
+                            {convo.partnerName}
+                          </span>
+                          <span className="text-xs text-muted-foreground shrink-0 ml-2" data-testid={`text-time-${convo.partnerId}`}>
+                            {formatDistanceToNow(new Date(convo.lastMessageAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          {isTyping ? (
+                            <p className="text-sm text-primary animate-pulse" data-testid={`text-typing-${convo.partnerId}`}>
+                              typing...
+                            </p>
+                          ) : (
+                            <p className={`text-sm truncate ${convo.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"}`} data-testid={`text-preview-${convo.partnerId}`}>
+                              {convo.lastMessage.length > 60 ? convo.lastMessage.substring(0, 60) + "..." : convo.lastMessage}
+                            </p>
+                          )}
+                          {convo.unreadCount > 0 && (
+                            <Badge className="ml-2 shrink-0 bg-primary text-primary-foreground text-xs min-w-[20px] h-5 flex items-center justify-center rounded-full" data-testid={`badge-unread-${convo.partnerId}`}>
+                              {convo.unreadCount}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
