@@ -35,19 +35,15 @@ export class WebRTCConnection {
   public onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
   public onNegotiationNeeded: ((offer: RTCSessionDescriptionInit) => void) | null = null;
 
-  constructor(iceServers: RTCIceServer[], forceRelay: boolean) {
+  constructor(iceServers: RTCIceServer[]) {
     const config: RTCConfiguration = {
       iceServers,
       iceCandidatePoolSize: 2,
+      iceTransportPolicy: "all",
     };
 
-    if (forceRelay) {
-      config.iceTransportPolicy = "relay";
-      console.log("[WebRTC] Forcing TURN relay mode (WhatsApp-style)");
-    }
-
     this.pc = new RTCPeerConnection(config);
-    console.log("[WebRTC] PeerConnection created, iceTransportPolicy:", forceRelay ? "relay" : "all");
+    console.log("[WebRTC] PeerConnection created, iceTransportPolicy: all, servers:", iceServers.length);
 
     this.setupListeners();
     this.setupNetworkMonitor();
