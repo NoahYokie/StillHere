@@ -1,7 +1,7 @@
 # StillHere - Safety Check-in App
 
 ### Overview
-StillHere is a safety check-in application designed to help elderly individuals, solo dwellers, and lone workers maintain connection with their emergency contacts. It provides a simple, reassuring user experience where users confirm their safety with a single tap. If a check-in is missed, pre-selected emergency contacts are notified, enabling them to assess the situation and take appropriate action via a dedicated status page. The project aims to offer a reliable and user-friendly solution for personal safety monitoring, emphasizing ease of use and timely communication during emergencies.
+StillHere is a safety check-in application designed to help elderly individuals, solo dwellers, and lone workers stay connected with their emergency contacts. Users confirm their safety with a single tap, and if a check-in is missed, pre-selected emergency contacts are notified via a dedicated status page. The project focuses on providing a reliable, user-friendly solution for personal safety monitoring, ensuring ease of use and timely communication during emergencies. It aims to offer peace of mind through a simple, effective safety net.
 
 ### User Preferences
 - I want to interact with the agent in a clear and structured way.
@@ -13,98 +13,27 @@ StillHere is a safety check-in application designed to help elderly individuals,
 ### System Architecture
 
 **UI/UX Decisions:**
-The application features an extremely simple, calm, and reassuring user interface.
-- **Color Scheme:** Primary blue (#0ea5e9) for trust/safety, accent green (#22c55e) for positive actions ("I'm OK"), and destructive red (#ef4444) for SOS and alerts.
-- **Key Elements:** A large green "I'm OK" button for daily check-ins and a prominent red "I Need Help" button for SOS alerts.
-- **Onboarding:** A 4-screen onboarding flow introduces new users to the app's purpose and functionality, followed by a 3-step registration process (name, contacts, preferences).
-- **In-App Banners:** Real-time status banners on the home page display alert status, contact handling, and notification progress with dynamic contact names.
-- **Haptic Feedback:** Implemented for check-in, SOS, and fall detection actions on supported devices to provide tactile confirmation.
-- **Quote of the Day:** After each check-in, a daily motivational quote is displayed in a card below the check-in button (125 quotes, rotates by day-of-year).
+The application features a simple, reassuring user interface with a primary blue color scheme, accent green for positive actions, and destructive red for alerts. Key elements include a large "I'm OK" button and a prominent "I Need Help" SOS button. An onboarding flow introduces functionality, followed by a 3-step registration. In-app banners provide real-time status, and haptic feedback is implemented for key actions. A motivational quote is displayed after each check-in.
 
 **Technical Implementations:**
-- **Frontend:** Built with React, TypeScript, Tailwind CSS, and shadcn/ui, utilizing `wouter` for routing and `TanStack Query` for data fetching.
-- **Backend:** Powered by Express.js, integrating Helmet for security headers and `express-rate-limit` for API rate limiting.
-- **Database:** PostgreSQL managed with Drizzle ORM.
-- **Authentication:** Passkey (WebAuthn/FIDO2) as primary login with Face ID, Touch ID, fingerprint, or screen lock. Phone OTP as fallback. Sessions last 30 days using httpOnly secure cookies. Rate limiting on OTP requests. Passkey challenges bound to server-side httpOnly cookies for security.
-- **Check-in Mechanism:** Users can manually check-in or opt for automatic check-ins upon opening the app.
-- **Emergency System:** Configurable check-in schedules, grace periods before alerts, and reminders. An SOS alert button provides immediate notification.
-- **Escalation System:** Sequential escalation through the top 5 contacts by priority (20 minutes each), then all remaining contacts are notified simultaneously. Re-notification for unaddressed incidents. Tracked via `notifiedContactIds` JSON field on incidents.
-- **Fall Detection:** DeviceMotion API-based fall detection — detects high-G impact followed by stillness. Shows 60-second countdown dialog before auto-triggering SOS. Toggle in settings.
-- **Premium Contacts:** Free users: 2 contacts max. Premium users (`isPremium` flag): unlimited contacts with top-5 sequential escalation then blast-all remaining.
-- **Location Sharing:** Optional, user-controlled location sharing.
-- **Push Notifications:** Web push notifications are used for reminders to reduce SMS costs, with an "I'm OK" action button for one-tap check-ins directly from the notification. A service worker handles push events and offline capabilities.
-- **Security:** Comprehensive security measures including Helmet.js for HTTP headers, global API rate limiting, cron job security (`x-cron-secret`), and robust input validation.
-- **PWA Support:** Full Progressive Web App capabilities, including a manifest, service worker for caching and offline support, and installability.
-- **Wearable API:** Dedicated API endpoints for companion watch apps (Apple Watch, Wear OS) using Bearer token authentication (`x-api-token` header) for quick check-ins (`POST /api/checkin/quick`) and minimal status updates (`GET /api/status/simple`).
-- **International Phone Normalization:** 28+ countries supported with E.164 normalization (US, UK, AU, CA, NZ, JP, KR, SG, IN, FR, DE, IT, ES, NL, BE, CH, IE, SE, NO, DK, CZ, HU, RO, HR, and more).
-- **WebSocket Communication:** Socket.IO for real-time messaging and video call signaling, with cookie-based authentication matching the existing session system.
-- **In-App Messaging:** Real-time chat between users and emergency contacts who have the app, with message persistence, read receipts, and push notification fallback for offline users.
-- **In-App Video Calling:** WhatsApp-style WebRTC video calling with relay-first architecture. Forces `iceTransportPolicy: "relay"` when TURN servers are available (Twilio Network Traversal Service) for guaranteed connectivity behind any firewall/NAT. Uses full ICE gathering (candidates baked into SDP) instead of trickle ICE to eliminate timing bugs. Caller queues trickle candidates until call:initiate confirms. 45-second ring timeout. ICE restart on disconnect/network change. Features: mute, camera toggle, camera flip, incoming call overlay with ICE candidate buffering.
-- **Native Call Integration (iOS/Android):** CallKit (iOS) and ConnectionService (Android) integration via Capacitor plugins for native incoming call UI. VoIP push tokens (APNs for iOS, FCM for Android) registered on server. Server sends VoIP pushes to wake app for incoming calls when in background. Falls back to web overlay when not running natively.
-- **Contact Detection & Watcher System:** Automatic detection of emergency contacts who are also StillHere users (via phone number matching). Contacts with the app get push notifications instead of SMS during incidents. Watcher dashboard shows real-time status of people being monitored.
-- **Smart Notification Routing:** When an emergency contact has the app (linked via `linkedUserId`), notifications are sent via push + in-app message instead of SMS, reducing costs and enabling richer communication.
+The frontend uses React, TypeScript, Tailwind CSS, and shadcn/ui. The backend is Express.js with Helmet for security and `express-rate-limit`. PostgreSQL is managed with Drizzle ORM. Authentication is primarily Passkey (WebAuthn/FIDO2) with phone OTP as a fallback. Sessions are 30 days via httpOnly secure cookies.
 
-**Feature Specifications:**
-- **User Management:** Passkey + phone OTP authentication, user profiles, and settings. Passkey setup prompt after first OTP login. Passkey management in settings.
-- **Check-in Features:** Manual "I'm OK" button, optional auto check-in on app open, configurable schedules (12-48+ hours), grace periods (10-30 min), and configurable reminders (none, one, or two). Quote of the day shown after check-in.
-- **Emergency Management:** SOS alert button, dynamic emergency contacts with priority levels (free: 2, premium: unlimited), token-based contact pages for status viewing, responsibility system for contacts to pause escalation, fall detection with countdown, and location sharing.
-- **Notifications:** SMS (via Twilio) and web push notifications for reminders and alerts. Smart routing sends push to contacts who have the app, SMS to those who don't.
-- **Communication:** In-app messaging with real-time delivery, read receipts, and message history. In-app video calling via WebRTC with camera/mic controls and incoming call overlay.
-- **Watcher Dashboard:** Emergency contacts who have the app can see a dashboard of all people they monitor — showing names, last check-in times, status (OK/overdue/alert), with direct message and video call buttons.
-- **Account Security:** OTP rate limiting (10 req/15min on all auth endpoints including passkey), phone number normalization for 28+ countries, staging environment whitelisting, PII-free server logs (all names/phones/tokens/SMS bodies redacted), emergency token path sanitization in request logs, no hardcoded cron secret fallback (SESSION_SECRET required).
-- **Bank-Level Security Hardening:**
-  - HSTS with 1-year max-age, includeSubDomains, preload (production)
-  - Permissions-Policy restricting camera/mic/geolocation/sensors to self only
-  - X-Content-Type-Options: nosniff, X-Frame-Options: DENY, X-Powered-By removed
-  - Content-Type enforcement: all POST/PUT/DELETE API requests must be application/json
-  - Request body size capped at 1MB (JSON + URL-encoded)
-  - OTP codes stored as HMAC-SHA256 hashes (never plaintext in DB), timing-safe comparison
-  - Socket.IO origin allowlist (rejects cross-origin connections), strict payload validation (UUID format, message length 2KB, SDP 50KB, ICE 5KB limits)
-  - Error handler sanitizes 5xx responses (no internal error leakage to clients)
-  - CSP upgrade-insecure-requests in production
-  - Cron overlap guard prevents double-send of alerts
-  - WebSocket call signaling authorization (all events verify call ownership)
-  - User profile endpoint requires contact relationship check
-  - DB indexes on hot query paths (contacts, incidents, messages)
-- **New User Tour:** Interactive 7-step visual walkthrough at `/tour` with phone mockups showing checkin, reminders, alerts, SOS, contacts, contact response page, and settings. Accessible via "See how it works" button on landing page.
-
-**iOS App Store Preparation:**
-- **Capacitor v8:** All Capacitor packages aligned at v8 (@capacitor/core, cli, app, haptics, keyboard, status-bar, splash-screen, push-notifications).
-- **Native Plugin Init:** `client/src/lib/capacitor.ts` initializes StatusBar, SplashScreen, Keyboard, and App plugins when running natively.
-- **iOS Safe Areas:** CSS safe-area-inset padding on `<html>`, `capacitor-ios` body class for iOS-specific overrides, keyboard-open class for keyboard visibility.
-- **App Icons:** All 13 iOS icon sizes generated in `client/public/ios-icons/` from 1024x1024 source. Xcode asset catalog JSON in `ios-app-store/AppIcon-Contents.json`.
-- **Build Guide:** Complete iOS App Store submission guide at `ios-app-store/IOS_BUILD_GUIDE.md`.
-- **Build Flow:** `npm run build` → `npx cap sync ios` → Open in Xcode → Archive → Submit.
-
-### Key Files
-- `shared/schema.ts` — Database schema (users, settings, contacts, incidents, checkins, messages, calls, etc.)
-- `server/routes.ts` — All API routes including cron tick escalation logic, messaging, watcher endpoints
-- `server/storage.ts` — Storage interface and implementation (IStorage / DatabaseStorage)
-- `server/auth.ts` — Phone normalization, OTP generation, session management
-- `server/sms.ts` — Twilio SMS integration
-- `server/socket.ts` — Socket.IO WebSocket server for real-time messaging and video call signaling
-- `server/push.ts` — Web push notification sending
-- `client/src/App.tsx` — Frontend routing with all pages including chat, call, watcher
-- `client/src/pages/home.tsx` — Main check-in page with escalation banner, fall detection, quote of the day
-- `client/src/pages/settings.tsx` — Settings page with dynamic contacts list, fall detection toggle, "On StillHere" badges
-- `client/src/pages/watched.tsx` — Watcher dashboard showing monitored users
-- `client/src/pages/chat.tsx` — Real-time messaging conversation view
-- `client/src/pages/call.tsx` — Video call interface with WebRTC
-- `client/src/pages/contact.tsx` — Emergency contact status page with in-app chat/call buttons
-- `client/src/pages/setup-contacts.tsx` — Onboarding contacts setup (dynamic list)
-- `client/src/components/incoming-call.tsx` — Incoming call overlay (works on any page)
-- `client/src/lib/socket.ts` — Socket.IO client singleton
-- `client/src/lib/webrtc.ts` — WebRTC peer connection management (relay-first, full ICE gathering)
-- `client/src/lib/native-call.ts` — Native CallKit/ConnectionService integration for iOS/Android
-- `client/src/lib/fall-detection.ts` — DeviceMotion-based fall detection module
-- `client/src/lib/quotes.ts` — 125 daily motivational quotes
-- `server/voip-push.ts` — VoIP push notifications (APNs for iOS, FCM for Android)
-- `capacitor.config.json` — Capacitor config with watch companion app stubs
+Key features include:
+- **Check-in Mechanism:** Manual or optional automatic check-ins, with configurable schedules, grace periods, and reminders.
+- **Emergency System:** SOS alerts, sequential escalation through prioritized contacts, and fall detection with a countdown.
+- **Notifications:** Web push notifications are prioritized to reduce SMS costs, with SMS fallback. Smart routing sends push to app users and SMS to others.
+- **Communication:** Socket.IO enables real-time in-app messaging with persistence and read receipts, and WhatsApp-style WebRTC video calling with a relay-first architecture. Native call integration via Capacitor plugins (CallKit/ConnectionService) provides a native incoming call UI.
+- **Watcher System:** Automatic detection of emergency contacts who are also StillHere users, enabling push notifications and a watcher dashboard for monitoring.
+- **Security:** Comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free server logs, and bank-level security hardening (e.g., HSTS, Permissions-Policy, content-type enforcement, OTP hashing).
+- **PWA Support:** Full Progressive Web App capabilities for offline support and installability.
+- **Wearable API:** Dedicated API endpoints support companion watch apps (Apple Watch, Wear OS) for quick check-ins and status updates.
+- **Internationalization:** E.164 phone number normalization supports 28+ countries.
+- **Apple Watch Companion App:** A SwiftUI watchOS app provides one-tap check-in, SOS, and a custom 2-phase fall detection algorithm. It uses WatchConnectivity for iPhone relay and WidgetKit for watch face complications.
 
 ### External Dependencies
-- **SMS Gateway:** Twilio (for sending SMS messages)
-- **Push Notifications:** `web-push` library (for VAPID-based web push notifications)
-- **WebSocket:** `socket.io` / `socket.io-client` (for real-time messaging and video call signaling)
+- **SMS Gateway:** Twilio
+- **Push Notifications:** `web-push` library
+- **WebSocket:** `socket.io` / `socket.io-client`
 - **Frontend Framework:** React
 - **Styling:** Tailwind CSS, shadcn/ui
 - **Database:** PostgreSQL
@@ -114,4 +43,4 @@ The application features an extremely simple, calm, and reassuring user interfac
 - **Rate Limiting Middleware:** `express-rate-limit`
 - **Frontend Routing:** `wouter`
 - **Data Fetching:** `TanStack Query`
-- **Mobile/Desktop App Wrapper:** Capacitor (for native iOS and Android builds)
+- **Mobile/Desktop App Wrapper:** Capacitor
