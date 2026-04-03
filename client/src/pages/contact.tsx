@@ -157,7 +157,7 @@ export default function ContactPage() {
               <div>
                 <CardTitle className="text-lg" data-testid="text-user-name">{user.name}</CardTitle>
                 <CardDescription>
-                  Last check-in:{" "}
+                  Last checkin:{" "}
                   <span data-testid="text-last-checkin">
                     {lastCheckin
                       ? formatDistanceToNow(new Date(lastCheckin.createdAt), { addSuffix: true })
@@ -186,7 +186,7 @@ export default function ContactPage() {
                   <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isSOS ? "text-destructive" : "text-yellow-600 dark:text-yellow-500"}`} />
                   <div>
                     <p className={`font-medium ${isSOS ? "text-destructive" : "text-yellow-700 dark:text-yellow-400"}`}>
-                      {isSOS ? "Help has been requested" : "Missed check-in"}
+                      {isSOS ? "Help has been requested" : "Missed checkin"}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
                       {isSOS

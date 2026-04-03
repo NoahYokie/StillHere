@@ -318,12 +318,12 @@ export default function SettingsPage() {
       </header>
 
       <main className="max-w-md mx-auto px-6 py-6 space-y-6">
-        {/* Check-ins Section */}
+        {/* Checkins Section */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Clock className="h-5 w-5" />
-              Check-ins
+              Checkins
             </CardTitle>
             <CardDescription>How often should we check in?</CardDescription>
           </CardHeader>
@@ -397,7 +397,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <AlertCircle className="h-5 w-5" />
-              If you miss a check-in
+              If you miss a checkin
             </CardTitle>
             <CardDescription>How long should we wait before notifying your emergency contacts?</CardDescription>
           </CardHeader>
@@ -597,11 +597,11 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="on_shift_only" id="loc-shift" data-testid="radio-location-shift" />
-                <Label htmlFor="loc-shift">During active check-ins</Label>
+                <Label htmlFor="loc-shift">During active checkins</Label>
               </div>
               <div className="flex items-center space-x-3">
                 <RadioGroupItem value="both" id="loc-both" data-testid="radio-location-both" />
-                <Label htmlFor="loc-both">During emergencies and active check-ins (recommended)</Label>
+                <Label htmlFor="loc-both">During emergencies and active checkins (recommended)</Label>
               </div>
             </RadioGroup>
             <p className="text-sm text-muted-foreground mt-3">
@@ -641,12 +641,12 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Auto Check-in Section */}
+        {/* Auto Checkin Section */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Smartphone className="h-5 w-5" />
-              Auto check-in
+              Auto checkin
             </CardTitle>
             <CardDescription>Check in automatically when you open the app.</CardDescription>
           </CardHeader>
@@ -664,7 +664,7 @@ export default function SettingsPage() {
               />
             </div>
             <p className="text-sm text-muted-foreground mt-3">
-              Opening StillHere counts as a check-in. No button tap needed.
+              Opening StillHere counts as a checkin. No button tap needed.
             </p>
           </CardContent>
         </Card>

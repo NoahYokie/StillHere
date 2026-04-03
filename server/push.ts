@@ -89,10 +89,10 @@ export async function sendSosConfirmationPush(userId: string): Promise<void> {
 }
 
 export async function sendIncidentPush(userId: string, userName: string, reason: "sos" | "missed_checkin"): Promise<void> {
-  const title = reason === "sos" ? "Help request received" : "Missed check-in alert";
+  const title = reason === "sos" ? "Help request received" : "Missed checkin alert";
   const body = reason === "sos"
     ? `${userName} has requested help. Check the app for details.`
-    : `${userName} missed their check-in. Your contacts are being notified.`;
+    : `${userName} missed their checkin. Your contacts are being notified.`;
 
   await sendPushNotification(userId, {
     title,

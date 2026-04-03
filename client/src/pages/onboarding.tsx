@@ -22,7 +22,7 @@ const screens = [
   },
   {
     title: "Let's get started",
-    body: "Next, we'll set up check-ins and contacts.",
+    body: "Next, we'll set up checkins and contacts.",
     icon: ArrowRight,
     isLast: true,
   },
