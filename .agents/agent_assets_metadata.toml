@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "KIHSnRb4Sh7ggJEJAvFB_"
+uri = "file://FULL_APP_REPORT.md"
+type = "text"
+title = "StillHere - Full Application Report"
