@@ -427,11 +427,11 @@ export default function LandingPage() {
           <div className="text-center mb-10 md:mb-14">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400 text-xs font-medium mb-4">
               <Watch className="h-3.5 w-3.5" />
-              <span>Apple Watch Companion</span>
+              <span>Smartwatch Companion</span>
             </div>
             <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">Safety that never sleeps</h2>
             <p className="text-sm md:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
-              Your Apple Watch monitors you around the clock, even when your phone is in the other room.
+              Works with Apple Watch and Wear OS. Your smartwatch monitors you around the clock, even when your phone is in the other room.
             </p>
           </div>
 
@@ -505,7 +505,7 @@ export default function LandingPage() {
                 <div>
                   <h3 className="font-semibold mb-1">Wrist Checkin</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Check in directly from your Apple Watch with one tap. No need to reach for your phone.
+                    Check in directly from your smartwatch with one tap. No need to reach for your phone.
                   </p>
                 </div>
               </div>
