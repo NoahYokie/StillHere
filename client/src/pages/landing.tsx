@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone } from "lucide-react";
+import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone, Wifi, WifiOff, Smartphone, Server } from "lucide-react";
 
 type AnimStep = "checkin" | "tapping" | "confirmed" | "reminder" | "alert";
 
@@ -511,6 +511,20 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+
+          <div className="mt-10 md:mt-14 bg-background rounded-2xl p-5 md:p-6 border border-border max-w-2xl mx-auto">
+            <div className="flex items-start gap-3 md:gap-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Smartphone className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm md:text-base">Don't have a smartwatch? You're still covered.</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Fall detection and heart rate monitoring require a smartwatch because it's physically on your body. Phone-only users are protected by the daily checkin system and SOS button. If you miss a checkin for any reason, your contacts are notified automatically.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -560,6 +574,53 @@ export default function LandingPage() {
       </section>
 
       <section className="px-6 py-14 md:py-20 bg-background">
+        <div className="max-w-5xl md:mx-auto">
+          <div className="text-center mb-10 md:mb-14">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-400 text-xs font-medium mb-4">
+              <WifiOff className="h-3.5 w-3.5" />
+              <span>Always Protected</span>
+            </div>
+            <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">Works even when you're offline</h2>
+            <p className="text-sm md:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
+              Your safety doesn't depend on your phone being online. Our server watches the clock for you.
+            </p>
+          </div>
+
+          <div className="md:grid md:grid-cols-3 md:gap-6 space-y-4 md:space-y-0">
+            <div className="p-5 rounded-xl bg-muted/50 border border-border text-center">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                <Server className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1.5 text-sm md:text-base">Server-side monitoring</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                The server knows your checkin schedule. If 9 AM comes and it doesn't hear from you, it takes action.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-xl bg-muted/50 border border-border text-center">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-3">
+                <WifiOff className="h-6 w-6 text-amber-500" />
+              </div>
+              <h3 className="font-semibold mb-1.5 text-sm md:text-base">Phone off? No problem.</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                If your phone dies, you lose signal, or you simply can't check in, that triggers the safety net automatically.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-xl bg-muted/50 border border-border text-center">
+              <div className="w-12 h-12 rounded-2xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
+                <MessageCircle className="h-6 w-6 text-green-500" />
+              </div>
+              <h3 className="font-semibold mb-1.5 text-sm md:text-base">SMS alerts, not apps</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Your emergency contacts are notified by text message. They don't need the app, a smartphone, or even the internet.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-14 md:py-20 bg-muted/30">
         <div className="max-w-5xl md:mx-auto md:grid md:grid-cols-2 md:gap-12 md:items-center">
           <div className="md:block">
             <h2 className="text-xl md:text-2xl font-bold mb-3 text-center md:text-left">What your contacts see</h2>
