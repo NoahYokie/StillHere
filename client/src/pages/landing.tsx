@@ -76,25 +76,25 @@ export default function LandingPage() {
           <div className="absolute bottom-32 right-4 md:bottom-10 md:right-20 w-48 md:w-80 h-48 md:h-80 rounded-full bg-white/15 blur-3xl" />
         </div>
 
-        <div className="relative flex-1 md:flex-none flex flex-col md:block px-6 pt-14 pb-8 md:py-24 max-w-5xl md:mx-auto md:w-full">
-          <div className="flex items-center gap-2 md:hidden">
-            <Heart className="h-7 w-7" />
-            <span className="text-xl font-semibold" data-testid="text-landing-title-mobile">StillHere</span>
+        <div className="relative flex-1 md:flex-none flex flex-col md:block px-6 pt-12 pb-6 md:py-24 max-w-5xl md:mx-auto md:w-full">
+          <div className="flex items-center gap-2 md:hidden mb-6">
+            <Heart className="h-6 w-6" />
+            <span className="text-lg font-semibold tracking-tight" data-testid="text-landing-title-mobile">StillHere</span>
           </div>
 
           <div className="md:grid md:grid-cols-2 md:gap-12 md:items-center flex-1 flex flex-col md:flex-none">
-            <div className="flex-1 flex flex-col justify-center md:block -mt-8 md:mt-0 order-2 md:order-1">
-              <h1 className="text-[2rem] md:text-4xl lg:text-5xl leading-tight font-bold mb-4 md:mb-6 text-center md:text-left" data-testid="text-hero-title">
+            <div className="flex-1 flex flex-col justify-end md:justify-center md:block order-2 md:order-1 pt-2 md:pt-0">
+              <h1 className="text-[1.75rem] md:text-4xl lg:text-5xl leading-[1.2] md:leading-tight font-bold tracking-tight mb-3 md:mb-6 text-center md:text-left" data-testid="text-hero-title">
                 Your family will always know you're okay.
               </h1>
-              <p className="text-lg md:text-xl text-white/85 leading-relaxed mb-8 text-center md:text-left">
+              <p className="text-[0.95rem] md:text-xl text-white/80 leading-relaxed mb-6 md:mb-8 text-center md:text-left tracking-normal">
                 One tap a day. That's all it takes to give your loved ones peace of mind.
               </p>
 
-              <div className="space-y-3 md:space-y-0 md:flex md:flex-wrap md:gap-3">
+              <div className="space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3">
                 <Button
                   size="lg"
-                  className="w-full md:w-auto py-6 md:px-8 text-lg font-semibold bg-white text-primary hover:bg-white/90"
+                  className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 text-base md:text-lg font-semibold bg-white text-primary hover:bg-white/90 rounded-xl shadow-lg shadow-black/10"
                   onClick={() => setLocation("/login")}
                   data-testid="button-get-started"
                 >
@@ -103,7 +103,7 @@ export default function LandingPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full md:w-auto py-6 md:px-8 text-lg font-semibold border-white/30 text-white bg-white/10 hover:bg-white/20"
+                  className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 text-base md:text-lg font-semibold border-white/25 text-white bg-white/10 hover:bg-white/20 rounded-xl"
                   onClick={() => setLocation("/tour")}
                   data-testid="button-see-tour"
                 >
@@ -111,7 +111,7 @@ export default function LandingPage() {
                 </Button>
                 <button
                   onClick={() => setLocation("/login")}
-                  className="w-full md:hidden text-center text-white/70 text-sm py-2"
+                  className="w-full md:hidden text-center text-white/60 text-sm py-1.5 tracking-normal"
                   data-testid="button-sign-in-mobile"
                 >
                   Already have an account? Sign in
@@ -119,38 +119,38 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="flex justify-center order-1 md:order-2 mb-6 md:mb-0">
-              <div className="relative flex items-end gap-3 md:gap-4">
-                <div className="w-[200px] h-[400px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2.25rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col">
-                  <div className="w-20 md:w-24 h-4 md:h-5 bg-gray-900 rounded-b-xl md:rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[1.75rem] md:rounded-[2.25rem] overflow-hidden flex flex-col">
-                    <div className="bg-primary text-white px-4 md:px-5 pt-6 md:pt-8 pb-3 md:pb-4">
+            <div className="flex justify-center order-1 md:order-2 mb-2 md:mb-0">
+              <div className="relative flex items-end gap-2.5 md:gap-4">
+                <div className="w-[180px] h-[360px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col">
+                  <div className="w-16 md:w-24 h-3.5 md:h-5 bg-gray-900 rounded-b-lg md:rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
+                  <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[1.5rem] md:rounded-[2.25rem] overflow-hidden flex flex-col">
+                    <div className="bg-primary text-white px-3.5 md:px-5 pt-5 md:pt-8 pb-2.5 md:pb-4">
                       <div className="flex items-center gap-1.5 mb-0.5 md:mb-1">
-                        <Heart className="h-3.5 md:h-4 w-3.5 md:w-4" />
-                        <span className="text-xs md:text-sm font-semibold">StillHere</span>
+                        <Heart className="h-3 md:h-4 w-3 md:w-4" />
+                        <span className="text-[11px] md:text-sm font-semibold">StillHere</span>
                       </div>
-                      <p className="text-[10px] md:text-xs text-white/70">Welcome, Sarah</p>
+                      <p className="text-[9px] md:text-xs text-white/70">Welcome, Sarah</p>
                     </div>
-                    <div className="flex-1 px-3.5 md:px-5 py-3 md:py-4 flex flex-col gap-3 md:gap-4">
-                      <div className="bg-white rounded-lg md:rounded-xl px-3 md:px-4 py-2 md:py-3 shadow-sm border border-gray-100 text-center">
-                        <p className="text-[8px] md:text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Next checkin</p>
-                        <p className="text-xs md:text-sm font-medium text-gray-800">9:00 AM tomorrow</p>
+                    <div className="flex-1 px-3 md:px-5 py-2.5 md:py-4 flex flex-col gap-2.5 md:gap-4">
+                      <div className="bg-white rounded-lg md:rounded-xl px-2.5 md:px-4 py-1.5 md:py-3 shadow-sm border border-gray-100 text-center">
+                        <p className="text-[7px] md:text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Next checkin</p>
+                        <p className="text-[11px] md:text-sm font-semibold text-gray-800">9:00 AM tomorrow</p>
                       </div>
                       <div className="flex-1 flex flex-col items-center justify-center">
-                        <div className="w-[4.5rem] h-[4.5rem] md:w-24 md:h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
-                          <Check className="h-9 w-9 md:h-12 md:w-12 text-white" />
+                        <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
+                          <Check className="h-8 w-8 md:h-12 md:w-12 text-white" />
                         </div>
-                        <p className="font-bold text-gray-800 text-sm md:text-base mt-2 md:mt-3">I'm OK</p>
-                        <p className="text-[9px] md:text-[11px] text-gray-400 mt-0.5 md:mt-1">Tap once a day</p>
+                        <p className="font-bold text-gray-800 text-[13px] md:text-base mt-1.5 md:mt-3">I'm OK</p>
+                        <p className="text-[8px] md:text-[11px] text-gray-400 mt-0.5 md:mt-1">Tap once a day</p>
                       </div>
-                      <div className="bg-red-500 rounded-lg md:rounded-xl py-2 md:py-2.5 text-center text-white text-xs md:text-sm font-semibold shadow-sm">
+                      <div className="bg-red-500 rounded-lg md:rounded-xl py-1.5 md:py-2.5 text-center text-white text-[11px] md:text-sm font-semibold shadow-sm">
                         I Need Help
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mb-8 md:mb-12">
+                <div className="mb-6 md:mb-12">
                   <WatchMockup />
                 </div>
               </div>
@@ -158,8 +158,8 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="md:hidden flex justify-center pb-6 motion-safe:animate-bounce">
-          <ChevronDown className="h-5 w-5 text-white/50" />
+        <div className="md:hidden flex justify-center pb-4 motion-safe:animate-bounce">
+          <ChevronDown className="h-5 w-5 text-white/40" />
         </div>
       </section>
 
