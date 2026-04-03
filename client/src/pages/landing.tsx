@@ -1,8 +1,180 @@
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch } from "lucide-react";
+import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone } from "lucide-react";
 
-function WatchMockup() {
+type AnimStep = "checkin" | "tapping" | "confirmed" | "reminder" | "alert";
+
+const STEP_DURATIONS: Record<AnimStep, number> = {
+  checkin: 3000,
+  tapping: 1200,
+  confirmed: 3500,
+  reminder: 4000,
+  alert: 4500,
+};
+
+const STEP_ORDER: AnimStep[] = ["checkin", "tapping", "confirmed", "reminder", "alert"];
+
+function AnimatedPhoneScreen({ step }: { step: AnimStep }) {
+  if (step === "checkin" || step === "tapping") {
+    const isTapping = step === "tapping";
+    return (
+      <div className="flex-1 flex flex-col">
+        <div className="bg-primary text-white px-3.5 md:px-5 pt-5 md:pt-8 pb-2.5 md:pb-4">
+          <div className="flex items-center gap-1.5 mb-0.5 md:mb-1">
+            <Heart className="h-3 md:h-4 w-3 md:w-4" />
+            <span className="text-[11px] md:text-sm font-semibold">StillHere</span>
+          </div>
+          <p className="text-[9px] md:text-xs text-white/70">Good morning, Sarah</p>
+        </div>
+        <div className="flex-1 px-3 md:px-5 py-2.5 md:py-4 flex flex-col gap-2.5 md:gap-4">
+          <div className="bg-white rounded-lg md:rounded-xl px-2.5 md:px-4 py-1.5 md:py-3 shadow-sm border border-gray-100 text-center">
+            <p className="text-[7px] md:text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Next checkin</p>
+            <p className="text-[11px] md:text-sm font-semibold text-gray-800">Due now</p>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <div
+              className={`w-16 h-16 md:w-24 md:h-24 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
+                isTapping
+                  ? "bg-green-400 scale-90"
+                  : "bg-green-500 scale-100"
+              }`}
+            >
+              <Check className="h-8 w-8 md:h-12 md:w-12 text-white" />
+            </div>
+            <p className="font-bold text-gray-800 text-[13px] md:text-base mt-1.5 md:mt-3">I'm OK</p>
+            <p className="text-[8px] md:text-[11px] text-gray-400 mt-0.5 md:mt-1">Tap once a day</p>
+          </div>
+          <div className="bg-red-500 rounded-lg md:rounded-xl py-1.5 md:py-2.5 text-center text-white text-[11px] md:text-sm font-semibold shadow-sm">
+            I Need Help
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "confirmed") {
+    return (
+      <div className="flex-1 flex flex-col">
+        <div className="bg-green-500 text-white px-3.5 md:px-5 pt-5 md:pt-8 pb-2.5 md:pb-4 transition-colors duration-500">
+          <div className="flex items-center gap-1.5 mb-0.5 md:mb-1">
+            <Heart className="h-3 md:h-4 w-3 md:w-4" />
+            <span className="text-[11px] md:text-sm font-semibold">StillHere</span>
+          </div>
+          <p className="text-[9px] md:text-xs text-white/80">You're all good!</p>
+        </div>
+        <div className="flex-1 px-3 md:px-5 py-2.5 md:py-4 flex flex-col gap-2.5 md:gap-4">
+          <div className="bg-green-50 rounded-lg md:rounded-xl px-2.5 md:px-4 py-1.5 md:py-3 shadow-sm border border-green-200 text-center">
+            <p className="text-[7px] md:text-[10px] text-green-600 uppercase tracking-wider mb-0.5">Status</p>
+            <p className="text-[11px] md:text-sm font-semibold text-green-700">Checked in ✓</p>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg animate-[scaleIn_0.4s_ease-out]">
+              <Check className="h-8 w-8 md:h-12 md:w-12 text-white" />
+            </div>
+            <p className="font-bold text-green-700 text-[13px] md:text-base mt-1.5 md:mt-3">All good!</p>
+            <p className="text-[8px] md:text-[11px] text-gray-400 mt-0.5 md:mt-1">Next checkin: 9 AM tomorrow</p>
+          </div>
+          <div className="bg-green-50 rounded-lg md:rounded-xl py-2 md:py-2.5 text-center border border-green-200">
+            <p className="text-[10px] md:text-xs text-green-600 font-medium">Your contacts have been notified you're safe</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "reminder") {
+    return (
+      <div className="flex-1 flex flex-col bg-gray-100">
+        <div className="bg-gray-800 text-white px-3.5 md:px-5 pt-5 md:pt-7 pb-2 md:pb-3">
+          <p className="text-[9px] md:text-xs text-gray-400">9:15 AM</p>
+        </div>
+        <div className="flex-1 px-2.5 md:px-3 pt-3 md:pt-4 space-y-2">
+          <div className="bg-white rounded-xl p-2.5 md:p-3 shadow-sm border border-gray-200 animate-[slideDown_0.5s_ease-out]">
+            <div className="flex items-start gap-2">
+              <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0">
+                <Heart className="h-3.5 w-3.5 md:h-4 md:w-4 text-white" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] md:text-[10px] font-semibold text-gray-800">StillHere</p>
+                  <p className="text-[7px] md:text-[8px] text-gray-400">now</p>
+                </div>
+                <p className="text-[9px] md:text-[10px] text-gray-600 mt-0.5 leading-relaxed">
+                  Hey Sarah! Time to check in. Tap the button to let your family know you're okay.
+                </p>
+                <div className="mt-1.5 md:mt-2 bg-green-500 rounded-md py-1 md:py-1.5 text-center">
+                  <p className="text-[8px] md:text-[9px] text-white font-semibold">I'm OK ✓</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="text-center pt-1 md:pt-2">
+            <div className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2.5 md:px-3 py-1 md:py-1.5 rounded-full">
+              <Bell className="h-2.5 w-2.5 md:h-3 md:w-3" />
+              <p className="text-[8px] md:text-[9px] font-medium">Friendly reminder</p>
+            </div>
+          </div>
+          <p className="text-[8px] md:text-[9px] text-gray-400 text-center px-3 md:px-4">
+            You can check in right from this notification
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className="bg-amber-500 text-white px-3.5 md:px-5 pt-5 md:pt-8 pb-2.5 md:pb-4">
+        <div className="flex items-center gap-1.5 mb-0.5 md:mb-1">
+          <AlertTriangle className="h-3 md:h-4 w-3 md:w-4" />
+          <span className="text-[11px] md:text-sm font-semibold">Alert Active</span>
+        </div>
+        <p className="text-[9px] md:text-xs text-white/80">Notifying your contacts</p>
+      </div>
+      <div className="flex-1 px-2.5 md:px-4 py-2.5 md:py-3 space-y-2 md:space-y-2.5">
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 md:p-3 animate-[slideDown_0.4s_ease-out]">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 md:h-4 md:w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[9px] md:text-[10px] font-semibold text-amber-800">Missed checkin</p>
+              <p className="text-[8px] md:text-[9px] text-amber-600 mt-0.5">
+                Contacting John (1 of 2)...
+              </p>
+              <div className="mt-1 flex gap-1">
+                <div className="w-3.5 h-3.5 md:w-4 md:h-4 rounded-full bg-green-500 flex items-center justify-center">
+                  <Check className="h-2 w-2 md:h-2.5 md:w-2.5 text-white" />
+                </div>
+                <div className="w-3.5 h-3.5 md:w-4 md:h-4 rounded-full bg-gray-200 flex items-center justify-center">
+                  <span className="text-[6px] md:text-[7px] text-gray-500">2</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg p-2.5 md:p-3 border border-gray-100">
+          <p className="text-[8px] md:text-[9px] text-gray-500 text-center">
+            Your contacts get a text with a link to check on you
+          </p>
+          <div className="mt-1.5 bg-gray-50 rounded-md p-1.5 md:p-2 border border-gray-100">
+            <p className="text-[7px] md:text-[8px] text-gray-600">
+              📱 "Hi John, Sarah hasn't checked in. Please check on her."
+            </p>
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="text-[7px] md:text-[8px] text-gray-400">Contacts are notified one by one</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnimatedWatchScreen({ step }: { step: AnimStep }) {
+  const isConfirmed = step === "confirmed";
+  const isAlert = step === "alert";
+  const bpm = isAlert ? 0 : 72;
+
   return (
     <div className="w-[88px] h-[108px] md:w-[110px] md:h-[135px] bg-gray-900 rounded-[1.75rem] md:rounded-[2.25rem] border-[2.5px] border-gray-700 shadow-2xl shadow-black/40 p-1 flex flex-col relative">
       <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-3 h-5 md:w-3.5 md:h-6 bg-gray-700 rounded-sm" />
@@ -15,20 +187,40 @@ function WatchMockup() {
             <span className="text-[6px] md:text-[7px] font-semibold text-cyan-400">StillHere</span>
           </div>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center px-1.5 gap-1">
-          <div className="w-9 h-9 md:w-11 md:h-11 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
-            <Check className="h-5 w-5 md:h-6 md:w-6 text-white" />
+
+        {isAlert ? (
+          <div className="flex-1 flex flex-col items-center justify-center px-1.5 gap-1">
+            <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-amber-500 flex items-center justify-center animate-pulse">
+              <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-white" />
+            </div>
+            <p className="text-[6px] md:text-[7px] font-bold text-amber-400">ALERT</p>
+            <p className="text-[5px] md:text-[6px] text-gray-500">Notifying contacts</p>
           </div>
-          <p className="text-[7px] md:text-[8px] font-bold text-white">I'm OK</p>
-        </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center px-1.5 gap-1">
+            <div className={`w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${
+              isConfirmed ? "bg-green-400 scale-95" : "bg-green-500"
+            }`}>
+              <Check className="h-5 w-5 md:h-6 md:w-6 text-white" />
+            </div>
+            <p className="text-[7px] md:text-[8px] font-bold text-white">
+              {isConfirmed ? "Done!" : "I'm OK"}
+            </p>
+          </div>
+        )}
+
         <div className="px-2 pb-1.5 md:pb-2 space-y-1">
-          <div className="flex items-center justify-center gap-1">
-            <Heart className="h-2 w-2 text-red-500" />
-            <span className="text-[7px] md:text-[8px] font-bold text-red-400">72</span>
-            <span className="text-[5px] md:text-[6px] text-gray-400">BPM</span>
-          </div>
-          <div className="bg-red-500 rounded-md py-0.5 text-center">
-            <span className="text-[6px] md:text-[7px] text-white font-semibold">SOS</span>
+          {!isAlert && (
+            <div className="flex items-center justify-center gap-1">
+              <Heart className="h-2 w-2 text-red-500" />
+              <span className="text-[7px] md:text-[8px] font-bold text-red-400">{bpm}</span>
+              <span className="text-[5px] md:text-[6px] text-gray-400">BPM</span>
+            </div>
+          )}
+          <div className={`rounded-md py-0.5 text-center ${isAlert ? "bg-amber-500" : "bg-red-500"}`}>
+            <span className="text-[6px] md:text-[7px] text-white font-semibold">
+              {isAlert ? "SOS Sent" : "SOS"}
+            </span>
           </div>
         </div>
       </div>
@@ -36,8 +228,52 @@ function WatchMockup() {
   );
 }
 
+function StepIndicator({ step }: { step: AnimStep }) {
+  const labels: Record<AnimStep, string> = {
+    checkin: "Check in",
+    tapping: "Tap",
+    confirmed: "Confirmed",
+    reminder: "Reminder",
+    alert: "Contacts notified",
+  };
+
+  const visibleSteps: AnimStep[] = ["checkin", "confirmed", "reminder", "alert"];
+  const currentVisible = (step === "tapping") ? "checkin" : step;
+
+  return (
+    <div className="flex items-center justify-center gap-1 mt-2" data-testid="animation-step-indicator">
+      {visibleSteps.map((s) => (
+        <div
+          key={s}
+          className={`h-1 rounded-full transition-all duration-500 ${
+            s === currentVisible
+              ? "w-5 md:w-6 bg-white"
+              : "w-1.5 bg-white/30"
+          }`}
+        />
+      ))}
+      <span className="text-[8px] md:text-[9px] text-white/50 ml-1.5 font-medium min-w-[70px] md:min-w-[90px]">
+        {labels[step === "tapping" ? "checkin" : step]}
+      </span>
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const [, setLocation] = useLocation();
+  const [animStep, setAnimStep] = useState<AnimStep>("checkin");
+
+  useEffect(() => {
+    const currentIndex = STEP_ORDER.indexOf(animStep);
+    const duration = STEP_DURATIONS[animStep];
+
+    const timer = setTimeout(() => {
+      const nextIndex = (currentIndex + 1) % STEP_ORDER.length;
+      setAnimStep(STEP_ORDER[nextIndex]);
+    }, duration);
+
+    return () => clearTimeout(timer);
+  }, [animStep]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -119,41 +355,20 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="flex justify-center order-1 md:order-2 mb-2 md:mb-0">
+            <div className="flex flex-col items-center order-1 md:order-2 mb-2 md:mb-0">
               <div className="relative flex items-end gap-2.5 md:gap-4">
-                <div className="w-[180px] h-[360px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col">
+                <div className="w-[180px] h-[360px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col" data-testid="phone-mockup-animated">
                   <div className="w-16 md:w-24 h-3.5 md:h-5 bg-gray-900 rounded-b-lg md:rounded-b-2xl mx-auto relative z-10 -mt-0.5" />
                   <div className="flex-1 bg-slate-50 dark:bg-slate-100 rounded-[1.5rem] md:rounded-[2.25rem] overflow-hidden flex flex-col">
-                    <div className="bg-primary text-white px-3.5 md:px-5 pt-5 md:pt-8 pb-2.5 md:pb-4">
-                      <div className="flex items-center gap-1.5 mb-0.5 md:mb-1">
-                        <Heart className="h-3 md:h-4 w-3 md:w-4" />
-                        <span className="text-[11px] md:text-sm font-semibold">StillHere</span>
-                      </div>
-                      <p className="text-[9px] md:text-xs text-white/70">Welcome, Sarah</p>
-                    </div>
-                    <div className="flex-1 px-3 md:px-5 py-2.5 md:py-4 flex flex-col gap-2.5 md:gap-4">
-                      <div className="bg-white rounded-lg md:rounded-xl px-2.5 md:px-4 py-1.5 md:py-3 shadow-sm border border-gray-100 text-center">
-                        <p className="text-[7px] md:text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">Next checkin</p>
-                        <p className="text-[11px] md:text-sm font-semibold text-gray-800">9:00 AM tomorrow</p>
-                      </div>
-                      <div className="flex-1 flex flex-col items-center justify-center">
-                        <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
-                          <Check className="h-8 w-8 md:h-12 md:w-12 text-white" />
-                        </div>
-                        <p className="font-bold text-gray-800 text-[13px] md:text-base mt-1.5 md:mt-3">I'm OK</p>
-                        <p className="text-[8px] md:text-[11px] text-gray-400 mt-0.5 md:mt-1">Tap once a day</p>
-                      </div>
-                      <div className="bg-red-500 rounded-lg md:rounded-xl py-1.5 md:py-2.5 text-center text-white text-[11px] md:text-sm font-semibold shadow-sm">
-                        I Need Help
-                      </div>
-                    </div>
+                    <AnimatedPhoneScreen step={animStep} />
                   </div>
                 </div>
 
                 <div className="mb-6 md:mb-12">
-                  <WatchMockup />
+                  <AnimatedWatchScreen step={animStep} />
                 </div>
               </div>
+              <StepIndicator step={animStep} />
             </div>
           </div>
         </div>
