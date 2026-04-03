@@ -338,7 +338,7 @@ export default function Home() {
 
   useEffect(() => {
     if (fallCountdown === 0 && fallCountdown !== null) {
-      apiRequest("POST", "/api/sos").then(() => {
+      apiRequest("POST", "/api/sos", {}).then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
           title: "Fall detected - SOS sent",
@@ -400,7 +400,7 @@ export default function Home() {
 
         if (shakeCount >= SHAKES_NEEDED) {
           shakeCount = 0;
-          apiRequest("POST", "/api/sos").catch(() => {});
+          apiRequest("POST", "/api/sos", {}).catch(() => {});
           queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         }
       }
@@ -412,7 +412,7 @@ export default function Home() {
 
   const checkinMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/checkin");
+      return apiRequest("POST", "/api/checkin", {});
     },
     onSuccess: () => {
       triggerHaptic(50);
@@ -434,7 +434,7 @@ export default function Home() {
 
   const sosMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/sos");
+      return apiRequest("POST", "/api/sos", {});
     },
     onSuccess: () => {
       triggerHaptic([100, 50, 100, 50, 200]);
@@ -468,7 +468,7 @@ export default function Home() {
 
   const resolveAlertMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/resolve-alert");
+      return apiRequest("POST", "/api/resolve-alert", {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
