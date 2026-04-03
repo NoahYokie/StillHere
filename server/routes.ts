@@ -55,7 +55,7 @@ async function notifyContact(
   userName: string,
   link: string,
   reason: "sos" | "missed_checkin",
-  sendSmsFn: (phone: string, userName: string, link: string) => Promise<void>
+  sendSmsFn: (phone: string, userName: string, link: string) => Promise<any>
 ): Promise<void> {
   const normalizedPhone = normalizePhone(contact.phone);
   await sendSmsFn(normalizedPhone, userName, link);
@@ -262,7 +262,7 @@ export async function registerRoutes(
   const challengeStore = new Map<string, { challenge: string; expiresAt: number }>();
   setInterval(() => {
     const now = Date.now();
-    for (const [k, v] of challengeStore) {
+    for (const [k, v] of Array.from(challengeStore.entries())) {
       if (now > v.expiresAt) challengeStore.delete(k);
     }
   }, 60_000);
@@ -541,10 +541,17 @@ export async function registerRoutes(
     }
   });
 
-  // SOS - immediate incident
+  // SOS - immediate incident (supports both cookie auth and bearer token for watch)
   app.post("/api/sos", async (req, res) => {
     try {
-      const userId = getUserId(req);
+      let userId = getUserId(req);
+      if (!userId) {
+        const bearerToken = req.headers["authorization"]?.replace("Bearer ", "");
+        if (bearerToken) {
+          const result = await getUserFromSession(bearerToken);
+          if (result) userId = result.userId;
+        }
+      }
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
@@ -876,12 +883,13 @@ export async function registerRoutes(
       }
       const status = await storage.getUserStatus(result.userId);
       const incident = await storage.getOpenIncident(result.userId);
+      const isOverdue = status.nextCheckinDue ? new Date() > new Date(status.nextCheckinDue) : false;
       res.json({
         ok: true,
         name: result.user.name,
         lastCheckin: status.lastCheckin?.createdAt || null,
         nextDue: status.nextCheckinDue || null,
-        isOverdue: status.isOverdue || false,
+        isOverdue,
         hasActiveIncident: !!incident,
       });
     } catch (error) {
@@ -1028,7 +1036,7 @@ export async function registerRoutes(
   // Contact page - get data
   app.get("/api/emergency/:token", emergencyLimiter, async (req, res) => {
     try {
-      const { token } = req.params;
+      const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
       
       if (!data) {
@@ -1045,7 +1053,7 @@ export async function registerRoutes(
   // Contact takes responsibility
   app.post("/api/emergency/:token/handle", async (req, res) => {
     try {
-      const { token } = req.params;
+      const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
       
       if (!data) {
@@ -1077,7 +1085,7 @@ export async function registerRoutes(
   // Contact escalates (manual escalation - "I can't help")
   app.post("/api/emergency/:token/escalate", async (req, res) => {
     try {
-      const { token } = req.params;
+      const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
       
       if (!data) {
