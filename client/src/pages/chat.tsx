@@ -134,11 +134,14 @@ export default function ChatPage() {
     const handleNewMessage = async (msg: any) => {
       if (msg.senderId === otherUserId) {
         let decryptedContent = msg.content;
-        if (msg.encrypted && msg.iv && privateKeyRef.current && userProfile?.publicKey) {
-          try {
-            decryptedContent = await decryptMessage(msg.content, msg.iv, privateKeyRef.current, userProfile.publicKey);
-          } catch {
-            decryptedContent = "[Encrypted message]";
+        if (msg.encrypted) {
+          decryptedContent = "[Encrypted message]";
+          if (msg.iv && privateKeyRef.current && userProfile?.publicKey) {
+            try {
+              decryptedContent = await decryptMessage(msg.content, msg.iv, privateKeyRef.current, userProfile.publicKey);
+            } catch {
+              decryptedContent = "[Encrypted message]";
+            }
           }
         }
         setLocalMessages(prev => {
@@ -156,7 +159,10 @@ export default function ChatPage() {
       if (msg.receiverId === otherUserId) {
         setLocalMessages(prev => {
           const oldest = prev.find(m => m.id.startsWith("optimistic-"));
-          const plainContent = oldest?.decryptedContent || msg.content;
+          let plainContent = oldest?.decryptedContent;
+          if (!plainContent) {
+            plainContent = msg.encrypted ? "[Encrypted message]" : msg.content;
+          }
           const updated = prev.filter(m => m !== oldest);
           if (updated.some(m => m.id === msg.id)) return updated;
           return [...updated, { ...msg, decryptedContent: plainContent }];
@@ -364,7 +370,7 @@ export default function ChatPage() {
         {localMessages.map((msg) => {
           const isMine = msg.senderId === currentUserId;
           const isOptimistic = msg.id.startsWith("optimistic-");
-          const content = msg.decryptedContent || msg.content;
+          const content = msg.decryptedContent ?? (msg.encrypted ? "[Encrypted message]" : msg.content);
           return (
             <div
               key={msg.id}
