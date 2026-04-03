@@ -16,6 +16,9 @@ import {
   passkeys,
   heartRateReadings,
   heartRateAlerts,
+  geofences,
+  locationBreadcrumbs,
+  satelliteDevices,
   type User,
   type InsertUser,
   type Settings,
@@ -39,6 +42,9 @@ import {
   type Passkey,
   type HeartRateReading,
   type HeartRateAlert,
+  type Geofence,
+  type LocationBreadcrumb,
+  type SatelliteDevice,
 } from "@shared/schema";
 import { addHours } from "date-fns";
 
@@ -58,7 +64,7 @@ export interface IStorage {
   getContacts(userId: string): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
   upsertContacts(userId: string, contactsData: { contact1: InsertContact; contact2?: InsertContact }): Promise<Contact[]>;
-  saveContactsList(userId: string, contactsList: { name: string; phone: string; priority: number }[]): Promise<Contact[]>;
+  saveContactsList(userId: string, contactsList: { name: string; phone: string; email?: string | null; priority: number }[]): Promise<Contact[]>;
   deleteContact(contactId: string): Promise<void>;
   getContactLimit(userId: string): Promise<number>;
   
@@ -68,7 +74,7 @@ export interface IStorage {
   
   // Checkins
   getLastCheckin(userId: string): Promise<Checkin | undefined>;
-  createCheckin(userId: string, method?: "button" | "auto"): Promise<Checkin>;
+  createCheckin(userId: string, method?: "button" | "auto" | "sms"): Promise<Checkin>;
   
   // Incidents
   getOpenIncident(userId: string): Promise<Incident | undefined>;
@@ -135,6 +141,25 @@ export interface IStorage {
   createHeartRateAlert(userId: string, alertType: string, bpm: number): Promise<HeartRateAlert>;
   getActiveHeartRateAlerts(userId: string): Promise<HeartRateAlert[]>;
   resolveHeartRateAlert(alertId: string): Promise<void>;
+
+  // Geofences
+  getGeofences(userId: string): Promise<Geofence[]>;
+  createGeofence(userId: string, data: { name: string; lat: number; lng: number; radiusMeters: number; type: string }): Promise<Geofence>;
+  updateGeofence(id: string, userId: string, data: Partial<{ name: string; lat: number; lng: number; radiusMeters: number; active: boolean }>): Promise<Geofence>;
+  deleteGeofence(id: string, userId: string): Promise<void>;
+
+  // Location Breadcrumbs
+  saveBreadcrumb(userId: string, sessionId: string | null, lat: number, lng: number, accuracy: number | null): Promise<LocationBreadcrumb>;
+  getBreadcrumbs(userId: string, sessionId?: string, limit?: number): Promise<LocationBreadcrumb[]>;
+
+  // Satellite Devices
+  getSatelliteDevices(userId: string): Promise<SatelliteDevice[]>;
+  registerSatelliteDevice(userId: string, data: { deviceType: string; deviceId: string; name: string }): Promise<SatelliteDevice>;
+  getSatelliteDeviceByDeviceId(deviceId: string): Promise<(SatelliteDevice & { user: User }) | undefined>;
+  deleteSatelliteDevice(id: string, userId: string): Promise<void>;
+
+  // SMS Checkin
+  getUserByPhone(phone: string): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -318,7 +343,7 @@ export class DatabaseStorage implements IStorage {
     return user?.isPremium ? 999 : 2;
   }
 
-  async saveContactsList(userId: string, contactsList: { name: string; phone: string; priority: number }[]): Promise<Contact[]> {
+  async saveContactsList(userId: string, contactsList: { name: string; phone: string; email?: string | null; priority: number }[]): Promise<Contact[]> {
     const existing = await this.getContacts(userId);
     const result: Contact[] = [];
     const processedIds = new Set<string>();
@@ -331,6 +356,7 @@ export class DatabaseStorage implements IStorage {
           .set({
             name: contactData.name,
             phone: contactData.phone,
+            email: contactData.email || null,
             canViewLocation: true,
           })
           .where(eq(contacts.id, existingMatch.id))
@@ -344,6 +370,7 @@ export class DatabaseStorage implements IStorage {
           userId,
           name: contactData.name,
           phone: contactData.phone,
+          email: contactData.email || null,
           priority: contactData.priority,
           canViewLocation: true,
         }).returning();
@@ -421,7 +448,7 @@ export class DatabaseStorage implements IStorage {
     return checkin || undefined;
   }
 
-  async createCheckin(userId: string, method: "button" | "auto" = "button"): Promise<Checkin> {
+  async createCheckin(userId: string, method: "button" | "auto" | "sms" = "button"): Promise<Checkin> {
     const [checkin] = await db.insert(checkins).values({
       userId,
       method,
@@ -913,6 +940,89 @@ export class DatabaseStorage implements IStorage {
       resolved: true,
       resolvedAt: new Date(),
     }).where(eq(heartRateAlerts.id, alertId));
+  }
+
+  async getGeofences(userId: string): Promise<Geofence[]> {
+    return db.select().from(geofences).where(eq(geofences.userId, userId));
+  }
+
+  async createGeofence(userId: string, data: { name: string; lat: number; lng: number; radiusMeters: number; type: string }): Promise<Geofence> {
+    const [row] = await db.insert(geofences).values({
+      userId,
+      name: data.name,
+      lat: data.lat,
+      lng: data.lng,
+      radiusMeters: data.radiusMeters,
+      type: data.type as any,
+    }).returning();
+    return row;
+  }
+
+  async updateGeofence(id: string, userId: string, data: Partial<{ name: string; lat: number; lng: number; radiusMeters: number; active: boolean }>): Promise<Geofence> {
+    const [row] = await db.update(geofences).set(data).where(and(eq(geofences.id, id), eq(geofences.userId, userId))).returning();
+    return row;
+  }
+
+  async deleteGeofence(id: string, userId: string): Promise<void> {
+    await db.delete(geofences).where(and(eq(geofences.id, id), eq(geofences.userId, userId)));
+  }
+
+  async saveBreadcrumb(userId: string, sessionId: string | null, lat: number, lng: number, accuracy: number | null): Promise<LocationBreadcrumb> {
+    const [row] = await db.insert(locationBreadcrumbs).values({
+      userId,
+      sessionId,
+      lat,
+      lng,
+      accuracy,
+      recordedAt: new Date(),
+    }).returning();
+    return row;
+  }
+
+  async getBreadcrumbs(userId: string, sessionId?: string, limit: number = 100): Promise<LocationBreadcrumb[]> {
+    const conditions = [eq(locationBreadcrumbs.userId, userId)];
+    if (sessionId) conditions.push(eq(locationBreadcrumbs.sessionId, sessionId));
+    return db.select()
+      .from(locationBreadcrumbs)
+      .where(and(...conditions))
+      .orderBy(desc(locationBreadcrumbs.recordedAt))
+      .limit(limit);
+  }
+
+  async getSatelliteDevices(userId: string): Promise<SatelliteDevice[]> {
+    return db.select().from(satelliteDevices).where(eq(satelliteDevices.userId, userId));
+  }
+
+  async registerSatelliteDevice(userId: string, data: { deviceType: string; deviceId: string; name: string }): Promise<SatelliteDevice> {
+    const existing = await db.select().from(satelliteDevices)
+      .where(and(eq(satelliteDevices.userId, userId), eq(satelliteDevices.deviceId, data.deviceId)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(satelliteDevices)
+        .set({ name: data.name, active: true, lastSeenAt: new Date() })
+        .where(eq(satelliteDevices.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    const [row] = await db.insert(satelliteDevices).values({
+      userId,
+      deviceType: data.deviceType,
+      deviceId: data.deviceId,
+      name: data.name,
+    }).returning();
+    return row;
+  }
+
+  async getSatelliteDeviceByDeviceId(deviceId: string): Promise<(SatelliteDevice & { user: User }) | undefined> {
+    const [device] = await db.select().from(satelliteDevices)
+      .where(and(eq(satelliteDevices.deviceId, deviceId), eq(satelliteDevices.active, true)));
+    if (!device) return undefined;
+    const user = await this.getUser(device.userId);
+    if (!user) return undefined;
+    return { ...device, user };
+  }
+
+  async deleteSatelliteDevice(id: string, userId: string): Promise<void> {
+    await db.delete(satelliteDevices).where(and(eq(satelliteDevices.id, id), eq(satelliteDevices.userId, userId)));
   }
 }
 

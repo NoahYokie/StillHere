@@ -9,7 +9,7 @@ export const reminderModeEnum = pgEnum("reminder_mode", ["none", "one", "two"]);
 export const incidentStatusEnum = pgEnum("incident_status", ["open", "paused", "resolved"]);
 export const incidentReasonEnum = pgEnum("incident_reason", ["missed_checkin", "sos", "test"]);
 export const locationSessionTypeEnum = pgEnum("location_session_type", ["emergency", "shift"]);
-export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto"]);
+export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto", "sms"]);
 export const callStatusEnum = pgEnum("call_status", ["ringing", "active", "ended", "missed"]);
 export const callTypeEnum = pgEnum("call_type", ["video", "audio"]);
 
@@ -41,6 +41,9 @@ export const settings = pgTable("settings", {
   reminderMode: reminderModeEnum("reminder_mode").notNull().default("one"),
   autoCheckin: boolean("auto_checkin").notNull().default(false),
   fallDetection: boolean("fall_detection").notNull().default(false),
+  discreetSos: boolean("discreet_sos").notNull().default(false),
+  escalationMinutes: integer("escalation_minutes").notNull().default(20),
+  smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(false),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
   pauseUntil: timestamp("pause_until"),
@@ -60,6 +63,7 @@ export const contacts = pgTable("contacts", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
+  email: text("email"),
   priority: integer("priority").notNull(),
   canViewLocation: boolean("can_view_location").notNull().default(true),
   linkedUserId: uuid("linked_user_id").references(() => users.id),
@@ -348,6 +352,77 @@ export const heartRateAlertsRelations = relations(heartRateAlerts, ({ one }) => 
   }),
 }));
 
+// Geofences table
+export const geofenceTypeEnum = pgEnum("geofence_type", ["home", "work", "custom"]);
+
+export const geofences = pgTable("geofences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  radiusMeters: integer("radius_meters").notNull().default(200),
+  type: geofenceTypeEnum("type").notNull().default("home"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("geofences_user_id_idx").on(table.userId),
+]);
+
+export const geofencesRelations = relations(geofences, ({ one }) => ({
+  user: one(users, {
+    fields: [geofences.userId],
+    references: [users.id],
+  }),
+}));
+
+// Location Breadcrumbs table
+export const locationBreadcrumbs = pgTable("location_breadcrumbs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").references(() => locationSessions.id),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  accuracy: real("accuracy"),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+}, (table) => [
+  index("breadcrumbs_user_session_idx").on(table.userId, table.sessionId),
+  index("breadcrumbs_recorded_at_idx").on(table.userId, table.recordedAt),
+]);
+
+export const locationBreadcrumbsRelations = relations(locationBreadcrumbs, ({ one }) => ({
+  user: one(users, {
+    fields: [locationBreadcrumbs.userId],
+    references: [users.id],
+  }),
+  session: one(locationSessions, {
+    fields: [locationBreadcrumbs.sessionId],
+    references: [locationSessions.id],
+  }),
+}));
+
+// Satellite Devices table
+export const satelliteDevices = pgTable("satellite_devices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deviceType: text("device_type").notNull(),
+  deviceId: text("device_id").notNull(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  lastSeenAt: timestamp("last_seen_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("satellite_devices_user_id_idx").on(table.userId),
+  index("satellite_devices_device_id_idx").on(table.deviceId),
+]);
+
+export const satelliteDevicesRelations = relations(satelliteDevices, ({ one }) => ({
+  user: one(users, {
+    fields: [satelliteDevices.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -364,6 +439,9 @@ export const insertVoipTokenSchema = createInsertSchema(voipTokens).omit({ id: t
 export const insertPasskeySchema = createInsertSchema(passkeys).omit({ id: true, createdAt: true });
 export const insertHeartRateReadingSchema = createInsertSchema(heartRateReadings).omit({ id: true, createdAt: true });
 export const insertHeartRateAlertSchema = createInsertSchema(heartRateAlerts).omit({ id: true, createdAt: true });
+export const insertGeofenceSchema = createInsertSchema(geofences).omit({ id: true, createdAt: true });
+export const insertLocationBreadcrumbSchema = createInsertSchema(locationBreadcrumbs).omit({ id: true });
+export const insertSatelliteDeviceSchema = createInsertSchema(satelliteDevices).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -412,6 +490,15 @@ export type InsertHeartRateReading = z.infer<typeof insertHeartRateReadingSchema
 
 export type HeartRateAlert = typeof heartRateAlerts.$inferSelect;
 export type InsertHeartRateAlert = z.infer<typeof insertHeartRateAlertSchema>;
+
+export type Geofence = typeof geofences.$inferSelect;
+export type InsertGeofence = z.infer<typeof insertGeofenceSchema>;
+
+export type LocationBreadcrumb = typeof locationBreadcrumbs.$inferSelect;
+export type InsertLocationBreadcrumb = z.infer<typeof insertLocationBreadcrumbSchema>;
+
+export type SatelliteDevice = typeof satelliteDevices.$inferSelect;
+export type InsertSatelliteDevice = z.infer<typeof insertSatelliteDeviceSchema>;
 
 // API Response Types
 export interface UserStatus {
