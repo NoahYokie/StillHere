@@ -57,6 +57,10 @@ async function notifyContact(
   reason: "sos" | "missed_checkin",
   sendSmsFn: (phone: string, userName: string, link: string) => Promise<void>
 ): Promise<void> {
+  const normalizedPhone = normalizePhone(contact.phone);
+  await sendSmsFn(normalizedPhone, userName, link);
+  console.log(`[NOTIFY] Sent SMS to contact`);
+
   if (contact.linkedUserId) {
     await sendPushNotification(contact.linkedUserId, {
       title: reason === "sos" ? `${userName} needs help!` : `${userName} missed their checkin`,
@@ -78,11 +82,7 @@ async function notifyContact(
         link,
       });
     } catch {}
-    console.log(`[NOTIFY] Sent push notification to contact (in-app user)`);
-  } else {
-    const normalizedPhone = normalizePhone(contact.phone);
-    await sendSmsFn(normalizedPhone, userName, link);
-    console.log(`[NOTIFY] Sent SMS to contact`);
+    console.log(`[NOTIFY] Also sent push notification to contact (in-app user)`);
   }
 }
 
