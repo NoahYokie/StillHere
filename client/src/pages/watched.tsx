@@ -32,11 +32,11 @@ export default function WatchedPage() {
 
   function getStatusText(user: WatchedUser) {
     if (user.hasOpenIncident) {
-      return user.incidentReason === "sos" ? "SOS Alert Active" : "Missed Check-in Alert";
+      return user.incidentReason === "sos" ? "SOS Alert Active" : "Missed Checkin Alert";
     }
     const now = new Date();
     const due = new Date(user.nextCheckinDue);
-    if (now > due) return "Check-in overdue";
+    if (now > due) return "Checkin overdue";
     return "OK";
   }
 
@@ -98,10 +98,10 @@ export default function WatchedPage() {
                 <div className="text-xs text-muted-foreground mb-3">
                   {user.lastCheckinAt ? (
                     <span data-testid={`text-last-checkin-${user.userId}`}>
-                      Last check-in: {formatDistanceToNow(new Date(user.lastCheckinAt), { addSuffix: true })}
+                      Last checkin: {formatDistanceToNow(new Date(user.lastCheckinAt), { addSuffix: true })}
                     </span>
                   ) : (
-                    <span>No check-ins yet</span>
+                    <span>No checkins yet</span>
                   )}
                 </div>
 

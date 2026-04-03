@@ -1,7 +1,7 @@
 {
   "name": "StillHere",
   "short_name": "StillHere",
-  "description": "A simple daily check-in app for people who live alone. Let your family know you're okay.",
+  "description": "A simple daily checkin app for people who live alone. Let your family know you're okay.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

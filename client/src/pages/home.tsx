@@ -38,7 +38,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
     : null;
 
   const isSOSReason = incident.reason === "sos";
-  const title = isSOSReason ? "Help request active" : "Missed check-in alert";
+  const title = isSOSReason ? "Help request active" : "Missed checkin alert";
 
   if (incident.status === "paused") {
     const contactName = handlingContact?.name || "A contact";
@@ -192,7 +192,7 @@ function PushNotificationBanner() {
       });
 
       setPushState("granted");
-      toast({ title: "Notifications enabled", description: "You'll receive check-in reminders." });
+      toast({ title: "Notifications enabled", description: "You'll receive checkin reminders." });
     } catch (error) {
       console.error("Push subscription failed:", error);
       toast({ title: "Could not enable notifications", variant: "destructive" });
@@ -590,7 +590,7 @@ export default function Home() {
           <CardContent className="pt-6 text-center">
             <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
               <Clock className="h-4 w-4" />
-              <span className="text-sm">Next check-in</span>
+              <span className="text-sm">Next checkin</span>
             </div>
             <p className="text-lg font-medium" data-testid="text-next-checkin">
               {status?.nextCheckinDue

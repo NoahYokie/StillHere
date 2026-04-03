@@ -4,14 +4,14 @@ import { ArrowLeft } from "lucide-react";
 
 const faqs = [
   {
-    question: "What happens if I miss a check-in?",
+    question: "What happens if I miss a checkin?",
     answer:
       "We send you a reminder first. If you still don't respond after the grace period, we send a message to your emergency contacts so they can check on you.",
   },
   {
     question: "What if my phone is off?",
     answer:
-      "StillHere works by waiting for you to tap the green button. If your phone is off and you miss your check-in time, we'll send a message to your emergency contacts so they can check on you.",
+      "StillHere works by waiting for you to tap the green button. If your phone is off and you miss your checkin time, we'll send a message to your emergency contacts so they can check on you.",
   },
   {
     question: "Will you share my location?",
@@ -39,14 +39,14 @@ const faqs = [
       "The red 'I Need Help' button sends an immediate alert to your emergency contacts. Use it if you need help right away. Your emergency contacts will see that you pressed the emergency button and can check on you.",
   },
   {
-    question: "Can I change my check-in schedule?",
+    question: "Can I change my checkin schedule?",
     answer:
       "Yes. Go to Settings and choose how often to check in.",
   },
   {
     question: "What is the grace period?",
     answer:
-      "After your check-in is due, we wait 10-30 minutes before notifying your emergency contacts. This gives you extra time to respond.",
+      "After your checkin is due, we wait 10-30 minutes before notifying your emergency contacts. This gives you extra time to respond.",
   },
   {
     question: "How do I add emergency contacts?",
@@ -54,9 +54,9 @@ const faqs = [
       "Go to Settings and scroll to 'Emergency contacts'. You can add up to two people who will be notified if you don't respond.",
   },
   {
-    question: "Can I pause check-ins temporarily?",
+    question: "Can I pause checkins temporarily?",
     answer:
-      "Yes. If you're busy or going somewhere without your phone, you can pause alerts in Settings. Choose 2 hours, 6 hours, or until tomorrow morning. While paused, we won't send reminders or notify your emergency contacts if you miss a check-in.",
+      "Yes. If you're busy or going somewhere without your phone, you can pause alerts in Settings. Choose 2 hours, 6 hours, or until tomorrow morning. While paused, we won't send reminders or notify your emergency contacts if you miss a checkin.",
   },
   {
     question: "What are reminders?",
@@ -76,7 +76,7 @@ const faqs = [
   {
     question: "What messages will I receive from StillHere?",
     answer:
-      "The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself. We keep communication simple and focused on your safety.",
+      "The only messages you'll receive from StillHere are checkin reminders and alerts you've set up yourself. We keep communication simple and focused on your safety.",
   },
 ];
 

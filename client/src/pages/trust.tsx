@@ -174,7 +174,7 @@ export default function TrustPage() {
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">•</span>
-                <span>Your most recent check-in time</span>
+                <span>Your most recent checkin time</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">•</span>

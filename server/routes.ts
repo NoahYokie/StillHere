@@ -59,7 +59,7 @@ async function notifyContact(
 ): Promise<void> {
   if (contact.linkedUserId) {
     await sendPushNotification(contact.linkedUserId, {
-      title: reason === "sos" ? `${userName} needs help!` : `${userName} missed their check-in`,
+      title: reason === "sos" ? `${userName} needs help!` : `${userName} missed their checkin`,
       body: reason === "sos"
         ? `${userName} has triggered an SOS alert. Tap to respond.`
         : `${userName} hasn't checked in. Tap to respond.`,
@@ -69,7 +69,7 @@ async function notifyContact(
     try {
       const alertContent = reason === "sos"
         ? `[ALERT] ${userName} has triggered an SOS alert. Please check on them: ${link}`
-        : `[ALERT] ${userName} missed their check-in. Please check on them: ${link}`;
+        : `[ALERT] ${userName} missed their checkin. Please check on them: ${link}`;
       await storage.saveMessage(contact.userId, contact.linkedUserId, alertContent);
       emitToUser(contact.linkedUserId, "message:new", {
         type: "emergency-alert",
@@ -660,7 +660,7 @@ export async function registerRoutes(
       const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection } = req.body;
       
       if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
-        return res.status(400).json({ error: "Check-in interval must be between 12 and 48 hours" });
+        return res.status(400).json({ error: "Checkin interval must be between 12 and 48 hours" });
       }
       if (graceMinutes !== undefined && (typeof graceMinutes !== "number" || graceMinutes < 10 || graceMinutes > 30)) {
         return res.status(400).json({ error: "Grace period must be between 10 and 30 minutes" });
@@ -672,7 +672,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid reminder mode" });
       }
       if (autoCheckin !== undefined && typeof autoCheckin !== "boolean") {
-        return res.status(400).json({ error: "Auto check-in must be a boolean" });
+        return res.status(400).json({ error: "Auto checkin must be a boolean" });
       }
       if (fallDetection !== undefined && typeof fallDetection !== "boolean") {
         return res.status(400).json({ error: "Fall detection must be a boolean" });
@@ -1369,7 +1369,7 @@ export async function registerRoutes(
             // Send reminder to the user
             console.log(`[REMINDER] Sending reminder ${remindersSentSoFar + 1}/${maxReminders}`);
             
-            // Use home page as the check-in link
+            // Use home page as the checkin link
             const checkInLink = `${baseUrl}/`;
             await sendReminderPush(user.id, user.name);
             if (user.phone) {

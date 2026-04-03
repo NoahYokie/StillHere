@@ -214,7 +214,7 @@ export default function LoginPage() {
           </div>
           <div className="mt-6 p-3 bg-muted/50 rounded-md">
             <p className="text-xs text-muted-foreground text-center" data-testid="text-security-notice">
-              The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.
+              The only messages you'll receive from StillHere are checkin reminders and alerts you've set up yourself.
             </p>
           </div>
         </CardContent>

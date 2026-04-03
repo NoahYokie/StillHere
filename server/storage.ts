@@ -550,7 +550,7 @@ export class DatabaseStorage implements IStorage {
     const openIncident = await this.getOpenIncident(userId);
     const activeLocationSession = await this.getActiveLocationSession(userId);
 
-    // Calculate next check-in due
+    // Calculate next checkin due
     let nextCheckinDue: Date;
     if (lastCheckin) {
       nextCheckinDue = addHours(lastCheckin.createdAt, userSettings.checkinIntervalHours);

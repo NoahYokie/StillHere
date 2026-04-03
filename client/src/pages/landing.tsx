@@ -90,7 +90,7 @@ export default function LandingPage() {
                     </div>
                     <div className="flex-1 px-3.5 md:px-5 py-3 md:py-4 flex flex-col gap-3 md:gap-4">
                       <div className="bg-white rounded-lg md:rounded-xl px-3 md:px-4 py-2 md:py-3 shadow-sm border border-gray-100 text-center">
-                        <p className="text-[8px] md:text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Next check-in</p>
+                        <p className="text-[8px] md:text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Next checkin</p>
                         <p className="text-xs md:text-sm font-medium text-gray-800">9:00 AM tomorrow</p>
                       </div>
                       <div className="flex-1 flex flex-col items-center justify-center">
@@ -127,7 +127,7 @@ export default function LandingPage() {
               <Bell className="h-5 w-5 md:h-7 md:w-7 text-accent" />
             </div>
             <div>
-              <h2 className="font-semibold mb-1 md:text-lg md:mb-2">One tap check-in</h2>
+              <h2 className="font-semibold mb-1 md:text-lg md:mb-2">One tap checkin</h2>
               <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
                 Tap the green button once a day. We'll remind you if you forget.
               </p>
@@ -167,7 +167,7 @@ export default function LandingPage() {
           <div className="space-y-8 md:hidden">
             {[
               { num: "1", title: "Check in each day", desc: "Open the app and tap \"I'm OK\". Takes less than 2 seconds.", last: false, accent: false },
-              { num: "2", title: "Miss a check-in?", desc: "We'll send you a reminder first. No panic, no rush.", last: false, accent: false },
+              { num: "2", title: "Miss a checkin?", desc: "We'll send you a reminder first. No panic, no rush.", last: false, accent: false },
               { num: "3", title: "Your contacts are notified", desc: "They receive a text message with a link to check on you. No app needed on their end.", last: false, accent: false },
               { num: "4", title: "Someone checks on you", desc: "Your family or friends can call, visit, or confirm they're on their way.", last: true, accent: true },
             ].map((step) => (
@@ -189,7 +189,7 @@ export default function LandingPage() {
           <div className="hidden md:grid md:grid-cols-4 gap-8">
             {[
               { num: "1", title: "Check in each day", desc: "Open the app and tap \"I'm OK\". Takes 2 seconds.", accent: false },
-              { num: "2", title: "Miss a check-in?", desc: "We send you a friendly reminder first. No panic.", accent: false },
+              { num: "2", title: "Miss a checkin?", desc: "We send you a friendly reminder first. No panic.", accent: false },
               { num: "3", title: "Contacts notified", desc: "They get a text with a link to check on you.", accent: false },
               { num: "4", title: "Someone checks on you", desc: "They can call, visit, or confirm they're handling it.", accent: true },
             ].map((step) => (
@@ -241,7 +241,7 @@ export default function LandingPage() {
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="h-4 w-4 flex-shrink-0" />
-                <span>Last check-in: 9:15 AM yesterday</span>
+                <span>Last checkin: 9:15 AM yesterday</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4 flex-shrink-0" />
@@ -302,7 +302,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between text-sm text-muted-foreground md:flex-row">
             <div className="flex items-center gap-1.5 md:gap-2">
               <Heart className="h-4 w-4 text-primary" />
-              <span className="hidden md:inline">StillHere — A safety check-in app</span>
+              <span className="hidden md:inline">StillHere — A safety checkin app</span>
               <span className="md:hidden">StillHere</span>
             </div>
             <div className="flex gap-4 md:gap-6">
@@ -316,7 +316,7 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:block mt-4 px-4 py-3 bg-muted/50 rounded-md text-xs text-muted-foreground text-center">
             <Shield className="h-3.5 w-3.5 inline mr-1" />
-            The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.
+            The only messages you'll receive from StillHere are checkin reminders and alerts you've set up yourself.
           </div>
         </div>
       </footer>
