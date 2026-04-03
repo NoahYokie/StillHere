@@ -1160,6 +1160,20 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const targetUserId = req.params.userId;
+      if (currentUserId === targetUserId) {
+        const user = await storage.getUser(targetUserId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        return res.json({ id: user.id, name: user.name });
+      }
+      const myContacts = await storage.getContacts(currentUserId);
+      const hasAsContact = myContacts.some(c => c.linkedUserId === targetUserId);
+      if (!hasAsContact) {
+        const theirContacts = await storage.getContacts(targetUserId);
+        const isContactOf = theirContacts.some(c => c.linkedUserId === currentUserId);
+        if (!isContactOf) {
+          return res.status(403).json({ error: "Not authorized" });
+        }
+      }
       const user = await storage.getUser(targetUserId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -1271,6 +1285,8 @@ export async function registerRoutes(
     }
   });
 
+  let cronRunning = false;
+
   // Cron tick - check for due users (internal only)
   app.get("/api/cron/tick", async (req, res) => {
     try {
@@ -1283,6 +1299,11 @@ export async function registerRoutes(
       if (providedSecret !== cronSecret) {
         return res.status(403).json({ error: "Forbidden" });
       }
+
+      if (cronRunning) {
+        return res.json({ skipped: true, reason: "previous tick still running" });
+      }
+      cronRunning = true;
 
       const overdueUsers = await storage.getOverdueUsersWithSettings();
       const baseUrl = getBaseUrl();
@@ -1535,8 +1556,10 @@ export async function registerRoutes(
         }
       }
       
+      cronRunning = false;
       res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations });
     } catch (error) {
+      cronRunning = false;
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });
     }

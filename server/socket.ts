@@ -200,30 +200,28 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:answer", async (data: { callId: string; callerId: string; answer: any }) => {
-      console.log(`[CALL] ${userId} answering call ${data.callId} from ${data.callerId}`);
-      console.log(`[CALL] Answer SDP type: ${data.answer?.type}, SDP length: ${data.answer?.sdp?.length || 0}`);
       try {
+        const call = await storage.getCall(data.callId);
+        if (!call || call.receiverId !== userId || call.callerId !== data.callerId) {
+          console.log(`[CALL] Unauthorized answer attempt by ${userId}`);
+          return;
+        }
         await storage.updateCall(data.callId, { status: "active", answeredAt: new Date() });
-
-        const callerOnline = isUserOnline(data.callerId);
-        const callerSockets = onlineUsers.get(data.callerId);
-        console.log(`[CALL] Caller ${data.callerId} online: ${callerOnline}, sockets: ${callerSockets?.size || 0}`);
-
+        console.log(`[CALL] ${userId} answered call ${data.callId}`);
         io!.to(`user:${data.callerId}`).emit("call:answered", {
           callId: data.callId,
           answer: data.answer,
         });
-
-        console.log(`[CALL] Answer event emitted to user:${data.callerId}`);
       } catch (error) {
         console.error("[CALL] answer error:", error);
       }
     });
 
-    socket.on("call:ice-candidate", (data: { targetUserId: string; candidate: any }) => {
-      const targetOnline = isUserOnline(data.targetUserId);
-      const targetSockets = onlineUsers.get(data.targetUserId);
-      console.log(`[CALL] ICE candidate ${userId} -> ${data.targetUserId} (target online: ${targetOnline}, sockets: ${targetSockets?.size || 0}, candidate: ${data.candidate?.candidate?.substring(0, 50) || 'null'})`);
+    socket.on("call:ice-candidate", async (data: { targetUserId: string; candidate: any }) => {
+      const pairKey = getCallPairKey(userId, data.targetUserId);
+      if (!activeCallPairs.has(pairKey)) {
+        return;
+      }
       io!.to(`user:${data.targetUserId}`).emit("call:ice-candidate", {
         candidate: data.candidate,
         fromUserId: userId,
@@ -231,25 +229,35 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:end", async (data: { callId: string; targetUserId: string }) => {
-      console.log(`[CALL] ${userId} ending call ${data.callId}`);
       try {
+        const call = await storage.getCall(data.callId);
+        if (!call || (call.callerId !== userId && call.receiverId !== userId)) {
+          return;
+        }
         const pairKey = getCallPairKey(userId, data.targetUserId);
         activeCallPairs.delete(pairKey);
         await storage.updateCall(data.callId, { status: "ended", endedAt: new Date() });
         io!.to(`user:${data.targetUserId}`).emit("call:ended", { callId: data.callId });
+        console.log(`[CALL] Call ${data.callId} ended`);
       } catch {}
     });
 
-    socket.on("call:ice-restart", (data: { targetUserId: string; offer: any }) => {
-      console.log(`[CALL] ICE restart ${userId} -> ${data.targetUserId}`);
+    socket.on("call:ice-restart", async (data: { targetUserId: string; offer: any }) => {
+      const pairKey = getCallPairKey(userId, data.targetUserId);
+      if (!activeCallPairs.has(pairKey)) {
+        return;
+      }
       io!.to(`user:${data.targetUserId}`).emit("call:ice-restart", {
         offer: data.offer,
         fromUserId: userId,
       });
     });
 
-    socket.on("call:ice-restart-answer", (data: { targetUserId: string; answer: any }) => {
-      console.log(`[CALL] ICE restart answer ${userId} -> ${data.targetUserId}`);
+    socket.on("call:ice-restart-answer", async (data: { targetUserId: string; answer: any }) => {
+      const pairKey = getCallPairKey(userId, data.targetUserId);
+      if (!activeCallPairs.has(pairKey)) {
+        return;
+      }
       io!.to(`user:${data.targetUserId}`).emit("call:ice-restart-answer", {
         answer: data.answer,
         fromUserId: userId,
@@ -257,12 +265,17 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("call:reject", async (data: { callId: string; callerId: string }) => {
-      console.log(`[CALL] ${userId} rejecting call ${data.callId}`);
       try {
+        const call = await storage.getCall(data.callId);
+        if (!call || call.receiverId !== userId || call.callerId !== data.callerId) {
+          console.log(`[CALL] Unauthorized reject attempt by ${userId}`);
+          return;
+        }
         const pairKey = getCallPairKey(userId, data.callerId);
         activeCallPairs.delete(pairKey);
         await storage.updateCall(data.callId, { status: "missed", endedAt: new Date() });
         io!.to(`user:${data.callerId}`).emit("call:rejected", { callId: data.callId });
+        console.log(`[CALL] Call ${data.callId} rejected`);
       } catch {}
     });
 
