@@ -47,6 +47,7 @@ import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 interface ContactEntry {
   name: string;
   phone: string;
+  email: string;
 }
 
 export default function SettingsPage() {
@@ -60,6 +61,9 @@ export default function SettingsPage() {
   const [reminderMode, setReminderMode] = useState<ReminderMode>("one");
   const [autoCheckin, setAutoCheckin] = useState(false);
   const [fallDetection, setFallDetection] = useState(false);
+  const [discreetSos, setDiscreetSos] = useState(false);
+  const [smsCheckinEnabled, setSmsCheckinEnabled] = useState(false);
+  const [escalationMinutes, setEscalationMinutes] = useState(20);
   const [customInterval, setCustomInterval] = useState("");
   const [customPauseHours, setCustomPauseHours] = useState("");
   const [contactEntries, setContactEntries] = useState<ContactEntry[]>([]);
@@ -78,20 +82,23 @@ export default function SettingsPage() {
       setReminderMode((status.settings as any)?.reminderMode || "one");
       setAutoCheckin((status.settings as any)?.autoCheckin || false);
       setFallDetection((status.settings as any)?.fallDetection || false);
+      setDiscreetSos((status.settings as any)?.discreetSos || false);
+      setSmsCheckinEnabled((status.settings as any)?.smsCheckinEnabled || false);
+      setEscalationMinutes((status.settings as any)?.escalationMinutes || 20);
 
       if (!contactsInitialized && status.contacts?.length) {
         const sorted = [...status.contacts].sort((a, b) => a.priority - b.priority);
-        setContactEntries(sorted.map(c => ({ name: c.name, phone: c.phone })));
+        setContactEntries(sorted.map(c => ({ name: c.name, phone: c.phone, email: (c as any).email || "" })));
         setContactsInitialized(true);
       } else if (!contactsInitialized && (!status.contacts || status.contacts.length === 0)) {
-        setContactEntries([{ name: "", phone: "" }]);
+        setContactEntries([{ name: "", phone: "", email: "" }]);
         setContactsInitialized(true);
       }
     }
   }, [status, contactsInitialized]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; escalationMinutes?: number }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -109,6 +116,7 @@ export default function SettingsPage() {
         contacts: contactsList.map((c, i) => ({
           name: c.name,
           phone: c.phone,
+          email: c.email || null,
           priority: i + 1,
         })),
       });
@@ -255,7 +263,7 @@ export default function SettingsPage() {
 
   const addContactEntry = () => {
     if (contactEntries.length >= contactLimit) return;
-    setContactEntries([...contactEntries, { name: "", phone: "" }]);
+    setContactEntries([...contactEntries, { name: "", phone: "", email: "" }]);
   };
 
   const removeContactEntry = (index: number) => {
@@ -489,6 +497,13 @@ export default function SettingsPage() {
                     onChange={(e) => updateContactEntry(index, "phone", e.target.value)}
                     data-testid={`input-contact-phone-${index}`}
                   />
+                  <Input
+                    placeholder="Email (optional)"
+                    type="email"
+                    value={contact.email}
+                    onChange={(e) => updateContactEntry(index, "email", e.target.value)}
+                    data-testid={`input-contact-email-${index}`}
+                  />
                   {savedContact && contact.name.trim() && contact.phone.trim() && (
                     <div className="flex items-center gap-2">
                       {linkedUserId ? (
@@ -693,6 +708,99 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-3">
               Uses your device's motion sensors. If a fall is detected, you'll have 60 seconds to dismiss before an SOS is sent.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Discreet SOS Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Shield className="h-5 w-5" />
+              Discreet SOS
+            </CardTitle>
+            <CardDescription>Trigger an SOS silently by shaking your phone.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="discreet-sos">Enable shake-to-SOS</Label>
+              <Switch
+                id="discreet-sos"
+                checked={discreetSos}
+                onCheckedChange={(checked) => {
+                  setDiscreetSos(checked);
+                  settingsMutation.mutate({ discreetSos: checked });
+                }}
+                data-testid="switch-discreet-sos"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              Shake your phone 3 times quickly to trigger an SOS without any visible alert on your screen. Useful in situations where you need help discreetly.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* SMS Checkin Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MessageCircle className="h-5 w-5" />
+              SMS checkin
+            </CardTitle>
+            <CardDescription>Check in by replying to a text message.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="sms-checkin">Enable SMS checkin</Label>
+              <Switch
+                id="sms-checkin"
+                checked={smsCheckinEnabled}
+                onCheckedChange={(checked) => {
+                  setSmsCheckinEnabled(checked);
+                  settingsMutation.mutate({ smsCheckinEnabled: checked });
+                }}
+                data-testid="switch-sms-checkin"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              When enabled, you can check in by replying YES to your reminder text message. You can also text HELP to trigger an SOS.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Escalation Timing Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Clock className="h-5 w-5" />
+              Escalation timing
+            </CardTitle>
+            <CardDescription>How long to wait before alerting the next contact.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Select
+              value={String(escalationMinutes)}
+              onValueChange={(val) => {
+                const mins = parseInt(val);
+                setEscalationMinutes(mins);
+                settingsMutation.mutate({ escalationMinutes: mins });
+              }}
+            >
+              <SelectTrigger data-testid="select-escalation-minutes">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5 minutes</SelectItem>
+                <SelectItem value="10">10 minutes</SelectItem>
+                <SelectItem value="15">15 minutes</SelectItem>
+                <SelectItem value="20">20 minutes (default)</SelectItem>
+                <SelectItem value="30">30 minutes</SelectItem>
+                <SelectItem value="45">45 minutes</SelectItem>
+                <SelectItem value="60">60 minutes</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground mt-3">
+              If your first contact does not respond within this time, the next contact in your list will be alerted.
             </p>
           </CardContent>
         </Card>

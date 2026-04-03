@@ -40,6 +40,7 @@ import {
   sendPushNotification,
 } from "./push";
 import { emitToUser, isUserOnline } from "./socket";
+import { sendEmergencyEmail, sendGeofenceEmail } from "./email";
 
 // Helper to get userId from session
 const getUserId = (req: Request): string | null => {
@@ -50,8 +51,17 @@ const getBaseUrl = (): string => {
   return process.env.BASE_URL || "https://stillhere.health";
 };
 
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (deg: number) => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 async function notifyContact(
-  contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string },
+  contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null },
   userName: string,
   link: string,
   reason: "sos" | "missed_checkin",
@@ -60,6 +70,15 @@ async function notifyContact(
   const normalizedPhone = normalizePhone(contact.phone);
   await sendSmsFn(normalizedPhone, userName, link);
   console.log(`[NOTIFY] Sent SMS to contact`);
+
+  if (contact.email) {
+    try {
+      await sendEmergencyEmail(contact.email, userName, link, reason);
+      console.log(`[NOTIFY] Also sent email to contact`);
+    } catch (e) {
+      console.error(`[NOTIFY] Email failed:`, e);
+    }
+  }
 
   if (contact.linkedUserId) {
     await sendPushNotification(contact.linkedUserId, {
@@ -593,12 +612,13 @@ export async function registerRoutes(
         }
       }
       
+      const sosSettings = await storage.getSettings(userId);
       incident = await storage.updateIncident(incident.id, {
         escalationLevel: 1,
         notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
         lastContactNotifiedAt: now,
         contact1NotifiedAt: now,
-        nextActionAt: addMinutes(now, 20),
+        nextActionAt: addMinutes(now, sosSettings?.escalationMinutes || 20),
       });
       
       res.json({ success: true, incident });
@@ -664,7 +684,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes } = req.body;
       
       if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
         return res.status(400).json({ error: "Checkin interval must be between 12 and 48 hours" });
@@ -684,6 +704,15 @@ export async function registerRoutes(
       if (fallDetection !== undefined && typeof fallDetection !== "boolean") {
         return res.status(400).json({ error: "Fall detection must be a boolean" });
       }
+      if (discreetSos !== undefined && typeof discreetSos !== "boolean") {
+        return res.status(400).json({ error: "Discreet SOS must be a boolean" });
+      }
+      if (smsCheckinEnabled !== undefined && typeof smsCheckinEnabled !== "boolean") {
+        return res.status(400).json({ error: "SMS checkin must be a boolean" });
+      }
+      if (escalationMinutes !== undefined && (typeof escalationMinutes !== "number" || ![5, 10, 15, 20, 30, 45, 60].includes(escalationMinutes))) {
+        return res.status(400).json({ error: "Escalation minutes must be 5, 10, 15, 20, 30, 45, or 60" });
+      }
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -693,6 +722,9 @@ export async function registerRoutes(
       if (preferredCheckinTime !== undefined) updates.preferredCheckinTime = preferredCheckinTime;
       if (autoCheckin !== undefined) updates.autoCheckin = autoCheckin;
       if (fallDetection !== undefined) updates.fallDetection = fallDetection;
+      if (discreetSos !== undefined) updates.discreetSos = discreetSos;
+      if (smsCheckinEnabled !== undefined) updates.smsCheckinEnabled = smsCheckinEnabled;
+      if (escalationMinutes !== undefined) updates.escalationMinutes = escalationMinutes;
       
       // Update user timezone if provided
       if (timezone) {
@@ -738,7 +770,7 @@ export async function registerRoutes(
 
       // New array format: { contacts: [{ name, phone, priority }] }
       if (req.body.contacts && Array.isArray(req.body.contacts)) {
-        const contactsList = req.body.contacts as { name: string; phone: string; priority: number }[];
+        const contactsList = req.body.contacts as { name: string; phone: string; email?: string | null; priority: number }[];
         
         if (contactsList.length === 0) {
           return res.status(400).json({ error: "At least one contact is required" });
@@ -755,6 +787,7 @@ export async function registerRoutes(
         const savedContacts = await storage.saveContactsList(userId, contactsList.map((c, i) => ({
           name: c.name.trim(),
           phone: normalizePhone(c.phone),
+          email: c.email?.trim() || null,
           priority: c.priority || (i + 1),
         })));
 
@@ -1104,6 +1137,7 @@ export async function registerRoutes(
       const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
       const firstContact = sortedContacts[0];
 
+      const escalateSettings = await storage.getSettings(data.user.id);
       const incident = await storage.updateIncident(data.incident.id, {
         status: "open",
         handledByContactId: null,
@@ -1114,7 +1148,7 @@ export async function registerRoutes(
         userNotifiedNoResponseAt: null,
         contact1NotifiedAt: now,
         contact2NotifiedAt: null,
-        nextActionAt: addMinutes(now, 20),
+        nextActionAt: addMinutes(now, escalateSettings?.escalationMinutes || 20),
       });
       
       console.log(`[INCIDENT] Contact escalated incident for user`);
@@ -1416,6 +1450,352 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // SMS CHECK-IN WEBHOOK (Twilio incoming)
+  // ============================================
+  app.post("/api/sms/incoming", async (req, res) => {
+    try {
+      const from = req.body?.From || req.body?.from;
+      const body = (req.body?.Body || req.body?.body || "").trim().toLowerCase();
+      
+      if (!from) {
+        return res.status(400).send("<Response></Response>");
+      }
+      
+      const normalized = normalizePhone(from);
+      const user = await storage.getUserByPhone(normalized);
+      
+      if (!user) {
+        console.log(`[SMS-CHECKIN] Unknown phone: ***${normalized.slice(-4)}`);
+        return res.type("text/xml").send('<Response><Message>This number is not registered with StillHere.</Message></Response>');
+      }
+      
+      const userSettings = await storage.getSettings(user.id);
+      if (!userSettings?.smsCheckinEnabled) {
+        return res.type("text/xml").send('<Response><Message>SMS checkin is not enabled for your account. Enable it in Settings.</Message></Response>');
+      }
+      
+      const affirmatives = ["yes", "ok", "y", "yep", "yeah", "im ok", "i'm ok", "safe", "good", "fine", "here", "alive", "checkin", "check in"];
+      const isCheckin = affirmatives.some(a => body.includes(a));
+      
+      if (isCheckin) {
+        await storage.createCheckin(user.id, "sms");
+        await storage.resetReminderState(user.id);
+        
+        const openIncident = await storage.getOpenIncident(user.id);
+        if (openIncident) {
+          await storage.updateIncident(openIncident.id, {
+            status: "resolved",
+            resolvedAt: new Date(),
+          });
+        }
+        
+        console.log(`[SMS-CHECKIN] Checkin recorded for user ***${normalized.slice(-4)}`);
+        return res.type("text/xml").send('<Response><Message>Thanks! Your checkin has been recorded. Stay safe.</Message></Response>');
+      }
+      
+      if (body === "help" || body === "sos") {
+        const existingIncident = await storage.getOpenIncident(user.id);
+        if (!existingIncident) {
+          const incident = await storage.createIncident(user.id, "sos");
+          const allContacts = await storage.getContacts(user.id);
+          const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
+          const tokens = await storage.getContactTokensForUser(user.id);
+          const baseUrl = getBaseUrl();
+          const first = sorted[0];
+          if (first) {
+            const tok = tokens.find(t => t.contact.id === first.id);
+            if (tok) {
+              const link = `${baseUrl}/emergency/${tok.token}`;
+              await notifyContact(first, user.name, link, "sos", sendSosAlert);
+            }
+          }
+          await storage.updateIncident(incident.id, {
+            escalationLevel: 1,
+            notifiedContactIds: JSON.stringify(first ? [first.id] : []),
+            lastContactNotifiedAt: new Date(),
+            contact1NotifiedAt: new Date(),
+            nextActionAt: addMinutes(new Date(), userSettings.escalationMinutes || 20),
+          });
+        }
+        return res.type("text/xml").send('<Response><Message>SOS alert sent. Your emergency contacts are being notified.</Message></Response>');
+      }
+      
+      return res.type("text/xml").send('<Response><Message>Reply YES to check in, or HELP for SOS. StillHere is watching over you.</Message></Response>');
+    } catch (error) {
+      console.error("Error in SMS incoming webhook:", error);
+      res.type("text/xml").send('<Response><Message>Something went wrong. Please try again.</Message></Response>');
+    }
+  });
+
+  // ============================================
+  // GEOFENCE ENDPOINTS
+  // ============================================
+  app.get("/api/geofences", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const fences = await storage.getGeofences(userId);
+      res.json(fences);
+    } catch (error) {
+      console.error("Error getting geofences:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.post("/api/geofences", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { name, lat, lng, radiusMeters, type } = req.body;
+      if (!name || lat == null || lng == null) {
+        return res.status(400).json({ error: "name, lat, and lng are required" });
+      }
+      const fence = await storage.createGeofence(userId, {
+        name,
+        lat,
+        lng,
+        radiusMeters: radiusMeters || 200,
+        type: type || "home",
+      });
+      res.json(fence);
+    } catch (error) {
+      console.error("Error creating geofence:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.put("/api/geofences/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const fence = await storage.updateGeofence(req.params.id as string, userId, req.body);
+      res.json(fence);
+    } catch (error) {
+      console.error("Error updating geofence:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.delete("/api/geofences/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      await storage.deleteGeofence(req.params.id as string, userId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error deleting geofence:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  const geofenceState = new Map<string, Map<string, boolean>>();
+
+  app.post("/api/geofences/check", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { lat, lng } = req.body;
+      if (lat == null || lng == null || typeof lat !== "number" || typeof lng !== "number") {
+        return res.status(400).json({ error: "lat and lng must be numbers" });
+      }
+      
+      const fences = await storage.getGeofences(userId);
+      const activeFences = fences.filter(f => f.active);
+      const results = activeFences.map(fence => {
+        const distance = haversineDistance(lat, lng, fence.lat, fence.lng);
+        return {
+          id: fence.id,
+          name: fence.name,
+          type: fence.type,
+          inside: distance <= fence.radiusMeters,
+          distanceMeters: Math.round(distance),
+        };
+      });
+      
+      if (!geofenceState.has(userId)) {
+        geofenceState.set(userId, new Map());
+      }
+      const userState = geofenceState.get(userId)!;
+      
+      const newDepartures = results.filter(r => {
+        const wasInside = userState.get(r.id);
+        const transitioned = wasInside === true && !r.inside;
+        userState.set(r.id, r.inside);
+        return transitioned;
+      });
+      
+      for (const r of results) {
+        if (!userState.has(r.id)) {
+          userState.set(r.id, r.inside);
+        }
+      }
+      
+      if (newDepartures.length > 0) {
+        const user = await storage.getUser(userId);
+        const allContacts = await storage.getContacts(userId);
+        for (const zone of newDepartures) {
+          for (const contact of allContacts) {
+            if (contact.email) {
+              try {
+                await sendGeofenceEmail(contact.email, user?.name || "User", zone.name);
+              } catch {}
+            }
+          }
+        }
+      }
+      
+      res.json({ zones: results, newDepartures: newDepartures.map(d => d.name) });
+    } catch (error) {
+      console.error("Error checking geofences:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ============================================
+  // LOCATION BREADCRUMBS
+  // ============================================
+  app.post("/api/location/breadcrumb", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { lat, lng, accuracy, sessionId } = req.body;
+      if (lat == null || lng == null) return res.status(400).json({ error: "lat and lng required" });
+      const breadcrumb = await storage.saveBreadcrumb(userId, sessionId || null, lat, lng, accuracy || null);
+      res.json(breadcrumb);
+    } catch (error) {
+      console.error("Error saving breadcrumb:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/location/breadcrumbs/:userId", async (req, res) => {
+    try {
+      const requesterId = getUserId(req);
+      if (!requesterId) return res.status(401).json({ error: "Not authenticated" });
+      const targetUserId = req.params.userId as string;
+      const linkedContacts = await storage.getContactsLinkedToUser(requesterId);
+      const isWatcher = linkedContacts.some(c => c.userId === targetUserId);
+      if (!isWatcher && requesterId !== targetUserId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      const sessionId = req.query.sessionId as string | undefined;
+      const breadcrumbs = await storage.getBreadcrumbs(targetUserId, sessionId, 200);
+      res.json(breadcrumbs);
+    } catch (error) {
+      console.error("Error getting breadcrumbs:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ============================================
+  // SATELLITE DEVICE ENDPOINTS
+  // ============================================
+  app.get("/api/satellite/devices", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const devices = await storage.getSatelliteDevices(userId);
+      res.json(devices);
+    } catch (error) {
+      console.error("Error getting satellite devices:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.post("/api/satellite/register", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { deviceType, deviceId, name } = req.body;
+      if (!deviceType || !deviceId || !name) {
+        return res.status(400).json({ error: "deviceType, deviceId, and name are required" });
+      }
+      const device = await storage.registerSatelliteDevice(userId, { deviceType, deviceId, name });
+      res.json(device);
+    } catch (error) {
+      console.error("Error registering satellite device:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.delete("/api/satellite/devices/:id", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      await storage.deleteSatelliteDevice(req.params.id as string, userId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error deleting satellite device:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.post("/api/satellite/webhook", async (req, res) => {
+    try {
+      const { deviceId, action, lat, lng } = req.body;
+      if (!deviceId || !action) {
+        return res.status(400).json({ error: "deviceId and action required" });
+      }
+      
+      const deviceWithUser = await storage.getSatelliteDeviceByDeviceId(deviceId);
+      if (!deviceWithUser) {
+        return res.status(404).json({ error: "Device not registered" });
+      }
+      
+      const user = deviceWithUser.user;
+      
+      if (action === "checkin") {
+        await storage.createCheckin(user.id, "auto");
+        await storage.resetReminderState(user.id);
+        if (lat != null && lng != null) {
+          const session = await storage.getActiveLocationSession(user.id);
+          if (session) {
+            await storage.updateLocationSession(session.id, lat, lng, 50);
+          }
+          await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+        }
+        console.log(`[SATELLITE] Checkin from device ${deviceId} for user ${user.name}`);
+        res.json({ ok: true, action: "checkin_recorded" });
+      } else if (action === "sos") {
+        const existing = await storage.getOpenIncident(user.id);
+        if (!existing) {
+          const incident = await storage.createIncident(user.id, "sos");
+          const allContacts = await storage.getContacts(user.id);
+          const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
+          const tokens = await storage.getContactTokensForUser(user.id);
+          const baseUrl = getBaseUrl();
+          const first = sorted[0];
+          if (first) {
+            const tok = tokens.find(t => t.contact.id === first.id);
+            if (tok) {
+              const link = `${baseUrl}/emergency/${tok.token}`;
+              await notifyContact(first, user.name, link, "sos", sendSosAlert);
+            }
+          }
+          const userSettings = await storage.getSettings(user.id);
+          await storage.updateIncident(incident.id, {
+            escalationLevel: 1,
+            notifiedContactIds: JSON.stringify(first ? [first.id] : []),
+            lastContactNotifiedAt: new Date(),
+            contact1NotifiedAt: new Date(),
+            nextActionAt: addMinutes(new Date(), userSettings?.escalationMinutes || 20),
+          });
+        }
+        if (lat != null && lng != null) {
+          await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+        }
+        console.log(`[SATELLITE] SOS from device ${deviceId} for user ${user.name}`);
+        res.json({ ok: true, action: "sos_triggered" });
+      } else {
+        res.status(400).json({ error: "Unknown action. Use 'checkin' or 'sos'" });
+      }
+    } catch (error) {
+      console.error("Error in satellite webhook:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
   let cronRunning = false;
 
   // Cron tick - check for due users (internal only)
@@ -1481,7 +1861,7 @@ export async function registerRoutes(
             notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
             lastContactNotifiedAt: now,
             contact1NotifiedAt: now,
-            nextActionAt: addMinutes(now, 20),
+            nextActionAt: addMinutes(now, settings.escalationMinutes || 20),
           });
           
           alertsSent++;
@@ -1519,12 +1899,15 @@ export async function registerRoutes(
       // Handle escalations for incidents that need attention
       let escalations = 0;
       const incidentsNeedingEscalation = await storage.getIncidentsNeedingEscalation();
-      const ESCALATION_WINDOW_MS = 20 * 60 * 1000;
       const MAX_SEQUENTIAL = 5;
       
       for (const incident of incidentsNeedingEscalation) {
         const user = await storage.getUser(incident.userId);
         if (!user) continue;
+        
+        const userSettings = await storage.getSettings(incident.userId);
+        const escalationMinutes = userSettings?.escalationMinutes || 20;
+        const ESCALATION_WINDOW_MS = escalationMinutes * 60 * 1000;
         
         const contacts = await storage.getContacts(incident.userId);
         const tokens = await storage.getContactTokensForUser(incident.userId);
@@ -1557,7 +1940,7 @@ export async function registerRoutes(
             userNotifiedNoResponseAt: null,
             contact1NotifiedAt: now,
             contact2NotifiedAt: null,
-            nextActionAt: addMinutes(now, 20),
+            nextActionAt: addMinutes(now, escalationMinutes),
           });
           
           console.log("[ESCALATION] Handling timeout alerts sent, escalation reset\n");
@@ -1584,7 +1967,7 @@ export async function registerRoutes(
               notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
               lastContactNotifiedAt: now,
               contact1NotifiedAt: now,
-              nextActionAt: addMinutes(now, 20),
+              nextActionAt: addMinutes(now, escalationMinutes),
             });
             escalations++;
             continue;
@@ -1594,7 +1977,7 @@ export async function registerRoutes(
           if (!lastNotifiedAt) {
             await storage.updateIncident(incident.id, {
               lastContactNotifiedAt: now,
-              nextActionAt: addMinutes(now, 20),
+              nextActionAt: addMinutes(now, escalationMinutes),
             });
             continue;
           }
@@ -1631,7 +2014,7 @@ export async function registerRoutes(
               escalationLevel: newLevel,
               notifiedContactIds: JSON.stringify(notifiedIds),
               lastContactNotifiedAt: now,
-              nextActionAt: addMinutes(now, 20),
+              nextActionAt: addMinutes(now, escalationMinutes),
             };
             if (newLevel === 2) updateData.contact2NotifiedAt = now;
             
@@ -1661,7 +2044,7 @@ export async function registerRoutes(
               notifiedContactIds: JSON.stringify(notifiedIds),
               allContactsNotifiedAt: now,
               lastContactNotifiedAt: now,
-              nextActionAt: addMinutes(now, 20),
+              nextActionAt: addMinutes(now, escalationMinutes),
             });
             
             console.log("[ESCALATION] All contacts notified\n");

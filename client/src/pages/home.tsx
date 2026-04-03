@@ -367,6 +367,49 @@ export default function Home() {
     };
   }, [(status?.settings as any)?.fallDetection, startFallCountdown]);
 
+  useEffect(() => {
+    const discreetEnabled = (status?.settings as any)?.discreetSos;
+    if (!discreetEnabled || !isDeviceMotionSupported()) return;
+
+    let shakeCount = 0;
+    let lastShakeTime = 0;
+    let lastAccel = { x: 0, y: 0, z: 0 };
+    const SHAKE_THRESHOLD = 25;
+    const SHAKE_RESET_MS = 1500;
+    const SHAKES_NEEDED = 3;
+
+    const handleMotion = (e: DeviceMotionEvent) => {
+      const accel = e.accelerationIncludingGravity;
+      if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
+
+      const dx = accel.x - lastAccel.x;
+      const dy = accel.y - lastAccel.y;
+      const dz = accel.z - lastAccel.z;
+      const magnitude = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      lastAccel = { x: accel.x, y: accel.y, z: accel.z };
+
+      const now = Date.now();
+      if (now - lastShakeTime > SHAKE_RESET_MS) {
+        shakeCount = 0;
+      }
+
+      if (magnitude > SHAKE_THRESHOLD) {
+        shakeCount++;
+        lastShakeTime = now;
+
+        if (shakeCount >= SHAKES_NEEDED) {
+          shakeCount = 0;
+          apiRequest("POST", "/api/sos").catch(() => {});
+          queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+        }
+      }
+    };
+
+    window.addEventListener("devicemotion", handleMotion);
+    return () => window.removeEventListener("devicemotion", handleMotion);
+  }, [(status?.settings as any)?.discreetSos]);
+
   const checkinMutation = useMutation({
     mutationFn: async () => {
       return apiRequest("POST", "/api/checkin");

@@ -19,11 +19,15 @@ The application features a simple, reassuring user interface with a primary blue
 The frontend uses React, TypeScript, Tailwind CSS, and shadcn/ui. The backend is Express.js with Helmet for security and `express-rate-limit`. PostgreSQL is managed with Drizzle ORM. Authentication is primarily Passkey (WebAuthn/FIDO2) with phone OTP as a fallback. Sessions are 30 days via httpOnly secure cookies.
 
 Key features include:
-- **Check-in Mechanism:** Manual or optional automatic check-ins, with configurable schedules, grace periods, and reminders.
-- **Emergency System:** SOS alerts, sequential escalation through prioritized contacts, and fall detection with a countdown.
-- **Notifications:** SMS is always sent to every emergency contact as the primary channel. Push notifications (VAPID web-push) are sent additionally to contacts who also use the app. This ensures contacts are always reached regardless of app usage.
+- **Check-in Mechanism:** Manual or optional automatic check-ins, with configurable schedules, grace periods, and reminders. SMS checkin supported (reply YES to reminder text).
+- **Emergency System:** SOS alerts, sequential escalation through prioritized contacts, and fall detection with a countdown. Discreet SOS via shake gesture (DeviceMotion API). Configurable escalation timing (5-60 min).
+- **Notifications:** SMS is always sent to every emergency contact as the primary channel. Push notifications (VAPID web-push) are sent additionally to contacts who also use the app. Email notifications sent when contact has an email address. This ensures contacts are always reached regardless of app usage.
 - **Communication:** Socket.IO enables real-time in-app messaging with persistence and read receipts, and WhatsApp-style WebRTC video calling with a relay-first architecture. Native call integration via Capacitor plugins (CallKit/ConnectionService) provides a native incoming call UI.
-- **Watcher System:** Automatic detection of emergency contacts who are also StillHere users, enabling push notifications and a watcher dashboard for monitoring.
+- **Watcher System:** Automatic detection of emergency contacts who are also StillHere users, enabling push notifications and an enhanced watcher dashboard with grouped status sections (active alerts, overdue, all clear), quick actions (message/video call), and next-due-time display.
+- **Geofencing:** CRUD API for named geofences (home, work, custom). Real-time zone departure detection with transition-based alerting (no spam). Email notifications to contacts on zone departure. DB table: `geofences`. API: `GET/POST /api/geofences`, `PUT/DELETE /api/geofences/:id`, `POST /api/geofences/check`.
+- **Location Breadcrumbs:** Trail of location points during active sessions. Watcher-accessible breadcrumb history. DB table: `location_breadcrumbs`. API: `POST /api/location/breadcrumb`, `GET /api/location/breadcrumbs/:userId`.
+- **Satellite Device Integration:** API for satellite communicators (Garmin inReach, SPOT). Register/unregister devices, webhook for checkin/SOS from satellite. DB table: `satellite_devices`. API: `GET /api/satellite/devices`, `POST /api/satellite/register`, `DELETE /api/satellite/devices/:id`, `POST /api/satellite/webhook`.
+- **SMS Checkin:** Twilio incoming webhook at `POST /api/sms/incoming`. Users can reply YES/OK/SAFE to check in, or HELP for SOS. Requires `smsCheckinEnabled` in settings.
 - **Security:** Comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free server logs, and bank-level security hardening (e.g., HSTS, Permissions-Policy, content-type enforcement, OTP hashing).
 - **PWA Support:** Full Progressive Web App capabilities for offline support and installability.
 - **Wearable API:** Dedicated API endpoints support companion watch apps (Apple Watch, Wear OS) for quick check-ins and status updates.
