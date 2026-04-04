@@ -1,5 +1,28 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "tXcKYqBJSmBpi_1RzGPk9"
+uri = "file://attached_assets/icon-option-1.png"
+type = "image"
+title = "StillHere app icon shield checkmark"
+
+[[generated]]
+id = "oYP9kyyJw6iPDPIspUeoG"
+uri = "file://attached_assets/icon-option-2.png"
+type = "image"
+title = "StillHere app icon heart shield"
+
+[[generated]]
+id = "x7dgfvmDAL0eQcychssJs"
+uri = "file://attached_assets/icon-option-3.png"
+type = "image"
+title = "StillHere app icon pin checkmark"
+
+[[generated]]
+id = "MbNwNCU7ChC97VstkGYDT"
+uri = "file://attached_assets/icon-option-4.png"
+type = "image"
+title = "StillHere app icon person check"
 
 [[outputs]]
 id = "KIHSnRb4Sh7ggJEJAvFB_"
