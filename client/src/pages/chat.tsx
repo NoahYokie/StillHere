@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Send, Video, CheckCheck, Check, RotateCcw } from "lucide-react";
+import { ArrowLeft, Send, Phone, CheckCheck, Check, RotateCcw } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
@@ -236,9 +236,9 @@ export default function ChatPage() {
           variant="ghost"
           size="icon"
           onClick={() => setLocation(`/call/${otherUserId}`)}
-          data-testid="button-video-call"
+          data-testid="button-call"
         >
-          <Video className="w-5 h-5" />
+          <Phone className="w-5 h-5" />
         </Button>
       </div>
 

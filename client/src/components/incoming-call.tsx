@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Phone, PhoneOff, Video } from "lucide-react";
+import { Phone, PhoneOff } from "lucide-react";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
 import { startIncomingRingtone, stopRingtone } from "@/lib/ringtone";
@@ -10,7 +10,7 @@ interface IncomingCallData {
   callId: string;
   callerId: string;
   callerName: string;
-  callType: "video" | "audio";
+  callType?: string;
   offer: RTCSessionDescriptionInit;
 }
 
@@ -124,15 +124,15 @@ export function IncomingCallOverlay() {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" data-testid="incoming-call-overlay">
       <div className="bg-card rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-xl">
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <Video className="w-8 h-8 text-primary animate-pulse" />
+        <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+          <Phone className="w-8 h-8 text-green-500 animate-pulse" />
         </div>
 
         <h2 className="text-lg font-semibold mb-1" data-testid="text-caller-name">
           {incomingCall.callerName}
         </h2>
         <p className="text-muted-foreground mb-6" data-testid="text-call-type">
-          Incoming {incomingCall.callType} call
+          Incoming call
         </p>
 
         <div className="flex justify-center gap-6">

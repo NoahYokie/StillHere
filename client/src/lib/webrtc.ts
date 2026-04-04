@@ -214,22 +214,17 @@ export class WebRTCConnection {
     });
   }
 
-  async getLocalStream(video = true, audio = true): Promise<MediaStream> {
+  async getLocalStream(): Promise<MediaStream> {
     const constraints: MediaStreamConstraints = {
-      audio: audio ? {
+      audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-      } : false,
-      video: video ? {
-        facingMode: "user",
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        frameRate: { ideal: 24, max: 30 },
-      } : false,
+      },
+      video: false,
     };
 
-    console.log("[WebRTC] Requesting getUserMedia...");
+    console.log("[WebRTC] Requesting getUserMedia (audio only)...");
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
     const trackInfo = this.localStream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`).join(", ");
     console.log("[WebRTC] Got local stream, tracks:", trackInfo);
@@ -245,7 +240,7 @@ export class WebRTCConnection {
   async createOffer(): Promise<RTCSessionDescriptionInit> {
     const offer = await this.pc.createOffer({
       offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
+      offerToReceiveVideo: false,
     });
     await this.pc.setLocalDescription(offer);
     console.log("[WebRTC] Offer created, waiting for ICE gathering...");
@@ -322,39 +317,6 @@ export class WebRTCConnection {
 
   toggleAudio(enabled: boolean): void {
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = enabled));
-  }
-
-  toggleVideo(enabled: boolean): void {
-    this.localStream?.getVideoTracks().forEach((t) => (t.enabled = enabled));
-  }
-
-  async switchCamera(): Promise<void> {
-    const videoTrack = this.localStream?.getVideoTracks()[0];
-    if (!videoTrack) return;
-
-    const currentFacing = videoTrack.getSettings().facingMode;
-    const newFacing = currentFacing === "user" ? "environment" : "user";
-
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: newFacing },
-      audio: false,
-    });
-
-    const newVideoTrack = newStream.getVideoTracks()[0];
-    const sender = this.pc.getSenders().find((s) => s.track?.kind === "video");
-    if (sender) {
-      await sender.replaceTrack(newVideoTrack);
-    }
-
-    videoTrack.stop();
-    if (this.localStream) {
-      this.localStream.removeTrack(videoTrack);
-      this.localStream.addTrack(newVideoTrack);
-    }
-  }
-
-  getLocalMediaStream(): MediaStream | null {
-    return this.localStream;
   }
 
   close(): void {
