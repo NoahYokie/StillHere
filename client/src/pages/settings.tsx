@@ -39,7 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge, Star, MessageSquare } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
@@ -1080,6 +1080,24 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Feedback & Ratings */}
+        <Card 
+          className="hover-elevate cursor-pointer" 
+          onClick={() => setLocation("/feedback")}
+          data-testid="card-feedback"
+        >
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <MessageSquare className="h-5 w-5 text-muted-foreground" />
+              <div className="flex-1">
+                <span className="font-medium">App feedback</span>
+                <p className="text-xs text-muted-foreground">Ratings, error reports</p>
+              </div>
+              <Star className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Logout */}
         <Card 

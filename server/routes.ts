@@ -1769,7 +1769,7 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       const limit = parseInt(req.query.limit as string) || 50;
       const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
-      const reports = await storage.getErrorReports(Math.min(limit, 100), resolved);
+      const reports = await storage.getErrorReports(Math.min(limit, 100), resolved, userId);
       res.json(reports);
     } catch (error) {
       console.error("Error getting error reports:", error);
@@ -1781,7 +1781,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
-      const stats = await storage.getErrorReportStats();
+      const stats = await storage.getErrorReportStats(userId);
       res.json(stats);
     } catch (error) {
       console.error("Error getting error stats:", error);
@@ -1793,7 +1793,12 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
-      await storage.resolveErrorReport(req.params.id);
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(req.params.id)) {
+        return res.status(400).json({ error: "Invalid error report ID" });
+      }
+      const resolved = await storage.resolveErrorReport(req.params.id, userId);
+      if (!resolved) return res.status(404).json({ error: "Error report not found" });
       res.json({ success: true });
     } catch (error) {
       console.error("Error resolving error report:", error);
@@ -1846,7 +1851,15 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       const limit = parseInt(req.query.limit as string) || 50;
       const ratings = await storage.getAppRatings(Math.min(limit, 100));
-      res.json(ratings);
+      const sanitized = ratings.map(r => ({
+        id: r.id,
+        rating: r.rating,
+        comment: r.comment,
+        createdAt: r.createdAt,
+        isOwn: r.userId === userId,
+        userName: r.userId === userId ? r.userName : undefined,
+      }));
+      res.json(sanitized);
     } catch (error) {
       console.error("Error getting ratings:", error);
       res.status(500).json({ error: "Failed to get ratings" });

@@ -193,9 +193,9 @@ export interface IStorage {
 
   // Error Reports
   createErrorReport(data: { userId?: string; type: string; message: string; stack?: string; url?: string; userAgent?: string; metadata?: string }): Promise<ErrorReport>;
-  getErrorReports(limit?: number, resolved?: boolean): Promise<ErrorReport[]>;
-  resolveErrorReport(id: string): Promise<void>;
-  getErrorReportStats(): Promise<{ total: number; unresolved: number; today: number }>;
+  getErrorReports(limit?: number, resolved?: boolean, userId?: string): Promise<ErrorReport[]>;
+  resolveErrorReport(id: string, userId?: string): Promise<boolean>;
+  getErrorReportStats(userId?: string): Promise<{ total: number; unresolved: number; today: number }>;
 
   // App Ratings
   createAppRating(userId: string, rating: number, comment?: string, appVersion?: string): Promise<AppRating>;
@@ -1284,21 +1284,27 @@ export class DatabaseStorage implements IStorage {
     return report;
   }
 
-  async getErrorReports(limit: number = 50, resolved?: boolean): Promise<ErrorReport[]> {
+  async getErrorReports(limit: number = 50, resolved?: boolean, userId?: string): Promise<ErrorReport[]> {
     const conditions = [];
     if (resolved !== undefined) conditions.push(eq(errorReports.resolved, resolved));
+    if (userId) conditions.push(eq(errorReports.userId, userId));
     return db.select().from(errorReports)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(desc(errorReports.createdAt))
       .limit(limit);
   }
 
-  async resolveErrorReport(id: string): Promise<void> {
-    await db.update(errorReports).set({ resolved: true }).where(eq(errorReports.id, id));
+  async resolveErrorReport(id: string, userId?: string): Promise<boolean> {
+    const conditions = [eq(errorReports.id, id)];
+    if (userId) conditions.push(eq(errorReports.userId, userId));
+    const result = await db.update(errorReports).set({ resolved: true }).where(and(...conditions)).returning();
+    return result.length > 0;
   }
 
-  async getErrorReportStats(): Promise<{ total: number; unresolved: number; today: number }> {
-    const all = await db.select().from(errorReports);
+  async getErrorReportStats(userId?: string): Promise<{ total: number; unresolved: number; today: number }> {
+    const conditions = userId ? [eq(errorReports.userId, userId)] : [];
+    const all = await db.select().from(errorReports)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
     const today = startOfDay(new Date());
     return {
       total: all.length,

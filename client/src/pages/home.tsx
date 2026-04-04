@@ -555,6 +555,8 @@ export default function Home() {
       triggerHaptic(50);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       setShowQuote(true);
+      const count = parseInt(localStorage.getItem("stillhere_checkin_count") || "0", 10);
+      localStorage.setItem("stillhere_checkin_count", String(count + 1));
       toast({
         title: "Checked in",
         description: "Your emergency contacts know you're okay.",
