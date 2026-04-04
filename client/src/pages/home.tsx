@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History, Smartphone } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -261,7 +261,9 @@ export default function Home() {
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
   const [fallCountdown, setFallCountdown] = useState<number | null>(null);
+  const [shakeCountdown, setShakeCountdown] = useState<number | null>(null);
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const shakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const [driveActive, setDriveActive] = useState(false);
@@ -397,6 +399,48 @@ export default function Home() {
     }
   }, [fallCountdown, toast]);
 
+  const startShakeCountdown = useCallback(() => {
+    triggerHaptic([200, 100, 200, 100, 200]);
+    setShakeCountdown(30);
+    if (shakeTimerRef.current) clearInterval(shakeTimerRef.current);
+    shakeTimerRef.current = setInterval(() => {
+      setShakeCountdown(prev => {
+        if (prev === null) {
+          if (shakeTimerRef.current) clearInterval(shakeTimerRef.current);
+          shakeTimerRef.current = null;
+          return null;
+        }
+        if (prev <= 1) {
+          if (shakeTimerRef.current) clearInterval(shakeTimerRef.current);
+          shakeTimerRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  const dismissShakeAlert = useCallback(() => {
+    if (shakeTimerRef.current) {
+      clearInterval(shakeTimerRef.current);
+      shakeTimerRef.current = null;
+    }
+    setShakeCountdown(null);
+  }, []);
+
+  useEffect(() => {
+    if (shakeCountdown === 0 && shakeCountdown !== null) {
+      apiRequest("POST", "/api/sos", {}).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+        toast({
+          title: "Shake SOS sent",
+          description: "Your emergency contacts have been alerted.",
+        });
+      }).catch(() => {});
+      setShakeCountdown(null);
+    }
+  }, [shakeCountdown, toast]);
+
   useEffect(() => {
     const fallEnabled = (status?.settings as any)?.fallDetection;
     if (fallEnabled && isDeviceMotionSupported() && !fallDetectorRef.current) {
@@ -448,15 +492,14 @@ export default function Home() {
 
         if (shakeCount >= SHAKES_NEEDED) {
           shakeCount = 0;
-          apiRequest("POST", "/api/sos", {}).catch(() => {});
-          queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+          startShakeCountdown();
         }
       }
     };
 
     window.addEventListener("devicemotion", handleMotion);
     return () => window.removeEventListener("devicemotion", handleMotion);
-  }, [(status?.settings as any)?.discreetSos]);
+  }, [(status?.settings as any)?.discreetSos, startShakeCountdown]);
 
   const drivingSafetyEnabled = !!(status?.settings as any)?.drivingSafety;
   const configuredSpeedLimit = (status?.settings as any)?.speedLimitKmh || 120;
@@ -989,6 +1032,37 @@ export default function Home() {
               }}
               className="bg-destructive text-destructive-foreground"
               data-testid="button-fall-sos"
+            >
+              Send SOS now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={shakeCountdown !== null} onOpenChange={(open) => { if (!open) dismissShakeAlert(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-destructive" />
+              Shake detected
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base">
+              We detected a distress shake. SOS will be sent to your emergency contacts in{" "}
+              <span className="font-bold text-destructive text-lg">{shakeCountdown}</span>{" "}
+              seconds. If this was accidental, tap cancel below.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={dismissShakeAlert} data-testid="button-shake-dismiss">
+              Cancel - I'm fine
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                dismissShakeAlert();
+                sosMutation.mutate();
+              }}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-shake-sos"
             >
               Send SOS now
             </AlertDialogAction>
