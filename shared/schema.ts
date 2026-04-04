@@ -72,6 +72,8 @@ export const contacts = pgTable("contacts", {
   priority: integer("priority").notNull(),
   canViewLocation: boolean("can_view_location").notNull().default(true),
   linkedUserId: uuid("linked_user_id").references(() => users.id),
+  softDeletedAt: timestamp("soft_deleted_at"),
+  softDeletedBy: text("soft_deleted_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("contacts_user_id_idx").on(table.userId),
