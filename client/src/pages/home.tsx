@@ -29,6 +29,21 @@ const triggerHaptic = (pattern: number | number[] = 50) => {
   }
 };
 
+function getCheckinLocation(): Promise<{ lat?: number; lng?: number; timezone?: string }> {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ timezone });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, timezone }),
+      () => resolve({ timezone }),
+      { timeout: 5000, maximumAge: 60000 }
+    );
+  });
+}
+
 function EscalationBanner({ status }: { status: UserStatus }) {
   const incident = status.openIncident;
   if (!incident || incident.status === "resolved") return null;
@@ -319,7 +334,13 @@ export default function Home() {
       !isLoading
     ) {
       autoCheckedRef.current = true;
-      apiRequest("POST", "/api/checkin", { method: "auto" }).then(() => {
+      getCheckinLocation().then((loc) => {
+        const body: any = { method: "auto" };
+        if (loc.lat != null) body.lat = loc.lat;
+        if (loc.lng != null) body.lng = loc.lng;
+        if (loc.timezone) body.timezone = loc.timezone;
+        return apiRequest("POST", "/api/checkin", body);
+      }).then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         setShowQuote(true);
         triggerHaptic(30);
@@ -432,7 +453,12 @@ export default function Home() {
 
   const checkinMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/checkin", {});
+      const loc = await getCheckinLocation();
+      const body: any = {};
+      if (loc.lat != null) body.lat = loc.lat;
+      if (loc.lng != null) body.lng = loc.lng;
+      if (loc.timezone) body.timezone = loc.timezone;
+      return apiRequest("POST", "/api/checkin", body);
     },
     onSuccess: () => {
       triggerHaptic(50);
@@ -673,6 +699,9 @@ export default function Home() {
               {status?.nextCheckinDue
                 ? formatNextCheckin(status.nextCheckinDue)
                 : "No schedule set"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1" data-testid="text-timezone">
+              {(Intl.DateTimeFormat().resolvedOptions().timeZone || "").replace(/_/g, " ") || "Unknown timezone"}
             </p>
             {isPaused && (
               <p className="text-sm text-muted-foreground mt-2">
