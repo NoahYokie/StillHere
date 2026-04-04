@@ -1737,6 +1737,135 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // ERROR TRACKING
+  // ============================================
+  app.post("/api/errors/report", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { type, message, stack, url, metadata } = req.body;
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ error: "Error message is required" });
+      }
+      const userAgent = req.headers["user-agent"] || undefined;
+      const report = await storage.createErrorReport({
+        userId: userId || undefined,
+        type: typeof type === "string" ? type : "error",
+        message,
+        stack: typeof stack === "string" ? stack : undefined,
+        url: typeof url === "string" ? url : undefined,
+        userAgent,
+        metadata: typeof metadata === "string" ? metadata : metadata ? JSON.stringify(metadata) : undefined,
+      });
+      res.json({ id: report.id });
+    } catch (error) {
+      console.error("Error saving error report:", error);
+      res.status(500).json({ error: "Failed to save error report" });
+    }
+  });
+
+  app.get("/api/errors", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      const reports = await storage.getErrorReports(Math.min(limit, 100), resolved);
+      res.json(reports);
+    } catch (error) {
+      console.error("Error getting error reports:", error);
+      res.status(500).json({ error: "Failed to get error reports" });
+    }
+  });
+
+  app.get("/api/errors/stats", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const stats = await storage.getErrorReportStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error getting error stats:", error);
+      res.status(500).json({ error: "Failed to get error stats" });
+    }
+  });
+
+  app.post("/api/errors/:id/resolve", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      await storage.resolveErrorReport(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving error report:", error);
+      res.status(500).json({ error: "Failed to resolve error report" });
+    }
+  });
+
+  // ============================================
+  // APP RATINGS
+  // ============================================
+  app.post("/api/ratings", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { rating, comment, appVersion } = req.body;
+      if (typeof rating !== "number" || rating < 1 || rating > 5 || !Number.isInteger(rating)) {
+        return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
+      }
+      if (comment && typeof comment !== "string") {
+        return res.status(400).json({ error: "Comment must be a string" });
+      }
+      const result = await storage.createAppRating(
+        userId,
+        rating,
+        typeof comment === "string" ? comment.slice(0, 1000) : undefined,
+        typeof appVersion === "string" ? appVersion : undefined,
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Error submitting rating:", error);
+      res.status(500).json({ error: "Failed to submit rating" });
+    }
+  });
+
+  app.get("/api/ratings/mine", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const rating = await storage.getUserRating(userId);
+      res.json(rating || null);
+    } catch (error) {
+      console.error("Error getting user rating:", error);
+      res.status(500).json({ error: "Failed to get rating" });
+    }
+  });
+
+  app.get("/api/ratings", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const limit = parseInt(req.query.limit as string) || 50;
+      const ratings = await storage.getAppRatings(Math.min(limit, 100));
+      res.json(ratings);
+    } catch (error) {
+      console.error("Error getting ratings:", error);
+      res.status(500).json({ error: "Failed to get ratings" });
+    }
+  });
+
+  app.get("/api/ratings/stats", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const stats = await storage.getAppRatingStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error getting rating stats:", error);
+      res.status(500).json({ error: "Failed to get rating stats" });
+    }
+  });
+
+  // ============================================
   // SMS CHECK-IN WEBHOOK (Twilio incoming)
   // ============================================
   app.post("/api/sms/incoming", async (req, res) => {

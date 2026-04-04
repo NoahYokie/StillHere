@@ -507,6 +507,50 @@ export const speedAlertsRelations = relations(speedAlerts, ({ one }) => ({
   }),
 }));
 
+// Error Reports table (crash/error tracking)
+export const errorReports = pgTable("error_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  type: text("type").notNull().default("error"),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  url: text("url"),
+  userAgent: text("user_agent"),
+  metadata: text("metadata"),
+  resolved: boolean("resolved").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("error_reports_created_at_idx").on(table.createdAt),
+  index("error_reports_type_idx").on(table.type),
+]);
+
+export const errorReportsRelations = relations(errorReports, ({ one }) => ({
+  user: one(users, {
+    fields: [errorReports.userId],
+    references: [users.id],
+  }),
+}));
+
+// App Ratings table
+export const appRatings = pgTable("app_ratings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  appVersion: text("app_version"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("app_ratings_user_id_idx").on(table.userId),
+  index("app_ratings_created_at_idx").on(table.createdAt),
+]);
+
+export const appRatingsRelations = relations(appRatings, ({ one }) => ({
+  user: one(users, {
+    fields: [appRatings.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -529,6 +573,8 @@ export const insertSatelliteDeviceSchema = createInsertSchema(satelliteDevices).
 export const insertReportPreferenceSchema = createInsertSchema(reportPreferences).omit({ id: true, createdAt: true });
 export const insertDriveSessionSchema = createInsertSchema(driveSessions).omit({ id: true, startedAt: true });
 export const insertSpeedAlertSchema = createInsertSchema(speedAlerts).omit({ id: true, createdAt: true });
+export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, createdAt: true });
+export const insertAppRatingSchema = createInsertSchema(appRatings).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -595,6 +641,12 @@ export type InsertDriveSession = z.infer<typeof insertDriveSessionSchema>;
 
 export type SpeedAlert = typeof speedAlerts.$inferSelect;
 export type InsertSpeedAlert = z.infer<typeof insertSpeedAlertSchema>;
+
+export type ErrorReport = typeof errorReports.$inferSelect;
+export type InsertErrorReport = z.infer<typeof insertErrorReportSchema>;
+
+export type AppRating = typeof appRatings.$inferSelect;
+export type InsertAppRating = z.infer<typeof insertAppRatingSchema>;
 
 export interface ReportData {
   userName: string;

@@ -52,6 +52,10 @@ import {
   speedAlerts,
   type DriveSession,
   type SpeedAlert,
+  errorReports,
+  appRatings,
+  type ErrorReport,
+  type AppRating,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -186,6 +190,18 @@ export interface IStorage {
   // Speed Alerts
   createSpeedAlert(userId: string, sessionId: string | null, speedKmh: number, speedLimitKmh: number, lat?: number, lng?: number): Promise<SpeedAlert>;
   getSpeedAlerts(userId: string, sessionId?: string): Promise<SpeedAlert[]>;
+
+  // Error Reports
+  createErrorReport(data: { userId?: string; type: string; message: string; stack?: string; url?: string; userAgent?: string; metadata?: string }): Promise<ErrorReport>;
+  getErrorReports(limit?: number, resolved?: boolean): Promise<ErrorReport[]>;
+  resolveErrorReport(id: string): Promise<void>;
+  getErrorReportStats(): Promise<{ total: number; unresolved: number; today: number }>;
+
+  // App Ratings
+  createAppRating(userId: string, rating: number, comment?: string, appVersion?: string): Promise<AppRating>;
+  getUserRating(userId: string): Promise<AppRating | undefined>;
+  getAppRatings(limit?: number): Promise<(AppRating & { userName?: string })[]>;
+  getAppRatingStats(): Promise<{ average: number; total: number; distribution: Record<number, number> }>;
 
   // Report Data
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
@@ -1254,6 +1270,107 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(speedAlerts.createdAt))
       .limit(50);
+  }
+  async createErrorReport(data: { userId?: string; type: string; message: string; stack?: string; url?: string; userAgent?: string; metadata?: string }): Promise<ErrorReport> {
+    const [report] = await db.insert(errorReports).values({
+      userId: data.userId || null,
+      type: data.type,
+      message: data.message.slice(0, 2000),
+      stack: data.stack?.slice(0, 10000) || null,
+      url: data.url?.slice(0, 500) || null,
+      userAgent: data.userAgent?.slice(0, 500) || null,
+      metadata: data.metadata?.slice(0, 5000) || null,
+    }).returning();
+    return report;
+  }
+
+  async getErrorReports(limit: number = 50, resolved?: boolean): Promise<ErrorReport[]> {
+    const conditions = [];
+    if (resolved !== undefined) conditions.push(eq(errorReports.resolved, resolved));
+    return db.select().from(errorReports)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(errorReports.createdAt))
+      .limit(limit);
+  }
+
+  async resolveErrorReport(id: string): Promise<void> {
+    await db.update(errorReports).set({ resolved: true }).where(eq(errorReports.id, id));
+  }
+
+  async getErrorReportStats(): Promise<{ total: number; unresolved: number; today: number }> {
+    const all = await db.select().from(errorReports);
+    const today = startOfDay(new Date());
+    return {
+      total: all.length,
+      unresolved: all.filter(r => !r.resolved).length,
+      today: all.filter(r => r.createdAt >= today).length,
+    };
+  }
+
+  async createAppRating(userId: string, rating: number, comment?: string, appVersion?: string): Promise<AppRating> {
+    const existing = await this.getUserRating(userId);
+    if (existing) {
+      const [updated] = await db.update(appRatings)
+        .set({ rating, comment: comment || null, appVersion: appVersion || null })
+        .where(eq(appRatings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [newRating] = await db.insert(appRatings).values({
+      userId,
+      rating,
+      comment: comment || null,
+      appVersion: appVersion || null,
+    }).returning();
+    return newRating;
+  }
+
+  async getUserRating(userId: string): Promise<AppRating | undefined> {
+    const [rating] = await db.select().from(appRatings)
+      .where(eq(appRatings.userId, userId))
+      .orderBy(desc(appRatings.createdAt))
+      .limit(1);
+    return rating || undefined;
+  }
+
+  async getAppRatings(limit: number = 50): Promise<(AppRating & { userName?: string })[]> {
+    const results = await db.select({
+      id: appRatings.id,
+      userId: appRatings.userId,
+      rating: appRatings.rating,
+      comment: appRatings.comment,
+      appVersion: appRatings.appVersion,
+      createdAt: appRatings.createdAt,
+      userName: users.name,
+    })
+      .from(appRatings)
+      .leftJoin(users, eq(appRatings.userId, users.id))
+      .orderBy(desc(appRatings.createdAt))
+      .limit(limit);
+    return results.map(r => ({
+      id: r.id,
+      userId: r.userId,
+      rating: r.rating,
+      comment: r.comment,
+      appVersion: r.appVersion,
+      createdAt: r.createdAt,
+      userName: r.userName || undefined,
+    }));
+  }
+
+  async getAppRatingStats(): Promise<{ average: number; total: number; distribution: Record<number, number> }> {
+    const all = await db.select().from(appRatings);
+    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let sum = 0;
+    for (const r of all) {
+      sum += r.rating;
+      distribution[r.rating] = (distribution[r.rating] || 0) + 1;
+    }
+    return {
+      average: all.length > 0 ? sum / all.length : 0,
+      total: all.length,
+      distribution,
+    };
   }
 }
 
