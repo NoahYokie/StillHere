@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Video, VideoOff, PhoneOff, SwitchCamera, Phone, Volume2 } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, Volume2, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
@@ -24,15 +24,15 @@ export default function CallPage() {
 
   const [callState, setCallState] = useState<CallState>("connecting");
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
 
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const rtcRef = useRef<WebRTCConnection | null>(null);
   const callIdRef = useRef<string | null>(null);
   const hasInitiatedRef = useRef(false);
   const hasEndedRef = useRef(false);
+  const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: userProfile } = useQuery<{ id: string; name: string }>({
     queryKey: ["/api/users", otherUserId, "profile"],
@@ -41,41 +41,24 @@ export default function CallPage() {
 
   const otherUserName = userProfile?.name || "User";
 
-  const playVideo = useCallback((el: HTMLVideoElement, muted: boolean) => {
-    el.muted = muted;
-    if (!muted) el.volume = 1.0;
+  const playRemoteAudio = useCallback((stream: MediaStream) => {
+    const el = remoteAudioRef.current;
+    if (!el) return;
+    console.log("[CALL] Setting remote audio stream, tracks:", stream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(", "));
+    el.srcObject = stream;
+    el.volume = 1.0;
     const p = el.play();
     if (p) {
       p.catch(() => {
-        if (!muted) {
-          console.warn("[CALL] Autoplay blocked, playing muted first");
-          el.muted = true;
-          el.play().then(() => {
-            setNeedsTap(true);
-          }).catch(() => {});
-        }
+        console.warn("[CALL] Autoplay blocked, will need user tap");
+        setNeedsTap(true);
       });
     }
   }, []);
 
-  const showLocalVideo = useCallback((stream: MediaStream) => {
-    const el = localVideoRef.current;
-    if (!el) return;
-    el.srcObject = stream;
-    playVideo(el, true);
-  }, [playVideo]);
-
-  const showRemoteVideo = useCallback((stream: MediaStream) => {
-    const el = remoteVideoRef.current;
-    if (!el) return;
-    console.log("[CALL] Showing remote stream, tracks:", stream.getTracks().map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`).join(", "));
-    el.srcObject = stream;
-    playVideo(el, false);
-  }, [playVideo]);
-
   const handleTapToUnmute = useCallback(() => {
-    const el = remoteVideoRef.current;
-    if (el && el.muted) {
+    const el = remoteAudioRef.current;
+    if (el) {
       el.muted = false;
       el.volume = 1.0;
       el.play().catch(() => {});
@@ -85,12 +68,15 @@ export default function CallPage() {
 
   const doCleanup = useCallback(() => {
     stopRingtone();
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
     if (rtcRef.current) {
       rtcRef.current.close();
       rtcRef.current = null;
     }
-    if (localVideoRef.current) localVideoRef.current.srcObject = null;
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
   }, []);
 
   const handleCallEnd = useCallback((reason?: string, emitToServer = false) => {
@@ -139,10 +125,8 @@ export default function CallPage() {
 
     function onIceCandidate(data: { candidate: any; fromUserId: string }) {
       if (rtcRef.current && data.candidate) {
-        console.log("[CALL] Received ICE candidate from", data.fromUserId, "type:", data.candidate.candidate?.substring(0, 60));
+        console.log("[CALL] Received ICE candidate from", data.fromUserId);
         rtcRef.current.addIceCandidate(data.candidate);
-      } else if (!rtcRef.current) {
-        console.warn("[CALL] Received ICE candidate but no RTC connection yet");
       }
     }
 
@@ -169,7 +153,7 @@ export default function CallPage() {
     function onIceRestartAnswer(data: { answer: any }) {
       console.log("[CALL] Received ICE restart answer");
       if (rtcRef.current) {
-        rtcRef.current.handleAnswer(data.answer).catch((err) => 
+        rtcRef.current.handleAnswer(data.answer).catch((err) =>
           console.error("[CALL] ICE restart answer failed:", err)
         );
       }
@@ -211,8 +195,8 @@ export default function CallPage() {
         rtcRef.current = rtc;
 
         rtc.onRemoteStream = (stream) => {
-          console.log("[CALL] Remote stream updated, tracks:", stream.getTracks().length);
-          showRemoteVideo(stream);
+          console.log("[CALL] Remote stream received, tracks:", stream.getTracks().length);
+          playRemoteAudio(stream);
         };
 
         const queuedCandidates: RTCIceCandidate[] = [];
@@ -223,7 +207,6 @@ export default function CallPage() {
             queuedCandidates.push(candidate);
             return;
           }
-          console.log("[CALL] Sending ICE candidate to", otherUserId);
           socket.emit("call:ice-candidate", {
             targetUserId: otherUserId,
             candidate: candidate.toJSON(),
@@ -247,6 +230,9 @@ export default function CallPage() {
             stopRingtone();
             playCallConnected();
             setCallState("active");
+            durationTimerRef.current = setInterval(() => {
+              setCallDuration(prev => prev + 1);
+            }, 1000);
           }
           if (state === "failed") {
             if (connectionTimer) { clearTimeout(connectionTimer); connectionTimer = null; }
@@ -269,9 +255,8 @@ export default function CallPage() {
         }
         startConnectionTimeoutFn = startConnectionTimeout;
 
-        console.log("[CALL] Getting local media...");
-        const localStream = await rtc.getLocalStream();
-        showLocalVideo(localStream);
+        console.log("[CALL] Getting microphone...");
+        await rtc.getLocalStream();
 
         if (isAnswerMode) {
           const pendingCall = getPendingIncomingCall();
@@ -306,13 +291,13 @@ export default function CallPage() {
           startConnectionTimeout();
         } else {
           const offer = await rtc.createOffer();
-          console.log("[CALL] Calling", otherUserId, "offer has", (offer.sdp?.match(/a=candidate:/g) || []).length, "embedded candidates");
+          console.log("[CALL] Calling", otherUserId);
           setCallState("ringing");
           startOutgoingRingtone();
 
           socket.emit("call:initiate", {
             receiverId: otherUserId,
-            callType: "video",
+            callType: "audio",
             offer,
           }, (response: any) => {
             console.log("[CALL] Initiate response:", JSON.stringify(response));
@@ -320,7 +305,7 @@ export default function CallPage() {
               callIdRef.current = response.callId;
               callInitiated = true;
               if (queuedCandidates.length > 0) {
-                console.log(`[CALL] Flushing ${queuedCandidates.length} queued ICE candidates after initiate`);
+                console.log(`[CALL] Flushing ${queuedCandidates.length} queued ICE candidates`);
                 for (const c of queuedCandidates) {
                   socket.emit("call:ice-candidate", {
                     targetUserId: otherUserId,
@@ -344,8 +329,8 @@ export default function CallPage() {
       } catch (err: any) {
         console.error("[CALL] Start failed:", err);
         toast({
-          title: "Camera/Mic access needed",
-          description: "Please allow camera and microphone access to make calls.",
+          title: "Microphone access needed",
+          description: "Please allow microphone access to make calls.",
           variant: "destructive",
         });
         setLocation("/watched");
@@ -372,114 +357,83 @@ export default function CallPage() {
     });
   }
 
-  function toggleVideo() {
-    setIsVideoOff((prev) => {
-      rtcRef.current?.toggleVideo(prev);
-      return !prev;
-    });
-  }
-
-  async function flipCamera() {
-    try {
-      await rtcRef.current?.switchCamera();
-      const stream = rtcRef.current?.getLocalMediaStream();
-      if (stream) showLocalVideo(stream);
-    } catch {
-      toast({ title: "Could not switch camera", variant: "destructive" });
-    }
+  function formatDuration(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
   }
 
   return (
-    <div className="fixed inset-0 bg-black flex flex-col" data-testid="call-screen" onClick={needsTap ? handleTapToUnmute : undefined}>
-      <video
-        ref={remoteVideoRef}
-        autoPlay
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover"
-        data-testid="video-remote"
-      />
+    <div
+      className="fixed inset-0 bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-between py-16"
+      data-testid="call-screen"
+      onClick={needsTap ? handleTapToUnmute : undefined}
+    >
+      <audio ref={remoteAudioRef} autoPlay playsInline data-testid="audio-remote" />
 
-      {callState !== "active" && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
-          <div className="text-center text-white">
-            <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <Phone className="w-10 h-10 text-primary animate-pulse" />
-            </div>
-            <h2 className="text-xl font-medium mb-2" data-testid="text-call-user">{otherUserName}</h2>
-            <p className="text-white/60" data-testid="text-call-state">
-              {callState === "connecting" && "Connecting..."}
-              {callState === "ringing" && "Ringing..."}
-              {callState === "ended" && "Call ended"}
-            </p>
-            {callState === "ringing" && (
-              <div className="mt-4 flex justify-center gap-2">
-                <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:0ms]" />
-                <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:150ms]" />
-                <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:300ms]" />
-              </div>
-            )}
-          </div>
+      <div className="flex flex-col items-center">
+        <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center mb-6">
+          {callState === "ringing" ? (
+            <Phone className="w-12 h-12 text-primary animate-pulse" />
+          ) : (
+            <User className="w-12 h-12 text-primary" />
+          )}
         </div>
-      )}
+
+        <h2 className="text-2xl font-semibold text-white mb-2" data-testid="text-call-user">
+          {otherUserName}
+        </h2>
+
+        <p className="text-white/60 text-sm" data-testid="text-call-state">
+          {callState === "connecting" && "Connecting..."}
+          {callState === "ringing" && "Ringing..."}
+          {callState === "active" && formatDuration(callDuration)}
+          {callState === "ended" && "Call ended"}
+        </p>
+
+        {callState === "ringing" && (
+          <div className="mt-4 flex gap-2">
+            <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:0ms]" />
+            <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:150ms]" />
+            <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce [animation-delay:300ms]" />
+          </div>
+        )}
+
+        {callState === "active" && (
+          <div className="mt-4 flex items-center gap-2">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            <span className="text-green-400 text-xs">Connected</span>
+          </div>
+        )}
+      </div>
 
       {needsTap && callState === "active" && (
-        <div className="absolute top-4 left-4 z-30 bg-black/70 rounded-lg px-3 py-2 flex items-center gap-2 text-white text-sm" data-testid="tap-to-unmute">
+        <div className="bg-black/50 rounded-lg px-4 py-2 flex items-center gap-2 text-white text-sm" data-testid="tap-to-unmute">
           <Volume2 className="w-4 h-4" />
           <span>Tap anywhere to hear audio</span>
         </div>
       )}
 
-      <video
-        ref={localVideoRef}
-        autoPlay
-        playsInline
-        muted
-        className="absolute top-4 right-4 w-32 h-44 rounded-xl object-cover z-20 border-2 border-white/20"
-        data-testid="video-local"
-      />
+      <div className="flex justify-center gap-6">
+        <Button
+          variant="secondary"
+          size="icon"
+          className={`w-16 h-16 rounded-full ${isMuted ? "bg-red-500/30 hover:bg-red-500/40" : "bg-white/20 hover:bg-white/30"} text-white`}
+          onClick={toggleMute}
+          data-testid="button-toggle-mute"
+        >
+          {isMuted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
+        </Button>
 
-      <div className="absolute bottom-8 left-0 right-0 z-20">
-        <div className="flex justify-center gap-4">
-          <Button
-            variant="secondary"
-            size="icon"
-            className="w-14 h-14 rounded-full bg-white/20 hover:bg-white/30 text-white"
-            onClick={toggleMute}
-            data-testid="button-toggle-mute"
-          >
-            {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-          </Button>
-
-          <Button
-            variant="secondary"
-            size="icon"
-            className="w-14 h-14 rounded-full bg-white/20 hover:bg-white/30 text-white"
-            onClick={toggleVideo}
-            data-testid="button-toggle-video"
-          >
-            {isVideoOff ? <VideoOff className="w-6 h-6" /> : <Video className="w-6 h-6" />}
-          </Button>
-
-          <Button
-            variant="secondary"
-            size="icon"
-            className="w-14 h-14 rounded-full bg-white/20 hover:bg-white/30 text-white"
-            onClick={flipCamera}
-            data-testid="button-flip-camera"
-          >
-            <SwitchCamera className="w-6 h-6" />
-          </Button>
-
-          <Button
-            variant="destructive"
-            size="icon"
-            className="w-14 h-14 rounded-full"
-            onClick={() => handleCallEnd(undefined, true)}
-            data-testid="button-end-call"
-          >
-            <PhoneOff className="w-6 h-6" />
-          </Button>
-        </div>
+        <Button
+          variant="destructive"
+          size="icon"
+          className="w-16 h-16 rounded-full"
+          onClick={() => handleCallEnd(undefined, true)}
+          data-testid="button-end-call"
+        >
+          <PhoneOff className="w-7 h-7" />
+        </Button>
       </div>
     </div>
   );

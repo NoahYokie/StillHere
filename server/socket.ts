@@ -213,18 +213,19 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       io!.to(`user:${data.receiverId}`).emit("typing:stop", { userId });
     });
 
-    socket.on("call:initiate", async (data: { receiverId: string; callType: "video" | "audio"; offer: any }, callback?: Function) => {
+    socket.on("call:initiate", async (data: { receiverId: string; callType?: string; offer: any }, callback?: Function) => {
       try {
-        if (!data || !isValidUUID(data.receiverId) || !["video", "audio"].includes(data.callType)) {
+        if (!data || !isValidUUID(data.receiverId)) {
           if (callback) callback({ success: false, error: "Invalid payload" });
           return;
         }
+        const callType = "audio";
         const offerStr = typeof data.offer === "string" ? data.offer : JSON.stringify(data.offer || "");
         if (offerStr.length > MAX_SDP_LENGTH) {
           if (callback) callback({ success: false, error: "Payload too large" });
           return;
         }
-        console.log(`[CALL] ${userId} initiating ${data.callType} call to ${data.receiverId}`);
+        console.log(`[CALL] ${userId} initiating call to ${data.receiverId}`);
         const canCall = await checkCommunicationPermission(userId, data.receiverId);
         if (!canCall) {
           console.log(`[CALL] Permission denied`);
@@ -239,7 +240,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           return;
         }
 
-        const call = await storage.createCall(userId, data.receiverId, data.callType);
+        const call = await storage.createCall(userId, data.receiverId, callType);
         activeCallPairs.set(pairKey, call.id);
 
         const caller = await storage.getUser(userId);
@@ -250,7 +251,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           callId: call.id,
           callerId: userId,
           callerName: caller?.name || "Unknown",
-          callType: data.callType,
+          callType,
           offer: data.offer,
         });
 
@@ -265,13 +266,13 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
                 callId: call.id,
                 callerId: userId,
                 callerName: caller?.name || "Someone",
-                callType: data.callType,
+                callType,
               });
             }
           }
 
           await sendPushNotification(data.receiverId, {
-            title: `${data.callType === "video" ? "Video" : "Audio"} call from ${caller?.name || "Someone"}`,
+            title: `Call from ${caller?.name || "Someone"}`,
             body: "Tap to answer",
             url: `/call/${userId}`,
             tag: "incoming-call",

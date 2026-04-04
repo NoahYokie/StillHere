@@ -322,7 +322,7 @@ function ContactPageScreen() {
           </div>
           <div className="flex-1 bg-sky-50 rounded-lg py-2 text-center">
             <Phone className="h-3.5 w-3.5 text-sky-500 mx-auto mb-0.5" />
-            <p className="text-[8px] text-sky-600 font-medium">Video call</p>
+            <p className="text-[8px] text-sky-600 font-medium">Call</p>
           </div>
         </div>
         <p className="text-[8px] text-gray-400 text-center">
