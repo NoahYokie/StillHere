@@ -343,7 +343,7 @@ function ReportPreferencePanel({ userId, existingPref }: { userId: string; exist
         <>
           <div>
             <Label className="text-xs text-muted-foreground">Frequency</Label>
-            <Select value={frequency} onValueChange={setFrequency}>
+            <Select value={frequency} onValueChange={(v) => setFrequency(v as "daily" | "weekly" | "fortnightly" | "monthly")}>
               <SelectTrigger className="mt-1" data-testid={`select-report-freq-${userId}`}>
                 <SelectValue />
               </SelectTrigger>

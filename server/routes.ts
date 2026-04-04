@@ -41,7 +41,7 @@ import {
   sendPushNotification,
 } from "./push";
 import { emitToUser, isUserOnline } from "./socket";
-import { sendEmergencyEmail, sendGeofenceEmail } from "./email";
+import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
 
 // Helper to get userId from session
 const getUserId = (req: Request): string | null => {
@@ -1484,15 +1484,14 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Not authorized to message this user" });
       }
 
-      const { encrypted, iv } = req.body;
-      const msg = await storage.saveMessage(currentUserId, receiverId, content.trim(), encrypted || false, iv);
+      const msg = await storage.saveMessage(currentUserId, receiverId, content.trim());
 
       const { emitToUser, isUserOnline } = await import("./socket");
       const sender = await storage.getUser(currentUserId);
       emitToUser(receiverId, "message:new", { ...msg, senderName: sender?.name || "Someone" });
 
       if (!isUserOnline(receiverId)) {
-        const pushBody = encrypted ? "New encrypted message" : content.substring(0, 100);
+        const pushBody = content.substring(0, 100);
         await sendPushNotification(receiverId, {
           title: `Message from ${sender?.name || "Someone"}`,
           body: pushBody,
@@ -1673,11 +1672,11 @@ export async function registerRoutes(
           }
 
           if (contact.email) {
-            await sendEmergencyEmail(
+            await sendCrashEmail(
               contact.email,
-              `Crash alert - ${user.name}`,
-              crashMsg,
-              link
+              user.name,
+              link,
+              speedKmh
             );
           }
 

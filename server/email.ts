@@ -24,6 +24,18 @@ export async function sendEmergencyEmail(
   return sendEmail(contactEmail, subject, body);
 }
 
+export async function sendCrashEmail(
+  contactEmail: string,
+  userName: string,
+  link: string,
+  speedKmh?: number
+): Promise<SendEmailResult> {
+  const speedInfo = speedKmh ? ` at ${Math.round(speedKmh)} km/h` : "";
+  const subject = `StillHere Crash Alert: ${userName}`;
+  const body = `StillHere Crash Alert\n\nA possible vehicle crash has been detected for ${userName}${speedInfo}.\n\nView status and respond:\n${link}\n\nYou are receiving this because you are listed as an emergency contact.`;
+  return sendEmail(contactEmail, subject, body);
+}
+
 export async function sendGeofenceEmail(
   contactEmail: string,
   userName: string,

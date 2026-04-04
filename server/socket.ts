@@ -379,7 +379,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         userSockets.delete(socket.id);
         if (userSockets.size === 0) {
           onlineUsers.delete(userId);
-          for (const [pairKey, callId] of activeCallPairs.entries()) {
+          for (const [pairKey, callId] of Array.from(activeCallPairs.entries())) {
             if (pairKey.includes(userId)) {
               activeCallPairs.delete(pairKey);
               console.log(`[CALL] Cleaned up stale call pair ${pairKey} on disconnect`);

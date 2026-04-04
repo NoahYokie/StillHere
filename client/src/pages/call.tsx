@@ -244,7 +244,7 @@ export default function CallPage() {
           }
         };
 
-        function startConnectionTimeout() {
+        const startConnectionTimeout = () => {
           if (connectionTimer) clearTimeout(connectionTimer);
           connectionTimer = setTimeout(() => {
             if (rtcRef.current && rtcRef.current.connectionState !== "connected") {
@@ -252,7 +252,7 @@ export default function CallPage() {
               handleCallEnd("Could not connect. Please try again.", true);
             }
           }, 20000);
-        }
+        };
         startConnectionTimeoutFn = startConnectionTimeout;
 
         console.log("[CALL] Getting microphone...");
