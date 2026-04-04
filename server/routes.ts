@@ -32,6 +32,7 @@ import {
   sendHandlingTimeoutAlert,
   isTwilioConfigured,
   getTurnCredentials,
+  sendSms,
 } from "./sms";
 import {
   isPushConfigured,
@@ -697,7 +698,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports, drivingSafety, speedLimitKmh } = req.body;
       
       if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
         return res.status(400).json({ error: "Checkin interval must be between 12 and 48 hours" });
@@ -729,6 +730,12 @@ export async function registerRoutes(
       if (allowReports !== undefined && typeof allowReports !== "boolean") {
         return res.status(400).json({ error: "Allow reports must be a boolean" });
       }
+      if (drivingSafety !== undefined && typeof drivingSafety !== "boolean") {
+        return res.status(400).json({ error: "Driving safety must be a boolean" });
+      }
+      if (speedLimitKmh !== undefined && (typeof speedLimitKmh !== "number" || speedLimitKmh < 20 || speedLimitKmh > 300)) {
+        return res.status(400).json({ error: "Speed limit must be between 20 and 300 km/h" });
+      }
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -742,6 +749,8 @@ export async function registerRoutes(
       if (smsCheckinEnabled !== undefined) updates.smsCheckinEnabled = smsCheckinEnabled;
       if (escalationMinutes !== undefined) updates.escalationMinutes = escalationMinutes;
       if (allowReports !== undefined) updates.allowReports = allowReports;
+      if (drivingSafety !== undefined) updates.drivingSafety = drivingSafety;
+      if (speedLimitKmh !== undefined) updates.speedLimitKmh = speedLimitKmh;
       
       // Update user timezone if provided
       if (timezone) {
@@ -1511,6 +1520,219 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error marking messages read:", error);
       res.status(500).json({ error: "Failed to mark messages read" });
+    }
+  });
+
+  // ============================================
+  // DRIVING SAFETY ENDPOINTS
+  // ============================================
+
+  const isValidLat = (v: any) => typeof v === "number" && v >= -90 && v <= 90;
+  const isValidLng = (v: any) => typeof v === "number" && v >= -180 && v <= 180;
+  const isValidSpeed = (v: any) => typeof v === "number" && v >= 0 && v <= 500;
+  const isValidDistance = (v: any) => typeof v === "number" && v >= 0 && v <= 100000;
+
+  app.post("/api/drive/start", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const existing = await storage.getActiveDriveSession(userId);
+      if (existing) return res.status(400).json({ error: "Drive session already active", session: existing });
+
+      const { lat, lng } = req.body || {};
+      const validLat = lat !== undefined && isValidLat(lat) ? lat : undefined;
+      const validLng = lng !== undefined && isValidLng(lng) ? lng : undefined;
+      const session = await storage.createDriveSession(userId, validLat, validLng);
+      res.json(session);
+    } catch (error) {
+      console.error("Error starting drive session:", error);
+      res.status(500).json({ error: "Failed to start drive session" });
+    }
+  });
+
+  app.post("/api/drive/end", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const session = await storage.getActiveDriveSession(userId);
+      if (!session) return res.status(404).json({ error: "No active drive session" });
+
+      const { maxSpeedKmh, avgSpeedKmh, distanceKm, lat, lng } = req.body || {};
+      const updated = await storage.updateDriveSession(session.id, {
+        endedAt: new Date(),
+        ...(isValidSpeed(maxSpeedKmh) && { maxSpeedKmh }),
+        ...(isValidSpeed(avgSpeedKmh) && { avgSpeedKmh }),
+        ...(isValidDistance(distanceKm) && { distanceKm }),
+        ...(isValidLat(lat) && { endLat: lat }),
+        ...(isValidLng(lng) && { endLng: lng }),
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error ending drive session:", error);
+      res.status(500).json({ error: "Failed to end drive session" });
+    }
+  });
+
+  app.get("/api/drive/active", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const session = await storage.getActiveDriveSession(userId);
+      res.json({ session: session || null });
+    } catch (error) {
+      console.error("Error getting active drive session:", error);
+      res.status(500).json({ error: "Failed to get active drive session" });
+    }
+  });
+
+  app.post("/api/drive/speed", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const { speedKmh, lat, lng, maxSpeedKmh, avgSpeedKmh, distanceKm } = req.body;
+      if (!isValidSpeed(speedKmh)) return res.status(400).json({ error: "Valid speed is required" });
+
+      const session = await storage.getActiveDriveSession(userId);
+      if (session) {
+        const updateData: any = {};
+        if (isValidSpeed(maxSpeedKmh)) updateData.maxSpeedKmh = maxSpeedKmh;
+        if (isValidSpeed(avgSpeedKmh)) updateData.avgSpeedKmh = avgSpeedKmh;
+        if (isValidDistance(distanceKm)) updateData.distanceKm = distanceKm;
+        if (Object.keys(updateData).length > 0) {
+          await storage.updateDriveSession(session.id, updateData);
+        }
+      }
+
+      const userSettings = await storage.getSettings(userId);
+      const speedLimit = userSettings?.speedLimitKmh || 120;
+
+      if (speedKmh > speedLimit) {
+        const alert = await storage.createSpeedAlert(
+          userId,
+          session?.id || null,
+          speedKmh,
+          speedLimit,
+          lat,
+          lng
+        );
+        return res.json({ alert, overSpeed: true, speedKmh, speedLimit });
+      }
+
+      res.json({ overSpeed: false, speedKmh, speedLimit });
+    } catch (error) {
+      console.error("Error logging speed:", error);
+      res.status(500).json({ error: "Failed to log speed" });
+    }
+  });
+
+  app.post("/api/drive/crash", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const { lat, lng, speedKmh, impactForce } = req.body;
+
+      const session = await storage.getActiveDriveSession(userId);
+      if (session) {
+        await storage.updateDriveSession(session.id, {
+          crashDetected: true,
+          endedAt: new Date(),
+          ...(lng !== undefined && { endLng: lng }),
+          ...(lat !== undefined && { endLat: lat }),
+        });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const existingIncident = await storage.getOpenIncident(userId);
+      if (existingIncident) {
+        return res.json({ incident: existingIncident, message: "Incident already open" });
+      }
+
+      const incident = await storage.createIncident(userId, "sos");
+
+      const contactsRaw = await storage.getContacts(userId);
+      const sortedContacts = contactsRaw.sort((a, b) => a.priority - b.priority);
+      const baseUrl = getBaseUrl();
+
+      for (const contact of sortedContacts) {
+        try {
+          const normalizedPhone = normalizePhone(contact.phone);
+          const tokenRecord = await storage.generateToken(contact.id);
+          const link = `${baseUrl}/emergency/${tokenRecord.token}`;
+
+          const crashMsg = `CRASH ALERT from ${user.name}! A possible vehicle crash has been detected. ${speedKmh ? `Speed at impact: ${Math.round(speedKmh)} km/h. ` : ""}Please check on them immediately: ${link}`;
+
+          if (isTwilioConfigured()) {
+            await sendSms(normalizedPhone, crashMsg);
+          }
+
+          if (contact.email) {
+            await sendEmergencyEmail(
+              contact.email,
+              `Crash alert - ${user.name}`,
+              crashMsg,
+              link
+            );
+          }
+
+          if (contact.linkedUserId) {
+            await sendPushNotification(contact.linkedUserId, {
+              title: `Crash detected - ${user.name}`,
+              body: "A possible vehicle crash has been detected. Tap to respond.",
+              url: `/emergency/${tokenRecord.token}`,
+              tag: "crash-alert",
+            });
+          }
+        } catch (err) {
+          console.error(`Error notifying contact ${contact.id} about crash:`, err);
+        }
+      }
+
+      await storage.updateIncident(incident.id, {
+        escalationLevel: 1,
+        notifiedContactIds: JSON.stringify(sortedContacts.map(c => c.id)),
+        lastContactNotifiedAt: new Date(),
+        nextActionAt: addMinutes(new Date(), 5),
+      });
+
+      res.json({ incident, contactsNotified: sortedContacts.length });
+    } catch (error) {
+      console.error("Error reporting crash:", error);
+      res.status(500).json({ error: "Failed to report crash" });
+    }
+  });
+
+  app.get("/api/drive/history", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const limit = parseInt(req.query.limit as string) || 20;
+      const sessions = await storage.getDriveHistory(userId, Math.min(limit, 50));
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error getting drive history:", error);
+      res.status(500).json({ error: "Failed to get drive history" });
+    }
+  });
+
+  app.get("/api/drive/alerts", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const sessionId = req.query.sessionId as string | undefined;
+      const alerts = await storage.getSpeedAlerts(userId, sessionId);
+      res.json(alerts);
+    } catch (error) {
+      console.error("Error getting speed alerts:", error);
+      res.status(500).json({ error: "Failed to get speed alerts" });
     }
   });
 
