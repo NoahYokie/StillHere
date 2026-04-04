@@ -849,7 +849,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const conversations: { partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[] = [];
-    for (const [partnerId, data] of partnerMap) {
+    for (const [partnerId, data] of Array.from(partnerMap)) {
       const partner = await this.getUser(partnerId);
       conversations.push({
         partnerId,
