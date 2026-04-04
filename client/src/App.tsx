@@ -8,8 +8,12 @@ import { IncomingCallOverlay } from "@/components/incoming-call";
 import { NotificationBanner } from "@/components/notification-banner";
 import { initNativeCall, isNativePlatform } from "@/lib/native-call";
 import { initCapacitorPlugins, isNative } from "@/lib/capacitor";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { RatingPrompt } from "@/components/rating-prompt";
+import { initErrorReporter } from "@/lib/error-reporter";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import FeedbackPage from "@/pages/feedback";
 import LandingPage from "@/pages/landing";
 import SettingsPage from "@/pages/settings";
 import HelpPage from "@/pages/help";
@@ -140,6 +144,13 @@ function Router() {
       <Route path="/drive-history">
         <RequireAuth><DriveHistoryPage /></RequireAuth>
       </Route>
+      <Route path="/feedback">
+        <RequireAuth>
+          <RequireSetup>
+            <FeedbackPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
       <Route path="/tour" component={TourPage} />
       <Route path="/help" component={HelpPage} />
       <Route path="/trust" component={TrustPage} />
@@ -171,19 +182,24 @@ function CapacitorInit() {
   return null;
 }
 
+initErrorReporter();
+
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <IncomingCallOverlay />
-          <NotificationBanner />
-          <CapacitorInit />
-          <Router />
-        </AuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <Toaster />
+            <IncomingCallOverlay />
+            <NotificationBanner />
+            <RatingPrompt />
+            <CapacitorInit />
+            <Router />
+          </AuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
