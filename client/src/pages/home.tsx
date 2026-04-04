@@ -264,6 +264,7 @@ export default function Home() {
   const [shakeCountdown, setShakeCountdown] = useState<number | null>(null);
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const shakeCooldownUntilRef = useRef<number>(0);
   const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const [driveActive, setDriveActive] = useState(false);
@@ -426,6 +427,7 @@ export default function Home() {
       shakeTimerRef.current = null;
     }
     setShakeCountdown(null);
+    shakeCooldownUntilRef.current = Date.now() + 5 * 60 * 1000;
   }, []);
 
   useEffect(() => {
@@ -492,6 +494,7 @@ export default function Home() {
 
         if (shakeCount >= SHAKES_NEEDED) {
           shakeCount = 0;
+          if (Date.now() < shakeCooldownUntilRef.current) return;
           startShakeCountdown();
         }
       }
