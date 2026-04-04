@@ -78,7 +78,7 @@ export interface IStorage {
   
   // Checkins
   getLastCheckin(userId: string): Promise<Checkin | undefined>;
-  createCheckin(userId: string, method?: "button" | "auto" | "sms"): Promise<Checkin>;
+  createCheckin(userId: string, method?: "button" | "auto" | "sms", location?: { lat?: number; lng?: number; timezone?: string }): Promise<Checkin>;
   
   // Incidents
   getOpenIncident(userId: string): Promise<Incident | undefined>;
@@ -465,11 +465,21 @@ export class DatabaseStorage implements IStorage {
     return checkin || undefined;
   }
 
-  async createCheckin(userId: string, method: "button" | "auto" | "sms" = "button"): Promise<Checkin> {
+  async createCheckin(userId: string, method: "button" | "auto" | "sms" = "button", location?: { lat?: number; lng?: number; timezone?: string }): Promise<Checkin> {
     const [checkin] = await db.insert(checkins).values({
       userId,
       method,
+      lat: location?.lat ?? null,
+      lng: location?.lng ?? null,
+      timezone: location?.timezone ?? null,
     }).returning();
+
+    if (location?.timezone) {
+      const user = await this.getUser(userId);
+      if (user && user.timezone !== location.timezone) {
+        await this.updateUser(userId, { timezone: location.timezone } as any);
+      }
+    }
 
     // Resolve any open incident
     const openIncident = await this.getOpenIncident(userId);

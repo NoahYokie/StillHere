@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, real, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, real, doublePrecision, pgEnum, index } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -107,6 +107,9 @@ export const checkins = pgTable("checkins", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   method: checkinMethodEnum("method").notNull().default("button"),
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  timezone: text("timezone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

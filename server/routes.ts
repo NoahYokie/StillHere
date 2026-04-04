@@ -548,7 +548,20 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const method = req.body?.method === "auto" ? "auto" : "button";
-      const checkin = await storage.createCheckin(userId, method);
+      let location: { lat?: number; lng?: number; timezone?: string } = {};
+      if (req.body?.lat != null && req.body?.lng != null) {
+        const lat = parseFloat(req.body.lat);
+        const lng = parseFloat(req.body.lng);
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          location.lat = lat;
+          location.lng = lng;
+        }
+      }
+      if (req.body?.timezone && typeof req.body.timezone === "string" && req.body.timezone.length <= 100) {
+        location.timezone = req.body.timezone;
+      }
+      const hasLocation = location.lat != null || location.timezone;
+      const checkin = await storage.createCheckin(userId, method, hasLocation ? location as any : undefined);
       
       // Reset reminder state when user checks in
       await storage.resetReminderState(userId);
@@ -899,7 +912,20 @@ export async function registerRoutes(
       if (!result) {
         return res.status(401).json({ error: "Invalid or expired token" });
       }
-      const checkin = await storage.createCheckin(result.userId, "auto");
+      let location: { lat?: number; lng?: number; timezone?: string } = {};
+      if (req.body?.lat != null && req.body?.lng != null) {
+        const lat = parseFloat(req.body.lat);
+        const lng = parseFloat(req.body.lng);
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          location.lat = lat;
+          location.lng = lng;
+        }
+      }
+      if (req.body?.timezone && typeof req.body.timezone === "string" && req.body.timezone.length <= 100) {
+        location.timezone = req.body.timezone;
+      }
+      const hasLocation = location.lat != null || location.timezone;
+      const checkin = await storage.createCheckin(result.userId, "auto", hasLocation ? location as any : undefined);
       await storage.resetReminderState(result.userId);
       res.json({ ok: true, checkinId: checkin.id, at: checkin.createdAt });
     } catch (error) {
