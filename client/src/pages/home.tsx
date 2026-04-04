@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History, Smartphone, Satellite, ArrowRight } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History, Smartphone, Satellite } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -787,6 +787,15 @@ export default function Home() {
               variant="ghost"
               size="icon"
               className="text-primary-foreground"
+              onClick={() => setLocation("/satellite")}
+              data-testid="button-satellite"
+            >
+              <Satellite className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground"
               onClick={() => setLocation("/settings")}
               data-testid="button-settings"
             >
@@ -954,23 +963,6 @@ export default function Home() {
             </CardContent>
           </Card>
         )}
-
-        <Card
-          className="hover-elevate cursor-pointer"
-          onClick={() => setLocation("/satellite")}
-          data-testid="card-satellite"
-        >
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <Satellite className="h-5 w-5 text-primary" />
-              <div className="flex-1">
-                <span className="font-medium">Satellite devices</span>
-                <p className="text-xs text-muted-foreground">Stay connected off-grid</p>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
 
         <Card className="bg-destructive/5 border-destructive/20">
           <CardContent className="pt-6">
