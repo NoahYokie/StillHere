@@ -32,6 +32,7 @@ import CallPage from "@/pages/call";
 import ReportPage from "@/pages/report";
 import InboxPage from "@/pages/inbox";
 import DriveHistoryPage from "@/pages/drive-history";
+import SatellitePage from "@/pages/satellite";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -148,6 +149,13 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <FeedbackPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/satellite">
+        <RequireAuth>
+          <RequireSetup>
+            <SatellitePage />
           </RequireSetup>
         </RequireAuth>
       </Route>
