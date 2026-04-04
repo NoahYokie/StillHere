@@ -2112,7 +2112,7 @@ export async function registerRoutes(
             const checkInLink = `${baseUrl}/`;
             await sendReminderPush(user.id, user.name);
             if (user.phone) {
-              await sendReminderSms(user.phone, checkInLink);
+              await sendReminderSms(user.phone, checkInLink, !!settings.smsCheckinEnabled);
             }
             await storage.incrementRemindersSent(user.id);
             remindersSent++;

@@ -137,9 +137,15 @@ export async function sendTestMessage(
 
 export async function sendReminderSms(
   userPhone: string,
-  link: string
+  link: string,
+  smsCheckinEnabled: boolean = false
 ): Promise<SendSmsResult> {
-  const body = `StillHere reminder:\nYou haven't checked in yet.\nTap below to let us know you're OK:\n${link}`;
+  let body = `StillHere reminder:\nYou haven't checked in yet.`;
+  if (smsCheckinEnabled) {
+    body += `\nReply YES to check in, or tap below:\n${link}`;
+  } else {
+    body += `\nTap below to let us know you're OK:\n${link}`;
+  }
   return sendSms(userPhone, body);
 }
 
