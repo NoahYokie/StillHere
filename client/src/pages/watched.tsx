@@ -9,18 +9,27 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowLeft, MessageSquare, Phone, CheckCircle2, AlertTriangle, Clock,
-  Shield, FileText, ChevronDown, ChevronUp, Heart, Mail,
+  Shield, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2,
 } from "lucide-react";
-import type { WatchedUser, DailyStatus, ReportPreference } from "@shared/schema";
+import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+interface RemovedContact extends Contact {
+  ownerName: string;
+}
 
 export default function WatchedPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [confirmOptOut, setConfirmOptOut] = useState<{ contactId: string; userName: string } | null>(null);
 
   const { data: watchedUsers, isLoading } = useQuery<WatchedUser[]>({
     queryKey: ["/api/watched-users"],
@@ -29,6 +38,42 @@ export default function WatchedPage() {
 
   const { data: reportPrefs } = useQuery<ReportPreference[]>({
     queryKey: ["/api/reports/preferences"],
+  });
+
+  const { data: removedContacts } = useQuery<RemovedContact[]>({
+    queryKey: ["/api/watched-users/removed"],
+  });
+
+  const optOutMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/watched-users/${contactId}/opt-out`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users/removed"] });
+      toast({ title: "You have been removed as an emergency contact" });
+      setConfirmOptOut(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to remove", variant: "destructive" });
+      setConfirmOptOut(null);
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/watched-users/${contactId}/restore`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users/removed"] });
+      toast({ title: "You are watching this person again" });
+    },
+    onError: () => {
+      toast({ title: "Failed to restore", variant: "destructive" });
+    },
   });
 
   function getStatusBadge(user: WatchedUser) {
@@ -135,7 +180,70 @@ export default function WatchedPage() {
             </div>
           </div>
         )}
+
+        {removedContacts && removedContacts.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <UserMinus className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground" data-testid="text-removed-header">
+                Removed ({removedContacts.length})
+              </span>
+            </div>
+            <div className="space-y-3">
+              {removedContacts.map(rc => {
+                const deletedAt = rc.softDeletedAt ? new Date(rc.softDeletedAt) : new Date();
+                const expiresAt = new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+                const daysLeft = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+                return (
+                  <Card key={rc.id} className="border-dashed opacity-75" data-testid={`card-removed-${rc.id}`}>
+                    <CardContent className="py-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm" data-testid={`text-removed-name-${rc.id}`}>{rc.ownerName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Removed {formatDistanceToNow(deletedAt, { addSuffix: true })} - {daysLeft} {daysLeft === 1 ? "day" : "days"} to restore
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => restoreMutation.mutate(rc.id)}
+                          disabled={restoreMutation.isPending}
+                          data-testid={`button-restore-${rc.id}`}
+                        >
+                          <Undo2 className="w-4 h-4 mr-1" />
+                          Restore
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      <AlertDialog open={!!confirmOptOut} onOpenChange={(open) => !open && setConfirmOptOut(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="text-optout-title">Stop watching {confirmOptOut?.userName}?</AlertDialogTitle>
+            <AlertDialogDescription data-testid="text-optout-description">
+              You will no longer receive their safety alerts, missed checkin notifications, or SOS messages. {confirmOptOut?.userName} will be notified that you have removed yourself. This can be reversed within 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-optout-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmOptOut && optOutMutation.mutate(confirmOptOut.contactId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-optout-confirm"
+            >
+              {optOutMutation.isPending ? "Removing..." : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 
@@ -221,7 +329,21 @@ export default function WatchedPage() {
           </div>
 
           {isExpanded && (
-            <ReportPreferencePanel userId={user.userId} existingPref={userPref} />
+            <>
+              <ReportPreferencePanel userId={user.userId} existingPref={userPref} />
+              <div className="border-t border-border mt-3 pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => setConfirmOptOut({ contactId: user.contactId, userName: user.userName })}
+                  data-testid={`button-stop-watching-${user.userId}`}
+                >
+                  <UserMinus className="w-4 h-4 mr-1.5" />
+                  Stop watching
+                </Button>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

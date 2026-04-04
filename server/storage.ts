@@ -78,6 +78,11 @@ export interface IStorage {
   upsertContacts(userId: string, contactsData: { contact1: InsertContact; contact2?: InsertContact }): Promise<Contact[]>;
   saveContactsList(userId: string, contactsList: { name: string; phone: string; email?: string | null; priority: number }[]): Promise<Contact[]>;
   deleteContact(contactId: string): Promise<void>;
+  softDeleteContact(contactId: string, deletedBy: string): Promise<Contact>;
+  restoreContact(contactId: string): Promise<Contact>;
+  getSoftDeletedContacts(userId: string): Promise<Contact[]>;
+  getSoftDeletedContactsByWatcher(watcherUserId: string): Promise<(Contact & { ownerName: string })[]>;
+  cleanupExpiredSoftDeletes(): Promise<number>;
   getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
@@ -299,7 +304,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getContacts(userId: string): Promise<Contact[]> {
-    return db.select().from(contacts).where(eq(contacts.userId, userId)).orderBy(contacts.priority);
+    return db.select().from(contacts).where(
+      and(eq(contacts.userId, userId), isNull(contacts.softDeletedAt))
+    ).orderBy(contacts.priority);
   }
 
   async getContact(id: string): Promise<Contact | undefined> {
@@ -447,6 +454,54 @@ export class DatabaseStorage implements IStorage {
     await db.delete(contacts).where(eq(contacts.id, contactId));
   }
 
+  async softDeleteContact(contactId: string, deletedBy: string): Promise<Contact> {
+    await db.update(contactTokens)
+      .set({ revoked: true })
+      .where(eq(contactTokens.contactId, contactId));
+    const [updated] = await db.update(contacts)
+      .set({ softDeletedAt: new Date(), softDeletedBy: deletedBy })
+      .where(eq(contacts.id, contactId))
+      .returning();
+    return updated;
+  }
+
+  async restoreContact(contactId: string): Promise<Contact> {
+    const [updated] = await db.update(contacts)
+      .set({ softDeletedAt: null, softDeletedBy: null })
+      .where(eq(contacts.id, contactId))
+      .returning();
+    return updated;
+  }
+
+  async getSoftDeletedContacts(userId: string): Promise<Contact[]> {
+    return db.select().from(contacts).where(
+      and(eq(contacts.userId, userId), gt(contacts.softDeletedAt, new Date(0)))
+    ).orderBy(desc(contacts.softDeletedAt));
+  }
+
+  async getSoftDeletedContactsByWatcher(watcherUserId: string): Promise<(Contact & { ownerName: string })[]> {
+    const rows = await db.select().from(contacts).where(
+      and(eq(contacts.linkedUserId, watcherUserId), gt(contacts.softDeletedAt, new Date(0)))
+    ).orderBy(desc(contacts.softDeletedAt));
+    const result: (Contact & { ownerName: string })[] = [];
+    for (const row of rows) {
+      const owner = await this.getUser(row.userId);
+      result.push({ ...row, ownerName: owner?.name || "Unknown" });
+    }
+    return result;
+  }
+
+  async cleanupExpiredSoftDeletes(): Promise<number> {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const expired = await db.select({ id: contacts.id }).from(contacts).where(
+      and(gt(contacts.softDeletedAt, new Date(0)), lt(contacts.softDeletedAt, thirtyDaysAgo))
+    );
+    for (const row of expired) {
+      await this.deleteContact(row.id);
+    }
+    return expired.length;
+  }
+
   async getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined> {
     const [tokenRecord] = await db.select().from(contactTokens).where(
       and(eq(contactTokens.token, token), eq(contactTokens.revoked, false))
@@ -459,6 +514,7 @@ export class DatabaseStorage implements IStorage {
 
     const contact = await this.getContact(tokenRecord.contactId);
     if (!contact) return undefined;
+    if (contact.softDeletedAt) return undefined;
 
     const user = await this.getUser(contact.userId);
     if (!user) return undefined;
@@ -907,7 +963,7 @@ export class DatabaseStorage implements IStorage {
     if (!watcherUser?.phone) return [];
 
     const linkedContacts = await db.select().from(contacts).where(
-      eq(contacts.linkedUserId, watcherUserId)
+      and(eq(contacts.linkedUserId, watcherUserId), isNull(contacts.softDeletedAt))
     );
 
     const result: WatchedUser[] = [];
@@ -942,7 +998,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getContactsLinkedToUser(linkedUserId: string): Promise<Contact[]> {
-    return db.select().from(contacts).where(eq(contacts.linkedUserId, linkedUserId));
+    return db.select().from(contacts).where(
+      and(eq(contacts.linkedUserId, linkedUserId), isNull(contacts.softDeletedAt))
+    );
   }
 
   async saveVoipToken(userId: string, token: string, platform: string): Promise<void> {

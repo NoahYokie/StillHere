@@ -1449,6 +1449,142 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/watched-users/:contactId/opt-out", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { contactId } = req.params;
+      const contact = await storage.getContact(contactId);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (contact.linkedUserId !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      if (contact.softDeletedAt) {
+        return res.status(400).json({ error: "Already removed" });
+      }
+      const updated = await storage.softDeleteContact(contactId, "watcher");
+      const owner = await storage.getUser(contact.userId);
+      const watcher = await storage.getUser(userId);
+      if (owner) {
+        const { emitToUser } = await import("./socket");
+        emitToUser(contact.userId, "contact:opted-out", {
+          contactId,
+          contactName: watcher?.name || contact.name,
+        });
+        await sendPushNotification(contact.userId, {
+          title: "Emergency contact removed themselves",
+          body: `${watcher?.name || contact.name} has opted out as your emergency contact. You may want to add a replacement.`,
+          url: "/settings",
+          tag: "contact-opted-out",
+        });
+      }
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("Error opting out:", error);
+      res.status(500).json({ error: "Failed to opt out" });
+    }
+  });
+
+  app.get("/api/watched-users/removed", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const removed = await storage.getSoftDeletedContactsByWatcher(userId);
+      res.json(removed);
+    } catch (error) {
+      console.error("Error fetching removed contacts:", error);
+      res.status(500).json({ error: "Failed to fetch removed contacts" });
+    }
+  });
+
+  app.post("/api/watched-users/:contactId/restore", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { contactId } = req.params;
+      const contact = await storage.getContact(contactId);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (contact.linkedUserId !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      if (!contact.softDeletedAt) {
+        return res.status(400).json({ error: "Contact is not removed" });
+      }
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      if (contact.softDeletedAt < thirtyDaysAgo) {
+        return res.status(410).json({ error: "Removal has expired and cannot be reversed" });
+      }
+      const updated = await storage.restoreContact(contactId);
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("Error restoring contact:", error);
+      res.status(500).json({ error: "Failed to restore" });
+    }
+  });
+
+  app.get("/api/contacts/removed", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const removed = await storage.getSoftDeletedContacts(userId);
+      res.json(removed);
+    } catch (error) {
+      console.error("Error fetching removed contacts:", error);
+      res.status(500).json({ error: "Failed to fetch removed contacts" });
+    }
+  });
+
+  app.post("/api/contacts/:contactId/restore", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { contactId } = req.params;
+      const contact = await storage.getContact(contactId);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (contact.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      if (!contact.softDeletedAt) {
+        return res.status(400).json({ error: "Contact is not removed" });
+      }
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      if (contact.softDeletedAt < thirtyDaysAgo) {
+        return res.status(410).json({ error: "Removal has expired and cannot be reversed" });
+      }
+      const activeContacts = await storage.getContacts(userId);
+      const contactLimit = await storage.getContactLimit(userId);
+      if (activeContacts.length >= contactLimit) {
+        return res.status(409).json({ error: "Contact limit reached. Remove an existing contact before restoring." });
+      }
+      const priorityConflict = activeContacts.find(c => c.priority === contact.priority);
+      if (priorityConflict) {
+        const nextPriority = activeContacts.length + 1;
+        contact.priority = nextPriority;
+      }
+      const updated = await storage.restoreContact(contactId);
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("Error restoring contact:", error);
+      res.status(500).json({ error: "Failed to restore" });
+    }
+  });
+
   app.get("/api/messages/:userId", async (req, res) => {
     try {
       const currentUserId = getUserId(req);
@@ -2720,8 +2856,18 @@ export async function registerRoutes(
         console.error("[CRON] Report processing failed:", err);
       }
 
+      let softDeletesCleaned = 0;
+      try {
+        softDeletesCleaned = await storage.cleanupExpiredSoftDeletes();
+        if (softDeletesCleaned > 0) {
+          console.log(`[CRON] Cleaned up ${softDeletesCleaned} expired soft-deleted contacts`);
+        }
+      } catch (err) {
+        console.error("[CRON] Soft-delete cleanup failed:", err);
+      }
+
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);

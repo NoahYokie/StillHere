@@ -76,6 +76,25 @@ export default function SettingsPage() {
     queryKey: ["/api/status"],
   });
 
+  const { data: removedContacts } = useQuery<{ id: string; name: string; phone: string; softDeletedAt: string }[]>({
+    queryKey: ["/api/contacts/removed"],
+  });
+
+  const restoreContactMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/restore`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts/removed"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      toast({ title: "Contact restored" });
+    },
+    onError: () => {
+      toast({ title: "Failed to restore contact", variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (status) {
       setCheckinInterval(status.settings?.checkinIntervalHours || 24);
@@ -592,6 +611,50 @@ export default function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        {removedContacts && removedContacts.length > 0 && (
+          <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+            <CardContent className="py-4">
+              <div className="flex items-start gap-3 mb-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-sm" data-testid="text-removed-contacts-alert">
+                    {removedContacts.length === 1
+                      ? "An emergency contact has removed themselves"
+                      : `${removedContacts.length} emergency contacts have removed themselves`}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    You may want to add a replacement. Removed contacts can be restored within 30 days.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {removedContacts.map(rc => {
+                  const deletedAt = new Date(rc.softDeletedAt);
+                  const expiresAt = new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+                  const daysLeft = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+                  return (
+                    <div key={rc.id} className="flex items-center justify-between bg-background rounded-lg px-3 py-2" data-testid={`removed-contact-${rc.id}`}>
+                      <div>
+                        <p className="text-sm font-medium">{rc.name}</p>
+                        <p className="text-xs text-muted-foreground">{daysLeft} {daysLeft === 1 ? "day" : "days"} left to restore</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => restoreContactMutation.mutate(rc.id)}
+                        disabled={restoreContactMutation.isPending}
+                        data-testid={`button-restore-contact-${rc.id}`}
+                      >
+                        Restore
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Share my Location Section */}
         <Card>
