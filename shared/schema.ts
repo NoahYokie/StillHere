@@ -46,6 +46,8 @@ export const settings = pgTable("settings", {
   discreetSos: boolean("discreet_sos").notNull().default(false),
   escalationMinutes: integer("escalation_minutes").notNull().default(20),
   smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(false),
+  drivingSafety: boolean("driving_safety").notNull().default(false),
+  speedLimitKmh: integer("speed_limit_kmh").notNull().default(120),
   allowReports: boolean("allow_reports").notNull().default(true),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
@@ -453,6 +455,58 @@ export const reportPreferencesRelations = relations(reportPreferences, ({ one })
   }),
 }));
 
+// Drive Sessions table
+export const driveSessions = pgTable("drive_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  maxSpeedKmh: doublePrecision("max_speed_kmh").notNull().default(0),
+  avgSpeedKmh: doublePrecision("avg_speed_kmh").notNull().default(0),
+  distanceKm: doublePrecision("distance_km").notNull().default(0),
+  crashDetected: boolean("crash_detected").notNull().default(false),
+  startLat: doublePrecision("start_lat"),
+  startLng: doublePrecision("start_lng"),
+  endLat: doublePrecision("end_lat"),
+  endLng: doublePrecision("end_lng"),
+}, (table) => [
+  index("drive_sessions_user_id_idx").on(table.userId),
+  index("drive_sessions_started_at_idx").on(table.userId, table.startedAt),
+]);
+
+export const driveSessionsRelations = relations(driveSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [driveSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+// Speed Alerts table
+export const speedAlerts = pgTable("speed_alerts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").references(() => driveSessions.id, { onDelete: "cascade" }),
+  speedKmh: doublePrecision("speed_kmh").notNull(),
+  speedLimitKmh: integer("speed_limit_kmh").notNull(),
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("speed_alerts_user_id_idx").on(table.userId),
+  index("speed_alerts_session_id_idx").on(table.sessionId),
+]);
+
+export const speedAlertsRelations = relations(speedAlerts, ({ one }) => ({
+  user: one(users, {
+    fields: [speedAlerts.userId],
+    references: [users.id],
+  }),
+  session: one(driveSessions, {
+    fields: [speedAlerts.sessionId],
+    references: [driveSessions.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -473,6 +527,8 @@ export const insertGeofenceSchema = createInsertSchema(geofences).omit({ id: tru
 export const insertLocationBreadcrumbSchema = createInsertSchema(locationBreadcrumbs).omit({ id: true });
 export const insertSatelliteDeviceSchema = createInsertSchema(satelliteDevices).omit({ id: true, createdAt: true });
 export const insertReportPreferenceSchema = createInsertSchema(reportPreferences).omit({ id: true, createdAt: true });
+export const insertDriveSessionSchema = createInsertSchema(driveSessions).omit({ id: true, startedAt: true });
+export const insertSpeedAlertSchema = createInsertSchema(speedAlerts).omit({ id: true, createdAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -533,6 +589,12 @@ export type InsertSatelliteDevice = z.infer<typeof insertSatelliteDeviceSchema>;
 
 export type ReportPreference = typeof reportPreferences.$inferSelect;
 export type InsertReportPreference = z.infer<typeof insertReportPreferenceSchema>;
+
+export type DriveSession = typeof driveSessions.$inferSelect;
+export type InsertDriveSession = z.infer<typeof insertDriveSessionSchema>;
+
+export type SpeedAlert = typeof speedAlerts.$inferSelect;
+export type InsertSpeedAlert = z.infer<typeof insertSpeedAlertSchema>;
 
 export interface ReportData {
   userName: string;

@@ -48,6 +48,10 @@ import {
   reportPreferences,
   type ReportPreference,
   type DailyStatus,
+  driveSessions,
+  speedAlerts,
+  type DriveSession,
+  type SpeedAlert,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -172,6 +176,16 @@ export interface IStorage {
   upsertReportPreference(data: { watcherId: string; watchedUserId: string; frequency: string; enabled: boolean; email?: string | null }): Promise<ReportPreference>;
   getDueReports(): Promise<ReportPreference[]>;
   updateReportLastSent(id: string): Promise<void>;
+
+  // Drive Sessions
+  createDriveSession(userId: string, lat?: number, lng?: number): Promise<DriveSession>;
+  getActiveDriveSession(userId: string): Promise<DriveSession | undefined>;
+  updateDriveSession(id: string, updates: Partial<{ endedAt: Date; maxSpeedKmh: number; avgSpeedKmh: number; distanceKm: number; crashDetected: boolean; endLat: number; endLng: number }>): Promise<DriveSession>;
+  getDriveHistory(userId: string, limit?: number): Promise<DriveSession[]>;
+
+  // Speed Alerts
+  createSpeedAlert(userId: string, sessionId: string | null, speedKmh: number, speedLimitKmh: number, lat?: number, lng?: number): Promise<SpeedAlert>;
+  getSpeedAlerts(userId: string, sessionId?: string): Promise<SpeedAlert[]>;
 
   // Report Data
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
@@ -1191,6 +1205,55 @@ export class DatabaseStorage implements IStorage {
       incidentReason: openIncident?.reason || null,
       heartRate,
     };
+  }
+  async createDriveSession(userId: string, lat?: number, lng?: number): Promise<DriveSession> {
+    const [session] = await db.insert(driveSessions).values({
+      userId,
+      startLat: lat ?? null,
+      startLng: lng ?? null,
+    }).returning();
+    return session;
+  }
+
+  async getActiveDriveSession(userId: string): Promise<DriveSession | undefined> {
+    const [session] = await db.select().from(driveSessions)
+      .where(and(eq(driveSessions.userId, userId), isNull(driveSessions.endedAt)))
+      .orderBy(desc(driveSessions.startedAt))
+      .limit(1);
+    return session || undefined;
+  }
+
+  async updateDriveSession(id: string, updates: Partial<{ endedAt: Date; maxSpeedKmh: number; avgSpeedKmh: number; distanceKm: number; crashDetected: boolean; endLat: number; endLng: number }>): Promise<DriveSession> {
+    const [session] = await db.update(driveSessions).set(updates).where(eq(driveSessions.id, id)).returning();
+    return session;
+  }
+
+  async getDriveHistory(userId: string, limit: number = 20): Promise<DriveSession[]> {
+    return db.select().from(driveSessions)
+      .where(eq(driveSessions.userId, userId))
+      .orderBy(desc(driveSessions.startedAt))
+      .limit(limit);
+  }
+
+  async createSpeedAlert(userId: string, sessionId: string | null, speedKmh: number, speedLimitKmh: number, lat?: number, lng?: number): Promise<SpeedAlert> {
+    const [alert] = await db.insert(speedAlerts).values({
+      userId,
+      sessionId,
+      speedKmh,
+      speedLimitKmh,
+      lat: lat ?? null,
+      lng: lng ?? null,
+    }).returning();
+    return alert;
+  }
+
+  async getSpeedAlerts(userId: string, sessionId?: string): Promise<SpeedAlert[]> {
+    const conditions = [eq(speedAlerts.userId, userId)];
+    if (sessionId) conditions.push(eq(speedAlerts.sessionId, sessionId));
+    return db.select().from(speedAlerts)
+      .where(and(...conditions))
+      .orderBy(desc(speedAlerts.createdAt))
+      .limit(50);
   }
 }
 

@@ -15,11 +15,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
 import { createFallDetector, isDeviceMotionSupported } from "@/lib/fall-detection";
+import { drivingMonitor } from "@/lib/driving-monitor";
+import CrashCountdown from "@/components/crash-countdown";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
 
@@ -262,6 +264,11 @@ export default function Home() {
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
   const locationWatchRef = useRef<number | null>(null);
+  const [driveActive, setDriveActive] = useState(false);
+  const [driveSpeed, setDriveSpeed] = useState(0);
+  const [driveSpeedLimit, setDriveSpeedLimit] = useState(120);
+  const [crashDetected, setCrashDetected] = useState<number | null>(null);
+  const [driveStarting, setDriveStarting] = useState(false);
 
   const { auth } = useAuth();
 
@@ -450,6 +457,90 @@ export default function Home() {
     window.addEventListener("devicemotion", handleMotion);
     return () => window.removeEventListener("devicemotion", handleMotion);
   }, [(status?.settings as any)?.discreetSos]);
+
+  const drivingSafetyEnabled = !!(status?.settings as any)?.drivingSafety;
+  const configuredSpeedLimit = (status?.settings as any)?.speedLimitKmh || 120;
+
+  useEffect(() => {
+    if (drivingMonitor.isActive()) {
+      setDriveActive(true);
+    }
+  }, []);
+
+  const startDrive = useCallback(async () => {
+    if (driveStarting || driveActive) return;
+    setDriveStarting(true);
+    try {
+      await drivingMonitor.start({
+        onSpeedUpdate: (speed, limit) => {
+          setDriveSpeed(speed);
+          setDriveSpeedLimit(limit);
+        },
+        onSpeedAlert: (speed, limit) => {
+          triggerHaptic([200, 100, 200, 100, 200]);
+          toast({
+            title: "Speed alert",
+            description: `You're going ${Math.round(speed)} km/h in a ${limit} km/h zone`,
+            variant: "destructive",
+          });
+        },
+        onCrashDetected: (impactForce) => {
+          triggerHaptic([500, 200, 500, 200, 500, 200, 500]);
+          setCrashDetected(impactForce);
+        },
+        onError: (error) => {
+          toast({ title: "Drive monitor error", description: error, variant: "destructive" });
+        },
+        onSessionStarted: () => {
+          setDriveActive(true);
+          toast({ title: "Drive started", description: "Speed monitoring and crash detection are active" });
+        },
+        onSessionEnded: () => {
+          setDriveActive(false);
+          setDriveSpeed(0);
+          toast({ title: "Drive ended", description: "Session saved to your drive history" });
+        },
+      }, configuredSpeedLimit);
+    } catch (err) {
+      toast({ title: "Could not start drive", description: "Please try again", variant: "destructive" });
+    } finally {
+      setDriveStarting(false);
+    }
+  }, [driveStarting, driveActive, configuredSpeedLimit, toast]);
+
+  const stopDrive = useCallback(async () => {
+    await drivingMonitor.stop();
+    setDriveActive(false);
+    setDriveSpeed(0);
+  }, []);
+
+  const handleCrashCancel = useCallback(() => {
+    setCrashDetected(null);
+  }, []);
+
+  const handleCrashSos = useCallback(async () => {
+    setCrashDetected(null);
+    let pos: GeolocationPosition | null = null;
+    try {
+      pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 })
+      );
+    } catch {}
+
+    try {
+      await drivingMonitor.reportCrash(pos?.coords.latitude, pos?.coords.longitude);
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      toast({ title: "Crash SOS sent", description: "Your emergency contacts have been notified", variant: "destructive" });
+    } catch {
+      try {
+        await apiRequest("POST", "/api/sos", {});
+        queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+        toast({ title: "SOS sent", description: "Your emergency contacts have been notified", variant: "destructive" });
+      } catch {
+        toast({ title: "Could not send SOS", description: "Please call emergency services directly", variant: "destructive" });
+      }
+    }
+  }, [toast]);
 
   const checkinMutation = useMutation({
     mutationFn: async () => {
@@ -742,6 +833,80 @@ export default function Home() {
           </Card>
         )}
 
+        {drivingSafetyEnabled && (
+          <Card className={driveActive ? "border-blue-500/50 bg-blue-50/50 dark:bg-blue-950/20" : ""} data-testid="card-driving">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Car className={`w-5 h-5 ${driveActive ? "text-blue-500" : "text-muted-foreground"}`} />
+                  <span className="font-medium">Driving safety</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation("/drive-history")}
+                  data-testid="button-drive-history"
+                >
+                  <History className="w-4 h-4 mr-1" />
+                  History
+                </Button>
+              </div>
+
+              {driveActive ? (
+                <>
+                  <div className="flex items-center justify-center gap-4 mb-3">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Gauge className="w-4 h-4 text-blue-500" />
+                        <span className={`text-2xl font-bold ${driveSpeed > driveSpeedLimit ? "text-red-500" : "text-foreground"}`} data-testid="text-current-speed">
+                          {Math.round(driveSpeed)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">km/h</p>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-sm text-muted-foreground">Limit</span>
+                      <p className="font-semibold" data-testid="text-speed-limit">{driveSpeedLimit} km/h</p>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-sm text-muted-foreground">Max</span>
+                      <p className="font-semibold" data-testid="text-max-speed-live">{Math.round(drivingMonitor.getMaxSpeed())} km/h</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1 text-center text-xs text-muted-foreground">
+                      Distance: {drivingMonitor.getDistance().toFixed(1)} km
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-3"
+                    onClick={stopDrive}
+                    data-testid="button-stop-drive"
+                  >
+                    Stop drive
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Monitor your speed and detect crashes while driving
+                  </p>
+                  <Button
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={startDrive}
+                    disabled={driveStarting}
+                    data-testid="button-start-drive"
+                  >
+                    <Car className="w-4 h-4 mr-2" />
+                    {driveStarting ? "Starting..." : "Start drive"}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="bg-destructive/5 border-destructive/20">
           <CardContent className="pt-6">
             <Button
@@ -828,6 +993,14 @@ export default function Home() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {crashDetected !== null && (
+        <CrashCountdown
+          impactForce={crashDetected}
+          onCancel={handleCrashCancel}
+          onConfirmSos={handleCrashSos}
+        />
+      )}
     </div>
   );
 }

@@ -39,7 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
@@ -63,6 +63,8 @@ export default function SettingsPage() {
   const [fallDetection, setFallDetection] = useState(false);
   const [discreetSos, setDiscreetSos] = useState(false);
   const [smsCheckinEnabled, setSmsCheckinEnabled] = useState(false);
+  const [drivingSafety, setDrivingSafety] = useState(false);
+  const [speedLimitKmh, setSpeedLimitKmh] = useState(120);
   const [allowReports, setAllowReports] = useState(true);
   const [escalationMinutes, setEscalationMinutes] = useState(20);
   const [customInterval, setCustomInterval] = useState("");
@@ -85,6 +87,8 @@ export default function SettingsPage() {
       setFallDetection((status.settings as any)?.fallDetection || false);
       setDiscreetSos((status.settings as any)?.discreetSos || false);
       setSmsCheckinEnabled((status.settings as any)?.smsCheckinEnabled || false);
+      setDrivingSafety((status.settings as any)?.drivingSafety || false);
+      setSpeedLimitKmh((status.settings as any)?.speedLimitKmh || 120);
       setAllowReports((status.settings as any)?.allowReports !== false);
       setEscalationMinutes((status.settings as any)?.escalationMinutes || 20);
 
@@ -100,7 +104,7 @@ export default function SettingsPage() {
   }, [status, contactsInitialized]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; escalationMinutes?: number; allowReports?: boolean }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; drivingSafety?: boolean; speedLimitKmh?: number; escalationMinutes?: number; allowReports?: boolean }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -767,6 +771,63 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground mt-3">
               When enabled, you can check in by replying YES to your reminder text message. You can also text HELP to trigger an SOS.
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Driving Safety Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Car className="h-5 w-5" />
+              Driving safety
+            </CardTitle>
+            <CardDescription>Monitor your speed and detect crashes while driving.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="driving-safety">Enable driving safety</Label>
+              <Switch
+                id="driving-safety"
+                checked={drivingSafety}
+                onCheckedChange={(checked) => {
+                  setDrivingSafety(checked);
+                  settingsMutation.mutate({ drivingSafety: checked });
+                }}
+                data-testid="switch-driving-safety"
+              />
+            </div>
+            {drivingSafety && (
+              <div>
+                <Label htmlFor="speed-limit" className="flex items-center gap-1.5 mb-2">
+                  <Gauge className="h-4 w-4" />
+                  Speed limit (km/h)
+                </Label>
+                <Select
+                  value={String(speedLimitKmh)}
+                  onValueChange={(val) => {
+                    const v = parseInt(val);
+                    setSpeedLimitKmh(v);
+                    settingsMutation.mutate({ speedLimitKmh: v });
+                  }}
+                >
+                  <SelectTrigger id="speed-limit" data-testid="select-speed-limit">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="40">40 km/h - School zone</SelectItem>
+                    <SelectItem value="50">50 km/h - Urban</SelectItem>
+                    <SelectItem value="60">60 km/h - City</SelectItem>
+                    <SelectItem value="80">80 km/h - Suburban</SelectItem>
+                    <SelectItem value="100">100 km/h - Highway</SelectItem>
+                    <SelectItem value="110">110 km/h - Freeway</SelectItem>
+                    <SelectItem value="120">120 km/h - Motorway</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-3">
+                  You'll receive alerts when you exceed this speed. Start a drive session from the home screen to activate monitoring.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

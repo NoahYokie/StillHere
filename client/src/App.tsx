@@ -27,6 +27,7 @@ import ChatPage from "@/pages/chat";
 import CallPage from "@/pages/call";
 import ReportPage from "@/pages/report";
 import InboxPage from "@/pages/inbox";
+import DriveHistoryPage from "@/pages/drive-history";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -135,6 +136,9 @@ function Router() {
             <ReportPage />
           </RequireSetup>
         </RequireAuth>
+      </Route>
+      <Route path="/drive-history">
+        <RequireAuth><DriveHistoryPage /></RequireAuth>
       </Route>
       <Route path="/tour" component={TourPage} />
       <Route path="/help" component={HelpPage} />
