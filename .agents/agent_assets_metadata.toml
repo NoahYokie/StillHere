@@ -41,3 +41,63 @@ id = "eVHZZmmxhSN29WbcBHOdn"
 uri = "file://NATIVE_BUILD_GUIDE.md"
 type = "text"
 title = "StillHere Native App Build Guide"
+
+[[outputs]]
+id = "76gjFutTsl0GaRL9kiYMS"
+uri = "file://ipad_screenshots/01_hero.png"
+type = "image"
+title = "iPad - Hero/Landing Page"
+
+[[outputs]]
+id = "lzziKwjBtqGpvs5hgS31E"
+uri = "file://ipad_screenshots/02_home.png"
+type = "image"
+title = "iPad - Home Screen"
+
+[[outputs]]
+id = "FnDXwGF4Qi3tki5_leCEJ"
+uri = "file://ipad_screenshots/03_sos.png"
+type = "image"
+title = "iPad - SOS & Discreet Alert"
+
+[[outputs]]
+id = "LtaRKj0hux4br8ldgCIkF"
+uri = "file://ipad_screenshots/04_settings.png"
+type = "image"
+title = "iPad - Checkin Settings"
+
+[[outputs]]
+id = "bHUbA-zZRxQxlzR0t7Mq1"
+uri = "file://ipad_screenshots/05_contacts.png"
+type = "image"
+title = "iPad - Emergency Contacts"
+
+[[outputs]]
+id = "gdx5SJjJLs3Xo2T21G9rm"
+uri = "file://ipad_screenshots/06_location.png"
+type = "image"
+title = "iPad - Live Location"
+
+[[outputs]]
+id = "dp-vDuMgQIn4inmDMJ3hF"
+uri = "file://ipad_screenshots/07_watcher.png"
+type = "image"
+title = "iPad - Watcher Dashboard"
+
+[[outputs]]
+id = "K8BE0A1N5uezrmvt1_WNv"
+uri = "file://ipad_screenshots/08_report.png"
+type = "image"
+title = "iPad - Safety Report"
+
+[[outputs]]
+id = "VqS4NuJCf4qYIoXv1UdAv"
+uri = "file://ipad_screenshots/09_messaging.png"
+type = "image"
+title = "iPad - Messaging"
+
+[[outputs]]
+id = "EfFn-UW64TY6xTdsKDM7-"
+uri = "file://ipad_screenshots/10_watch.png"
+type = "image"
+title = "iPad - Smartwatch Companion"
