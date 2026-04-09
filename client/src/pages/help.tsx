@@ -12,10 +12,6 @@ const faqs = [
         a: "StillHere is a safety checkin app designed for people who live alone, elderly individuals, and lone workers. You check in once a day to let your emergency contacts know you're okay. If you miss a checkin, your contacts are automatically notified so someone can check on you.",
       },
       {
-        q: "How much does StillHere cost?",
-        a: "StillHere is free for the first 14 days with full access to every feature. After your trial, you can continue with a monthly or yearly plan. Yearly saves you more. There are no hidden fees and you can cancel anytime.",
-      },
-      {
         q: "How do I sign up?",
         a: "Tap \"Get started\" on the home page and enter your phone number. You'll receive a one-time code via text message to verify your identity. After that, you'll set up your name, checkin schedule, and add your emergency contacts.",
       },
@@ -165,6 +161,31 @@ const faqs = [
       {
         q: "Can I stop watching someone?",
         a: "Yes. You can opt out of watching someone from the watcher dashboard. Your opt-out is kept for 30 days so it can be restored if needed.",
+      },
+    ],
+  },
+  {
+    category: "Pricing & Billing",
+    questions: [
+      {
+        q: "How much does StillHere cost?",
+        a: "StillHere costs $7.99 per month or $59.99 per year (that's just $5.00 per month, saving you 37%). Every plan includes full access to all features.",
+      },
+      {
+        q: "Is there a free trial?",
+        a: "Yes. Every new account gets a 14-day free trial with full access to every feature. No credit card is required to start. You only pay after your trial ends.",
+      },
+      {
+        q: "Can I cancel anytime?",
+        a: "Yes. You can cancel your subscription at any time. There are no cancellation fees or long-term contracts. If you cancel, you keep access until the end of your billing period.",
+      },
+      {
+        q: "Which plan should I choose?",
+        a: "Both plans include the same features. The yearly plan saves you 37% compared to paying monthly. If you're not sure, start with the monthly plan and switch to yearly anytime.",
+      },
+      {
+        q: "What happens when my trial ends?",
+        a: "You'll be prompted to choose a plan. If you don't subscribe, your account stays active but checkin monitoring and alerts will be paused until you subscribe.",
       },
     ],
   },

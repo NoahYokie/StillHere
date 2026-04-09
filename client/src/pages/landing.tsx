@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone, Wifi, WifiOff, Smartphone, Server, Navigation, Car, Radio, Map, Hand, BarChart3, Satellite } from "lucide-react";
+import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone, Wifi, WifiOff, Smartphone, Server, Navigation, Car, Radio, Map, Hand, BarChart3, Satellite, Sparkles } from "lucide-react";
 
 type AnimStep = "checkin" | "tapping" | "confirmed" | "reminder" | "alert";
 
@@ -820,6 +820,98 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="px-6 py-14 md:py-20 bg-background" data-testid="section-pricing">
+        <div className="max-w-4xl md:mx-auto">
+          <div className="text-center mb-10 md:mb-14">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 rounded-full text-primary text-xs font-medium mb-4">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Simple Pricing</span>
+            </div>
+            <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">Try everything free for 14 days</h2>
+            <p className="text-sm md:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
+              Full access to every feature during your trial. No credit card required. Cancel anytime.
+            </p>
+          </div>
+
+          <div className="md:grid md:grid-cols-2 md:gap-6 md:max-w-2xl md:mx-auto space-y-4 md:space-y-0">
+            <div className="rounded-2xl border border-border bg-muted/30 p-6 md:p-8 text-center">
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">Monthly</p>
+              <div className="mb-4">
+                <span className="text-4xl md:text-5xl font-bold">$7.99</span>
+                <span className="text-muted-foreground text-sm">/month</span>
+              </div>
+              <ul className="space-y-2.5 text-sm text-left mb-6">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>All features included</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>Unlimited checkins and SOS</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>SMS, push, and email alerts</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>Cancel anytime</span>
+                </li>
+              </ul>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setLocation("/login")}
+                data-testid="button-plan-monthly"
+              >
+                Start free trial
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border-2 border-primary bg-primary/5 p-6 md:p-8 text-center relative">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-xs font-semibold px-3 py-1 rounded-full">
+                Save 37%
+              </div>
+              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-2">Yearly</p>
+              <div className="mb-1">
+                <span className="text-4xl md:text-5xl font-bold">$59.99</span>
+                <span className="text-muted-foreground text-sm">/year</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">That's just $5.00/month</p>
+              <ul className="space-y-2.5 text-sm text-left mb-6">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>Everything in monthly</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>Best value for your safety</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>Save $35.89 per year</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-accent flex-shrink-0" />
+                  <span>Cancel anytime</span>
+                </li>
+              </ul>
+              <Button
+                className="w-full"
+                onClick={() => setLocation("/login")}
+                data-testid="button-plan-yearly"
+              >
+                Start free trial
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            14-day free trial on all plans. No credit card required to start. You only pay after your trial ends.
+          </p>
+        </div>
+      </section>
+
       <section className="px-6 py-16 md:py-20 bg-gradient-to-b md:bg-gradient-to-br from-primary to-primary/80 text-white text-center">
         <div className="max-w-3xl md:mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold mb-3 md:mb-4">Ready to get started?</h2>
@@ -832,7 +924,7 @@ export default function LandingPage() {
             onClick={() => setLocation("/login")}
             data-testid="button-get-started-bottom"
           >
-            Create your account
+            Start your free trial
           </Button>
         </div>
       </section>
