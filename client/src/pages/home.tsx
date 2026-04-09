@@ -472,6 +472,13 @@ export default function Home() {
     const SHAKE_RESET_MS = 1500;
     const SHAKES_NEEDED = 3;
 
+    const suppressUndo = (e: Event) => {
+      if ((e as InputEvent).inputType === "historyUndo") {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("beforeinput", suppressUndo, true);
+
     const handleMotion = (e: DeviceMotionEvent) => {
       const accel = e.accelerationIncludingGravity;
       if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
@@ -501,7 +508,10 @@ export default function Home() {
     };
 
     window.addEventListener("devicemotion", handleMotion);
-    return () => window.removeEventListener("devicemotion", handleMotion);
+    return () => {
+      window.removeEventListener("devicemotion", handleMotion);
+      document.removeEventListener("beforeinput", suppressUndo, true);
+    };
   }, [(status?.settings as any)?.discreetSos, startShakeCountdown]);
 
   const drivingSafetyEnabled = !!(status?.settings as any)?.drivingSafety;
