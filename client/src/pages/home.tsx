@@ -427,7 +427,7 @@ export default function Home() {
       shakeTimerRef.current = null;
     }
     setShakeCountdown(null);
-    shakeCooldownUntilRef.current = Date.now() + 5 * 60 * 1000;
+    shakeCooldownUntilRef.current = Date.now() + 60 * 1000;
   }, []);
 
   useEffect(() => {
@@ -472,18 +472,17 @@ export default function Home() {
       if (!granted) return;
 
       const SHAKES_NEEDED = 3;
-      const SHAKE_WINDOW_MS = 8000;
-      const PEAK_THRESHOLD = 20;
-      const CALM_THRESHOLD = 4;
-      const MIN_CALM_MS = 400;
-      const MIN_PEAK_MS = 100;
+      const SHAKE_WINDOW_MS = 2500;
+      const PEAK_THRESHOLD = 13;
+      const CALM_THRESHOLD = 6;
+      const MIN_CALM_MS = 80;
+      const DEBOUNCE_MS = 120;
 
       let shakeCount = 0;
       let firstShakeTime = 0;
-      let phase: "calm" | "shaking" = "calm";
-      let phaseStart = 0;
-      let peakReached = false;
-      const smoothed = { x: 0, y: 0, z: 0 };
+      let lastShakeTime = 0;
+      let aboveThreshold = false;
+      const gravity = { x: 0, y: 0, z: 0 };
       let initialized = false;
 
       const suppressUndo = (e: Event) => {
@@ -494,75 +493,60 @@ export default function Home() {
       document.addEventListener("beforeinput", suppressUndo, true);
 
       const handleMotion = (e: DeviceMotionEvent) => {
-        const accel = e.accelerationIncludingGravity;
-        if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
+        let magnitude: number;
 
-        const alpha = 0.3;
-        if (!initialized) {
-          smoothed.x = accel.x; smoothed.y = accel.y; smoothed.z = accel.z;
-          initialized = true;
-          return;
+        const pureAccel = e.acceleration;
+        if (pureAccel && pureAccel.x != null && pureAccel.y != null && pureAccel.z != null) {
+          magnitude = Math.sqrt(pureAccel.x ** 2 + pureAccel.y ** 2 + pureAccel.z ** 2);
+        } else {
+          const accel = e.accelerationIncludingGravity;
+          if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
+
+          const alpha = 0.8;
+          if (!initialized) {
+            gravity.x = accel.x; gravity.y = accel.y; gravity.z = accel.z;
+            initialized = true;
+            return;
+          }
+          gravity.x = alpha * gravity.x + (1 - alpha) * accel.x;
+          gravity.y = alpha * gravity.y + (1 - alpha) * accel.y;
+          gravity.z = alpha * gravity.z + (1 - alpha) * accel.z;
+
+          magnitude = Math.sqrt(
+            (accel.x - gravity.x) ** 2 +
+            (accel.y - gravity.y) ** 2 +
+            (accel.z - gravity.z) ** 2
+          );
         }
-        smoothed.x = alpha * accel.x + (1 - alpha) * smoothed.x;
-        smoothed.y = alpha * accel.y + (1 - alpha) * smoothed.y;
-        smoothed.z = alpha * accel.z + (1 - alpha) * smoothed.z;
-
-        const userX = accel.x - smoothed.x;
-        const userY = accel.y - smoothed.y;
-        const userZ = accel.z - smoothed.z;
-        const magnitude = Math.sqrt(userX * userX + userY * userY + userZ * userZ);
 
         const now = Date.now();
 
         if (shakeCount > 0 && now - firstShakeTime > SHAKE_WINDOW_MS) {
           shakeCount = 0;
-          phase = "calm";
-          phaseStart = now;
-          peakReached = false;
+          aboveThreshold = false;
         }
 
-        if (phase === "calm") {
-          if (magnitude > PEAK_THRESHOLD) {
-            if (!peakReached) {
-              peakReached = true;
-            }
-            const calmDuration = now - phaseStart;
-            if (shakeCount === 0 || calmDuration >= MIN_CALM_MS) {
-              phase = "shaking";
-              phaseStart = now;
-              peakReached = false;
-            }
-          }
-        } else if (phase === "shaking") {
-          if (magnitude > PEAK_THRESHOLD) {
-            peakReached = true;
-          }
+        if (magnitude >= PEAK_THRESHOLD) {
+          aboveThreshold = true;
+        } else if (magnitude < CALM_THRESHOLD && aboveThreshold) {
+          aboveThreshold = false;
 
-          if (magnitude < CALM_THRESHOLD && peakReached) {
-            const shakeDuration = now - phaseStart;
-            if (shakeDuration >= MIN_PEAK_MS) {
-              shakeCount++;
-              if (shakeCount === 1) firstShakeTime = now;
+          if (now - lastShakeTime < DEBOUNCE_MS) return;
 
-              if (shakeCount >= SHAKES_NEEDED) {
-                shakeCount = 0;
-                phase = "calm";
-                phaseStart = now;
-                peakReached = false;
-                if (Date.now() < shakeCooldownUntilRef.current) return;
-                startShakeCountdown();
-                return;
-              }
-            }
-            phase = "calm";
-            phaseStart = now;
-            peakReached = false;
-          }
+          const calmGap = now - lastShakeTime;
+          if (shakeCount > 0 && calmGap < MIN_CALM_MS) return;
 
-          if (now - phaseStart > 2000) {
-            phase = "calm";
-            phaseStart = now;
-            peakReached = false;
+          shakeCount++;
+          lastShakeTime = now;
+          if (shakeCount === 1) firstShakeTime = now;
+
+          triggerHaptic([30]);
+
+          if (shakeCount >= SHAKES_NEEDED) {
+            shakeCount = 0;
+            aboveThreshold = false;
+            if (Date.now() < shakeCooldownUntilRef.current) return;
+            startShakeCountdown();
           }
         }
       };
