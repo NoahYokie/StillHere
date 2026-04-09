@@ -11,6 +11,7 @@ import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
+import LocationMap from "@/components/location-map";
 
 interface LiveShare {
   id: string;
@@ -62,6 +63,8 @@ export default function LiveLocationPage() {
   const [sharingActive, setSharingActive] = useState(false);
   const [currentActivity, setCurrentActivity] = useState<string>("stationary");
   const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
+  const [currentLat, setCurrentLat] = useState<number | null>(null);
+  const [currentLng, setCurrentLng] = useState<number | null>(null);
   const [duration, setDuration] = useState<string>("0");
   const [watchedLocations, setWatchedLocations] = useState<Record<string, LiveShare>>({});
 
@@ -129,6 +132,8 @@ export default function LiveLocationPage() {
         onUpdate: (_pos, activity) => {
           setCurrentActivity(activity);
           setCurrentSpeed(_pos.coords.speed);
+          setCurrentLat(_pos.coords.latitude);
+          setCurrentLng(_pos.coords.longitude);
         },
         onError: (err) => {
           toast({ title: "Location error", description: err, variant: "destructive" });
@@ -198,6 +203,15 @@ export default function LiveLocationPage() {
                     </p>
                   </div>
                 </div>
+
+                {currentLat != null && currentLng != null && (
+                  <LocationMap
+                    center={{ lat: currentLat, lng: currentLng }}
+                    zoom={16}
+                    className="w-full h-48"
+                    showTrail={false}
+                  />
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 rounded-lg bg-muted text-center">

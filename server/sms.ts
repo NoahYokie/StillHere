@@ -55,7 +55,18 @@ export async function sendSms(
       console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
-      console.error(`[SMS] Messaging service failed for ${masked}:`, error.message);
+      console.warn(`[SMS] Messaging service failed for ${masked}: ${error.message}, trying fallback`);
+      const fallbackFrom = fromPhone || alphaSender;
+      if (fallbackFrom) {
+        try {
+          const message = await c.messages.create({ to, body, from: fallbackFrom });
+          console.log(`[SMS] Sent to ${masked} via fallback: ${message.sid}`);
+          return { success: true, messageId: message.sid };
+        } catch (fallbackError: any) {
+          console.error(`[SMS] Fallback also failed for ${masked}:`, fallbackError.message);
+          return { success: false, error: fallbackError.message };
+        }
+      }
       return { success: false, error: error.message };
     }
   }
