@@ -16,6 +16,7 @@ export default function LoginCodePage() {
   const [code, setCode] = useState("");
   const [showPasskeySetup, setShowPasskeySetup] = useState(false);
   const [loginResult, setLoginResult] = useState<any>(null);
+  const [resendCooldown, setResendCooldown] = useState(60);
 
   const params = new URLSearchParams(search);
   const phone = params.get("phone") || "";
@@ -25,6 +26,14 @@ export default function LoginCodePage() {
       setLocation("/login");
     }
   }, [phone, setLocation]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const verifyCodeMutation = useMutation({
     mutationFn: async () => {
@@ -107,10 +116,20 @@ export default function LoginCodePage() {
       return apiRequest("POST", "/api/auth/send-code", { phone });
     },
     onSuccess: () => {
+      setResendCooldown(60);
       toast({ title: "New code sent", description: "Check your phone." });
     },
-    onError: () => {
-      toast({ title: "Error", description: "Could not resend code. Please try again.", variant: "destructive" });
+    onError: (error: Error) => {
+      try {
+        const jsonStr = error.message.replace(/^\d+:\s*/, "");
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.waitSeconds) {
+          setResendCooldown(parsed.waitSeconds);
+          toast({ title: "Please wait", description: `You can request a new code in ${parsed.waitSeconds} seconds.` });
+          return;
+        }
+      } catch {}
+      toast({ title: "Could not resend code", description: "Please try again shortly.", variant: "destructive" });
     },
   });
 
@@ -219,11 +238,11 @@ export default function LoginCodePage() {
           <div className="mt-6 flex flex-col items-center gap-3">
             <button
               onClick={() => resendMutation.mutate()}
-              disabled={resendMutation.isPending}
+              disabled={resendMutation.isPending || resendCooldown > 0}
               className="text-sm text-primary hover:underline disabled:opacity-50"
               data-testid="button-resend"
             >
-              {resendMutation.isPending ? "Sending..." : "Resend code"}
+              {resendMutation.isPending ? "Sending..." : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
             </button>
             <button
               onClick={() => setLocation("/login")}
