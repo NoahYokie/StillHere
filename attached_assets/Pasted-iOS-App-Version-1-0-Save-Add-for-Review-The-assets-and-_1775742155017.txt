@@ -1,0 +1,103 @@
+iOS App Version 1.0
+Save
+Add for Review
+The assets and metadata below appear on your app’s product page, when users install your app, and will be used for web engine search results once you release your app.
+
+English (U.S.)
+?
+Previews and Screenshots
+?
+Adding accurate screenshots of your app on the newest devices can help you represent the app's user experience. Keep in mind that we'll use these screenshots for all display sizes and localizations. Screenshots are only required for iOS apps, and only the first 3 will be used on the app installation sheets.
+
+iPhone
+iPad
+Apple Watch
+View All Sizes in Media Manager
+
+iPhone
+6.5" Display
+Drag up to 3 app previews and 10 screenshots here.
+
+(1242 × 2688px, 2688 × 1242px, 1284 × 2778px or 2778 × 1284px)
+
+0 of 3 App Previews
+
+0 of 10 Screenshots
+
+Choose File
+
+Delete All
+
+Promotional Text
+?
+170
+
+Description
+?
+4,000
+
+Keywords
+?
+100
+
+Support URL
+?
+Marketing URL
+?
+Version
+?
+1.0
+Copyright
+?
+200
+
+Routing App Coverage File
+?
+No file chosen
+Choose File
+
+App Clip
+
+iMessage App
+?
+Build
+
+If your app uses encryption, you're required to upload export compliance documentation. You can submit this documentation before you submit your app for review in the App Encryption Documentation section, or by uploading your app below.
+
+Upload your builds using one of several tools. See Upload Tools
+
+Add Build
+Game Center
+App Review Information
+Sign-In Information
+?
+Provide a user name and password so we can sign in to your app. We’ll need this to complete your app review.
+
+
+Sign-in required
+User name
+Password
+Contact Information
+?
+First name
+Last name
+Phone number
+Email
+Notes
+?
+4,000
+
+Attachment
+?
+No file chosen
+Choose File (Optional)
+App Store Version Release
+To make your app available on the App Store, you can automatically release it after it’s been approved by App Review. You can also manually release it on the App Store at a later date.
+
+
+Manually release this version
+
+Automatically release this version
+
+Automatically release this version after App Review, no earlier than
+Your local date and time.
