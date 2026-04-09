@@ -25,6 +25,9 @@ export async function requestMotionPermission(): Promise<boolean> {
   if (typeof DME.requestPermission === "function") {
     try {
       const result = await DME.requestPermission();
+      if (result === "granted") {
+        localStorage.setItem("motionPermissionGranted", "true");
+      }
       return result === "granted";
     } catch {
       return false;
