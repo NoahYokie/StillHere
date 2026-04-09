@@ -27,6 +27,9 @@
     "Keyboard": {
       "resize": "body",
       "resizeOnFullScreen": true
+    },
+    "BackgroundGeolocation": {
+      "locationAuthorizationRequest": "Always"
     }
   },
   "ios": {
@@ -36,6 +39,7 @@
     "scheme": "stillhere"
   },
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "backgroundColor": "#0ea5e9"
   }
 }

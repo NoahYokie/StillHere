@@ -35,3 +35,9 @@ id = "PUsr03WUY9XX0rz2hXGPP"
 uri = "file://.local/competitive-review.md"
 type = "text"
 title = "StillHere Competitive Review"
+
+[[outputs]]
+id = "eVHZZmmxhSN29WbcBHOdn"
+uri = "file://NATIVE_BUILD_GUIDE.md"
+type = "text"
+title = "StillHere Native App Build Guide"
