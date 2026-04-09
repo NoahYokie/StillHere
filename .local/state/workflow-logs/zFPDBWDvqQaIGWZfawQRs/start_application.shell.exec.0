@@ -1,0 +1,67 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0K[PUSH] Web push configured with VAPID keys
+[SOCKET] WebSocket server initialized
+8:09:17 AM [express] serving on port 5000
+8:09:17 AM [cron] built-in cron scheduler started (every 2 minutes)
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+8:11:17 AM [express] GET /api/cron/tick 200 in 46ms
+8:13:17 AM [express] GET /api/cron/tick 200 in 37ms
+8:15:17 AM [express] GET /api/cron/tick 200 in 34ms
+8:17:17 AM [express] GET /api/cron/tick 200 in 34ms
+8:19:17 AM [express] GET /api/cron/tick 200 in 34ms
+8:21:17 AM [express] GET /api/cron/tick 200 in 28ms
+8:23:17 AM [express] GET /api/cron/tick 200 in 32ms
+8:25:18 AM [express] GET /api/cron/tick 200 in 671ms
+8:27:17 AM [express] GET /api/cron/tick 200 in 32ms
+8:29:17 AM [express] GET /api/cron/tick 200 in 30ms
+8:31:17 AM [express] GET /api/cron/tick 200 in 28ms
+8:33:17 AM [express] GET /api/cron/tick 200 in 28ms
+8:35:17 AM [express] GET /api/cron/tick 200 in 27ms
+8:37:17 AM [express] GET /api/cron/tick 200 in 31ms
+8:39:17 AM [express] GET /api/cron/tick 200 in 44ms
+8:41:17 AM [express] GET /api/cron/tick 200 in 32ms
+8:43:17 AM [express] GET /api/cron/tick 200 in 30ms
+8:45:17 AM [express] GET /api/cron/tick 200 in 33ms
+8:47:17 AM [express] GET /api/cron/tick 200 in 29ms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[0J[2m8:49:07 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/landing.tsx, /src/index.css[22m

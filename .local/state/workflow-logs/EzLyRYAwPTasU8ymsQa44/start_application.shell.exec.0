@@ -1,0 +1,104 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0K[PUSH] Web push configured with VAPID keys
+[SOCKET] WebSocket server initialized
+9:15:19 AM [express] serving on port 5000
+9:15:19 AM [cron] built-in cron scheduler started (every 2 minutes)
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+9:17:19 AM [express] GET /api/cron/tick 200 in 48ms
+9:19:19 AM [express] GET /api/cron/tick 200 in 33ms
+9:21:19 AM [express] GET /api/cron/tick 200 in 32ms
+9:23:19 AM [express] GET /api/cron/tick 200 in 30ms
+9:25:19 AM [express] GET /api/cron/tick 200 in 30ms
+9:27:19 AM [express] GET /api/cron/tick 200 in 32ms
+9:29:19 AM [express] GET /api/cron/tick 200 in 371ms
+9:31:19 AM [express] GET /api/cron/tick 200 in 29ms
+9:33:19 AM [express] GET /api/cron/tick 200 in 28ms
+9:35:19 AM [express] GET /api/cron/tick 200 in 28ms
+9:37:19 AM [express] GET /api/cron/tick 200 in 28ms
+9:39:19 AM [express] GET /api/cron/tick 200 in 29ms
+9:41:19 AM [express] GET /api/cron/tick 200 in 33ms
+9:43:19 AM [express] GET /api/cron/tick 200 in 26ms
+9:45:19 AM [express] GET /api/cron/tick 200 in 28ms
+9:47:19 AM [express] GET /api/cron/tick 200 in 25ms
+9:49:19 AM [express] GET /api/cron/tick 200 in 27ms
+9:51:19 AM [express] GET /api/cron/tick 200 in 26ms
+9:53:19 AM [express] GET /api/cron/tick 200 in 28ms
+9:55:19 AM [express] GET /api/cron/tick 200 in 26ms
+9:57:19 AM [express] GET /api/cron/tick 200 in 26ms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[0J[2m9:57:39 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/rating-prompt.tsx, /src/index.css[22m
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[1;1H[0J[2m9:58:28 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/feedback.tsx, /src/index.css[22m

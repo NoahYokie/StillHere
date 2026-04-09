@@ -1,0 +1,22 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0K[PUSH] Web push configured with VAPID keys
+[SOCKET] WebSocket server initialized
+7:43:08 AM [express] serving on port 5000
+7:43:08 AM [cron] built-in cron scheduler started (every 2 minutes)
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+7:45:08 AM [express] GET /api/cron/tick 200 in 51ms
+7:47:08 AM [express] GET /api/cron/tick 200 in 33ms
+7:49:08 AM [express] GET /api/cron/tick 200 in 36ms
+7:51:08 AM [express] GET /api/cron/tick 200 in 32ms
+7:53:08 AM [express] GET /api/cron/tick 200 in 33ms
+7:55:09 AM [express] GET /api/cron/tick 200 in 534ms
+7:57:08 AM [express] GET /api/cron/tick 200 in 29ms
+7:59:08 AM [express] GET /api/cron/tick 200 in 35ms
+8:01:08 AM [express] GET /api/cron/tick 200 in 36ms
