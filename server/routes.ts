@@ -2362,11 +2362,14 @@ export async function registerRoutes(
       const share = await storage.getActiveLiveShare(targetUserId);
       if (!share) return res.json({ active: false, points: [] });
 
+      const targetUser = await storage.getUser(targetUserId);
+      const shareWithName = { ...share, userName: targetUser?.name || "Contact" };
+
       const sinceParam = req.query.since as string | undefined;
       const since = sinceParam ? new Date(sinceParam) : undefined;
       const points = await storage.getLiveLocationPoints(share.id, since, 200);
 
-      res.json({ active: true, share, points: points.reverse() });
+      res.json({ active: true, share: shareWithName, points: points.reverse() });
     } catch (error) {
       res.status(500).json({ error: "Failed to get location trail" });
     }
