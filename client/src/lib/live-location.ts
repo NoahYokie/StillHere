@@ -2,19 +2,23 @@ import { apiRequest } from "./queryClient";
 
 type ActivityType = "stationary" | "walking" | "running" | "cycling" | "driving";
 
-interface LiveLocationCallbacks {
-  onUpdate?: (position: GeolocationPosition, activity: ActivityType) => void;
-  onError?: (error: string) => void;
-  onExpired?: () => void;
-}
+type LocationListener = (data: {
+  lat: number;
+  lng: number;
+  speed: number | null;
+  heading: number | null;
+  activity: ActivityType;
+}) => void;
 
 let watchId: number | null = null;
 let updateInterval: ReturnType<typeof setInterval> | null = null;
 let lastSentTime = 0;
 let lastPosition: GeolocationPosition | null = null;
-let callbacks: LiveLocationCallbacks = {};
+let wakeLock: WakeLockSentinel | null = null;
+const listeners = new Set<LocationListener>();
+let onErrorCb: ((err: string) => void) | null = null;
+let onExpiredCb: (() => void) | null = null;
 
-const MIN_SEND_INTERVAL_MS = 5000;
 const STATIONARY_SEND_INTERVAL_MS = 30000;
 const MOVING_SEND_INTERVAL_MS = 5000;
 
@@ -27,6 +31,24 @@ function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityTy
   return "driving";
 }
 
+async function acquireWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLock = await (navigator as any).wakeLock.request("screen");
+      wakeLock?.addEventListener("release", () => {
+        wakeLock = null;
+      });
+    }
+  } catch {}
+}
+
+function releaseWakeLock() {
+  try {
+    wakeLock?.release();
+    wakeLock = null;
+  } catch {}
+}
+
 async function sendLocationUpdate(position: GeolocationPosition): Promise<void> {
   const now = Date.now();
   const activity = detectActivityFromSpeed(position.coords.speed);
@@ -37,34 +59,38 @@ async function sendLocationUpdate(position: GeolocationPosition): Promise<void> 
   lastSentTime = now;
   lastPosition = position;
 
+  const data = {
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    accuracy: position.coords.accuracy,
+    speed: position.coords.speed,
+    heading: position.coords.heading,
+    activity,
+  };
+
   try {
-    await apiRequest("POST", "/api/live-location/update", {
-      lat: position.coords.latitude,
-      lng: position.coords.longitude,
-      accuracy: position.coords.accuracy,
-      speed: position.coords.speed,
-      heading: position.coords.heading,
+    await apiRequest("POST", "/api/live-location/update", data);
+    listeners.forEach(fn => fn({
+      lat: data.lat,
+      lng: data.lng,
+      speed: data.speed,
+      heading: data.heading,
       activity,
-    });
-    callbacks.onUpdate?.(position, activity);
+    }));
   } catch (error: any) {
-    if (error?.message?.includes("expired")) {
-      callbacks.onExpired?.();
+    const msg = error?.message || "";
+    if (msg.includes("expired") || msg.includes("No active")) {
       stopLiveTracking();
+      localStorage.removeItem("liveLocationActive");
+      onExpiredCb?.();
     } else {
-      callbacks.onError?.(error?.message || "Failed to send location");
+      onErrorCb?.(msg || "Failed to send location");
     }
   }
 }
 
-export function startLiveTracking(cbs: LiveLocationCallbacks = {}): boolean {
-  if (!navigator.geolocation) {
-    cbs.onError?.("Geolocation is not supported by this device");
-    return false;
-  }
-
-  callbacks = cbs;
-  lastSentTime = 0;
+function startGpsWatch() {
+  if (watchId !== null) return;
 
   watchId = navigator.geolocation.watchPosition(
     (position) => {
@@ -72,7 +98,7 @@ export function startLiveTracking(cbs: LiveLocationCallbacks = {}): boolean {
       sendLocationUpdate(position);
     },
     (error) => {
-      callbacks.onError?.(error.message);
+      onErrorCb?.(error.message);
     },
     {
       enableHighAccuracy: true,
@@ -87,6 +113,34 @@ export function startLiveTracking(cbs: LiveLocationCallbacks = {}): boolean {
     }
   }, 10000);
 
+  acquireWakeLock();
+}
+
+export function startLiveTracking(opts?: {
+  onError?: (err: string) => void;
+  onExpired?: () => void;
+  onUpdate?: (position: GeolocationPosition, activity: ActivityType) => void;
+}): boolean {
+  if (!navigator.geolocation) {
+    opts?.onError?.("Geolocation is not supported by this device");
+    return false;
+  }
+
+  onErrorCb = opts?.onError || null;
+  onExpiredCb = opts?.onExpired || null;
+  lastSentTime = 0;
+
+  if (opts?.onUpdate) {
+    const updateFn: LocationListener = (data) => {
+      if (lastPosition) {
+        opts.onUpdate!(lastPosition, data.activity);
+      }
+    };
+    listeners.add(updateFn);
+  }
+
+  startGpsWatch();
+  localStorage.setItem("liveLocationActive", "true");
   return true;
 }
 
@@ -101,12 +155,55 @@ export function stopLiveTracking(): void {
   }
   lastPosition = null;
   lastSentTime = 0;
-  callbacks = {};
+  listeners.clear();
+  onErrorCb = null;
+  onExpiredCb = null;
+  releaseWakeLock();
+  localStorage.removeItem("liveLocationActive");
 }
 
 export function isLiveTrackingActive(): boolean {
   return watchId !== null;
 }
+
+export function addLocationListener(fn: LocationListener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+export function removeLocationListener(fn: LocationListener): void {
+  listeners.delete(fn);
+}
+
+export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
+  if (watchId !== null) return true;
+
+  const wasActive = localStorage.getItem("liveLocationActive") === "true";
+  if (!wasActive) return false;
+
+  try {
+    const res = await fetch("/api/live-location/status", { credentials: "include" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data.active) {
+      localStorage.removeItem("liveLocationActive");
+      return false;
+    }
+
+    return startLiveTracking();
+  } catch {
+    return false;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && localStorage.getItem("liveLocationActive") === "true") {
+    if (watchId === null) {
+      resumeLiveTrackingIfNeeded();
+    }
+    acquireWakeLock();
+  }
+});
 
 export function formatActivity(activity: string | null | undefined): string {
   switch (activity) {
