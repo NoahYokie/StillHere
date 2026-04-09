@@ -54,7 +54,7 @@ export default function LocationMap({ center, points, zoom = 16, className = "w-
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
-  const trailRef = useRef<L.Polyline | null>(null);
+  const trailLayersRef = useRef<L.Layer[]>([]);
   const initializedRef = useRef(false);
   const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -101,20 +101,32 @@ export default function LocationMap({ center, points, zoom = 16, className = "w-
   }, [center.lat, center.lng, points]);
 
   useEffect(() => {
-    if (trailRef.current) {
-      trailRef.current.remove();
-      trailRef.current = null;
-    }
+    trailLayersRef.current.forEach(layer => layer.remove());
+    trailLayersRef.current = [];
 
     if (!mapInstanceRef.current || !showTrail || !points || points.length < 2) return;
 
-    const latLngs = points.map(p => [p.lat, p.lng] as [number, number]);
-    trailRef.current = L.polyline(latLngs, {
-      color: "#3b82f6",
-      weight: 4,
-      opacity: 0.7,
-      dashArray: "8, 8",
-    }).addTo(mapInstanceRef.current);
+    let segStart = 0;
+    for (let i = 1; i <= points.length; i++) {
+      const prevAct = points[i - 1].activity || "stationary";
+      const currAct = i < points.length ? (points[i].activity || "stationary") : null;
+
+      if (currAct !== prevAct || i === points.length) {
+        const segPoints = points.slice(segStart, i);
+        if (segPoints.length >= 2) {
+          const color = activityColors[prevAct] || "#3b82f6";
+          const latLngs = segPoints.map(p => [p.lat, p.lng] as [number, number]);
+          const line = L.polyline(latLngs, {
+            color,
+            weight: prevAct === "stationary" ? 2 : 4,
+            opacity: prevAct === "stationary" ? 0.4 : 0.8,
+            dashArray: prevAct === "stationary" ? "4, 8" : undefined,
+          }).addTo(mapInstanceRef.current!);
+          trailLayersRef.current.push(line);
+        }
+        segStart = i;
+      }
+    }
   }, [points, showTrail]);
 
   useEffect(() => {
@@ -127,7 +139,7 @@ export default function LocationMap({ center, points, zoom = 16, className = "w-
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
         markerRef.current = null;
-        trailRef.current = null;
+        trailLayersRef.current = [];
         initializedRef.current = false;
       }
     };
