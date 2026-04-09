@@ -218,6 +218,7 @@ export interface IStorage {
   getActiveLiveShare(userId: string): Promise<LiveLocationShare | undefined>;
   updateLiveLocation(shareId: string, userId: string, lat: number, lng: number, accuracy: number | null, speed: number | null, heading: number | null, activity: string): Promise<LiveLocationPoint>;
   getLiveLocationPoints(shareId: string, since?: Date, limit?: number): Promise<LiveLocationPoint[]>;
+  getAllActiveLiveShares(): Promise<LiveLocationShare[]>;
   getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string })[]>;
 
   // Report Data
@@ -1516,6 +1517,10 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(desc(liveLocationPoints.recordedAt))
       .limit(limit);
+  }
+
+  async getAllActiveLiveShares(): Promise<LiveLocationShare[]> {
+    return db.select().from(liveLocationShares).where(eq(liveLocationShares.active, true));
   }
 
   async getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string })[]> {
