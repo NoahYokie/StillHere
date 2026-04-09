@@ -281,3 +281,9 @@ id = "OX9Wm4ls0XJBIt-p1CJDb"
 uri = "file://iphone_screenshots/6.5/IMG_1116_1775752890370.png"
 type = "image"
 title = "6.5\" - Settings"
+
+[[outputs]]
+id = "Ekm1F5wVP2fGMLLx2kHwM"
+uri = "file://iphone_screenshots/6.9/IMG_1117_home.png"
+type = "image"
+title = "6.9\" - Home Screen (Real App)"
