@@ -49,25 +49,20 @@ export async function sendSms(
   const masked = `***${to.slice(-4)}`;
   console.log(`[SMS] Sending to ${masked}`);
 
-  if (alphaSender) {
+  if (messagingServiceSid) {
     try {
-      const message = await c.messages.create({ to, body, from: alphaSender });
-      console.log(`[SMS] Sent to ${masked} via alpha sender "${alphaSender}": ${message.sid}`);
+      const message = await c.messages.create({ to, body, messagingServiceSid });
+      console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
-      console.warn(`[SMS] Alpha sender "${alphaSender}" failed for ${masked}: ${error.message}, trying fallback`);
-      const fallback = messagingServiceSid
-        ? { to, body, messagingServiceSid }
-        : fromPhone
-          ? { to, body, from: fromPhone }
-          : null;
-      if (fallback) {
+      console.warn(`[SMS] Messaging service failed for ${masked}: ${error.message}, trying fallback`);
+      if (fromPhone) {
         try {
-          const message = await c.messages.create(fallback);
-          console.log(`[SMS] Sent to ${masked} via fallback: ${message.sid}`);
+          const message = await c.messages.create({ to, body, from: fromPhone });
+          console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
           return { success: true, messageId: message.sid };
         } catch (fallbackError: any) {
-          console.error(`[SMS] Fallback also failed for ${masked}:`, fallbackError.message);
+          console.error(`[SMS] Phone fallback also failed for ${masked}:`, fallbackError.message);
           return { success: false, error: fallbackError.message };
         }
       }
@@ -75,12 +70,13 @@ export async function sendSms(
     }
   }
 
-  if (messagingServiceSid) {
+  if (alphaSender) {
     try {
-      const message = await c.messages.create({ to, body, messagingServiceSid });
-      console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
+      const message = await c.messages.create({ to, body, from: alphaSender });
+      console.log(`[SMS] Sent to ${masked} via alpha sender "${alphaSender}": ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
+      console.warn(`[SMS] Alpha sender "${alphaSender}" failed for ${masked}: ${error.message}, trying phone fallback`);
       if (fromPhone) {
         try {
           const message = await c.messages.create({ to, body, from: fromPhone });
