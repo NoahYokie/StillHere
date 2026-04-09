@@ -8,9 +8,11 @@ interface FallDetectorOptions {
 }
 
 const DEFAULTS = {
-  impactThreshold: 30,
+  impactThreshold: 55,
+  freefallThreshold: 3,
+  freefallDuration: 150,
   stillnessThreshold: 2,
-  stillnessDuration: 2000,
+  stillnessDuration: 3000,
 };
 
 export function isDeviceMotionSupported(): boolean {
@@ -33,10 +35,13 @@ export async function requestMotionPermission(): Promise<boolean> {
 
 export function createFallDetector(options: FallDetectorOptions) {
   const impactThreshold = options.impactThreshold ?? DEFAULTS.impactThreshold;
+  const freefallThreshold = DEFAULTS.freefallThreshold;
+  const freefallDuration = DEFAULTS.freefallDuration;
   const stillnessThreshold = options.stillnessThreshold ?? DEFAULTS.stillnessThreshold;
   const stillnessDuration = options.stillnessDuration ?? DEFAULTS.stillnessDuration;
 
-  let impactDetected = false;
+  let phase: "watching" | "freefall" | "impact" = "watching";
+  let freefallStart = 0;
   let impactTime = 0;
   let stillnessStart = 0;
   let active = false;
@@ -49,28 +54,49 @@ export function createFallDetector(options: FallDetectorOptions) {
     if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
 
     const magnitude = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
+    const now = Date.now();
 
-    if (!impactDetected) {
-      if (magnitude > impactThreshold) {
-        impactDetected = true;
-        impactTime = Date.now();
-        stillnessStart = 0;
+    if (phase === "watching") {
+      if (magnitude < freefallThreshold) {
+        if (freefallStart === 0) {
+          freefallStart = now;
+        } else if (now - freefallStart >= freefallDuration) {
+          phase = "freefall";
+        }
+      } else {
+        freefallStart = 0;
       }
-    } else {
-      if (Date.now() - impactTime > 10000) {
-        impactDetected = false;
+    } else if (phase === "freefall") {
+      if (magnitude > impactThreshold) {
+        phase = "impact";
+        impactTime = now;
+        stillnessStart = 0;
+      } else if (magnitude > 15) {
+        phase = "watching";
+        freefallStart = 0;
+      }
+      if (now - (freefallStart || now) > 2000) {
+        phase = "watching";
+        freefallStart = 0;
+      }
+    } else if (phase === "impact") {
+      if (now - impactTime > 15000) {
+        phase = "watching";
+        freefallStart = 0;
         stillnessStart = 0;
         return;
       }
 
-      if (magnitude < stillnessThreshold + 9.81 && magnitude > 9.81 - stillnessThreshold) {
+      const nearGravity = magnitude < 9.81 + stillnessThreshold && magnitude > 9.81 - stillnessThreshold;
+      if (nearGravity) {
         if (stillnessStart === 0) {
-          stillnessStart = Date.now();
-        } else if (Date.now() - stillnessStart >= stillnessDuration) {
-          impactDetected = false;
+          stillnessStart = now;
+        } else if (now - stillnessStart >= stillnessDuration) {
+          phase = "watching";
+          freefallStart = 0;
           stillnessStart = 0;
           cooldown = true;
-          setTimeout(() => { cooldown = false; }, 30000);
+          setTimeout(() => { cooldown = false; }, 60000);
           options.onFallDetected();
         }
       } else {
@@ -87,7 +113,8 @@ export function createFallDetector(options: FallDetectorOptions) {
     },
     stop() {
       active = false;
-      impactDetected = false;
+      phase = "watching";
+      freefallStart = 0;
       stillnessStart = 0;
       window.removeEventListener("devicemotion", handleMotion);
     },
