@@ -12,8 +12,8 @@ const faqs = [
         a: "StillHere is a safety checkin app designed for people who live alone, elderly individuals, and lone workers. You check in once a day to let your emergency contacts know you're okay. If you miss a checkin, your contacts are automatically notified so someone can check on you.",
       },
       {
-        q: "Is StillHere free?",
-        a: "Yes. StillHere is completely free to use. There are no subscriptions, hidden fees, or premium tiers.",
+        q: "How much does StillHere cost?",
+        a: "StillHere is free for the first 14 days with full access to every feature. After your trial, you can continue with a monthly or yearly plan. Yearly saves you more. There are no hidden fees and you can cancel anytime.",
       },
       {
         q: "How do I sign up?",
