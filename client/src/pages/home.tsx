@@ -468,15 +468,22 @@ export default function Home() {
     let cleanup: (() => void) | null = null;
 
     const setupShakeDetection = async () => {
-      const granted = await requestMotionPermission();
-      if (!granted) return;
+      const DME = DeviceMotionEvent as any;
+      const needsPermission = typeof DME.requestPermission === "function";
+      if (needsPermission) {
+        const alreadyGranted = localStorage.getItem("motionPermissionGranted") === "true";
+        if (!alreadyGranted) {
+          const granted = await requestMotionPermission();
+          if (!granted) return;
+        }
+      }
 
       const SHAKES_NEEDED = 3;
-      const SHAKE_WINDOW_MS = 2500;
-      const PEAK_THRESHOLD = 13;
-      const CALM_THRESHOLD = 6;
-      const MIN_CALM_MS = 80;
-      const DEBOUNCE_MS = 120;
+      const SHAKE_WINDOW_MS = 3000;
+      const PEAK_THRESHOLD = 10;
+      const CALM_THRESHOLD = 5;
+      const MIN_CALM_MS = 60;
+      const DEBOUNCE_MS = 80;
 
       let shakeCount = 0;
       let firstShakeTime = 0;
@@ -1047,6 +1054,12 @@ export default function Home() {
               <AlertTriangle className="h-5 w-5 mr-2" />
               I Need Help
             </Button>
+            {(status?.settings as any)?.discreetSos && (
+              <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1" data-testid="text-shake-active">
+                <Smartphone className="h-3 w-3" />
+                Shake 3 times for discreet SOS
+              </p>
+            )}
           </CardContent>
         </Card>
 
