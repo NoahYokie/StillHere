@@ -334,7 +334,7 @@ export default function LandingPage() {
                   onClick={() => setLocation("/login")}
                   data-testid="button-get-started"
                 >
-                  Get started, it's free
+                  Start your free trial
                 </Button>
                 <Button
                   size="lg"
@@ -824,7 +824,7 @@ export default function LandingPage() {
         <div className="max-w-3xl md:mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold mb-3 md:mb-4">Ready to get started?</h2>
           <p className="text-white/80 md:text-xl mb-8">
-            Set up in under 2 minutes. Free forever.
+            Set up in under 2 minutes. Free for 14 days.
           </p>
           <Button
             size="lg"
