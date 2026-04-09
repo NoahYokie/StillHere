@@ -16,10 +16,23 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
   const [supportsPasskey, setSupportsPasskey] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
   useEffect(() => {
     setSupportsPasskey(browserSupportsWebAuthn());
   }, []);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((s) => {
+        if (s <= 1) { clearInterval(timer); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   const passkeyLoginMutation = useMutation({
     mutationFn: async () => {
@@ -66,6 +79,7 @@ export default function LoginPage() {
 
   const sendCodeMutation = useMutation({
     mutationFn: async () => {
+      setSendError("");
       const response = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -73,21 +87,22 @@ export default function LoginPage() {
         credentials: "include",
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to send code");
+        const errBody = await response.json();
+        if (errBody.waitSeconds) {
+          setCooldownSeconds(errBody.waitSeconds);
+        }
+        throw new Error(errBody.error || "Failed to send code");
       }
       return response.json();
     },
     onSuccess: (data: any) => {
+      setSendError("");
+      setCooldownSeconds(0);
       const normalizedPhone = data.phone || phone;
       setLocation(`/login/code?phone=${encodeURIComponent(normalizedPhone)}`);
     },
     onError: (error: Error) => {
-      toast({
-        title: "Could not send code",
-        description: error.message,
-        variant: "destructive",
-      });
+      setSendError(error.message);
     },
   });
 
@@ -171,14 +186,25 @@ export default function LoginPage() {
                     We'll send a one time code. No passwords needed.
                   </p>
                 </div>
+                {sendError && (
+                  <p className="text-sm text-destructive" data-testid="text-send-error">
+                    {cooldownSeconds > 0
+                      ? `Please wait ${cooldownSeconds}s before requesting another code.`
+                      : sendError}
+                  </p>
+                )}
                 <Button
                   type="submit"
                   className="w-full"
                   size="lg"
-                  disabled={!phone.trim() || sendCodeMutation.isPending}
+                  disabled={!phone.trim() || sendCodeMutation.isPending || cooldownSeconds > 0}
                   data-testid="button-send-code"
                 >
-                  {sendCodeMutation.isPending ? "Sending..." : "Send secure code"}
+                  {sendCodeMutation.isPending
+                    ? "Sending..."
+                    : cooldownSeconds > 0
+                      ? `Wait ${cooldownSeconds}s`
+                      : "Send secure code"}
                 </Button>
               </form>
               <div className="mt-4 text-center">
