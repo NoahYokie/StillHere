@@ -60,6 +60,17 @@ export async function sendSms(
     console.log(`[SMS] Sent to ${masked}: ${message.sid}`);
     return { success: true, messageId: message.sid };
   } catch (error: any) {
+    if (alphaSender && fromPhone && from === alphaSender) {
+      console.warn(`[SMS] Alpha sender failed for ${masked}, retrying with phone number`);
+      try {
+        const message = await c.messages.create({ to, body, from: fromPhone });
+        console.log(`[SMS] Sent to ${masked} via phone number: ${message.sid}`);
+        return { success: true, messageId: message.sid };
+      } catch (retryError: any) {
+        console.error(`[SMS] Retry also failed for ${masked}:`, retryError.message);
+        return { success: false, error: retryError.message };
+      }
+    }
     console.error(`[SMS] Failed to send to ${masked}:`, error.message);
     return { success: false, error: error.message };
   }
