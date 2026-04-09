@@ -12,15 +12,18 @@ type LocationListener = (data: {
 
 let watchId: number | null = null;
 let updateInterval: ReturnType<typeof setInterval> | null = null;
+let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 let lastSentTime = 0;
 let lastPosition: GeolocationPosition | null = null;
 let wakeLock: WakeLockSentinel | null = null;
+let persistentNotifShown = false;
 const listeners = new Set<LocationListener>();
 let onErrorCb: ((err: string) => void) | null = null;
 let onExpiredCb: (() => void) | null = null;
 
 const STATIONARY_SEND_INTERVAL_MS = 30000;
 const MOVING_SEND_INTERVAL_MS = 5000;
+const KEEPALIVE_INTERVAL_MS = 15000;
 
 function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityType {
   if (speedMs == null || speedMs < 0.5) return "stationary";
@@ -33,7 +36,7 @@ function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityTy
 
 async function acquireWakeLock() {
   try {
-    if ("wakeLock" in navigator) {
+    if ("wakeLock" in navigator && !wakeLock) {
       wakeLock = await (navigator as any).wakeLock.request("screen");
       wakeLock?.addEventListener("release", () => {
         wakeLock = null;
@@ -46,6 +49,38 @@ function releaseWakeLock() {
   try {
     wakeLock?.release();
     wakeLock = null;
+  } catch {}
+}
+
+async function showPersistentNotification() {
+  if (persistentNotifShown) return;
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      const reg = await navigator.serviceWorker?.ready;
+      if (reg) {
+        await reg.showNotification("StillHere - Location sharing active", {
+          body: "Your emergency contacts can see your location. Tap to open.",
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-96x96.png",
+          tag: "live-location-active",
+          requireInteraction: true,
+          silent: true,
+          data: { url: "/live-location" },
+        });
+        persistentNotifShown = true;
+      }
+    }
+  } catch {}
+}
+
+async function clearPersistentNotification() {
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    if (reg) {
+      const notifs = await reg.getNotifications({ tag: "live-location-active" });
+      notifs.forEach(n => n.close());
+    }
+    persistentNotifShown = false;
   } catch {}
 }
 
@@ -81,7 +116,6 @@ async function sendLocationUpdate(position: GeolocationPosition): Promise<void> 
     const msg = error?.message || "";
     if (msg.includes("expired") || msg.includes("No active")) {
       stopLiveTracking();
-      localStorage.removeItem("liveLocationActive");
       onExpiredCb?.();
     } else {
       onErrorCb?.(msg || "Failed to send location");
@@ -90,7 +124,10 @@ async function sendLocationUpdate(position: GeolocationPosition): Promise<void> 
 }
 
 function startGpsWatch() {
-  if (watchId !== null) return;
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
 
   watchId = navigator.geolocation.watchPosition(
     (position) => {
@@ -107,13 +144,49 @@ function startGpsWatch() {
     }
   );
 
+  if (updateInterval) clearInterval(updateInterval);
   updateInterval = setInterval(() => {
     if (lastPosition) {
       sendLocationUpdate(lastPosition);
     }
   }, 10000);
 
+  startKeepAlive();
   acquireWakeLock();
+  showPersistentNotification();
+}
+
+function startKeepAlive() {
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
+  let lastTick = Date.now();
+
+  keepAliveInterval = setInterval(() => {
+    const now = Date.now();
+    const drift = now - lastTick;
+    lastTick = now;
+
+    if (drift > KEEPALIVE_INTERVAL_MS * 3) {
+      lastSentTime = 0;
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          lastPosition = position;
+          sendLocationUpdate(position);
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      );
+      acquireWakeLock();
+    }
+
+    if (lastPosition && (now - lastSentTime > STATIONARY_SEND_INTERVAL_MS + 5000)) {
+      lastSentTime = 0;
+      sendLocationUpdate(lastPosition);
+    }
+  }, KEEPALIVE_INTERVAL_MS);
 }
 
 export function startLiveTracking(opts?: {
@@ -153,17 +226,26 @@ export function stopLiveTracking(): void {
     clearInterval(updateInterval);
     updateInterval = null;
   }
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
   lastPosition = null;
   lastSentTime = 0;
   listeners.clear();
   onErrorCb = null;
   onExpiredCb = null;
   releaseWakeLock();
+  clearPersistentNotification();
   localStorage.removeItem("liveLocationActive");
 }
 
 export function isLiveTrackingActive(): boolean {
   return watchId !== null;
+}
+
+export function isLiveTrackingEnabled(): boolean {
+  return localStorage.getItem("liveLocationActive") === "true";
 }
 
 export function addLocationListener(fn: LocationListener): () => void {
@@ -187,6 +269,7 @@ export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
     const data = await res.json();
     if (!data.active) {
       localStorage.removeItem("liveLocationActive");
+      clearPersistentNotification();
       return false;
     }
 
@@ -200,8 +283,19 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && localStorage.getItem("liveLocationActive") === "true") {
     if (watchId === null) {
       resumeLiveTrackingIfNeeded();
+    } else {
+      lastSentTime = 0;
+      if (lastPosition) {
+        sendLocationUpdate(lastPosition);
+      }
     }
     acquireWakeLock();
+  }
+});
+
+window.addEventListener("focus", () => {
+  if (localStorage.getItem("liveLocationActive") === "true" && watchId === null) {
+    resumeLiveTrackingIfNeeded();
   }
 });
 

@@ -54,13 +54,38 @@ self.addEventListener('notificationclick', (event) => {
   if (event.action === 'checkin') {
     event.waitUntil(
       fetch('/api/checkin', { method: 'POST', credentials: 'same-origin' })
-        .then(() => clients.openWindow(url))
-        .catch(() => clients.openWindow(url))
+        .then(() => focusOrOpen(url))
+        .catch(() => focusOrOpen(url))
     );
   } else {
-    event.waitUntil(clients.openWindow(url));
+    event.waitUntil(focusOrOpen(url));
   }
 });
+
+async function focusOrOpen(url) {
+  const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of windowClients) {
+    if (client.url.includes(self.location.origin)) {
+      client.focus();
+      client.navigate(url);
+      return;
+    }
+  }
+  return self.clients.openWindow(url);
+}
+
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'live-location-sync') {
+    event.waitUntil(wakeUpClient());
+  }
+});
+
+async function wakeUpClient() {
+  const windowClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  if (windowClients.length > 0) {
+    windowClients[0].postMessage({ type: 'resume-location-tracking' });
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
