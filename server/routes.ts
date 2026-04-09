@@ -83,17 +83,17 @@ async function notifyContact(
 
   if (contact.linkedUserId) {
     await sendPushNotification(contact.linkedUserId, {
-      title: reason === "sos" ? `${userName} needs help!` : `${userName} missed their checkin`,
+      title: reason === "sos" ? `Emergency: ${userName} needs help` : `Safety Alert: ${userName} has not checked in`,
       body: reason === "sos"
-        ? `${userName} has triggered an SOS alert. Tap to respond.`
-        : `${userName} hasn't checked in. Tap to respond.`,
+        ? `${userName} has activated an emergency SOS and needs immediate assistance. Tap to view their status and respond.`
+        : `${userName} has not completed their scheduled safety checkin. Tap to view their status and respond.`,
       url: link,
       tag: "emergency-alert",
     });
     try {
       const alertContent = reason === "sos"
-        ? `[ALERT] ${userName} has triggered an SOS alert. Please check on them: ${link}`
-        : `[ALERT] ${userName} missed their checkin. Please check on them: ${link}`;
+        ? `${userName} has activated an emergency SOS. Please check on them immediately: ${link}`
+        : `${userName} has not completed their safety checkin. Please check on them: ${link}`;
       await storage.saveMessage(contact.userId, contact.linkedUserId, alertContent);
       emitToUser(contact.linkedUserId, "message:new", {
         type: "emergency-alert",
@@ -1476,8 +1476,8 @@ export async function registerRoutes(
           contactName: watcher?.name || contact.name,
         });
         await sendPushNotification(contact.userId, {
-          title: "Emergency contact removed themselves",
-          body: `${watcher?.name || contact.name} has opted out as your emergency contact. You may want to add a replacement.`,
+          title: "Emergency Contact Update",
+          body: `${watcher?.name || contact.name} has removed themselves as your emergency contact. We recommend adding a replacement to keep your safety network active.`,
           url: "/settings",
           tag: "contact-opted-out",
         });
@@ -1818,8 +1818,8 @@ export async function registerRoutes(
 
           if (contact.linkedUserId) {
             await sendPushNotification(contact.linkedUserId, {
-              title: `Crash detected - ${user.name}`,
-              body: "A possible vehicle crash has been detected. Tap to respond.",
+              title: `Urgent: Possible vehicle crash - ${user.name}`,
+              body: `A possible vehicle crash has been detected for ${user.name}. Tap to view their status and respond immediately.`,
               url: `/emergency/${tokenRecord.token}`,
               tag: "crash-alert",
             });
