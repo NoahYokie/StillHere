@@ -1,111 +1,72 @@
 import twilio from "twilio";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromPhone = process.env.TWILIO_PHONE_NUMBER;
-
-const ALPHA_SUPPORTED_PREFIXES = [
-  "+61",  // Australia
-  "+64",  // New Zealand
-  "+44",  // UK
-  "+33",  // France
-  "+49",  // Germany
-  "+39",  // Italy
-  "+34",  // Spain
-  "+31",  // Netherlands
-  "+32",  // Belgium
-  "+43",  // Austria
-  "+41",  // Switzerland
-  "+353", // Ireland
-  "+48",  // Poland
-  "+46",  // Sweden
-  "+47",  // Norway
-  "+45",  // Denmark
-  "+358", // Finland
-  "+351", // Portugal
-  "+30",  // Greece
-  "+81",  // Japan
-  "+82",  // South Korea
-  "+65",  // Singapore
-  "+91",  // India
-  "+420", // Czech Republic
-  "+36",  // Hungary
-  "+40",  // Romania
-  "+385", // Croatia
-];
-
-function supportsAlphaSenderId(phone: string): boolean {
-  return ALPHA_SUPPORTED_PREFIXES.some(prefix => phone.startsWith(prefix));
-}
-
-let twilioClient: twilio.Twilio | null = null;
+let client: twilio.Twilio | null = null;
+let alphaSender: string | null = null;
+let fromPhone: string | null = null;
 
 function getClient(): twilio.Twilio | null {
-  if (!accountSid || !authToken) {
-    console.warn("[SMS] Twilio credentials not configured - messages will be logged only");
+  if (client) return client;
+
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  alphaSender = process.env.TWILIO_ALPHA_SENDER || null;
+  fromPhone = process.env.TWILIO_PHONE_NUMBER || null;
+
+  if (!sid || !token) {
+    console.warn("[SMS] Twilio credentials not configured");
     return null;
   }
-  
-  if (!twilioClient) {
-    twilioClient = twilio(accountSid, authToken);
-  }
-  
-  return twilioClient;
+
+  client = twilio(sid, token);
+  return client;
 }
 
 export interface SendSmsResult {
   success: boolean;
-  error?: string;
   messageId?: string;
+  error?: string;
 }
 
-export async function sendSms(to: string, body: string): Promise<SendSmsResult> {
-  const client = getClient();
-  
-  if (!client || !fromPhone) {
-    console.log(`[SMS - NO TWILIO] Would send to ***${to.slice(-4)} (${body.length} chars)`);
-    return { success: true, messageId: "console-only" };
+export function isSmsConfigured(): boolean {
+  const c = getClient();
+  return c !== null && !!(alphaSender || fromPhone);
+}
+
+export const isTwilioConfigured = isSmsConfigured;
+
+export async function sendSms(
+  to: string,
+  body: string
+): Promise<SendSmsResult> {
+  const c = getClient();
+  if (!c) {
+    console.warn("[SMS] Twilio not configured, skipping SMS");
+    return { success: false, error: "Twilio not configured" };
   }
-  
-  // Use alphanumeric sender if configured via TWILIO_ALPHA_SENDER, otherwise use phone number
-  // Alphanumeric sender requires Twilio Messaging Service setup and only works outside US/Canada
-  // Note: Australia requires pre-registration for Alpha Sender IDs
-  const alphaSender = process.env.TWILIO_ALPHA_SENDER;
-  const useAlpha = alphaSender && supportsAlphaSenderId(to);
-  
+
+  const sender = alphaSender || fromPhone;
+  if (!sender) {
+    console.warn("[SMS] No sender configured");
+    return { success: false, error: "No sender configured" };
+  }
+
+  const masked = `***${to.slice(-4)}`;
+  console.log(`[SMS] Sending to ${masked}`);
+
+  const from = alphaSender || fromPhone!;
+
   try {
-    // Try alpha sender first if configured
-    if (useAlpha) {
-      try {
-        const message = await client.messages.create({
-          body,
-          from: alphaSender,
-          to,
-        });
-        console.log(`[SMS] Sent to ***${to.slice(-4)} via alpha, SID: ${message.sid}`);
-        return { success: true, messageId: message.sid };
-      } catch (alphaError: any) {
-        console.log(`[SMS] Alpha sender failed, falling back to phone number: ${alphaError.message}`);
-      }
-    }
-    
-    // Fall back to phone number
-    const message = await client.messages.create({
-      body,
-      from: fromPhone,
-      to,
-    });
-    
-    console.log(`[SMS] Sent to ***${to.slice(-4)}, SID: ${message.sid}`);
+    const message = await c.messages.create({ to, body, from });
+    console.log(`[SMS] Sent to ${masked}: ${message.sid}`);
     return { success: true, messageId: message.sid };
   } catch (error: any) {
-    console.error(`[SMS] Failed to send to ***${to.slice(-4)}:`, error.message);
+    console.error(`[SMS] Failed to send to ${masked}:`, error.message);
     return { success: false, error: error.message };
   }
 }
 
 export async function sendOtpSms(phone: string, code: string): Promise<SendSmsResult> {
-  const body = `Your StillHere code is: ${code}\nThis code expires in 10 minutes.`;
+  const body = `Your StillHere verification code is: ${code}\n\nThis code expires in 10 minutes. If you did not request this, please ignore this message.`;
   return sendSms(phone, body);
 }
 
@@ -114,7 +75,7 @@ export async function sendMissedCheckinAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Alert\n\n${userName} hasn't checked in.\n\nView status and location:\n${link}\n\nYou are receiving this because you are an emergency contact.`;
+  const body = `STILLHERE SAFETY ALERT\n\n${userName} has not completed their scheduled safety checkin.\n\nPlease check on them and view their status:\n${link}\n\nIf you believe this is an emergency, please contact local emergency services.\n\nYou are receiving this message because you are registered as an emergency contact on StillHere.`;
   return sendSms(contactPhone, body);
 }
 
@@ -123,7 +84,7 @@ export async function sendSosAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Alert\n\n${userName} has requested help.\n\nView status and location:\n${link}\n\nYou are receiving this because you are an emergency contact.`;
+  const body = `STILLHERE EMERGENCY ALERT\n\n${userName} has activated an emergency SOS.\n\nThis is an urgent request for help. Please respond immediately:\n${link}\n\nIf you cannot reach them, please contact local emergency services.\n\nYou are receiving this message because you are registered as an emergency contact on StillHere.`;
   return sendSms(contactPhone, body);
 }
 
@@ -131,7 +92,7 @@ export async function sendTestMessage(
   contactPhone: string,
   userName: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere test:\nThis is a test message from ${userName}.\nNo action is needed.`;
+  const body = `StillHere Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is a test message only. No action is needed.\n\nIn a real emergency, you would receive an alert with a link to view their status and location.`;
   return sendSms(contactPhone, body);
 }
 
@@ -140,11 +101,11 @@ export async function sendReminderSms(
   link: string,
   smsCheckinEnabled: boolean = false
 ): Promise<SendSmsResult> {
-  let body = `StillHere reminder:\nYou haven't checked in yet.`;
+  let body = `StillHere Reminder\n\nYou have not completed your safety checkin yet.`;
   if (smsCheckinEnabled) {
-    body += `\nReply YES to check in, or tap below:\n${link}`;
+    body += `\n\nReply YES to confirm you are safe, or tap the link below:\n${link}`;
   } else {
-    body += `\nTap below to let us know you're OK:\n${link}`;
+    body += `\n\nPlease open the app or tap the link below to check in:\n${link}`;
   }
   return sendSms(userPhone, body);
 }
@@ -154,7 +115,7 @@ export async function sendAllClearNotification(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Update\n\n${userName} is OK now.\n\nNo action needed. You can view their status:\n${link}`;
+  const body = `StillHere Update\n\n${userName} has confirmed they are safe. The previous alert has been resolved.\n\nNo further action is needed. You can view their current status:\n${link}`;
   return sendSms(contactPhone, body);
 }
 
@@ -162,7 +123,7 @@ export async function sendContactRespondedNotification(
   userPhone: string,
   contactName: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Update\n\n${contactName} has seen your alert and is checking on you.`;
+  const body = `StillHere Update\n\n${contactName} has received your alert and is checking on you. Help is on the way.`;
   return sendSms(userPhone, body);
 }
 
@@ -172,15 +133,17 @@ export async function sendEscalationAlert(
   link: string,
   reason: "sos" | "missed_checkin"
 ): Promise<SendSmsResult> {
-  const reasonText = reason === "sos" ? "has requested help" : "hasn't checked in";
-  const body = `StillHere Alert (Escalated)\n\n${userName} ${reasonText} and the first contact hasn't responded.\n\nPlease check on them:\n${link}`;
+  const reasonText = reason === "sos"
+    ? "activated an emergency SOS"
+    : "not completed their safety checkin";
+  const body = `STILLHERE ESCALATED ALERT\n\n${userName} has ${reasonText} and their primary emergency contact has not responded.\n\nYou are being contacted as a backup. Please respond urgently:\n${link}\n\nIf you cannot reach them, please contact local emergency services.\n\nYou are receiving this message because you are registered as an emergency contact on StillHere.`;
   return sendSms(contactPhone, body);
 }
 
 export async function sendNoResponseNotification(
   userPhone: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Update\n\nWe've been trying to reach your emergency contacts but haven't received a response yet. We'll keep trying.`;
+  const body = `StillHere Update\n\nWe are still attempting to reach your emergency contacts. No one has responded yet.\n\nIf you are in immediate danger, please call your local emergency number (e.g. 000, 911, 999, 112).`;
   return sendSms(userPhone, body);
 }
 
@@ -189,7 +152,7 @@ export async function sendHandlingTimeoutAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Alert\n\nFollow-up: ${userName}'s alert is still active. Please confirm you've reached them:\n${link}`;
+  const body = `StillHere Follow-Up\n\n${userName}'s safety alert is still active and requires attention.\n\nPlease confirm you have been able to reach them:\n${link}\n\nIf you cannot reach them, please contact local emergency services.`;
   return sendSms(contactPhone, body);
 }
 
@@ -201,25 +164,14 @@ export async function getTurnCredentials(): Promise<RTCIceServer[]> {
       { urls: "stun:stun1.l.google.com:19302" },
     ];
   }
-
   try {
     const token = await client.tokens.create({ ttl: 3600 });
     return token.iceServers as RTCIceServer[];
-  } catch (error: any) {
-    console.error("[TURN] Failed to fetch Twilio TURN credentials:", error.message);
+  } catch (error) {
+    console.error("[TURN] Failed to get TURN credentials:", error);
     return [
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
     ];
   }
-}
-
-interface RTCIceServer {
-  urls: string | string[];
-  username?: string;
-  credential?: string;
-}
-
-export function isTwilioConfigured(): boolean {
-  return !!(accountSid && authToken && fromPhone);
 }
