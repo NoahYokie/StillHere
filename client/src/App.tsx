@@ -11,6 +11,7 @@ import { initCapacitorPlugins, isNative } from "@/lib/capacitor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { RatingPrompt } from "@/components/rating-prompt";
 import { initErrorReporter } from "@/lib/error-reporter";
+import { resumeLiveTrackingIfNeeded } from "@/lib/live-location";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import FeedbackPage from "@/pages/feedback";
@@ -200,6 +201,12 @@ function CapacitorInit() {
       initNativeCall().catch((err) =>
         console.error("[App] Native call init failed:", err)
       );
+    }
+  }, [auth?.authenticated]);
+
+  useEffect(() => {
+    if (auth?.authenticated) {
+      resumeLiveTrackingIfNeeded().catch(() => {});
     }
   }, [auth?.authenticated]);
 

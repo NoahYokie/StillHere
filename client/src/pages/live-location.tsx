@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
+import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed, addLocationListener } from "@/lib/live-location";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info } from "lucide-react";
 import { useLocation } from "wouter";
@@ -82,6 +82,11 @@ export default function LiveLocationPage() {
   useEffect(() => {
     if (myStatus?.active) {
       setSharingActive(true);
+      if (!isLiveTrackingActive()) {
+        startLiveTracking();
+      }
+    } else if (myStatus && !myStatus.active) {
+      setSharingActive(false);
     }
   }, [myStatus]);
 
@@ -92,6 +97,17 @@ export default function LiveLocationPage() {
       setWatchedLocations(map);
     }
   }, [watchedShares]);
+
+  useEffect(() => {
+    if (!sharingActive) return;
+    const unsubscribe = addLocationListener((data) => {
+      setCurrentActivity(data.activity);
+      setCurrentSpeed(data.speed);
+      setCurrentLat(data.lat);
+      setCurrentLng(data.lng);
+    });
+    return unsubscribe;
+  }, [sharingActive]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -132,17 +148,10 @@ export default function LiveLocationPage() {
       return apiRequest("POST", "/api/live-location/start", { durationMinutes });
     },
     onSuccess: () => {
-      setSharingActive(true);
       setLocationDenied(false);
       queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
 
       const started = startLiveTracking({
-        onUpdate: (_pos, activity) => {
-          setCurrentActivity(activity);
-          setCurrentSpeed(_pos.coords.speed);
-          setCurrentLat(_pos.coords.latitude);
-          setCurrentLng(_pos.coords.longitude);
-        },
         onError: (err) => {
           if (err.toLowerCase().includes("denied") || err.toLowerCase().includes("permission")) {
             setLocationDenied(true);
@@ -162,6 +171,7 @@ export default function LiveLocationPage() {
       if (!started) {
         setLocationDenied(true);
       } else {
+        setSharingActive(true);
         toast({ title: "Live location sharing started", description: "Your emergency contacts can now see your location in real time." });
       }
     },
