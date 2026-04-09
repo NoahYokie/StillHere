@@ -764,7 +764,7 @@ export default function TourPage() {
             size="sm"
             data-testid="button-tour-next"
           >
-            {isLast ? "Get started" : "Next"}
+            {isLast ? "Start free trial" : "Next"}
             {!isLast && <ArrowRight className="h-3.5 w-3.5 ml-1" />}
           </Button>
         </div>
