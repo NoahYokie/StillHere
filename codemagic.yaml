@@ -18,13 +18,18 @@ workflows:
       - name: Build web assets
         script: |
           npm run build
-      - name: Sync Capacitor
+      - name: Add and sync Capacitor
         script: |
           npx cap add ios || true
           npx cap sync ios
       - name: Install CocoaPods
         script: |
-          cd ios/App && pod install
+          find . -name "Podfile" -type f
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App && pod install
+          else
+            echo "No Podfile found, skipping CocoaPods"
+          fi
       - name: Set up code signing
         script: |
           xcode-project use-profiles
