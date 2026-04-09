@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone, Wifi, WifiOff, Smartphone, Server } from "lucide-react";
+import { Heart, Bell, Users, Shield, ChevronDown, Check, Clock, MessageCircle, MapPin, HelpCircle, Activity, Watch, AlertTriangle, Phone, Wifi, WifiOff, Smartphone, Server, Navigation, Car, Radio, Map, Hand, BarChart3, Satellite } from "lucide-react";
 
 type AnimStep = "checkin" | "tapping" | "confirmed" | "reminder" | "alert";
 
@@ -576,6 +576,131 @@ export default function LandingPage() {
       <section className="px-6 py-14 md:py-20 bg-background">
         <div className="max-w-5xl md:mx-auto">
           <div className="text-center mb-10 md:mb-14">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-600 dark:text-violet-400 text-xs font-medium mb-4">
+              <Shield className="h-3.5 w-3.5" />
+              <span>Beyond the Basics</span>
+            </div>
+            <h2 className="text-xl md:text-3xl font-bold mb-3 md:mb-4">More ways to stay safe</h2>
+            <p className="text-sm md:text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
+              StillHere goes beyond daily checkins with tools for every situation.
+            </p>
+          </div>
+
+          <div className="md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-5 space-y-4 md:space-y-0">
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                <Navigation className="h-4.5 w-4.5 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Live Location Sharing</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Share your real-time location with contacts during walks, trips, or whenever you want. They see your position, speed, and activity on a live map.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                <Car className="h-4.5 w-4.5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Driving Safety</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Speed monitoring and crash detection while you drive. If a crash is detected, a 60-second countdown starts before automatically alerting your contacts.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                <MessageCircle className="h-4.5 w-4.5 text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Messaging & Voice Calls</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Chat and call your contacts directly in the app. No phone numbers exchanged -- everything stays private and secure within StillHere.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
+                <Hand className="h-4.5 w-4.5 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Discreet SOS</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Hold a button for 3 seconds to silently send an SOS. No confirmation dialog, no sound -- just a quiet alert to your contacts.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
+                <Radio className="h-4.5 w-4.5 text-teal-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">SMS Checkin</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Reply YES to a text message to check in. No need to open the app -- perfect for basic phones or low-signal areas.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
+                <Map className="h-4.5 w-4.5 text-indigo-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Geofencing</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Set safe zones like home or work. If you leave a zone, your contacts are automatically notified.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                <BarChart3 className="h-4.5 w-4.5 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Watcher Dashboard & Reports</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Your contacts can see your status at a glance. Configurable safety reports with checkin history, heart rate, and incident summaries.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center flex-shrink-0">
+                <Satellite className="h-4.5 w-4.5 text-sky-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Satellite Devices</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Connect Garmin inReach or SPOT devices for checkins and SOS alerts in areas with no phone signal.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
+                <Users className="h-4.5 w-4.5 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Multi-Channel Alerts</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Your contacts are reached via SMS, push notifications, and email. Every channel fires to make sure someone responds.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-14 md:py-20 bg-muted/30">
+        <div className="max-w-5xl md:mx-auto">
+          <div className="text-center mb-10 md:mb-14">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-400 text-xs font-medium mb-4">
               <WifiOff className="h-3.5 w-3.5" />
               <span>Always Protected</span>
@@ -722,10 +847,13 @@ export default function LandingPage() {
             </div>
             <div className="flex gap-4 md:gap-6">
               <button onClick={() => setLocation("/help")} className="hover:text-foreground" data-testid="link-footer-help">
-                Help
+                FAQ
               </button>
               <button onClick={() => setLocation("/trust")} className="hover:text-foreground" data-testid="link-footer-trust">
                 Trust & Safety
+              </button>
+              <button onClick={() => setLocation("/tour")} className="hover:text-foreground" data-testid="link-footer-tour">
+                Tour
               </button>
             </div>
           </div>

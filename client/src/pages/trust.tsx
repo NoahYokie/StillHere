@@ -1,22 +1,32 @@
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Shield, MapPin, Heart, Lock, Eye, Users, Mail } from "lucide-react";
+import { ArrowLeft, Shield, MapPin, Heart, Lock, Eye, Users, Mail, Server, Smartphone } from "lucide-react";
 
 export default function TrustPage() {
+  const [, setLocation] = useLocation();
+
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-primary text-primary-foreground px-6 py-4">
-        <div className="max-w-2xl mx-auto flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="icon" className="text-primary-foreground" data-testid="button-back">
+      <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-50">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => window.history.back()} className="p-1 -ml-1 hover:bg-white/10 rounded-lg" data-testid="button-back">
               <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-xl font-semibold" data-testid="text-page-title">Trust & Safety</h1>
-            <p className="text-sm opacity-90">How StillHere protects you</p>
+            </button>
+            <div>
+              <h1 className="text-xl font-semibold" data-testid="text-page-title">Trust & Safety</h1>
+              <p className="text-sm opacity-90">How StillHere protects you</p>
+            </div>
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setLocation("/login")}
+            data-testid="button-sign-in"
+          >
+            Sign in
+          </Button>
         </div>
       </header>
 
@@ -46,23 +56,23 @@ export default function TrustPage() {
           <CardContent className="space-y-3">
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>You choose when to check in.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>You tap "I'm OK" to confirm you're fine.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>If you don't respond, we notify your emergency contacts.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>Your emergency contacts can check on you before anything else happens.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span><strong>StillHere does not monitor you continuously.</strong></span>
               </li>
             </ul>
@@ -79,22 +89,26 @@ export default function TrustPage() {
           <CardContent className="space-y-3">
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span><strong>Location sharing is OFF by default.</strong></span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>We never track your location unless you turn it on.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>You can turn location sharing off at any time, instantly.</span>
               </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Live location sharing is session-based. When you stop a session, tracking stops immediately.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Geofence alerts only trigger when you leave a zone you defined yourself.</span>
+              </li>
             </ul>
-            <p className="text-sm text-muted-foreground mt-4">
-              If enabled, location is shared only during emergencies or shifts. 
-              We do not create long-term location histories by default.
-            </p>
           </CardContent>
         </Card>
 
@@ -108,21 +122,50 @@ export default function TrustPage() {
           <CardContent className="space-y-3">
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Emergency contacts are notified first.</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Emergency contacts are notified first, one by one in the order you set.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>If a contact confirms they are checking on you, alerts are paused.</span>
+                <span className="text-primary mt-1">*</span>
+                <span>If a contact confirms they are checking on you, further alerts are paused.</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Contacts are reached via SMS, push notifications, and email to make sure someone responds.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
                 <span>In the current version, StillHere does not automatically contact emergency services.</span>
               </li>
             </ul>
             <p className="text-sm font-medium text-primary mt-4">
               People come before automation.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-primary" />
+              Communication privacy
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ul className="space-y-2 text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>In-app messages and voice calls stay within StillHere. No phone numbers are exchanged between users.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>All communication is encrypted via HTTPS and WSS transport security.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Voice calls use WebRTC with encrypted peer-to-peer connections.</span>
+              </li>
+            </ul>
           </CardContent>
         </Card>
 
@@ -137,24 +180,28 @@ export default function TrustPage() {
             <p className="text-muted-foreground mb-3">StillHere does not:</p>
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-destructive mt-1">✕</span>
+                <span className="text-destructive mt-1">x</span>
                 <span>Secretly track your location</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-destructive mt-1">✕</span>
+                <span className="text-destructive mt-1">x</span>
                 <span>Monitor your conversations</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-destructive mt-1">✕</span>
+                <span className="text-destructive mt-1">x</span>
                 <span>Record audio or video</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-destructive mt-1">✕</span>
+                <span className="text-destructive mt-1">x</span>
                 <span>Sell or share your data for advertising</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-destructive mt-1">✕</span>
+                <span className="text-destructive mt-1">x</span>
                 <span>Activate features without your consent</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-destructive mt-1">x</span>
+                <span>Send marketing messages or spam</span>
               </li>
             </ul>
           </CardContent>
@@ -173,16 +220,28 @@ export default function TrustPage() {
             </p>
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Your most recent checkin time</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Your phone number and name (for login and alerts)</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Short-lived alert events</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Your checkin history</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Location data only if enabled, and only when needed</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Your emergency contacts</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Location data only if you enable sharing, and only during active sessions</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Heart rate data only if you connect a smartwatch</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Drive session data only if you use driving safety</span>
               </li>
             </ul>
             <p className="text-sm text-muted-foreground mt-4">
@@ -194,28 +253,40 @@ export default function TrustPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              Security & misuse prevention
+              <Server className="h-5 w-5 text-primary" />
+              Security measures
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground mb-3">We actively protect the service:</p>
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Secure one-time login codes</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Secure one-time login codes (hashed, time-limited)</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Passkey (WebAuthn/FIDO2) authentication support</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
                 <span>Rate limits to prevent spam or abuse</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Secure contact access links</span>
+                <span className="text-primary mt-1">*</span>
+                <span>Secure HTTP headers (HSTS, Content Security Policy, Permissions Policy)</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
-                <span>Monitoring for unusual activity</span>
+                <span className="text-primary mt-1">*</span>
+                <span>httpOnly, secure session cookies</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>Input validation on all API endpoints</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-1">*</span>
+                <span>PII-free server logs</span>
               </li>
             </ul>
             <p className="text-sm font-medium text-destructive mt-4">
@@ -234,15 +305,15 @@ export default function TrustPage() {
             </p>
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>We will explain it clearly</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>We will not remove your control</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-primary mt-1">•</span>
+                <span className="text-primary mt-1">*</span>
                 <span>We will not enable tracking without consent</span>
               </li>
             </ul>
@@ -271,7 +342,7 @@ export default function TrustPage() {
 
         <section className="text-center py-8 border-t">
           <p className="text-sm text-muted-foreground">
-            Last updated: {new Date().toLocaleDateString('en-AU', { year: 'numeric', month: 'long', day: 'numeric' })}
+            Last updated: April 2026
           </p>
         </section>
       </main>

@@ -15,6 +15,12 @@ import {
   MessageCircle,
   Eye,
   X,
+  Navigation,
+  Car,
+  Hand,
+  Watch,
+  Activity,
+  MapPin,
 } from "lucide-react";
 
 const tourSteps = [
@@ -43,6 +49,12 @@ const tourSteps = [
     mockup: "sos",
   },
   {
+    id: "discreet",
+    title: "Discreet SOS",
+    description: "In a situation where you can't draw attention? Hold the button for 3 seconds to send a silent alert. No sound, no confirmation.",
+    mockup: "discreet",
+  },
+  {
     id: "contacts",
     title: "Choose who gets notified",
     description: "Add your trusted people: family, friends, neighbours. They'll only hear from us if something's wrong.",
@@ -53,6 +65,30 @@ const tourSteps = [
     title: "Your contacts can respond",
     description: "Each contact gets their own page to see your status, take responsibility, and communicate with you.",
     mockup: "contactpage",
+  },
+  {
+    id: "messaging",
+    title: "Chat and call in the app",
+    description: "Message your contacts with real-time delivery and typing indicators. Make voice calls directly through StillHere.",
+    mockup: "messaging",
+  },
+  {
+    id: "location",
+    title: "Share your location live",
+    description: "Going for a walk or a trip? Share your real-time position with contacts. They see you on a map with your speed and activity.",
+    mockup: "location",
+  },
+  {
+    id: "driving",
+    title: "Driving safety",
+    description: "StillHere monitors your speed and detects crashes. If something happens, your contacts are alerted after a 60-second countdown.",
+    mockup: "driving",
+  },
+  {
+    id: "watch",
+    title: "Apple Watch companion",
+    description: "Check in, send SOS, and monitor your heart rate right from your wrist. Fall detection works even when your phone is across the room.",
+    mockup: "watch",
   },
   {
     id: "settings",
@@ -71,8 +107,13 @@ function PhoneMockup({ step }: { step: string }) {
         {step === "reminder" && <ReminderScreen />}
         {step === "alert" && <AlertScreen />}
         {step === "sos" && <SOSScreen />}
+        {step === "discreet" && <DiscreetScreen />}
         {step === "contacts" && <ContactsScreen />}
         {step === "contactpage" && <ContactPageScreen />}
+        {step === "messaging" && <MessagingScreen />}
+        {step === "location" && <LocationScreen />}
+        {step === "driving" && <DrivingScreen />}
+        {step === "watch" && <WatchScreen />}
         {step === "settings" && <SettingsScreen />}
       </div>
     </div>
@@ -135,7 +176,7 @@ function ReminderScreen() {
                 Hey Sarah! Time to check in. Tap the button to let your family know you're okay.
               </p>
               <div className="mt-2 bg-green-500 rounded-md py-1.5 text-center">
-                <p className="text-[9px] text-white font-semibold">I'm OK ✓</p>
+                <p className="text-[9px] text-white font-semibold">I'm OK</p>
               </div>
             </div>
           </div>
@@ -147,7 +188,7 @@ function ReminderScreen() {
           </div>
         </div>
         <p className="text-[9px] text-gray-400 text-center px-4">
-          You can check in right from this notification, one tap and done!
+          You can check in right from this notification
         </p>
       </div>
     </div>
@@ -189,13 +230,12 @@ function AlertScreen() {
           </p>
           <div className="mt-2 bg-gray-50 rounded-md p-2 border border-gray-100">
             <p className="text-[8px] text-gray-600">
-              📱 "Hi John, Sarah hasn't checked in on StillHere. Please check on her."
+              "Hi John, Sarah hasn't checked in on StillHere. Please check on her."
             </p>
           </div>
         </div>
         <div className="text-center">
           <p className="text-[8px] text-gray-400">Contacts are notified one by one</p>
-          <p className="text-[8px] text-gray-400">giving each time to respond</p>
         </div>
       </div>
     </div>
@@ -238,6 +278,45 @@ function SOSScreen() {
   );
 }
 
+function DiscreetScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Heart className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">StillHere</span>
+        </div>
+      </div>
+      <div className="flex-1 px-4 py-3 flex flex-col gap-3">
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="w-16 h-16 rounded-full bg-green-500/30 flex items-center justify-center">
+            <Check className="h-8 w-8 text-green-500/50" />
+          </div>
+          <p className="text-sm text-gray-400 mt-2">I'm OK</p>
+        </div>
+        <div className="bg-red-500 rounded-lg py-2 text-center text-white text-xs font-semibold shadow-sm opacity-60">
+          I Need Help
+        </div>
+        <div className="relative">
+          <div className="bg-gray-800 rounded-lg py-3 text-center overflow-hidden">
+            <div className="absolute left-0 top-0 bottom-0 w-2/3 bg-red-500/40 rounded-l-lg" />
+            <div className="relative flex items-center justify-center gap-2">
+              <Hand className="h-3.5 w-3.5 text-white" />
+              <span className="text-[10px] text-white font-medium">Hold 3 seconds for silent SOS</span>
+            </div>
+          </div>
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[7px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap animate-bounce">
+            Silent alert
+          </div>
+        </div>
+        <p className="text-[8px] text-gray-400 text-center">
+          No confirmation, no sound. Your contacts are notified quietly.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ContactsScreen() {
   return (
     <div className="flex flex-col h-full">
@@ -255,7 +334,7 @@ function ContactsScreen() {
             </div>
             <div className="flex-1">
               <p className="text-[11px] font-semibold text-gray-800">John Smith</p>
-              <p className="text-[9px] text-gray-400">Son • Priority 1</p>
+              <p className="text-[9px] text-gray-400">Son - Priority 1</p>
             </div>
             <div className="flex gap-1">
               <div className="w-6 h-6 rounded-full bg-sky-50 flex items-center justify-center">
@@ -274,12 +353,7 @@ function ContactsScreen() {
             </div>
             <div className="flex-1">
               <p className="text-[11px] font-semibold text-gray-800">Mary Jones</p>
-              <p className="text-[9px] text-gray-400">Neighbour • Priority 2</p>
-            </div>
-            <div className="flex gap-1">
-              <div className="w-6 h-6 rounded-full bg-gray-50 flex items-center justify-center">
-                <Phone className="h-3 w-3 text-gray-400" />
-              </div>
+              <p className="text-[9px] text-gray-400">Neighbour - Priority 2</p>
             </div>
           </div>
         </div>
@@ -287,7 +361,7 @@ function ContactsScreen() {
           <p className="text-[10px] text-gray-400">+ Add another contact</p>
         </div>
         <p className="text-[9px] text-gray-400 text-center mt-1">
-          Contacts with StillHere get in-app messages instead of SMS
+          Notified via SMS, push, and email
         </p>
       </div>
     </div>
@@ -328,6 +402,196 @@ function ContactPageScreen() {
         <p className="text-[8px] text-gray-400 text-center">
           Once you take responsibility, other contacts are paused
         </p>
+      </div>
+    </div>
+  );
+}
+
+function MessagingScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <MessageCircle className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">John Smith</span>
+        </div>
+        <p className="text-[10px] text-white/70">Online</p>
+      </div>
+      <div className="flex-1 px-3 py-3 space-y-2 bg-gray-50">
+        <div className="flex justify-end">
+          <div className="bg-sky-500 text-white rounded-2xl rounded-tr-sm px-3 py-1.5 max-w-[70%]">
+            <p className="text-[10px]">Hi John, just checking in!</p>
+            <p className="text-[7px] text-white/60 mt-0.5 text-right">9:30 AM</p>
+          </div>
+        </div>
+        <div className="flex justify-start">
+          <div className="bg-white rounded-2xl rounded-tl-sm px-3 py-1.5 max-w-[70%] border border-gray-200">
+            <p className="text-[10px] text-gray-800">Hey Mum! All good here. How are you?</p>
+            <p className="text-[7px] text-gray-400 mt-0.5">9:31 AM</p>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <div className="bg-sky-500 text-white rounded-2xl rounded-tr-sm px-3 py-1.5 max-w-[70%]">
+            <p className="text-[10px]">I'm great! Just had breakfast.</p>
+            <p className="text-[7px] text-white/60 mt-0.5 text-right">9:32 AM</p>
+          </div>
+        </div>
+        <div className="flex justify-start">
+          <div className="bg-white rounded-lg px-2.5 py-1 border border-gray-200">
+            <div className="flex gap-1">
+              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.15s]" />
+              <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.3s]" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="px-3 py-2 border-t border-gray-200 bg-white flex items-center gap-2">
+        <div className="flex-1 bg-gray-100 rounded-full px-3 py-1.5">
+          <p className="text-[9px] text-gray-400">Type a message...</p>
+        </div>
+        <div className="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center">
+          <Phone className="h-3 w-3 text-white" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LocationScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Navigation className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Live Location</span>
+        </div>
+        <p className="text-[10px] text-white/70">Sharing with 2 contacts</p>
+      </div>
+      <div className="flex-1 bg-emerald-50 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-4 left-2 right-8 h-[1px] bg-gray-400" />
+          <div className="absolute top-8 left-6 right-2 h-[1px] bg-gray-400" />
+          <div className="absolute top-16 left-0 right-4 h-[1px] bg-gray-400" />
+          <div className="absolute left-12 top-0 bottom-0 w-[1px] bg-gray-400" />
+          <div className="absolute left-24 top-0 bottom-0 w-[1px] bg-gray-400" />
+        </div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="relative">
+            <div className="w-6 h-6 rounded-full bg-sky-500 border-2 border-white shadow-lg flex items-center justify-center">
+              <div className="w-2 h-2 bg-white rounded-full" />
+            </div>
+            <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-sky-500/20 animate-ping" />
+          </div>
+        </div>
+        <div className="absolute bottom-3 left-3 right-3 bg-white rounded-xl p-2.5 shadow-lg border border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[9px] font-semibold text-gray-800">Sarah</p>
+              <p className="text-[8px] text-gray-400">Walking - 4.2 km/h</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[8px] text-green-600 font-medium">Live</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="px-3 py-2.5 bg-white border-t border-gray-200">
+        <div className="bg-red-500 rounded-lg py-1.5 text-center">
+          <span className="text-[10px] text-white font-semibold">Stop sharing</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DrivingScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Car className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Drive Session</span>
+        </div>
+        <p className="text-[10px] text-white/70">Active</p>
+      </div>
+      <div className="flex-1 px-4 py-3 flex flex-col gap-3">
+        <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
+          <p className="text-[8px] text-gray-400 uppercase tracking-wide mb-1">Current Speed</p>
+          <p className="text-3xl font-bold text-gray-800">62</p>
+          <p className="text-[10px] text-gray-400">km/h</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-white rounded-lg p-2 border border-gray-200 text-center">
+            <p className="text-[8px] text-gray-400">Max</p>
+            <p className="text-sm font-bold text-gray-800">85 km/h</p>
+          </div>
+          <div className="bg-white rounded-lg p-2 border border-gray-200 text-center">
+            <p className="text-[8px] text-gray-400">Distance</p>
+            <p className="text-sm font-bold text-gray-800">12.4 km</p>
+          </div>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+          <div className="flex items-center gap-2">
+            <Shield className="h-3.5 w-3.5 text-amber-500" />
+            <p className="text-[9px] text-amber-700 font-medium">Crash detection active</p>
+          </div>
+          <p className="text-[8px] text-amber-600 mt-1">
+            If a crash is detected, your contacts are alerted after 60 seconds
+          </p>
+        </div>
+        <div className="mt-auto bg-red-500 rounded-lg py-2 text-center">
+          <span className="text-[11px] text-white font-semibold">End drive</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WatchScreen() {
+  return (
+    <div className="flex flex-col h-full items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100 px-4">
+      <div className="w-[130px] h-[160px] bg-gray-900 rounded-[2.5rem] border-[3px] border-gray-700 shadow-2xl p-1.5 flex flex-col relative">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-7 bg-gray-700 rounded-sm" />
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-4 h-7 bg-gray-700 rounded-sm" />
+        <div className="absolute top-1/2 -right-[4px] -translate-y-1/2 w-[5px] h-6 bg-gray-600 rounded-r-sm" />
+        <div className="flex-1 bg-black rounded-[2rem] overflow-hidden flex flex-col p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Heart className="h-2.5 w-2.5 text-cyan-400" />
+            <span className="text-[8px] font-semibold text-cyan-400">StillHere</span>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center gap-2">
+            <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center shadow-lg">
+              <Check className="h-7 w-7 text-white" />
+            </div>
+            <p className="text-[9px] font-bold text-white">I'm OK</p>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-center gap-1.5 bg-gray-900 rounded-lg py-1">
+              <Heart className="h-2.5 w-2.5 text-red-500 animate-pulse" />
+              <span className="text-[10px] font-bold text-red-400">72</span>
+              <span className="text-[7px] text-gray-400">BPM</span>
+            </div>
+            <div className="bg-red-500 rounded-lg py-1 text-center">
+              <span className="text-[8px] text-white font-semibold">SOS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 space-y-1.5 text-center">
+        <div className="flex items-center justify-center gap-1.5">
+          <Activity className="h-3 w-3 text-orange-500" />
+          <p className="text-[9px] text-gray-600 font-medium">Fall detection active</p>
+        </div>
+        <div className="flex items-center justify-center gap-1.5">
+          <Heart className="h-3 w-3 text-red-500" />
+          <p className="text-[9px] text-gray-600 font-medium">Heart rate monitoring</p>
+        </div>
+        <div className="flex items-center justify-center gap-1.5">
+          <Watch className="h-3 w-3 text-cyan-500" />
+          <p className="text-[9px] text-gray-600 font-medium">One-tap checkin</p>
+        </div>
       </div>
     </div>
   );
@@ -374,7 +638,7 @@ function SettingsScreen() {
         <div className="bg-white rounded-lg p-2.5 border border-gray-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <Shield className="h-3 w-3 text-sky-500" />
+              <MapPin className="h-3 w-3 text-sky-500" />
               <p className="text-[9px] font-semibold text-gray-600">Location sharing</p>
             </div>
             <div className="w-7 h-4 bg-gray-200 rounded-full flex items-center px-0.5">
