@@ -844,11 +844,14 @@ export default function Home() {
             <Button
               variant="ghost"
               size="icon"
-              className="text-primary-foreground"
+              className="text-primary-foreground relative"
               onClick={() => setLocation("/live-location")}
               data-testid="button-live-location"
             >
               <RadioTower className="h-5 w-5" />
+              {localStorage.getItem("liveLocationActive") === "true" && (
+                <span className="absolute top-1 right-1 h-2.5 w-2.5 bg-green-400 rounded-full animate-pulse" />
+              )}
             </Button>
             <Button
               variant="ghost"

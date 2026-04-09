@@ -60,7 +60,9 @@ function getActivityColor(activity: string | null): string {
 export default function LiveLocationPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [sharingActive, setSharingActive] = useState(false);
+  const [sharingActive, setSharingActive] = useState(() => {
+    return localStorage.getItem("liveLocationActive") === "true" || isLiveTrackingActive();
+  });
   const [currentActivity, setCurrentActivity] = useState<string>("stationary");
   const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
   const [currentLat, setCurrentLat] = useState<number | null>(null);
@@ -82,11 +84,24 @@ export default function LiveLocationPage() {
   useEffect(() => {
     if (myStatus?.active) {
       setSharingActive(true);
+      if (myStatus.share) {
+        if (myStatus.share.lastLat != null && myStatus.share.lastLng != null) {
+          setCurrentLat(myStatus.share.lastLat);
+          setCurrentLng(myStatus.share.lastLng);
+        }
+        if (myStatus.share.lastActivity) {
+          setCurrentActivity(myStatus.share.lastActivity);
+        }
+        if (myStatus.share.lastSpeed != null) {
+          setCurrentSpeed(myStatus.share.lastSpeed);
+        }
+      }
       if (!isLiveTrackingActive()) {
         startLiveTracking();
       }
     } else if (myStatus && !myStatus.active) {
       setSharingActive(false);
+      localStorage.removeItem("liveLocationActive");
     }
   }, [myStatus]);
 
