@@ -381,6 +381,16 @@ export default function LiveLocationViewPage() {
               showTrail={livePoints.length > 1}
               markerLabel={userName}
             />
+            {liveTimestamp && differenceInMinutes(new Date(), new Date(liveTimestamp)) >= 2 && (
+              <div className="absolute top-3 left-3 right-3 z-10">
+                <div className="bg-amber-100 dark:bg-amber-900 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2 flex items-center gap-2 shadow-md" data-testid="banner-stale-location">
+                  <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    Last update {formatDistanceToNow(new Date(liveTimestamp), { addSuffix: true })}. {userName} may have the app in the background.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="absolute bottom-4 left-4 right-4 z-10 flex gap-2">
               <Button
                 size="sm"
