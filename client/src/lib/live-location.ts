@@ -20,6 +20,7 @@ let persistentNotifShown = false;
 let nativePluginActive = false;
 let trackingSessionId = 0;
 let nativeSubscriptions: Array<{ remove: () => void }> = [];
+let silentAudioEl: HTMLAudioElement | null = null;
 const listeners = new Set<LocationListener>();
 let onErrorCb: ((err: string) => void) | null = null;
 let onExpiredCb: (() => void) | null = null;
@@ -29,6 +30,8 @@ const MOVING_SEND_INTERVAL_MS = 5000;
 const KEEPALIVE_CHECK_MS = 10000;
 const STALE_THRESHOLD_MS = 45000;
 
+const SILENT_WAV_BASE64 = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+
 function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityType {
   if (speedMs == null || speedMs < 0.5) return "stationary";
   const kmh = speedMs * 3.6;
@@ -36,6 +39,40 @@ function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityTy
   if (kmh < 20) return "running";
   if (kmh < 35) return "cycling";
   return "driving";
+}
+
+function startSilentAudio() {
+  try {
+    if (silentAudioEl) {
+      if (silentAudioEl.paused) {
+        silentAudioEl.play().catch(() => {});
+      }
+      return;
+    }
+    const el = document.createElement("audio");
+    el.id = "stillhere-keepalive-audio";
+    el.loop = true;
+    el.muted = true;
+    el.setAttribute("playsinline", "true");
+    el.style.display = "none";
+    el.src = SILENT_WAV_BASE64;
+    document.body.appendChild(el);
+    el.play().then(() => {
+      el.muted = false;
+    }).catch(() => {});
+    silentAudioEl = el;
+  } catch {}
+}
+
+function stopSilentAudio() {
+  if (silentAudioEl) {
+    try {
+      silentAudioEl.pause();
+      silentAudioEl.src = "";
+      silentAudioEl.remove();
+    } catch {}
+    silentAudioEl = null;
+  }
 }
 
 async function acquireWakeLock() {
@@ -168,6 +205,7 @@ function startGpsWatch() {
 
   startKeepAlive();
   acquireWakeLock();
+  startSilentAudio();
   showPersistentNotification();
 }
 
@@ -187,6 +225,10 @@ function startKeepAlive() {
       lastSentTime = 0;
       restartGpsWatch();
       acquireWakeLock();
+
+      if (!silentAudioEl || silentAudioEl.paused) {
+        startSilentAudio();
+      }
 
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -357,6 +399,7 @@ export async function stopLiveTracking(): Promise<void> {
   onErrorCb = null;
   onExpiredCb = null;
   releaseWakeLock();
+  stopSilentAudio();
   clearPersistentNotification();
   localStorage.removeItem("liveLocationActive");
 }
@@ -386,15 +429,29 @@ export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
 
   try {
     const res = await fetch("/api/live-location/status", { credentials: "include" });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("liveLocationActive");
+        clearPersistentNotification();
+        stopSilentAudio();
+      }
+      return false;
+    }
     const data = await res.json();
     if (!data.active) {
       localStorage.removeItem("liveLocationActive");
       clearPersistentNotification();
+      stopSilentAudio();
       return false;
     }
 
-    return startLiveTracking();
+    return startLiveTracking({
+      onError: (err) => {
+        if (err.toLowerCase().includes("denied") || err.toLowerCase().includes("permission")) {
+          stopLiveTracking();
+        }
+      },
+    });
   } catch {
     return false;
   }
@@ -416,6 +473,10 @@ document.addEventListener("visibilitychange", () => {
       );
     }
     acquireWakeLock();
+
+    if (silentAudioEl?.paused) {
+      silentAudioEl.play().catch(() => {});
+    }
   }
 });
 
