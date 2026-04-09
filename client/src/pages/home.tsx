@@ -474,8 +474,11 @@ export default function Home() {
       let shakeCount = 0;
       let lastShakeTime = 0;
       let lastAccel = { x: 0, y: 0, z: 0 };
-      const SHAKE_THRESHOLD = 25;
-      const SHAKE_RESET_MS = 1500;
+      let inShake = false;
+      const SHAKE_THRESHOLD = 30;
+      const SHAKE_END_THRESHOLD = 12;
+      const SHAKE_WINDOW_MS = 3000;
+      const MIN_SHAKE_GAP_MS = 200;
       const SHAKES_NEEDED = 3;
 
       const suppressUndo = (e: Event) => {
@@ -492,24 +495,29 @@ export default function Home() {
         const dx = accel.x - lastAccel.x;
         const dy = accel.y - lastAccel.y;
         const dz = accel.z - lastAccel.z;
-        const magnitude = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const delta = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         lastAccel = { x: accel.x, y: accel.y, z: accel.z };
 
         const now = Date.now();
-        if (now - lastShakeTime > SHAKE_RESET_MS) {
+        if (shakeCount > 0 && now - lastShakeTime > SHAKE_WINDOW_MS) {
           shakeCount = 0;
         }
 
-        if (magnitude > SHAKE_THRESHOLD) {
-          shakeCount++;
-          lastShakeTime = now;
+        if (!inShake && delta > SHAKE_THRESHOLD) {
+          inShake = true;
+          if (now - lastShakeTime >= MIN_SHAKE_GAP_MS) {
+            shakeCount++;
+            lastShakeTime = now;
 
-          if (shakeCount >= SHAKES_NEEDED) {
-            shakeCount = 0;
-            if (Date.now() < shakeCooldownUntilRef.current) return;
-            startShakeCountdown();
+            if (shakeCount >= SHAKES_NEEDED) {
+              shakeCount = 0;
+              if (Date.now() < shakeCooldownUntilRef.current) return;
+              startShakeCountdown();
+            }
           }
+        } else if (inShake && delta < SHAKE_END_THRESHOLD) {
+          inShake = false;
         }
       };
 
