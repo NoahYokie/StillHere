@@ -262,6 +262,9 @@ export default function Home() {
   const [showQuote, setShowQuote] = useState(false);
   const [fallCountdown, setFallCountdown] = useState<number | null>(null);
   const [shakeCountdown, setShakeCountdown] = useState<number | null>(null);
+  const [longPressProgress, setLongPressProgress] = useState(0);
+  const longPressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const longPressStartRef = useRef<number>(0);
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shakeCooldownUntilRef = useRef<number>(0);
@@ -443,6 +446,42 @@ export default function Home() {
     }
   }, [shakeCountdown, toast]);
 
+  const LONG_PRESS_DURATION = 3000;
+
+  const startLongPress = useCallback(() => {
+    longPressStartRef.current = Date.now();
+    setLongPressProgress(0);
+    triggerHaptic([30]);
+
+    if (longPressTimerRef.current) clearInterval(longPressTimerRef.current);
+    longPressTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - longPressStartRef.current;
+      const pct = Math.min(elapsed / LONG_PRESS_DURATION, 1);
+      setLongPressProgress(pct);
+      if (pct >= 1) {
+        if (longPressTimerRef.current) clearInterval(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+        triggerHaptic([200, 100, 200, 100, 200]);
+        apiRequest("POST", "/api/sos", {}).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+          toast({
+            title: "Discreet SOS sent",
+            description: "Your emergency contacts have been alerted.",
+          });
+        }).catch(() => {});
+        setLongPressProgress(0);
+      }
+    }, 50);
+  }, [toast]);
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearInterval(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    setLongPressProgress(0);
+  }, []);
+
   useEffect(() => {
     const fallEnabled = (status?.settings as any)?.fallDetection;
     if (fallEnabled && isDeviceMotionSupported() && !fallDetectorRef.current) {
@@ -491,13 +530,6 @@ export default function Home() {
       let aboveThreshold = false;
       const gravity = { x: 0, y: 0, z: 0 };
       let initialized = false;
-
-      const suppressUndo = (e: Event) => {
-        if ((e as InputEvent).inputType === "historyUndo") {
-          e.preventDefault();
-        }
-      };
-      document.addEventListener("beforeinput", suppressUndo, true);
 
       const handleMotion = (e: DeviceMotionEvent) => {
         let magnitude: number;
@@ -561,7 +593,6 @@ export default function Home() {
       window.addEventListener("devicemotion", handleMotion);
       cleanup = () => {
         window.removeEventListener("devicemotion", handleMotion);
-        document.removeEventListener("beforeinput", suppressUndo, true);
       };
     };
 
@@ -1055,10 +1086,30 @@ export default function Home() {
               I Need Help
             </Button>
             {(status?.settings as any)?.discreetSos && (
-              <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1" data-testid="text-shake-active">
-                <Smartphone className="h-3 w-3" />
-                Shake 3 times for discreet SOS
-              </p>
+              <div className="mt-4">
+                <button
+                  className="w-full relative overflow-hidden rounded-lg border-2 border-destructive/30 py-3 px-4 text-sm font-medium text-destructive select-none touch-none"
+                  onTouchStart={(e) => { e.preventDefault(); startLongPress(); }}
+                  onTouchEnd={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
+                  onMouseDown={startLongPress}
+                  onMouseUp={cancelLongPress}
+                  onMouseLeave={cancelLongPress}
+                  onContextMenu={(e) => e.preventDefault()}
+                  data-testid="button-discreet-sos"
+                >
+                  <div
+                    className="absolute inset-0 bg-destructive/20 transition-none"
+                    style={{ width: `${longPressProgress * 100}%` }}
+                  />
+                  <span className="relative flex items-center justify-center gap-2">
+                    <Smartphone className="h-4 w-4" />
+                    {longPressProgress > 0
+                      ? `Hold ${Math.ceil((1 - longPressProgress) * 3)}s...`
+                      : "Hold 3 seconds for discreet SOS"}
+                  </span>
+                </button>
+              </div>
             )}
           </CardContent>
         </Card>
