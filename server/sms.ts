@@ -3,6 +3,7 @@ import twilio from "twilio";
 let client: twilio.Twilio | null = null;
 let alphaSender: string | null = null;
 let fromPhone: string | null = null;
+let messagingServiceSid: string | null = null;
 
 function getClient(): twilio.Twilio | null {
   if (client) return client;
@@ -11,6 +12,7 @@ function getClient(): twilio.Twilio | null {
   const token = process.env.TWILIO_AUTH_TOKEN;
   alphaSender = process.env.TWILIO_ALPHA_SENDER || null;
   fromPhone = process.env.TWILIO_PHONE_NUMBER || null;
+  messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID || null;
 
   if (!sid || !token) {
     console.warn("[SMS] Twilio credentials not configured");
@@ -29,7 +31,7 @@ export interface SendSmsResult {
 
 export function isSmsConfigured(): boolean {
   const c = getClient();
-  return c !== null && !!(alphaSender || fromPhone);
+  return c !== null && !!(messagingServiceSid || alphaSender || fromPhone);
 }
 
 export const isTwilioConfigured = isSmsConfigured;
@@ -44,16 +46,25 @@ export async function sendSms(
     return { success: false, error: "Twilio not configured" };
   }
 
-  const sender = alphaSender || fromPhone;
-  if (!sender) {
-    console.warn("[SMS] No sender configured");
-    return { success: false, error: "No sender configured" };
-  }
-
   const masked = `***${to.slice(-4)}`;
   console.log(`[SMS] Sending to ${masked}`);
 
-  const from = alphaSender || fromPhone!;
+  if (messagingServiceSid) {
+    try {
+      const message = await c.messages.create({ to, body, messagingServiceSid });
+      console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
+      return { success: true, messageId: message.sid };
+    } catch (error: any) {
+      console.error(`[SMS] Messaging service failed for ${masked}:`, error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  const from = alphaSender || fromPhone;
+  if (!from) {
+    console.warn("[SMS] No sender configured");
+    return { success: false, error: "No sender configured" };
+  }
 
   try {
     const message = await c.messages.create({ to, body, from });
