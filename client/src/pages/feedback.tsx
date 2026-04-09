@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { ArrowLeft, Bug, Star, CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Bug, Star, CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -42,13 +42,14 @@ interface ErrorStats {
   today: number;
 }
 
-function StarDisplay({ count }: { count: number }) {
+function StarRow({ count, size = "sm" }: { count: number; size?: "sm" | "md" | "lg" }) {
+  const sizeClass = size === "lg" ? "h-5 w-5" : size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
   return (
     <div className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
         <Star
           key={s}
-          className={`h-4 w-4 ${s <= count ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+          className={`${sizeClass} ${s <= count ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/20"}`}
         />
       ))}
     </div>
@@ -58,15 +59,51 @@ function StarDisplay({ count }: { count: number }) {
 function RatingBar({ star, count, total }: { star: number; count: number; total: number }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="w-4 text-right text-muted-foreground">{star}</span>
-      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-        <div className="h-full bg-yellow-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+    <div className="flex items-center gap-2.5">
+      <span className="text-xs text-muted-foreground w-3 text-right">{star}</span>
+      <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className="h-full bg-yellow-400 rounded-full transition-all duration-500 ease-out"
+          style={{ width: `${pct}%` }}
+        />
       </div>
-      <span className="w-8 text-right text-muted-foreground">{count}</span>
     </div>
   );
+}
+
+function formatRelativeTime(dateStr: string) {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+  const diffWeek = Math.floor(diffDay / 7);
+  const diffMonth = Math.floor(diffDay / 30);
+  const diffYear = Math.floor(diffDay / 365);
+
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay < 7) return `${diffDay}d ago`;
+  if (diffWeek < 5) return `${diffWeek}w ago`;
+  if (diffMonth < 12) return `${diffMonth}mo ago`;
+  return `${diffYear}y ago`;
+}
+
+function getInitials(name: string) {
+  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-orange-500",
+  "bg-pink-500", "bg-teal-500", "bg-indigo-500", "bg-rose-500",
+];
+
+function getAvatarColor(id: string) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 export default function FeedbackPage() {
@@ -102,7 +139,7 @@ export default function FeedbackPage() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/")} data-testid="button-back-feedback">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-lg font-semibold">App Feedback</h1>
+          <h1 className="text-lg font-semibold">Feedback</h1>
         </div>
         <div className="flex border-b">
           <button
@@ -112,8 +149,7 @@ export default function FeedbackPage() {
             }`}
             data-testid="tab-ratings"
           >
-            <Star className="h-4 w-4 inline mr-1.5" />
-            Ratings
+            Ratings & Reviews
           </button>
           <button
             onClick={() => setTab("errors")}
@@ -122,7 +158,6 @@ export default function FeedbackPage() {
             }`}
             data-testid="tab-errors"
           >
-            <Bug className="h-4 w-4 inline mr-1.5" />
             Error Reports
             {errorStats && errorStats.unresolved > 0 && (
               <Badge variant="destructive" className="ml-1.5 text-xs px-1.5 py-0">
@@ -133,25 +168,22 @@ export default function FeedbackPage() {
         </div>
       </div>
 
-      <div className="p-4 max-w-lg mx-auto space-y-4">
+      <div className="p-4 max-w-lg mx-auto space-y-6">
         {tab === "ratings" && (
           <>
             {ratingStats && (
-              <Card data-testid="card-rating-overview">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Overall Rating</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="text-4xl font-bold">{ratingStats.average.toFixed(1)}</div>
-                    <div>
-                      <StarDisplay count={Math.round(ratingStats.average)} />
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {ratingStats.total} {ratingStats.total === 1 ? "rating" : "ratings"}
-                      </p>
+              <div className="py-4" data-testid="card-rating-overview">
+                <div className="flex items-start gap-6">
+                  <div className="text-center">
+                    <div className="text-6xl font-bold tracking-tight leading-none">{ratingStats.average.toFixed(1)}</div>
+                    <div className="mt-2">
+                      <StarRow count={Math.round(ratingStats.average)} size="md" />
                     </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      {ratingStats.total.toLocaleString()} {ratingStats.total === 1 ? "rating" : "ratings"}
+                    </p>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="flex-1 space-y-1.5 pt-1.5">
                     {[5, 4, 3, 2, 1].map((star) => (
                       <RatingBar
                         key={star}
@@ -161,38 +193,50 @@ export default function FeedbackPage() {
                       />
                     ))}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
 
-            {ratings && ratings.length > 0 ? (
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">Recent feedback</h3>
-                {ratings.map((r) => (
-                  <Card key={r.id} data-testid={`card-rating-${r.id}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <StarDisplay count={r.rating} />
-                          <span className="text-sm font-medium">{r.isOwn ? (r.userName || "You") : "User"}</span>
+            <div className="border-t pt-4">
+              {ratings && ratings.length > 0 ? (
+                <div className="space-y-0">
+                  {ratings.map((r, i) => {
+                    const displayName = r.isOwn ? (r.userName || "You") : `User`;
+                    const initials = r.isOwn ? getInitials(r.userName || "You") : "U";
+                    return (
+                      <div key={r.id} data-testid={`card-rating-${r.id}`}>
+                        {i > 0 && <div className="border-t my-4" />}
+                        <div className="py-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className={`w-9 h-9 rounded-full ${getAvatarColor(r.id)} flex items-center justify-center text-white text-xs font-bold`}>
+                              {initials}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">{displayName}</p>
+                              <div className="flex items-center gap-2">
+                                <StarRow count={r.rating} size="sm" />
+                                <span className="text-xs text-muted-foreground">{formatRelativeTime(r.createdAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          {r.comment && (
+                            <p className="text-sm text-foreground/80 leading-relaxed pl-12">{r.comment}</p>
+                          )}
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(r.createdAt).toLocaleDateString()}
-                        </span>
                       </div>
-                      {r.comment && (
-                        <p className="text-sm text-muted-foreground">{r.comment}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground" data-testid="text-no-ratings">
-                <Star className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p>No ratings yet</p>
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-16 text-muted-foreground" data-testid="text-no-ratings">
+                  <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                    <Star className="h-8 w-8 text-muted-foreground/30" />
+                  </div>
+                  <p className="font-medium">No ratings yet</p>
+                  <p className="text-sm mt-1">Be the first to rate StillHere</p>
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -241,12 +285,9 @@ export default function FeedbackPage() {
                             {err.type.replace(/_/g, " ")}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(err.createdAt).toLocaleString()}
-                          </span>
-                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {formatRelativeTime(err.createdAt)}
+                        </span>
                       </div>
                       <p className="text-sm font-medium break-all line-clamp-2 mb-2">{err.message}</p>
                       {err.url && (
@@ -280,7 +321,7 @@ export default function FeedbackPage() {
                         </Button>
                       </div>
                       {expandedError === err.id && err.stack && (
-                        <pre className="mt-3 p-3 bg-muted rounded text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                        <pre className="mt-3 p-3 bg-muted rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-48">
                           {err.stack}
                         </pre>
                       )}
@@ -289,9 +330,11 @@ export default function FeedbackPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-muted-foreground" data-testid="text-no-errors">
-                <CheckCircle className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p>No error reports</p>
+              <div className="text-center py-16 text-muted-foreground" data-testid="text-no-errors">
+                <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="h-8 w-8 text-muted-foreground/30" />
+                </div>
+                <p className="font-medium">No error reports</p>
                 <p className="text-sm mt-1">Errors will appear here automatically</p>
               </div>
             )}
