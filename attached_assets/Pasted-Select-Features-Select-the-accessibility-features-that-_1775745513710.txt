@@ -1,0 +1,36 @@
+Select Features
+Select the accessibility features that your app supports. To consider a feature supported, users should be able to complete your app's common tasks using that feature on Apple Watch. Learn More About Common Tasks
+
+
+VoiceOver
+Using Apple's VoiceOver screen reader, users can navigate an app's interface without needing to see the screen. Many people who are blind or have low vision use VoiceOver to understand and control apps.
+
+
+Larger Text
+Users can adjust the size of text and icons to make them more legible, visible, and comfortable to read.
+
+
+Dark Interface
+Users with light sensitivity can maintain a dark user interface for the common tasks of the app to reduce eye pain or discomfort.
+
+
+Differentiate Without Color Alone
+Users shouldn't have to rely on color to distinguish different selection states or values in an app. Instead, apps should use additional methods beyond color, such as text labels or icons, to convey information to users with common forms of color blindness.
+
+
+Sufficient Contrast
+Users can increase or adjust the contrast between text or iconography and the background, improving readability. Sufficient contrast helps users whose vision is reduced due to a disability or situational impairment (e.g. bright sunlight).
+
+
+Reduced Motion
+Motion can enrich app experience, but certain types of motion, such as scaling, spinning, or peripheral motion, cause dizziness or nausea for people with vestibular motion sensitivity. If your app includes these motion triggers, make them optional or provide alternative animations.
+
+
+Captions
+Captions are usually time-synchronized text alternatives for dialogue and relevant sounds in videos or some forms of audio-only content. Captions are a necessary accommodation for the Deaf and hard of hearing communities. They're also used by the hearing community in many situations.
+
+
+Audio Descriptions
+Audio descriptions are additional dialogue, interspersed between natural pauses in the main audio of a program or interstitial content, that describe to viewers who are blind or low vision what's happening on-screen during time-based visual content.
+
+Back
