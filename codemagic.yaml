@@ -13,6 +13,8 @@ workflows:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
       node: v20.11.0
+    integrations:
+      app_store_connect: Codemagic
     scripts:
       - name: Install dependencies
         script: |
