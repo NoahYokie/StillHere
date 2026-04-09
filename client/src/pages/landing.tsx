@@ -947,6 +947,12 @@ export default function LandingPage() {
               <button onClick={() => setLocation("/tour")} className="hover:text-foreground" data-testid="link-footer-tour">
                 Tour
               </button>
+              <button onClick={() => setLocation("/privacy")} className="hover:text-foreground" data-testid="link-footer-privacy">
+                Privacy
+              </button>
+              <button onClick={() => setLocation("/terms")} className="hover:text-foreground" data-testid="link-footer-terms">
+                Terms
+              </button>
             </div>
           </div>
           <div className="hidden md:block mt-4 px-4 py-3 bg-muted/50 rounded-md text-xs text-muted-foreground text-center">

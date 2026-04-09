@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { users, settings, authSessions } from "@shared/schema";
 import {
   generateRegistrationOptions,
@@ -277,6 +278,31 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error logging out:", error);
       res.status(500).json({ error: "Failed to logout" });
+    }
+  });
+
+  // ============================================
+  // ACCOUNT DELETION
+  // ============================================
+  
+  app.delete("/api/account", async (req, res) => {
+    try {
+      const user = await getUserFromSession(req);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+
+      await db.delete(users).where(eq(users.id, user.id));
+
+      const sessionToken = getSessionToken(req);
+      if (sessionToken) {
+        await deleteSession(sessionToken);
+      }
+      clearSessionCookie(res);
+
+      console.log(`[AUTH] Account deleted for user ***${user.phone?.slice(-4)}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      res.status(500).json({ error: "Failed to delete account" });
     }
   });
 

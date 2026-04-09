@@ -55,6 +55,7 @@ export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showTestConfirm, setShowTestConfirm] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [checkinInterval, setCheckinInterval] = useState(24);
   const [preferredTime, setPreferredTime] = useState("09:00");
   const [graceMinutes, setGraceMinutes] = useState(15);
@@ -179,6 +180,19 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: "Error sending test", variant: "destructive" });
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/account");
+    },
+    onSuccess: async () => {
+      queryClient.clear();
+      window.location.href = "/login";
+    },
+    onError: () => {
+      toast({ title: "Failed to delete account", variant: "destructive" });
     },
   });
 
@@ -1159,6 +1173,28 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {/* Legal Links */}
+        <Card>
+          <CardContent className="py-4 space-y-3">
+            <div 
+              className="flex items-center gap-3 cursor-pointer" 
+              onClick={() => setLocation("/privacy")}
+              data-testid="link-privacy-policy"
+            >
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              <span className="font-medium">Privacy Policy</span>
+            </div>
+            <div 
+              className="flex items-center gap-3 cursor-pointer" 
+              onClick={() => setLocation("/terms")}
+              data-testid="link-terms-of-service"
+            >
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              <span className="font-medium">Terms of Service</span>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Logout */}
         <Card 
           className="hover-elevate cursor-pointer" 
@@ -1170,6 +1206,20 @@ export default function SettingsPage() {
               <span className="font-medium" data-testid="button-logout">
                 {logoutMutation.isPending ? "Logging out..." : "Log out"}
               </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Delete Account */}
+        <Card className="border-destructive/50">
+          <CardContent className="py-4">
+            <div 
+              className="flex items-center gap-3 cursor-pointer" 
+              onClick={() => setShowDeleteAccount(true)}
+              data-testid="button-delete-account"
+            >
+              <Trash2 className="h-5 w-5 text-destructive" />
+              <span className="font-medium text-destructive">Delete Account</span>
             </div>
           </CardContent>
         </Card>
@@ -1194,6 +1244,31 @@ export default function SettingsPage() {
               data-testid="button-test-confirm"
             >
               Send Test
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Account Confirmation Dialog */}
+      <AlertDialog open={showDeleteAccount} onOpenChange={setShowDeleteAccount}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. All your data, contacts, checkin history, and settings will be permanently deleted. Active subscriptions should be cancelled through the App Store before deleting your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-delete-account-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                deleteAccountMutation.mutate();
+                setShowDeleteAccount(false);
+              }}
+              data-testid="button-delete-account-confirm"
+            >
+              {deleteAccountMutation.isPending ? "Deleting..." : "Delete Account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

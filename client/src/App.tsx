@@ -35,6 +35,8 @@ import DriveHistoryPage from "@/pages/drive-history";
 import SatellitePage from "@/pages/satellite";
 import LiveLocationPage from "@/pages/live-location";
 import LiveLocationViewPage from "@/pages/live-location-view";
+import PrivacyPolicyPage from "@/pages/privacy-policy";
+import TermsOfServicePage from "@/pages/terms-of-service";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -171,6 +173,8 @@ function Router() {
       <Route path="/tour" component={TourPage} />
       <Route path="/help" component={HelpPage} />
       <Route path="/trust" component={TrustPage} />
+      <Route path="/privacy" component={PrivacyPolicyPage} />
+      <Route path="/terms" component={TermsOfServicePage} />
       <Route path="/emergency/:token" component={ContactPage} />
       <Route component={NotFound} />
     </Switch>
