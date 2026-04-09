@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed, addLocationListener } from "@/lib/live-location";
 import { getSocket } from "@/lib/socket";
-import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info } from "lucide-react";
+import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import LocationMap from "@/components/location-map";
@@ -25,16 +25,6 @@ interface LiveShare {
   lastActivity: string | null;
   lastUpdatedAt: string;
   userName?: string;
-}
-
-interface LocationPoint {
-  id: string;
-  lat: number;
-  lng: number;
-  speed: number | null;
-  heading: number | null;
-  activity: string | null;
-  recordedAt: string;
 }
 
 function getActivityIcon(activity: string | null) {
@@ -70,6 +60,8 @@ export default function LiveLocationPage() {
   const [duration, setDuration] = useState<string>("0");
   const [watchedLocations, setWatchedLocations] = useState<Record<string, LiveShare>>({});
   const [locationDenied, setLocationDenied] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
+  const [panelExpanded, setPanelExpanded] = useState(false);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
     queryKey: ["/api/live-location/status"],
@@ -209,51 +201,78 @@ export default function LiveLocationPage() {
     },
   });
 
+  const allPeople = [];
+  if (sharingActive && currentLat != null && currentLng != null) {
+    allPeople.push({
+      id: "me",
+      name: "Me",
+      lat: currentLat,
+      lng: currentLng,
+      activity: currentActivity,
+      isMe: true,
+    });
+  }
+  Object.values(watchedLocations).forEach(share => {
+    if (share.lastLat != null && share.lastLng != null) {
+      allPeople.push({
+        id: share.userId,
+        name: share.userName || "Contact",
+        lat: share.lastLat,
+        lng: share.lastLng,
+        activity: share.lastActivity,
+        isMe: false,
+      });
+    }
+  });
+
+  const mapCenter = allPeople.length > 0
+    ? { lat: allPeople[0].lat, lng: allPeople[0].lng }
+    : currentLat != null && currentLng != null
+      ? { lat: currentLat, lng: currentLng }
+      : { lat: -31.95, lng: 115.86 };
+
+  const hasMap = allPeople.length > 0;
+  const watchedPeopleList = Object.values(watchedLocations);
+
+  const handlePersonTap = useCallback((personId: string) => {
+    setSelectedPerson(personId);
+    setPanelExpanded(true);
+  }, []);
+
+  const selectedShare = selectedPerson ? watchedLocations[selectedPerson] : null;
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-10 bg-primary text-primary-foreground p-4 flex items-center gap-3">
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="text-primary-foreground hover:bg-primary/80" data-testid="button-back">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-semibold">Live Location</h1>
-          <p className="text-xs opacity-80">Share your real-time location with contacts</p>
+          <p className="text-xs opacity-80">
+            {sharingActive ? "Sharing with contacts" : "Share your real-time location"}
+          </p>
         </div>
+        {sharingActive && (
+          <div className="relative">
+            <Radio className="h-5 w-5 text-green-300" />
+            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-green-400 rounded-full animate-ping" />
+            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-green-400 rounded-full" />
+          </div>
+        )}
       </div>
 
-      <div className="p-4 space-y-4 max-w-lg mx-auto">
-        {locationDenied && (
+      {locationDenied && (
+        <div className="p-4 pb-0">
           <Card className="border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950">
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 pb-4">
               <div className="flex items-start gap-3">
-                <ShieldAlert className="h-6 w-6 text-orange-600 shrink-0 mt-0.5" />
-                <div className="space-y-3">
-                  <div>
-                    <p className="font-semibold text-orange-800 dark:text-orange-200">Location permission is blocked</p>
-                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                      StillHere needs access to your location to share it with your emergency contacts. Please follow the steps below to enable it.
-                    </p>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <p className="font-medium text-orange-800 dark:text-orange-200 flex items-center gap-1">
-                      <Info className="h-4 w-4" /> On iPhone (Safari):
-                    </p>
-                    <ol className="list-decimal list-inside space-y-1 text-orange-700 dark:text-orange-300 pl-1">
-                      <li>Open your phone <b>Settings</b></li>
-                      <li>Scroll down and tap <b>Safari</b> (or your browser)</li>
-                      <li>Tap <b>Location</b> and select <b>Allow</b> or <b>Ask</b></li>
-                      <li>Come back here and try again</li>
-                    </ol>
-                    <p className="font-medium text-orange-800 dark:text-orange-200 flex items-center gap-1 mt-2">
-                      <Info className="h-4 w-4" /> On Android (Chrome):
-                    </p>
-                    <ol className="list-decimal list-inside space-y-1 text-orange-700 dark:text-orange-300 pl-1">
-                      <li>Tap the <b>lock icon</b> in Chrome's address bar</li>
-                      <li>Tap <b>Permissions</b> or <b>Site settings</b></li>
-                      <li>Set <b>Location</b> to <b>Allow</b></li>
-                      <li>Refresh the page and try again</li>
-                    </ol>
-                  </div>
+                <ShieldAlert className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="font-semibold text-orange-800 dark:text-orange-200 text-sm">Location permission is blocked</p>
+                  <p className="text-xs text-orange-700 dark:text-orange-300">
+                    Open your device Settings and allow location access for this browser, then try again.
+                  </p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -261,183 +280,237 @@ export default function LiveLocationPage() {
                     onClick={() => setLocationDenied(false)}
                     data-testid="button-dismiss-location-help"
                   >
-                    I've updated my settings, try again
+                    Try again
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
-        )}
+        </div>
+      )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <RadioTower className="h-5 w-5" />
-              Share My Location
-            </CardTitle>
-            <CardDescription>
-              When active, your emergency contacts can see where you are, how you are moving, and your travel path in real time.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {sharingActive ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                  <div className="relative">
-                    <Radio className="h-6 w-6 text-green-600" />
-                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full animate-ping" />
-                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-green-500 rounded-full" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-green-800 dark:text-green-200">Location sharing is active</p>
-                    <p className="text-sm text-green-600 dark:text-green-400">
-                      Your contacts can see you right now
-                    </p>
-                  </div>
-                </div>
+      {hasMap ? (
+        <div className="relative flex-1 min-h-[50vh]">
+          <LocationMap
+            center={mapCenter}
+            people={allPeople}
+            zoom={15}
+            className="w-full h-full absolute inset-0"
+            showTrail={false}
+            onPersonTap={handlePersonTap}
+          />
 
-                {currentLat != null && currentLng != null && (
-                  <LocationMap
-                    center={{ lat: currentLat, lng: currentLng }}
-                    zoom={16}
-                    className="w-full h-48"
-                    showTrail={false}
-                  />
-                )}
+          {sharingActive && (
+            <div className="absolute top-3 left-3 z-10">
+              <div className="bg-green-500 text-white rounded-full px-3 py-1.5 flex items-center gap-2 shadow-lg text-xs font-medium" data-testid="badge-sharing-active">
+                <span className="h-2 w-2 bg-white rounded-full animate-pulse" />
+                Sharing ON
+              </div>
+            </div>
+          )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-muted text-center">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      {getActivityIcon(currentActivity)}
+          <div className="absolute bottom-0 left-0 right-0 z-10">
+            <div className="bg-background rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.1)] border-t">
+              <button
+                className="w-full pt-3 pb-2 flex justify-center"
+                onClick={() => setPanelExpanded(!panelExpanded)}
+                data-testid="button-toggle-panel"
+              >
+                <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+              </button>
+
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-2 mb-3">
+                  {sharingActive && (
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className={`h-8 w-8 rounded-full ${getActivityColor(currentActivity)} flex items-center justify-center text-white shrink-0`}>
+                        {getActivityIcon(currentActivity)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">You - {formatActivity(currentActivity)}</p>
+                        <p className="text-xs text-muted-foreground">{formatSpeed(currentSpeed)}</p>
+                      </div>
                     </div>
-                    <p className="text-sm font-medium" data-testid="text-current-activity">{formatActivity(currentActivity)}</p>
-                    <p className="text-xs text-muted-foreground">Activity</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted text-center">
-                    <Navigation className="h-4 w-4 mx-auto mb-1" />
-                    <p className="text-sm font-medium" data-testid="text-current-speed">{formatSpeed(currentSpeed)}</p>
-                    <p className="text-xs text-muted-foreground">Speed</p>
-                  </div>
+                  )}
+                  {sharingActive ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => stopMutation.mutate()}
+                      disabled={stopMutation.isPending}
+                      data-testid="button-stop-sharing"
+                    >
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => startMutation.mutate()}
+                      disabled={startMutation.isPending}
+                      data-testid="button-start-sharing"
+                    >
+                      <RadioTower className="h-4 w-4 mr-1" />
+                      {startMutation.isPending ? "Starting..." : "Share My Location"}
+                    </Button>
+                  )}
                 </div>
 
-                {myStatus?.share?.expiresAt && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Clock className="h-4 w-4" />
-                    <span>Expires {formatDistanceToNow(new Date(myStatus.share.expiresAt), { addSuffix: true })}</span>
+                {watchedPeopleList.length > 0 && (
+                  <div className="space-y-2">
+                    {watchedPeopleList.map((share) => (
+                      <button
+                        key={share.userId}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg border transition-colors text-left ${selectedPerson === share.userId ? "bg-primary/5 border-primary/30" : "hover:bg-muted/50"}`}
+                        onClick={() => {
+                          setSelectedPerson(share.userId === selectedPerson ? null : share.userId);
+                          navigate(`/live-location/${share.userId}`);
+                        }}
+                        data-testid={`card-live-contact-${share.userId}`}
+                      >
+                        <div className="relative">
+                          <div className={`h-9 w-9 rounded-full ${getActivityColor(share.lastActivity)} flex items-center justify-center text-white`}>
+                            {getActivityIcon(share.lastActivity)}
+                          </div>
+                          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-900" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{share.userName || "Contact"}</p>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>{formatActivity(share.lastActivity)}</span>
+                            {share.lastSpeed != null && share.lastSpeed > 0.5 && (
+                              <span>- {formatSpeed(share.lastSpeed)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          {formatDistanceToNow(new Date(share.lastUpdatedAt), { addSuffix: true })}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
-
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => stopMutation.mutate()}
-                  disabled={stopMutation.isPending}
-                  data-testid="button-stop-sharing"
-                >
-                  Stop Sharing Location
-                </Button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Duration</label>
-                  <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger data-testid="select-duration">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Until I turn it off</SelectItem>
-                      <SelectItem value="15">15 minutes</SelectItem>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                      <SelectItem value="60">1 hour</SelectItem>
-                      <SelectItem value="120">2 hours</SelectItem>
-                      <SelectItem value="240">4 hours</SelectItem>
-                      <SelectItem value="480">8 hours</SelectItem>
-                      <SelectItem value="1440">24 hours</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+              {panelExpanded && (
+                <div className="px-4 pb-4 border-t pt-3 space-y-3">
+                  {!sharingActive && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Duration</label>
+                      <Select value={duration} onValueChange={setDuration}>
+                        <SelectTrigger data-testid="select-duration">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Until I turn it off</SelectItem>
+                          <SelectItem value="15">15 minutes</SelectItem>
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="60">1 hour</SelectItem>
+                          <SelectItem value="120">2 hours</SelectItem>
+                          <SelectItem value="240">4 hours</SelectItem>
+                          <SelectItem value="480">8 hours</SelectItem>
+                          <SelectItem value="1440">24 hours</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        className="w-full"
+                        onClick={() => startMutation.mutate()}
+                        disabled={startMutation.isPending}
+                        data-testid="button-start-sharing-expanded"
+                      >
+                        <RadioTower className="h-4 w-4 mr-2" />
+                        {startMutation.isPending ? "Starting..." : "Start Sharing My Location"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {sharingActive && myStatus?.share?.expiresAt && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span>Expires {formatDistanceToNow(new Date(myStatus.share.expiresAt), { addSuffix: true })}</span>
+                    </div>
+                  )}
+
+                  <div className="text-center text-xs text-muted-foreground space-y-1 pt-2">
+                    <p className="font-medium">How it works</p>
+                    <div className="flex items-center justify-center gap-4">
+                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> GPS shared</span>
+                      <span className="flex items-center gap-1"><Navigation className="h-3 w-3" /> Activity detected</span>
+                      <span className="flex items-center gap-1"><Radio className="h-3 w-3" /> Real-time</span>
+                    </div>
+                  </div>
                 </div>
-
-                <Button
-                  className="w-full"
-                  onClick={() => startMutation.mutate()}
-                  disabled={startMutation.isPending}
-                  data-testid="button-start-sharing"
-                >
-                  <RadioTower className="h-4 w-4 mr-2" />
-                  {startMutation.isPending ? "Starting..." : "Start Sharing My Location"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {Object.keys(watchedLocations).length > 0 && (
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 space-y-4 max-w-lg mx-auto flex-1">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <MapPin className="h-5 w-5" />
-                Contacts Sharing Location
+                <RadioTower className="h-5 w-5" />
+                Share My Location
               </CardTitle>
-              <CardDescription>People who are sharing their live location with you.</CardDescription>
+              <CardDescription>
+                When active, your emergency contacts can see where you are, how you are moving, and your travel path in real time.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {Object.values(watchedLocations).map((share) => (
-                <div
-                  key={share.userId}
-                  className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => navigate(`/live-location/${share.userId}`)}
-                  data-testid={`card-live-contact-${share.userId}`}
-                >
-                  <div className="relative">
-                    <div className={`h-10 w-10 rounded-full ${getActivityColor(share.lastActivity)} flex items-center justify-center text-white`}>
-                      {getActivityIcon(share.lastActivity)}
-                    </div>
-                    <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-900" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{share.userName || "Contact"}</p>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>{formatActivity(share.lastActivity)}</span>
-                      {share.lastSpeed != null && share.lastSpeed > 0.5 && (
-                        <>
-                          <span>-</span>
-                          <span>{formatSpeed(share.lastSpeed)}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-muted-foreground">
-                    <p>{formatDistanceToNow(new Date(share.lastUpdatedAt), { addSuffix: true })}</p>
-                  </div>
-                </div>
-              ))}
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Duration</label>
+                <Select value={duration} onValueChange={setDuration}>
+                  <SelectTrigger data-testid="select-duration">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Until I turn it off</SelectItem>
+                    <SelectItem value="15">15 minutes</SelectItem>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                    <SelectItem value="60">1 hour</SelectItem>
+                    <SelectItem value="120">2 hours</SelectItem>
+                    <SelectItem value="240">4 hours</SelectItem>
+                    <SelectItem value="480">8 hours</SelectItem>
+                    <SelectItem value="1440">24 hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => startMutation.mutate()}
+                disabled={startMutation.isPending}
+                data-testid="button-start-sharing"
+              >
+                <RadioTower className="h-4 w-4 mr-2" />
+                {startMutation.isPending ? "Starting..." : "Start Sharing My Location"}
+              </Button>
             </CardContent>
           </Card>
-        )}
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center text-sm text-muted-foreground space-y-2">
-              <p className="font-medium">How it works</p>
-              <ul className="text-left space-y-1">
-                <li className="flex items-start gap-2">
-                  <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>Your GPS location is shared with your emergency contacts</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Navigation className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>We detect if you are stationary, walking, running, cycling, or driving</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Radio className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>Updates are sent every 5 seconds when moving, every 30 seconds when stationary</span>
-                </li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center text-sm text-muted-foreground space-y-2">
+                <p className="font-medium">How it works</p>
+                <ul className="text-left space-y-1">
+                  <li className="flex items-start gap-2">
+                    <MapPin className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>Your GPS location is shared with your emergency contacts</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Navigation className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>We detect if you are stationary, walking, running, cycling, or driving</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Radio className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>Updates are sent every 5 seconds when moving, every 30 seconds when stationary</span>
+                  </li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
