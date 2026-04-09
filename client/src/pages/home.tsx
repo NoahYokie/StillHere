@@ -261,13 +261,10 @@ export default function Home() {
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
   const [fallCountdown, setFallCountdown] = useState<number | null>(null);
-  const [shakeCountdown, setShakeCountdown] = useState<number | null>(null);
   const [longPressProgress, setLongPressProgress] = useState(0);
   const longPressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const longPressStartRef = useRef<number>(0);
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const shakeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const shakeCooldownUntilRef = useRef<number>(0);
   const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
   const locationWatchRef = useRef<number | null>(null);
   const [driveActive, setDriveActive] = useState(false);
@@ -403,49 +400,6 @@ export default function Home() {
     }
   }, [fallCountdown, toast]);
 
-  const startShakeCountdown = useCallback(() => {
-    triggerHaptic([200, 100, 200, 100, 200]);
-    setShakeCountdown(30);
-    if (shakeTimerRef.current) clearInterval(shakeTimerRef.current);
-    shakeTimerRef.current = setInterval(() => {
-      setShakeCountdown(prev => {
-        if (prev === null) {
-          if (shakeTimerRef.current) clearInterval(shakeTimerRef.current);
-          shakeTimerRef.current = null;
-          return null;
-        }
-        if (prev <= 1) {
-          if (shakeTimerRef.current) clearInterval(shakeTimerRef.current);
-          shakeTimerRef.current = null;
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, []);
-
-  const dismissShakeAlert = useCallback(() => {
-    if (shakeTimerRef.current) {
-      clearInterval(shakeTimerRef.current);
-      shakeTimerRef.current = null;
-    }
-    setShakeCountdown(null);
-    shakeCooldownUntilRef.current = Date.now() + 5 * 60 * 1000;
-  }, []);
-
-  useEffect(() => {
-    if (shakeCountdown === 0 && shakeCountdown !== null) {
-      apiRequest("POST", "/api/sos", {}).then(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/status"] });
-        toast({
-          title: "Shake SOS sent",
-          description: "Your emergency contacts have been alerted.",
-        });
-      }).catch(() => {});
-      setShakeCountdown(null);
-    }
-  }, [shakeCountdown, toast]);
-
   const LONG_PRESS_DURATION = 3000;
 
   const startLongPress = useCallback(() => {
@@ -500,105 +454,6 @@ export default function Home() {
     };
   }, [(status?.settings as any)?.fallDetection, startFallCountdown]);
 
-  useEffect(() => {
-    const discreetEnabled = (status?.settings as any)?.discreetSos;
-    if (!discreetEnabled || !isDeviceMotionSupported()) return;
-
-    let cleanup: (() => void) | null = null;
-
-    const setupShakeDetection = async () => {
-      const DME = DeviceMotionEvent as any;
-      const needsPermission = typeof DME.requestPermission === "function";
-      if (needsPermission) {
-        const alreadyGranted = localStorage.getItem("motionPermissionGranted") === "true";
-        if (!alreadyGranted) {
-          const granted = await requestMotionPermission();
-          if (!granted) return;
-        }
-      }
-
-      const SHAKES_NEEDED = 3;
-      const SHAKE_WINDOW_MS = 3000;
-      const PEAK_THRESHOLD = 10;
-      const CALM_THRESHOLD = 5;
-      const MIN_CALM_MS = 60;
-      const DEBOUNCE_MS = 80;
-
-      let shakeCount = 0;
-      let firstShakeTime = 0;
-      let lastShakeTime = 0;
-      let aboveThreshold = false;
-      const gravity = { x: 0, y: 0, z: 0 };
-      let initialized = false;
-
-      const handleMotion = (e: DeviceMotionEvent) => {
-        let magnitude: number;
-
-        const pureAccel = e.acceleration;
-        if (pureAccel && pureAccel.x != null && pureAccel.y != null && pureAccel.z != null) {
-          magnitude = Math.sqrt(pureAccel.x ** 2 + pureAccel.y ** 2 + pureAccel.z ** 2);
-        } else {
-          const accel = e.accelerationIncludingGravity;
-          if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
-
-          const alpha = 0.8;
-          if (!initialized) {
-            gravity.x = accel.x; gravity.y = accel.y; gravity.z = accel.z;
-            initialized = true;
-            return;
-          }
-          gravity.x = alpha * gravity.x + (1 - alpha) * accel.x;
-          gravity.y = alpha * gravity.y + (1 - alpha) * accel.y;
-          gravity.z = alpha * gravity.z + (1 - alpha) * accel.z;
-
-          magnitude = Math.sqrt(
-            (accel.x - gravity.x) ** 2 +
-            (accel.y - gravity.y) ** 2 +
-            (accel.z - gravity.z) ** 2
-          );
-        }
-
-        const now = Date.now();
-
-        if (shakeCount > 0 && now - firstShakeTime > SHAKE_WINDOW_MS) {
-          shakeCount = 0;
-          aboveThreshold = false;
-        }
-
-        if (magnitude >= PEAK_THRESHOLD) {
-          aboveThreshold = true;
-        } else if (magnitude < CALM_THRESHOLD && aboveThreshold) {
-          aboveThreshold = false;
-
-          if (now - lastShakeTime < DEBOUNCE_MS) return;
-
-          const calmGap = now - lastShakeTime;
-          if (shakeCount > 0 && calmGap < MIN_CALM_MS) return;
-
-          shakeCount++;
-          lastShakeTime = now;
-          if (shakeCount === 1) firstShakeTime = now;
-
-          triggerHaptic([30]);
-
-          if (shakeCount >= SHAKES_NEEDED) {
-            shakeCount = 0;
-            aboveThreshold = false;
-            if (Date.now() < shakeCooldownUntilRef.current) return;
-            startShakeCountdown();
-          }
-        }
-      };
-
-      window.addEventListener("devicemotion", handleMotion);
-      cleanup = () => {
-        window.removeEventListener("devicemotion", handleMotion);
-      };
-    };
-
-    setupShakeDetection();
-    return () => { if (cleanup) cleanup(); };
-  }, [(status?.settings as any)?.discreetSos, startShakeCountdown]);
 
   const drivingSafetyEnabled = !!(status?.settings as any)?.drivingSafety;
   const configuredSpeedLimit = (status?.settings as any)?.speedLimitKmh || 120;
@@ -1185,36 +1040,6 @@ export default function Home() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={shakeCountdown !== null} onOpenChange={(open) => { if (!open) dismissShakeAlert(); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Smartphone className="h-5 w-5 text-destructive" />
-              Shake detected
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-base">
-              We detected a distress shake. SOS will be sent to your emergency contacts in{" "}
-              <span className="font-bold text-destructive text-lg">{shakeCountdown}</span>{" "}
-              seconds. If this was accidental, tap cancel below.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={dismissShakeAlert} data-testid="button-shake-dismiss">
-              Cancel - I'm fine
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                dismissShakeAlert();
-                sosMutation.mutate();
-              }}
-              className="bg-destructive text-destructive-foreground"
-              data-testid="button-shake-sos"
-            >
-              Send SOS now
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {crashDetected !== null && (
         <CrashCountdown
