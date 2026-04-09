@@ -2354,8 +2354,8 @@ export async function registerRoutes(
       if (!currentUserId) return res.status(401).json({ error: "Not authenticated" });
       const targetUserId = req.params.userId;
 
-      const linkedContacts = await storage.getContactsLinkedToUser(targetUserId);
-      const isWatcher = linkedContacts.some(c => c.linkedUserId === currentUserId);
+      const linkedContacts = await storage.getContactsLinkedToUser(currentUserId);
+      const isWatcher = linkedContacts.some(c => c.userId === targetUserId);
       if (!isWatcher && targetUserId !== currentUserId) {
         return res.status(403).json({ error: "Not authorized to view this location" });
       }
