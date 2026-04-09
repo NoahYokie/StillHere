@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
 import { getSocket } from "@/lib/socket";
-import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock } from "lucide-react";
+import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import LocationMap from "@/components/location-map";
@@ -67,6 +67,7 @@ export default function LiveLocationPage() {
   const [currentLng, setCurrentLng] = useState<number | null>(null);
   const [duration, setDuration] = useState<string>("0");
   const [watchedLocations, setWatchedLocations] = useState<Record<string, LiveShare>>({});
+  const [locationDenied, setLocationDenied] = useState(false);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
     queryKey: ["/api/live-location/status"],
@@ -121,11 +122,18 @@ export default function LiveLocationPage() {
 
   const startMutation = useMutation({
     mutationFn: async () => {
+      const permResult = await navigator.permissions?.query({ name: "geolocation" }).catch(() => null);
+      if (permResult?.state === "denied") {
+        setLocationDenied(true);
+        throw new Error("Location permission denied");
+      }
+
       const durationMinutes = duration === "0" ? null : parseInt(duration);
       return apiRequest("POST", "/api/live-location/start", { durationMinutes });
     },
     onSuccess: () => {
       setSharingActive(true);
+      setLocationDenied(false);
       queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
 
       const started = startLiveTracking({
@@ -136,7 +144,14 @@ export default function LiveLocationPage() {
           setCurrentLng(_pos.coords.longitude);
         },
         onError: (err) => {
-          toast({ title: "Location error", description: err, variant: "destructive" });
+          if (err.toLowerCase().includes("denied") || err.toLowerCase().includes("permission")) {
+            setLocationDenied(true);
+            stopLiveTracking();
+            setSharingActive(false);
+            apiRequest("POST", "/api/live-location/stop").catch(() => {});
+          } else {
+            toast({ title: "Location error", description: err, variant: "destructive" });
+          }
         },
         onExpired: () => {
           setSharingActive(false);
@@ -145,9 +160,14 @@ export default function LiveLocationPage() {
       });
 
       if (!started) {
-        toast({ title: "Location not available", description: "Please enable location services on your device.", variant: "destructive" });
+        setLocationDenied(true);
       } else {
         toast({ title: "Live location sharing started", description: "Your emergency contacts can now see your location in real time." });
+      }
+    },
+    onError: (err: Error) => {
+      if (err.message.includes("denied")) {
+        setLocationDenied(true);
       }
     },
   });
@@ -177,6 +197,53 @@ export default function LiveLocationPage() {
       </div>
 
       <div className="p-4 space-y-4 max-w-lg mx-auto">
+        {locationDenied && (
+          <Card className="border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="h-6 w-6 text-orange-600 shrink-0 mt-0.5" />
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-orange-800 dark:text-orange-200">Location permission is blocked</p>
+                    <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                      StillHere needs access to your location to share it with your emergency contacts. Please follow the steps below to enable it.
+                    </p>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p className="font-medium text-orange-800 dark:text-orange-200 flex items-center gap-1">
+                      <Info className="h-4 w-4" /> On iPhone (Safari):
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 text-orange-700 dark:text-orange-300 pl-1">
+                      <li>Open your phone <b>Settings</b></li>
+                      <li>Scroll down and tap <b>Safari</b> (or your browser)</li>
+                      <li>Tap <b>Location</b> and select <b>Allow</b> or <b>Ask</b></li>
+                      <li>Come back here and try again</li>
+                    </ol>
+                    <p className="font-medium text-orange-800 dark:text-orange-200 flex items-center gap-1 mt-2">
+                      <Info className="h-4 w-4" /> On Android (Chrome):
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1 text-orange-700 dark:text-orange-300 pl-1">
+                      <li>Tap the <b>lock icon</b> in Chrome's address bar</li>
+                      <li>Tap <b>Permissions</b> or <b>Site settings</b></li>
+                      <li>Set <b>Location</b> to <b>Allow</b></li>
+                      <li>Refresh the page and try again</li>
+                    </ol>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-orange-300 text-orange-800 hover:bg-orange-100 dark:border-orange-600 dark:text-orange-200 dark:hover:bg-orange-900"
+                    onClick={() => setLocationDenied(false)}
+                    data-testid="button-dismiss-location-help"
+                  >
+                    I've updated my settings, try again
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
