@@ -33,6 +33,8 @@ import ReportPage from "@/pages/report";
 import InboxPage from "@/pages/inbox";
 import DriveHistoryPage from "@/pages/drive-history";
 import SatellitePage from "@/pages/satellite";
+import LiveLocationPage from "@/pages/live-location";
+import LiveLocationViewPage from "@/pages/live-location-view";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -156,6 +158,20 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <SatellitePage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/live-location">
+        <RequireAuth>
+          <RequireSetup>
+            <LiveLocationPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/live-location/:userId">
+        <RequireAuth>
+          <RequireSetup>
+            <LiveLocationViewPage />
           </RequireSetup>
         </RequireAuth>
       </Route>

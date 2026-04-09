@@ -61,6 +61,15 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function detectActivity(speedMs: number | null | undefined): string {
+  if (speedMs == null || speedMs < 0.5) return "stationary";
+  const kmh = speedMs * 3.6;
+  if (kmh < 7) return "walking";
+  if (kmh < 20) return "running";
+  if (kmh < 35) return "cycling";
+  return "driving";
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null },
   userName: string,
@@ -2247,6 +2256,119 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting breadcrumbs:", error);
       res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // ============================================
+  // LIVE LOCATION SHARING ENDPOINTS
+  // ============================================
+  app.post("/api/live-location/start", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { durationMinutes } = req.body;
+      const expiresAt = durationMinutes ? new Date(Date.now() + durationMinutes * 60 * 1000) : null;
+      const share = await storage.startLiveLocationShare(userId, expiresAt);
+      res.json(share);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to start live location sharing" });
+    }
+  });
+
+  app.post("/api/live-location/stop", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      await storage.stopLiveLocationShare(userId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to stop live location sharing" });
+    }
+  });
+
+  app.get("/api/live-location/status", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const share = await storage.getActiveLiveShare(userId);
+      res.json({ active: !!share, share: share || null });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get live location status" });
+    }
+  });
+
+  app.post("/api/live-location/update", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const share = await storage.getActiveLiveShare(userId);
+      if (!share) return res.status(400).json({ error: "No active live location session" });
+
+      if (share.expiresAt && new Date() > share.expiresAt) {
+        await storage.stopLiveLocationShare(userId);
+        return res.status(400).json({ error: "Live location session has expired" });
+      }
+
+      const { lat, lng, accuracy, speed, heading, activity } = req.body;
+      if (lat == null || lng == null) return res.status(400).json({ error: "lat and lng are required" });
+
+      const detectedActivity = activity || detectActivity(speed);
+      const point = await storage.updateLiveLocation(
+        share.id, userId, lat, lng,
+        accuracy ?? null, speed ?? null, heading ?? null, detectedActivity
+      );
+
+      emitToUser(userId, "live-location:updated", { lat, lng, speed, heading, activity: detectedActivity });
+
+      const watcherContacts = await storage.getContactsLinkedToUser(userId);
+      for (const contact of watcherContacts) {
+        if (contact.linkedUserId) {
+          emitToUser(contact.linkedUserId, "live-location:contact-updated", {
+            userId, lat, lng, speed, heading, activity: detectedActivity,
+            accuracy, timestamp: point.recordedAt,
+          });
+        }
+      }
+
+      res.json(point);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update live location" });
+    }
+  });
+
+  app.get("/api/live-location/watching", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const shares = await storage.getActiveLiveSharesForWatcher(userId);
+      res.json(shares);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get watched live locations" });
+    }
+  });
+
+  app.get("/api/live-location/trail/:userId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) return res.status(401).json({ error: "Not authenticated" });
+      const targetUserId = req.params.userId;
+
+      const linkedContacts = await storage.getContactsLinkedToUser(targetUserId);
+      const isWatcher = linkedContacts.some(c => c.linkedUserId === currentUserId);
+      if (!isWatcher && targetUserId !== currentUserId) {
+        return res.status(403).json({ error: "Not authorized to view this location" });
+      }
+
+      const share = await storage.getActiveLiveShare(targetUserId);
+      if (!share) return res.json({ active: false, points: [] });
+
+      const sinceParam = req.query.since as string | undefined;
+      const since = sinceParam ? new Date(sinceParam) : undefined;
+      const points = await storage.getLiveLocationPoints(share.id, since, 200);
+
+      res.json({ active: true, share, points: points.reverse() });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get location trail" });
     }
   });
 

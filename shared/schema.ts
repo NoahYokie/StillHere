@@ -413,6 +413,69 @@ export const locationBreadcrumbsRelations = relations(locationBreadcrumbs, ({ on
   }),
 }));
 
+// Live Location Sharing table
+export const activityTypeEnum = pgEnum("activity_type", ["stationary", "walking", "running", "cycling", "driving"]);
+
+export const liveLocationShares = pgTable("live_location_shares", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  active: boolean("active").notNull().default(true),
+  expiresAt: timestamp("expires_at"),
+  lastLat: real("last_lat"),
+  lastLng: real("last_lng"),
+  lastAccuracy: real("last_accuracy"),
+  lastSpeed: real("last_speed"),
+  lastHeading: real("last_heading"),
+  lastActivity: activityTypeEnum("last_activity").default("stationary"),
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("live_location_user_idx").on(table.userId),
+  index("live_location_active_idx").on(table.userId, table.active),
+]);
+
+export const liveLocationSharesRelations = relations(liveLocationShares, ({ one }) => ({
+  user: one(users, {
+    fields: [liveLocationShares.userId],
+    references: [users.id],
+  }),
+}));
+
+export const liveLocationPoints = pgTable("live_location_points", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  shareId: uuid("share_id").notNull().references(() => liveLocationShares.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  accuracy: real("accuracy"),
+  speed: real("speed"),
+  heading: real("heading"),
+  activity: activityTypeEnum("activity").default("stationary"),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+}, (table) => [
+  index("live_points_share_idx").on(table.shareId, table.recordedAt),
+  index("live_points_user_idx").on(table.userId, table.recordedAt),
+]);
+
+export const liveLocationPointsRelations = relations(liveLocationPoints, ({ one }) => ({
+  share: one(liveLocationShares, {
+    fields: [liveLocationPoints.shareId],
+    references: [liveLocationShares.id],
+  }),
+  user: one(users, {
+    fields: [liveLocationPoints.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertLiveLocationShareSchema = createInsertSchema(liveLocationShares).omit({ id: true, createdAt: true, lastUpdatedAt: true });
+export type LiveLocationShare = typeof liveLocationShares.$inferSelect;
+export type InsertLiveLocationShare = z.infer<typeof insertLiveLocationShareSchema>;
+
+export const insertLiveLocationPointSchema = createInsertSchema(liveLocationPoints).omit({ id: true, recordedAt: true });
+export type LiveLocationPoint = typeof liveLocationPoints.$inferSelect;
+export type InsertLiveLocationPoint = z.infer<typeof insertLiveLocationPointSchema>;
+
 // Satellite Devices table
 export const satelliteDevices = pgTable("satellite_devices", {
   id: uuid("id").defaultRandom().primaryKey(),

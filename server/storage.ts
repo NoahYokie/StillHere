@@ -56,6 +56,10 @@ import {
   appRatings,
   type ErrorReport,
   type AppRating,
+  liveLocationShares,
+  liveLocationPoints,
+  type LiveLocationShare,
+  type LiveLocationPoint,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -207,6 +211,14 @@ export interface IStorage {
   getUserRating(userId: string): Promise<AppRating | undefined>;
   getAppRatings(limit?: number): Promise<(AppRating & { userName?: string })[]>;
   getAppRatingStats(): Promise<{ average: number; total: number; distribution: Record<number, number> }>;
+
+  // Live Location Sharing
+  startLiveLocationShare(userId: string, expiresAt: Date | null): Promise<LiveLocationShare>;
+  stopLiveLocationShare(userId: string): Promise<void>;
+  getActiveLiveShare(userId: string): Promise<LiveLocationShare | undefined>;
+  updateLiveLocation(shareId: string, userId: string, lat: number, lng: number, accuracy: number | null, speed: number | null, heading: number | null, activity: string): Promise<LiveLocationPoint>;
+  getLiveLocationPoints(shareId: string, since?: Date, limit?: number): Promise<LiveLocationPoint[]>;
+  getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string })[]>;
 
   // Report Data
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
@@ -1435,6 +1447,87 @@ export class DatabaseStorage implements IStorage {
       total: all.length,
       distribution,
     };
+  }
+  async startLiveLocationShare(userId: string, expiresAt: Date | null): Promise<LiveLocationShare> {
+    await db.update(liveLocationShares)
+      .set({ active: false })
+      .where(and(eq(liveLocationShares.userId, userId), eq(liveLocationShares.active, true)));
+
+    const [share] = await db.insert(liveLocationShares).values({
+      userId,
+      active: true,
+      expiresAt,
+    }).returning();
+    return share;
+  }
+
+  async stopLiveLocationShare(userId: string): Promise<void> {
+    await db.update(liveLocationShares)
+      .set({ active: false })
+      .where(and(eq(liveLocationShares.userId, userId), eq(liveLocationShares.active, true)));
+  }
+
+  async getActiveLiveShare(userId: string): Promise<LiveLocationShare | undefined> {
+    const [share] = await db.select().from(liveLocationShares)
+      .where(and(eq(liveLocationShares.userId, userId), eq(liveLocationShares.active, true)))
+      .limit(1);
+    return share;
+  }
+
+  async updateLiveLocation(
+    shareId: string, userId: string, lat: number, lng: number,
+    accuracy: number | null, speed: number | null, heading: number | null, activity: string
+  ): Promise<LiveLocationPoint> {
+    const now = new Date();
+    await db.update(liveLocationShares).set({
+      lastLat: lat,
+      lastLng: lng,
+      lastAccuracy: accuracy,
+      lastSpeed: speed,
+      lastHeading: heading,
+      lastActivity: activity as any,
+      lastUpdatedAt: now,
+    }).where(eq(liveLocationShares.id, shareId));
+
+    const [point] = await db.insert(liveLocationPoints).values({
+      shareId,
+      userId,
+      lat, lng, accuracy, speed, heading,
+      activity: activity as any,
+    }).returning();
+    return point;
+  }
+
+  async getLiveLocationPoints(shareId: string, since?: Date, limit: number = 200): Promise<LiveLocationPoint[]> {
+    const conditions = [eq(liveLocationPoints.shareId, shareId)];
+    if (since) conditions.push(gt(liveLocationPoints.recordedAt, since));
+
+    return db.select().from(liveLocationPoints)
+      .where(and(...conditions))
+      .orderBy(desc(liveLocationPoints.recordedAt))
+      .limit(limit);
+  }
+
+  async getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string })[]> {
+    const watcherContacts = await db.select().from(contacts)
+      .where(and(
+        eq(contacts.linkedUserId, watcherUserId),
+        isNull(contacts.softDeletedAt)
+      ));
+
+    const results: (LiveLocationShare & { userName: string })[] = [];
+    for (const contact of watcherContacts) {
+      const [share] = await db.select().from(liveLocationShares)
+        .where(and(eq(liveLocationShares.userId, contact.userId), eq(liveLocationShares.active, true)))
+        .limit(1);
+      if (share) {
+        const user = await this.getUser(contact.userId);
+        if (user) {
+          results.push({ ...share, userName: user.name });
+        }
+      }
+    }
+    return results;
   }
 }
 
