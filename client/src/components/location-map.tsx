@@ -86,8 +86,9 @@ export default function LocationMap({ center, points, people, zoom = 16, classNa
       attributionControl: false,
     }).setView([center.lat, center.lng], zoom);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      maxZoom: 20,
+      subdomains: "abcd",
     }).addTo(map);
 
     L.control.attribution({ position: "bottomright", prefix: false }).addTo(map);
