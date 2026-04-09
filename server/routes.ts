@@ -85,21 +85,20 @@ async function notifyContact(
     await sendPushNotification(contact.linkedUserId, {
       title: reason === "sos" ? `Emergency: ${userName} needs help` : `Safety Alert: ${userName} has not checked in`,
       body: reason === "sos"
-        ? `${userName} has activated an emergency SOS and needs immediate assistance. Tap to view their status and respond.`
-        : `${userName} has not completed their scheduled safety checkin. Tap to view their status and respond.`,
-      url: link,
+        ? `${userName} has activated an emergency SOS and needs immediate assistance. Open the app to respond.`
+        : `${userName} has not completed their scheduled safety checkin. Open the app to respond.`,
+      url: "/watched",
       tag: "emergency-alert",
     });
     try {
       const alertContent = reason === "sos"
-        ? `${userName} has activated an emergency SOS. Please check on them immediately: ${link}`
-        : `${userName} has not completed their safety checkin. Please check on them: ${link}`;
+        ? `${userName} has activated an emergency SOS. Please check on them immediately.`
+        : `${userName} has not completed their safety checkin. Please check on them.`;
       await storage.saveMessage(contact.userId, contact.linkedUserId, alertContent);
       emitToUser(contact.linkedUserId, "message:new", {
         type: "emergency-alert",
         userName,
         reason,
-        link,
       });
     } catch {}
     console.log(`[NOTIFY] Also sent push notification to contact (in-app user)`);
@@ -1819,8 +1818,8 @@ export async function registerRoutes(
           if (contact.linkedUserId) {
             await sendPushNotification(contact.linkedUserId, {
               title: `Urgent: Possible vehicle crash - ${user.name}`,
-              body: `A possible vehicle crash has been detected for ${user.name}. Tap to view their status and respond immediately.`,
-              url: `/emergency/${tokenRecord.token}`,
+              body: `A possible vehicle crash has been detected for ${user.name}. Open the app to respond immediately.`,
+              url: "/watched",
               tag: "crash-alert",
             });
           }
