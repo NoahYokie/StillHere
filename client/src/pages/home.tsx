@@ -427,7 +427,7 @@ export default function Home() {
       shakeTimerRef.current = null;
     }
     setShakeCountdown(null);
-    shakeCooldownUntilRef.current = Date.now() + 60 * 1000;
+    shakeCooldownUntilRef.current = Date.now() + 5 * 60 * 1000;
   }, []);
 
   useEffect(() => {
