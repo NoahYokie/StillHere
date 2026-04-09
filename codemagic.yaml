@@ -10,7 +10,7 @@ workflows:
       vars:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-      node: v20.11.0
+      node: v22.0.0
     scripts:
       - name: Install dependencies
         script: |
