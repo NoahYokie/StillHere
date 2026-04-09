@@ -49,17 +49,21 @@ export async function sendSms(
   const masked = `***${to.slice(-4)}`;
   console.log(`[SMS] Sending to ${masked}`);
 
-  if (messagingServiceSid) {
+  if (alphaSender) {
     try {
-      const message = await c.messages.create({ to, body, messagingServiceSid });
-      console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
+      const message = await c.messages.create({ to, body, from: alphaSender });
+      console.log(`[SMS] Sent to ${masked} via alpha sender "${alphaSender}": ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
-      console.warn(`[SMS] Messaging service failed for ${masked}: ${error.message}, trying fallback`);
-      const fallbackFrom = fromPhone || alphaSender;
-      if (fallbackFrom) {
+      console.warn(`[SMS] Alpha sender "${alphaSender}" failed for ${masked}: ${error.message}, trying fallback`);
+      const fallback = messagingServiceSid
+        ? { to, body, messagingServiceSid }
+        : fromPhone
+          ? { to, body, from: fromPhone }
+          : null;
+      if (fallback) {
         try {
-          const message = await c.messages.create({ to, body, from: fallbackFrom });
+          const message = await c.messages.create(fallback);
           console.log(`[SMS] Sent to ${masked} via fallback: ${message.sid}`);
           return { success: true, messageId: message.sid };
         } catch (fallbackError: any) {
@@ -71,31 +75,39 @@ export async function sendSms(
     }
   }
 
-  const from = alphaSender || fromPhone;
-  if (!from) {
-    console.warn("[SMS] No sender configured");
-    return { success: false, error: "No sender configured" };
+  if (messagingServiceSid) {
+    try {
+      const message = await c.messages.create({ to, body, messagingServiceSid });
+      console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
+      return { success: true, messageId: message.sid };
+    } catch (error: any) {
+      if (fromPhone) {
+        try {
+          const message = await c.messages.create({ to, body, from: fromPhone });
+          console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
+          return { success: true, messageId: message.sid };
+        } catch (fallbackError: any) {
+          console.error(`[SMS] Phone fallback also failed for ${masked}:`, fallbackError.message);
+          return { success: false, error: fallbackError.message };
+        }
+      }
+      return { success: false, error: error.message };
+    }
   }
 
-  try {
-    const message = await c.messages.create({ to, body, from });
-    console.log(`[SMS] Sent to ${masked}: ${message.sid}`);
-    return { success: true, messageId: message.sid };
-  } catch (error: any) {
-    if (alphaSender && fromPhone && from === alphaSender) {
-      console.warn(`[SMS] Alpha sender failed for ${masked}, retrying with phone number`);
-      try {
-        const message = await c.messages.create({ to, body, from: fromPhone });
-        console.log(`[SMS] Sent to ${masked} via phone number: ${message.sid}`);
-        return { success: true, messageId: message.sid };
-      } catch (retryError: any) {
-        console.error(`[SMS] Retry also failed for ${masked}:`, retryError.message);
-        return { success: false, error: retryError.message };
-      }
+  if (fromPhone) {
+    try {
+      const message = await c.messages.create({ to, body, from: fromPhone });
+      console.log(`[SMS] Sent to ${masked} via phone number: ${message.sid}`);
+      return { success: true, messageId: message.sid };
+    } catch (error: any) {
+      console.error(`[SMS] Failed to send to ${masked}:`, error.message);
+      return { success: false, error: error.message };
     }
-    console.error(`[SMS] Failed to send to ${masked}:`, error.message);
-    return { success: false, error: error.message };
   }
+
+  console.warn("[SMS] No sender configured");
+  return { success: false, error: "No sender configured" };
 }
 
 export async function sendOtpSms(phone: string, code: string): Promise<SendSmsResult> {
