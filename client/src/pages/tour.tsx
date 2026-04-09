@@ -334,7 +334,7 @@ function ContactsScreen() {
             </div>
             <div className="flex-1">
               <p className="text-[11px] font-semibold text-gray-800">John Smith</p>
-              <p className="text-[9px] text-gray-400">Son - Priority 1</p>
+              <p className="text-[9px] text-gray-400">Son, Priority 1</p>
             </div>
             <div className="flex gap-1">
               <div className="w-6 h-6 rounded-full bg-sky-50 flex items-center justify-center">
@@ -353,7 +353,7 @@ function ContactsScreen() {
             </div>
             <div className="flex-1">
               <p className="text-[11px] font-semibold text-gray-800">Mary Jones</p>
-              <p className="text-[9px] text-gray-400">Neighbour - Priority 2</p>
+              <p className="text-[9px] text-gray-400">Neighbour, Priority 2</p>
             </div>
           </div>
         </div>
@@ -488,7 +488,7 @@ function LocationScreen() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[9px] font-semibold text-gray-800">Sarah</p>
-              <p className="text-[8px] text-gray-400">Walking - 4.2 km/h</p>
+              <p className="text-[8px] text-gray-400">Walking, 4.2 km/h</p>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -750,22 +750,22 @@ export default function TourPage() {
             <Button
               variant="outline"
               onClick={handlePrev}
-              className="flex-1"
-              size="lg"
+              className="flex-1 h-10"
+              size="sm"
               data-testid="button-tour-prev"
             >
-              <ArrowLeft className="h-4 w-4 mr-1" />
+              <ArrowLeft className="h-3.5 w-3.5 mr-1" />
               Back
             </Button>
           )}
           <Button
             onClick={handleNext}
-            className="flex-1"
-            size="lg"
+            className="flex-1 h-10"
+            size="sm"
             data-testid="button-tour-next"
           >
             {isLast ? "Get started" : "Next"}
-            {!isLast && <ArrowRight className="h-4 w-4 ml-1" />}
+            {!isLast && <ArrowRight className="h-3.5 w-3.5 ml-1" />}
           </Button>
         </div>
       </div>

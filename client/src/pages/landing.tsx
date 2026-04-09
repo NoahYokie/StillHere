@@ -618,7 +618,7 @@ export default function LandingPage() {
               <div>
                 <h3 className="font-semibold mb-1 text-sm">Messaging & Voice Calls</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Chat and call your contacts directly in the app. No phone numbers exchanged -- everything stays private and secure within StillHere.
+                  Chat and call your contacts directly in the app. No phone numbers exchanged. Everything stays private and secure within StillHere.
                 </p>
               </div>
             </div>
@@ -630,7 +630,7 @@ export default function LandingPage() {
               <div>
                 <h3 className="font-semibold mb-1 text-sm">Discreet SOS</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Hold a button for 3 seconds to silently send an SOS. No confirmation dialog, no sound -- just a quiet alert to your contacts.
+                  Hold a button for 3 seconds to silently send an SOS. No confirmation dialog, no sound. Just a quiet alert to your contacts.
                 </p>
               </div>
             </div>
@@ -642,7 +642,7 @@ export default function LandingPage() {
               <div>
                 <h3 className="font-semibold mb-1 text-sm">SMS Checkin</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Reply YES to a text message to check in. No need to open the app -- perfect for basic phones or low-signal areas.
+                  Reply YES to a text message to check in. No need to open the app. Perfect for basic phones or low-signal areas.
                 </p>
               </div>
             </div>
