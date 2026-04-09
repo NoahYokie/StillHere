@@ -9,7 +9,7 @@ import { sendOtpSms } from "./sms";
 const SESSION_COOKIE_NAME = "stillhere_session";
 const SESSION_EXPIRY_DAYS = 30;
 const OTP_EXPIRY_MINUTES = 10;
-const OTP_RATE_LIMIT_SECONDS = 60;
+const OTP_RATE_LIMIT_SECONDS = 30;
 const OTP_RATE_LIMIT_HOURLY = 15;
 
 // Staging environment configuration

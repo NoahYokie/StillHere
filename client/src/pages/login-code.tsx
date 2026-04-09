@@ -116,7 +116,7 @@ export default function LoginCodePage() {
       return apiRequest("POST", "/api/auth/send-code", { phone });
     },
     onSuccess: () => {
-      setResendCooldown(60);
+      setResendCooldown(30);
       toast({ title: "New code sent", description: "Check your phone." });
     },
     onError: (error: Error) => {
@@ -125,11 +125,10 @@ export default function LoginCodePage() {
         const parsed = JSON.parse(jsonStr);
         if (parsed.waitSeconds) {
           setResendCooldown(parsed.waitSeconds);
-          toast({ title: "Please wait", description: `You can request a new code in ${parsed.waitSeconds} seconds.` });
           return;
         }
       } catch {}
-      toast({ title: "Could not resend code", description: "Please try again shortly.", variant: "destructive" });
+      toast({ title: "Could not resend code", description: "Please try again shortly." });
     },
   });
 
