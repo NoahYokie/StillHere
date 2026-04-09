@@ -19,7 +19,7 @@ import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, Us
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
-import { createFallDetector, isDeviceMotionSupported } from "@/lib/fall-detection";
+import { createFallDetector, isDeviceMotionSupported, requestMotionPermission } from "@/lib/fall-detection";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import CrashCountdown from "@/components/crash-countdown";
 import { getSocket } from "@/lib/socket";
@@ -465,53 +465,63 @@ export default function Home() {
     const discreetEnabled = (status?.settings as any)?.discreetSos;
     if (!discreetEnabled || !isDeviceMotionSupported()) return;
 
-    let shakeCount = 0;
-    let lastShakeTime = 0;
-    let lastAccel = { x: 0, y: 0, z: 0 };
-    const SHAKE_THRESHOLD = 25;
-    const SHAKE_RESET_MS = 1500;
-    const SHAKES_NEEDED = 3;
+    let cleanup: (() => void) | null = null;
 
-    const suppressUndo = (e: Event) => {
-      if ((e as InputEvent).inputType === "historyUndo") {
-        e.preventDefault();
-      }
-    };
-    document.addEventListener("beforeinput", suppressUndo, true);
+    const setupShakeDetection = async () => {
+      const granted = await requestMotionPermission();
+      if (!granted) return;
 
-    const handleMotion = (e: DeviceMotionEvent) => {
-      const accel = e.accelerationIncludingGravity;
-      if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
+      let shakeCount = 0;
+      let lastShakeTime = 0;
+      let lastAccel = { x: 0, y: 0, z: 0 };
+      const SHAKE_THRESHOLD = 25;
+      const SHAKE_RESET_MS = 1500;
+      const SHAKES_NEEDED = 3;
 
-      const dx = accel.x - lastAccel.x;
-      const dy = accel.y - lastAccel.y;
-      const dz = accel.z - lastAccel.z;
-      const magnitude = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-      lastAccel = { x: accel.x, y: accel.y, z: accel.z };
-
-      const now = Date.now();
-      if (now - lastShakeTime > SHAKE_RESET_MS) {
-        shakeCount = 0;
-      }
-
-      if (magnitude > SHAKE_THRESHOLD) {
-        shakeCount++;
-        lastShakeTime = now;
-
-        if (shakeCount >= SHAKES_NEEDED) {
-          shakeCount = 0;
-          if (Date.now() < shakeCooldownUntilRef.current) return;
-          startShakeCountdown();
+      const suppressUndo = (e: Event) => {
+        if ((e as InputEvent).inputType === "historyUndo") {
+          e.preventDefault();
         }
-      }
+      };
+      document.addEventListener("beforeinput", suppressUndo, true);
+
+      const handleMotion = (e: DeviceMotionEvent) => {
+        const accel = e.accelerationIncludingGravity;
+        if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
+
+        const dx = accel.x - lastAccel.x;
+        const dy = accel.y - lastAccel.y;
+        const dz = accel.z - lastAccel.z;
+        const magnitude = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        lastAccel = { x: accel.x, y: accel.y, z: accel.z };
+
+        const now = Date.now();
+        if (now - lastShakeTime > SHAKE_RESET_MS) {
+          shakeCount = 0;
+        }
+
+        if (magnitude > SHAKE_THRESHOLD) {
+          shakeCount++;
+          lastShakeTime = now;
+
+          if (shakeCount >= SHAKES_NEEDED) {
+            shakeCount = 0;
+            if (Date.now() < shakeCooldownUntilRef.current) return;
+            startShakeCountdown();
+          }
+        }
+      };
+
+      window.addEventListener("devicemotion", handleMotion);
+      cleanup = () => {
+        window.removeEventListener("devicemotion", handleMotion);
+        document.removeEventListener("beforeinput", suppressUndo, true);
+      };
     };
 
-    window.addEventListener("devicemotion", handleMotion);
-    return () => {
-      window.removeEventListener("devicemotion", handleMotion);
-      document.removeEventListener("beforeinput", suppressUndo, true);
-    };
+    setupShakeDetection();
+    return () => { if (cleanup) cleanup(); };
   }, [(status?.settings as any)?.discreetSos, startShakeCountdown]);
 
   const drivingSafetyEnabled = !!(status?.settings as any)?.drivingSafety;
