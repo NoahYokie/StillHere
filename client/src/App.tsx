@@ -14,7 +14,6 @@ import { initErrorReporter } from "@/lib/error-reporter";
 import { resumeLiveTrackingIfNeeded } from "@/lib/live-location";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
-import FeedbackPage from "@/pages/feedback";
 import LandingPage from "@/pages/landing";
 import SettingsPage from "@/pages/settings";
 import HelpPage from "@/pages/help";
@@ -147,13 +146,6 @@ function Router() {
       </Route>
       <Route path="/drive-history">
         <RequireAuth><DriveHistoryPage /></RequireAuth>
-      </Route>
-      <Route path="/feedback">
-        <RequireAuth>
-          <RequireSetup>
-            <FeedbackPage />
-          </RequireSetup>
-        </RequireAuth>
       </Route>
       <Route path="/satellite">
         <RequireAuth>
