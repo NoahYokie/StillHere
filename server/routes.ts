@@ -826,7 +826,8 @@ export async function registerRoutes(
         })));
 
         for (const contact of savedContacts) {
-          const linkedUser = await storage.getUserByPhone(contact.phone);
+          const normalizedContactPhone = normalizePhone(contact.phone);
+          const linkedUser = await storage.getUserByPhone(normalizedContactPhone);
           if (linkedUser && linkedUser.id !== userId) {
             await storage.linkContactToUser(contact.id, linkedUser.id);
           } else {

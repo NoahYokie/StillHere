@@ -959,7 +959,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findContactsByPhone(phone: string): Promise<Contact[]> {
-    return db.select().from(contacts).where(eq(contacts.phone, phone));
+    const allContacts = await db.select().from(contacts).where(isNull(contacts.softDeletedAt));
+    const normalized = phone.replace(/\s+/g, "");
+    return allContacts.filter(c => {
+      const cNorm = c.phone.replace(/\s+/g, "");
+      if (cNorm === normalized) return true;
+      if (normalized.startsWith("+61") && cNorm === "0" + normalized.slice(3)) return true;
+      if (cNorm.startsWith("+61") && normalized === "0" + cNorm.slice(3)) return true;
+      if (normalized.startsWith("+") && cNorm === normalized.slice(1)) return true;
+      if (cNorm.startsWith("+") && normalized === cNorm.slice(1)) return true;
+      return false;
+    });
   }
 
   async linkContactToUser(contactId: string, linkedUserId: string | null): Promise<Contact> {
