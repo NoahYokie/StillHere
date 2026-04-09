@@ -42,6 +42,7 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge, Star, MessageSquare } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
+import { requestMotionPermission } from "@/lib/fall-detection";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
 interface ContactEntry {
@@ -768,7 +769,14 @@ export default function SettingsPage() {
               <Switch
                 id="fall-detection"
                 checked={fallDetection}
-                onCheckedChange={(checked) => {
+                onCheckedChange={async (checked) => {
+                  if (checked) {
+                    const granted = await requestMotionPermission();
+                    if (!granted) {
+                      toast({ title: "Motion sensor access denied", description: "Please allow motion access in your browser settings to use fall detection.", variant: "destructive" });
+                      return;
+                    }
+                  }
                   setFallDetection(checked);
                   settingsMutation.mutate({ fallDetection: checked });
                 }}
@@ -796,7 +804,14 @@ export default function SettingsPage() {
               <Switch
                 id="discreet-sos"
                 checked={discreetSos}
-                onCheckedChange={(checked) => {
+                onCheckedChange={async (checked) => {
+                  if (checked) {
+                    const granted = await requestMotionPermission();
+                    if (!granted) {
+                      toast({ title: "Motion sensor access denied", description: "Please allow motion access in your browser settings to use shake-to-SOS.", variant: "destructive" });
+                      return;
+                    }
+                  }
                   setDiscreetSos(checked);
                   settingsMutation.mutate({ discreetSos: checked });
                 }}

@@ -17,6 +17,20 @@ export function isDeviceMotionSupported(): boolean {
   return typeof window !== "undefined" && "DeviceMotionEvent" in window;
 }
 
+export async function requestMotionPermission(): Promise<boolean> {
+  if (typeof window === "undefined" || !("DeviceMotionEvent" in window)) return false;
+  const DME = DeviceMotionEvent as any;
+  if (typeof DME.requestPermission === "function") {
+    try {
+      const result = await DME.requestPermission();
+      return result === "granted";
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function createFallDetector(options: FallDetectorOptions) {
   const impactThreshold = options.impactThreshold ?? DEFAULTS.impactThreshold;
   const stillnessThreshold = options.stillnessThreshold ?? DEFAULTS.stillnessThreshold;
