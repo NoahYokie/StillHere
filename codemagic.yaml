@@ -8,7 +8,6 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.daudabangoura.stillhere.app
       vars:
-        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
       node: v22.0.0
     scripts:
@@ -24,19 +23,14 @@ workflows:
           npx cap sync ios
       - name: Install CocoaPods
         script: |
-          find . -name "Podfile" -type f
-          if [ -f "ios/App/Podfile" ]; then
-            cd ios/App && pod install
-          else
-            echo "No Podfile found, skipping CocoaPods"
-          fi
+          cd ios/App && pod install --repo-update
       - name: Set up code signing
         script: |
           xcode-project use-profiles
       - name: Build iOS app
         script: |
           xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
+            --workspace "ios/App/App.xcworkspace" \
             --scheme "$XCODE_SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa
