@@ -2648,6 +2648,7 @@ export async function registerRoutes(
     return linkedContacts.some(c => c.userId === watchedUserId);
   }
 
+  const locationWakeThrottles = new Map<string, number>();
   let cronRunning = false;
 
   // Cron tick - check for due users (internal only)
@@ -2981,6 +2982,40 @@ export async function registerRoutes(
         console.error("[CRON] Report processing failed:", err);
       }
 
+      let locationWakeups = 0;
+      try {
+        const allShares = await storage.getAllActiveLiveShares();
+        for (const share of allShares) {
+          if (share.expiresAt && new Date() > share.expiresAt) {
+            await storage.stopLiveLocationShare(share.userId);
+            continue;
+          }
+          const lastUpdate = share.lastUpdatedAt ? new Date(share.lastUpdatedAt).getTime() : 0;
+          const staleMs = Date.now() - lastUpdate;
+          const lastWake = locationWakeThrottles.get(share.userId) || 0;
+          const sinceLastWake = Date.now() - lastWake;
+          if (staleMs > 2 * 60 * 1000 && staleMs < 30 * 60 * 1000 && sinceLastWake > 5 * 60 * 1000) {
+            try {
+              const result = await sendPushNotification(share.userId, {
+                title: "Location sharing active",
+                body: "Tap to keep your location updating for your contacts.",
+                tag: "location-wake",
+                url: "/live-location",
+              });
+              locationWakeThrottles.set(share.userId, Date.now());
+              if (result.sent > 0) {
+                locationWakeups++;
+              }
+            } catch {}
+          }
+        }
+        if (locationWakeups > 0) {
+          console.log(`[CRON] Sent ${locationWakeups} location wake-up push(es)`);
+        }
+      } catch (err) {
+        console.error("[CRON] Location heartbeat failed:", err);
+      }
+
       let softDeletesCleaned = 0;
       try {
         softDeletesCleaned = await storage.cleanupExpiredSoftDeletes();
@@ -2992,7 +3027,7 @@ export async function registerRoutes(
       }
 
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);
