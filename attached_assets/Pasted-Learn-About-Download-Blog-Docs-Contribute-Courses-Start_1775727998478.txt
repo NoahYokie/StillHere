@@ -1,0 +1,79 @@
+Learn
+About
+Download
+Blog
+Docs
+Contribute
+Courses
+
+Start typing...
+⌘ K
+
+
+Download Node.js®
+Get Node.js®
+
+v24.14.1 (LTS)
+for
+
+Windows
+using
+
+Docker
+with
+
+npm
+
+Info
+Want new features sooner? Get the latest Node.js version instead and try the latest improvements!
+# Docker has specific installation instructions for each operating system.
+# Please refer to the official documentation at https://docker.com/get-started/
+# Pull the Node.js Docker image:
+docker pull node:24-slim
+# Create a Node.js container and start a Shell session:
+docker run -it --rm --entrypoint sh node:24-slim
+# Verify the Node.js version:
+node -v # Should print "v24.14.1".
+# Verify npm version:
+npm -v # Should print "11.11.0".
+PowerShell
+Copy to clipboard
+Docker is a containerization platform. If you encounter any issues please visit Docker's website
+Or get a prebuilt Node.js® for
+
+Windows
+running a
+
+x64
+architecture.
+
+Windows Installer (.msi)
+Standalone Binary (.zip)
+Read the changelog or blog post for this version.
+
+Learn more about Node.js releases, including the release schedule and LTS status.
+
+Learn how to verify signed SHASUMS.
+
+Looking for Node.js source? Download a signed Node.js source tarball.
+
+Check out our nightly binaries or all previous releases or the unofficial binaries for other platforms.
+
+Proudly supported by the partners below:
+We are able to serve Node.js's downloads and maintain our infrastructure proudly due to the support of these partners, and more.
+
+v24.14.1
+Latest LTS
+v25.9.0
+Latest Release
+Copyright OpenJS Foundation and Node.js contributors. All rights reserved. The OpenJS Foundation has registered trademarks and uses trademarks. For a list of trademarks of the OpenJS Foundation, please see our Trademark Policy and Trademark List. Trademarks and logos not indicated on the list of OpenJS Foundation trademarks are trademarks™ or registered® trademarks of their respective holders. Use of them does not imply any affiliation with or endorsement by them.
+
+OpenJS Foundation
+Terms of Use
+Privacy Policy
+Bylaws
+Code of Conduct
+Trademark Policy
+Trademark List
+Cookie Policy
+Security Policy
