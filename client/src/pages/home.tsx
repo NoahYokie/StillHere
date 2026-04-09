@@ -471,15 +471,20 @@ export default function Home() {
       const granted = await requestMotionPermission();
       if (!granted) return;
 
-      let shakeCount = 0;
-      let lastShakeTime = 0;
-      let lastAccel = { x: 0, y: 0, z: 0 };
-      let inShake = false;
-      const SHAKE_THRESHOLD = 30;
-      const SHAKE_END_THRESHOLD = 12;
-      const SHAKE_WINDOW_MS = 3000;
-      const MIN_SHAKE_GAP_MS = 200;
       const SHAKES_NEEDED = 3;
+      const SHAKE_WINDOW_MS = 8000;
+      const PEAK_THRESHOLD = 20;
+      const CALM_THRESHOLD = 4;
+      const MIN_CALM_MS = 400;
+      const MIN_PEAK_MS = 100;
+
+      let shakeCount = 0;
+      let firstShakeTime = 0;
+      let phase: "calm" | "shaking" = "calm";
+      let phaseStart = 0;
+      let peakReached = false;
+      const smoothed = { x: 0, y: 0, z: 0 };
+      let initialized = false;
 
       const suppressUndo = (e: Event) => {
         if ((e as InputEvent).inputType === "historyUndo") {
@@ -492,32 +497,73 @@ export default function Home() {
         const accel = e.accelerationIncludingGravity;
         if (!accel || accel.x == null || accel.y == null || accel.z == null) return;
 
-        const dx = accel.x - lastAccel.x;
-        const dy = accel.y - lastAccel.y;
-        const dz = accel.z - lastAccel.z;
-        const delta = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const alpha = 0.3;
+        if (!initialized) {
+          smoothed.x = accel.x; smoothed.y = accel.y; smoothed.z = accel.z;
+          initialized = true;
+          return;
+        }
+        smoothed.x = alpha * accel.x + (1 - alpha) * smoothed.x;
+        smoothed.y = alpha * accel.y + (1 - alpha) * smoothed.y;
+        smoothed.z = alpha * accel.z + (1 - alpha) * smoothed.z;
 
-        lastAccel = { x: accel.x, y: accel.y, z: accel.z };
+        const userX = accel.x - smoothed.x;
+        const userY = accel.y - smoothed.y;
+        const userZ = accel.z - smoothed.z;
+        const magnitude = Math.sqrt(userX * userX + userY * userY + userZ * userZ);
 
         const now = Date.now();
-        if (shakeCount > 0 && now - lastShakeTime > SHAKE_WINDOW_MS) {
+
+        if (shakeCount > 0 && now - firstShakeTime > SHAKE_WINDOW_MS) {
           shakeCount = 0;
+          phase = "calm";
+          phaseStart = now;
+          peakReached = false;
         }
 
-        if (!inShake && delta > SHAKE_THRESHOLD) {
-          inShake = true;
-          if (now - lastShakeTime >= MIN_SHAKE_GAP_MS) {
-            shakeCount++;
-            lastShakeTime = now;
-
-            if (shakeCount >= SHAKES_NEEDED) {
-              shakeCount = 0;
-              if (Date.now() < shakeCooldownUntilRef.current) return;
-              startShakeCountdown();
+        if (phase === "calm") {
+          if (magnitude > PEAK_THRESHOLD) {
+            if (!peakReached) {
+              peakReached = true;
+            }
+            const calmDuration = now - phaseStart;
+            if (shakeCount === 0 || calmDuration >= MIN_CALM_MS) {
+              phase = "shaking";
+              phaseStart = now;
+              peakReached = false;
             }
           }
-        } else if (inShake && delta < SHAKE_END_THRESHOLD) {
-          inShake = false;
+        } else if (phase === "shaking") {
+          if (magnitude > PEAK_THRESHOLD) {
+            peakReached = true;
+          }
+
+          if (magnitude < CALM_THRESHOLD && peakReached) {
+            const shakeDuration = now - phaseStart;
+            if (shakeDuration >= MIN_PEAK_MS) {
+              shakeCount++;
+              if (shakeCount === 1) firstShakeTime = now;
+
+              if (shakeCount >= SHAKES_NEEDED) {
+                shakeCount = 0;
+                phase = "calm";
+                phaseStart = now;
+                peakReached = false;
+                if (Date.now() < shakeCooldownUntilRef.current) return;
+                startShakeCountdown();
+                return;
+              }
+            }
+            phase = "calm";
+            phaseStart = now;
+            peakReached = false;
+          }
+
+          if (now - phaseStart > 2000) {
+            phase = "calm";
+            phaseStart = now;
+            peakReached = false;
+          }
         }
       };
 
