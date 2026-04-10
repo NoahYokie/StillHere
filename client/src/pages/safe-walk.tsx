@@ -36,14 +36,31 @@ function getDistanceKm(from: { lat: number; lng: number }, to: { lat: number; ln
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function estimateTravelMinutes(distanceKm: number): { walk: number; bike: number; drive: number } {
-  const speeds = { walk: 5, bike: 15, drive: 40 };
-  const calc = (s: number) => Math.max(5, Math.ceil((distanceKm / s) * 60 * 1.2));
-  return { walk: calc(speeds.walk), bike: calc(speeds.bike), drive: calc(speeds.drive) };
+async function fetchRouteEstimate(
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  profile: "foot" | "bike" | "car"
+): Promise<{ durationMin: number; distanceKm: number } | null> {
+  try {
+    const osrmProfile = profile === "foot" ? "foot" : profile === "bike" ? "bicycle" : "car";
+    const url = `https://router.project-osrm.org/route/v1/${osrmProfile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code !== "Ok" || !data.routes?.length) return null;
+    const route = data.routes[0];
+    return {
+      durationMin: Math.ceil(route.duration / 60),
+      distanceKm: Math.round(route.distance / 100) / 10,
+    };
+  } catch {
+    return null;
+  }
 }
 
-function pickSafestEstimate(estimates: { walk: number; bike: number; drive: number }): number {
-  return estimates.walk;
+interface TravelEstimates {
+  walk: { min: number; km: number };
+  bike: { min: number; km: number };
+  drive: { min: number; km: number };
 }
 
 const EXTEND_OPTIONS = [
@@ -62,7 +79,8 @@ export default function SafeWalkPage() {
   const [destinationName, setDestinationName] = useState("");
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [expectedMinutes, setExpectedMinutes] = useState(30);
-  const [estimates, setEstimates] = useState<{ walk: number; bike: number; drive: number } | null>(null);
+  const [estimates, setEstimates] = useState<TravelEstimates | null>(null);
+  const [estimatesLoading, setEstimatesLoading] = useState(false);
   const [note, setNote] = useState("");
   const [remaining, setRemaining] = useState(0);
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -85,13 +103,44 @@ export default function SafeWalkPage() {
   });
 
   useEffect(() => {
-    if (currentPos && destinationCoords) {
-      const dist = getDistanceKm(currentPos, destinationCoords);
-      const est = estimateTravelMinutes(dist);
-      setEstimates(est);
-      setExpectedMinutes(pickSafestEstimate(est));
-    }
-  }, [currentPos, destinationCoords]);
+    if (!currentPos || !destinationCoords) return;
+    let cancelled = false;
+    setEstimatesLoading(true);
+
+    (async () => {
+      const [walk, bike, drive] = await Promise.all([
+        fetchRouteEstimate(currentPos, destinationCoords, "foot"),
+        fetchRouteEstimate(currentPos, destinationCoords, "bike"),
+        fetchRouteEstimate(currentPos, destinationCoords, "car"),
+      ]);
+
+      if (cancelled) return;
+
+      if (walk || bike || drive) {
+        const straightLine = getDistanceKm(currentPos, destinationCoords);
+        const fallback = (speedKmh: number) => Math.max(5, Math.ceil((straightLine / speedKmh) * 60 * 1.2));
+        const est: TravelEstimates = {
+          walk: walk ? { min: walk.durationMin, km: walk.distanceKm } : { min: fallback(5), km: straightLine },
+          bike: bike ? { min: bike.durationMin, km: bike.distanceKm } : { min: fallback(15), km: straightLine },
+          drive: drive ? { min: drive.durationMin, km: drive.distanceKm } : { min: fallback(40), km: straightLine },
+        };
+        setEstimates(est);
+        setExpectedMinutes(Math.max(5, est.walk.min));
+      } else {
+        const dist = getDistanceKm(currentPos, destinationCoords);
+        const fallback = (s: number) => Math.max(5, Math.ceil((dist / s) * 60 * 1.2));
+        setEstimates({
+          walk: { min: fallback(5), km: dist },
+          bike: { min: fallback(15), km: dist },
+          drive: { min: fallback(40), km: dist },
+        });
+        setExpectedMinutes(fallback(5));
+      }
+      setEstimatesLoading(false);
+    })();
+
+    return () => { cancelled = true; };
+  }, [currentPos?.lat, currentPos?.lng, destinationCoords?.lat, destinationCoords?.lng]);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -413,13 +462,14 @@ export default function SafeWalkPage() {
                 <span className="text-sm text-muted-foreground truncate ml-2 max-w-[200px]">{destinationName || "Selected"}</span>
               </div>
 
-              {currentPos && (
-                <p className="text-xs text-muted-foreground">
-                  {getDistanceKm(currentPos, destinationCoords).toFixed(1)} km away
-                </p>
+              {estimatesLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  Calculating route...
+                </div>
               )}
 
-              {estimates && (
+              {estimates && !estimatesLoading && (
                 <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock className="h-4 w-4 text-muted-foreground" />
@@ -428,23 +478,28 @@ export default function SafeWalkPage() {
                   <div className="grid grid-cols-3 gap-2 text-center text-sm">
                     <div>
                       <p className="text-muted-foreground text-xs">Walking</p>
-                      <p className="font-semibold" data-testid="text-est-walk">~{estimates.walk} min</p>
+                      <p className="font-semibold" data-testid="text-est-walk">{estimates.walk.min} min</p>
+                      <p className="text-[10px] text-muted-foreground">{estimates.walk.km} km</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">Cycling</p>
-                      <p className="font-semibold" data-testid="text-est-bike">~{estimates.bike} min</p>
+                      <p className="font-semibold" data-testid="text-est-bike">{estimates.bike.min} min</p>
+                      <p className="text-[10px] text-muted-foreground">{estimates.bike.km} km</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">Driving</p>
-                      <p className="font-semibold" data-testid="text-est-drive">~{estimates.drive} min</p>
+                      <p className="font-semibold" data-testid="text-est-drive">{estimates.drive.min} min</p>
+                      <p className="text-[10px] text-muted-foreground">{estimates.drive.km} km</p>
                     </div>
                   </div>
                 </div>
               )}
 
-              <p className="text-xs text-muted-foreground text-center">
-                We'll use the walking estimate to be safe. Once you start moving, the app detects if you're driving or cycling and adjusts automatically.
-              </p>
+              {estimates && !estimatesLoading && (
+                <p className="text-xs text-muted-foreground text-center">
+                  We start with the walking estimate to be safe. Once you're moving, we detect your speed and adjust automatically.
+                </p>
+              )}
 
               <Input
                 placeholder="Add a note (optional)"
