@@ -2092,10 +2092,25 @@ export async function registerRoutes(
             status: "resolved",
             resolvedAt: new Date(),
           });
+          
+          const session = await storage.getActiveLocationSession(user.id);
+          if (session) {
+            await storage.endLocationSession(session.id);
+          }
+          
+          const contactsWithTokens = await storage.getContactTokensForUser(user.id);
+          const baseUrl = getBaseUrl();
+          console.log(`[SMS-CHECKIN] Notifying contacts that user is OK...`);
+          for (const { contact, token } of contactsWithTokens) {
+            const normalizedContactPhone = normalizePhone(contact.phone);
+            const link = `${baseUrl}/emergency/${token}`;
+            await sendAllClearNotification(normalizedContactPhone, user.name, link);
+          }
+          console.log(`[SMS-CHECKIN] All clear notifications sent`);
         }
         
         console.log(`[SMS-CHECKIN] Checkin recorded for user ***${normalized.slice(-4)}`);
-        return res.type("text/xml").send('<Response><Message>Thanks! Your checkin has been recorded. Stay safe.</Message></Response>');
+        return res.type("text/xml").send('<Response><Message>Thanks! Your checkin has been recorded. Your emergency contacts have been notified. Stay safe.</Message></Response>');
       }
       
       if (body === "help" || body === "sos") {
