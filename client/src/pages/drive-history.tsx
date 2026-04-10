@@ -30,7 +30,7 @@ export default function DriveHistoryPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back-drive">
+        <Button variant="ghost" size="icon" onClick={() => setLocation("/drive")} data-testid="button-back-drive">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-lg font-semibold" data-testid="text-drive-history-title">Drive History</h1>

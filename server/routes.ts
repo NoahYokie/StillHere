@@ -1790,6 +1790,23 @@ export async function registerRoutes(
         }
       }
 
+      if (session && lat != null && lng != null) {
+        const speedMps = speedKmh / 3.6;
+        let activity = "stationary";
+        if (speedMps >= 11) activity = "driving";
+        else if (speedMps >= 8) activity = "cycling";
+        else if (speedMps >= 5) activity = "running";
+        else if (speedMps >= 0.5) activity = "walking";
+        await storage.addTripPoint({
+          tripId: session.id,
+          tripType: "drive",
+          userId,
+          lat, lng,
+          speed: speedMps,
+          activity,
+        });
+      }
+
       const userSettings = await storage.getSettings(userId);
       const speedLimit = userSettings?.speedLimitKmh || 120;
 
@@ -1917,6 +1934,19 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting speed alerts:", error);
       res.status(500).json({ error: "Failed to get speed alerts" });
+    }
+  });
+
+  app.get("/api/drive/trail/:sessionId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const session = await storage.getDriveSession(req.params.sessionId);
+      if (!session || session.userId !== userId) return res.status(404).json({ error: "Session not found" });
+      const points = await storage.getTripPoints(req.params.sessionId, "drive");
+      res.json(points);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get drive trail" });
     }
   });
 

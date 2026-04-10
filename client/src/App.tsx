@@ -31,6 +31,7 @@ import ChatPage from "@/pages/chat";
 import CallPage from "@/pages/call";
 import ReportPage from "@/pages/report";
 import InboxPage from "@/pages/inbox";
+import DrivePage from "@/pages/drive";
 import DriveHistoryPage from "@/pages/drive-history";
 import SatellitePage from "@/pages/satellite";
 import LiveLocationPage from "@/pages/live-location";
@@ -147,6 +148,9 @@ function Router() {
             <ReportPage />
           </RequireSetup>
         </RequireAuth>
+      </Route>
+      <Route path="/drive">
+        <RequireAuth><DrivePage /></RequireAuth>
       </Route>
       <Route path="/drive-history">
         <RequireAuth><DriveHistoryPage /></RequireAuth>

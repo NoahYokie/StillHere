@@ -118,12 +118,12 @@ export default function ContactPage() {
     );
   }
 
-  const { user, contact, lastCheckin, incident, locationSession, handlingContact, safetyTimer, safeWalk, tripTrail } = data;
+  const { user, contact, lastCheckin, incident, locationSession, handlingContact, safetyTimer, safeWalk, crashDrive, tripTrail } = data;
   const hasActiveIncident = incident && incident.status !== "resolved";
   const isBeingHandled = incident?.status === "paused" && handlingContact;
   const isMissedCheckin = incident?.reason === "missed_checkin";
   const isSOS = incident?.reason === "sos";
-  const hasTrip = safetyTimer || safeWalk;
+  const hasTrip = safetyTimer || safeWalk || crashDrive;
   const trailPoints = (tripTrail || []).map((p: any) => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt?.toString() }));
 
   const getStatusColor = () => {
@@ -217,16 +217,18 @@ export default function ContactPage() {
         )}
 
         {hasTrip && (
-          <Card className="border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20">
+          <Card className={crashDrive ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" : "border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20"}>
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
-                <Clock className="h-5 w-5 flex-shrink-0 mt-0.5 text-orange-600" />
+                {crashDrive ? <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-600" /> : <Clock className="h-5 w-5 flex-shrink-0 mt-0.5 text-orange-600" />}
                 <div>
-                  <p className="font-medium text-orange-700 dark:text-orange-400">
-                    {safetyTimer ? "Safety Timer Expired" : "Safe Walk Overdue"}
+                  <p className={`font-medium ${crashDrive ? "text-red-700 dark:text-red-400" : "text-orange-700 dark:text-orange-400"}`}>
+                    {crashDrive ? "Crash Detected" : safetyTimer ? "Safety Timer Expired" : "Safe Walk Overdue"}
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {safetyTimer
+                    {crashDrive
+                      ? `A crash was detected during ${user.name}'s drive. Max speed: ${Math.round(crashDrive.maxSpeedKmh)} km/h, Distance: ${crashDrive.distanceKm.toFixed(1)} km.`
+                      : safetyTimer
                       ? `${user.name} set a safety timer${safetyTimer.note ? ` (${safetyTimer.note})` : ""} and did not check back in.`
                       : `${user.name} was heading${safeWalk?.destinationName ? ` to ${safeWalk.destinationName}` : ""} and has not arrived.`}
                   </p>

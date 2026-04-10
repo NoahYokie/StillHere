@@ -873,5 +873,6 @@ export interface ContactPageData {
   handlingContact: Contact | null;
   safetyTimer: SafetyTimer | null;
   safeWalk: SafeWalk | null;
+  crashDrive: DriveSession | null;
   tripTrail: TripPoint[];
 }

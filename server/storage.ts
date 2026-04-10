@@ -201,6 +201,7 @@ export interface IStorage {
   // Drive Sessions
   createDriveSession(userId: string, lat?: number, lng?: number): Promise<DriveSession>;
   getActiveDriveSession(userId: string): Promise<DriveSession | undefined>;
+  getDriveSession(id: string): Promise<DriveSession | undefined>;
   updateDriveSession(id: string, updates: Partial<{ endedAt: Date; maxSpeedKmh: number; avgSpeedKmh: number; distanceKm: number; crashDetected: boolean; endLat: number; endLng: number }>): Promise<DriveSession>;
   getDriveHistory(userId: string, limit?: number): Promise<DriveSession[]>;
 
@@ -816,6 +817,20 @@ export class DatabaseStorage implements IStorage {
       tripTrail = await this.getTripPoints(safeWalk.id, "walk");
     }
 
+    let crashDrive: DriveSession | null = null;
+    if (!safetyTimer && !safeWalk) {
+      const [crashSession] = await db.select().from(driveSessions)
+        .where(and(eq(driveSessions.userId, user.id), eq(driveSessions.crashDetected, true)))
+        .orderBy(desc(driveSessions.startedAt)).limit(1);
+      if (crashSession) {
+        const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        if (new Date(crashSession.startedAt) > hourAgo) {
+          crashDrive = crashSession;
+          tripTrail = await this.getTripPoints(crashSession.id, "drive");
+        }
+      }
+    }
+
     return {
       user: {
         id: user.id,
@@ -829,6 +844,7 @@ export class DatabaseStorage implements IStorage {
       handlingContact,
       safetyTimer: safetyTimer || null,
       safeWalk: safeWalk || null,
+      crashDrive: crashDrive || null,
       tripTrail,
     };
   }
@@ -1384,6 +1400,11 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(driveSessions.userId, userId), isNull(driveSessions.endedAt)))
       .orderBy(desc(driveSessions.startedAt))
       .limit(1);
+    return session || undefined;
+  }
+
+  async getDriveSession(id: string): Promise<DriveSession | undefined> {
+    const [session] = await db.select().from(driveSessions).where(eq(driveSessions.id, id));
     return session || undefined;
   }
 
