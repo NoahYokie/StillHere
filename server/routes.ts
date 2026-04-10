@@ -2919,11 +2919,23 @@ export async function registerRoutes(
         lat, lng, speed, activity,
       });
 
-      // Check if user has arrived at destination
+      // Auto-adjust expected arrival based on detected speed/activity
       const distanceToDestination = getDistanceMeters(lat, lng, walk.destinationLat, walk.destinationLng);
+
       if (distanceToDestination <= walk.arrivalRadiusMeters) {
         await storage.updateSafeWalk(walk.id, { status: "arrived", resolvedAt: new Date() });
         return res.json({ success: true, arrived: true });
+      }
+
+      if (speed && speed > 0.5) {
+        const distKm = distanceToDestination / 1000;
+        const speedKmh = speed * 3.6;
+        const etaMinutes = Math.ceil((distKm / speedKmh) * 60 * 1.2);
+        const newArrival = new Date(Date.now() + Math.max(5, etaMinutes) * 60000);
+        const currentArrival = new Date(walk.expectedArrivalAt);
+        if (newArrival < currentArrival) {
+          await storage.updateSafeWalk(walk.id, { expectedArrivalAt: newArrival });
+        }
       }
 
       res.json({ success: true, arrived: false, distanceToDestination: Math.round(distanceToDestination) });

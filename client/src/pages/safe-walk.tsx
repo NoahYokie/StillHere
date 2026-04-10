@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock, Footprints, Bike, Car } from "lucide-react";
+import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock } from "lucide-react";
 import { useLocation } from "wouter";
 import LocationMap from "@/components/location-map";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
@@ -36,14 +36,15 @@ function getDistanceKm(from: { lat: number; lng: number }, to: { lat: number; ln
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function estimateTravelMinutes(distanceKm: number, mode: "walk" | "bike" | "drive"): number {
-  const speeds: Record<string, number> = { walk: 5, bike: 15, drive: 40 };
-  const raw = (distanceKm / speeds[mode]) * 60;
-  const withBuffer = Math.ceil(raw * 1.2);
-  return Math.max(5, withBuffer);
+function estimateTravelMinutes(distanceKm: number): { walk: number; bike: number; drive: number } {
+  const speeds = { walk: 5, bike: 15, drive: 40 };
+  const calc = (s: number) => Math.max(5, Math.ceil((distanceKm / s) * 60 * 1.2));
+  return { walk: calc(speeds.walk), bike: calc(speeds.bike), drive: calc(speeds.drive) };
 }
 
-type TravelMode = "walk" | "bike" | "drive";
+function pickSafestEstimate(estimates: { walk: number; bike: number; drive: number }): number {
+  return estimates.walk;
+}
 
 const EXTEND_OPTIONS = [
   { label: "+15 min", value: 15 },
@@ -61,7 +62,7 @@ export default function SafeWalkPage() {
   const [destinationName, setDestinationName] = useState("");
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [expectedMinutes, setExpectedMinutes] = useState(30);
-  const [travelMode, setTravelMode] = useState<TravelMode>("walk");
+  const [estimates, setEstimates] = useState<{ walk: number; bike: number; drive: number } | null>(null);
   const [note, setNote] = useState("");
   const [remaining, setRemaining] = useState(0);
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -86,9 +87,11 @@ export default function SafeWalkPage() {
   useEffect(() => {
     if (currentPos && destinationCoords) {
       const dist = getDistanceKm(currentPos, destinationCoords);
-      setExpectedMinutes(estimateTravelMinutes(dist, travelMode));
+      const est = estimateTravelMinutes(dist);
+      setEstimates(est);
+      setExpectedMinutes(pickSafestEstimate(est));
     }
-  }, [currentPos, destinationCoords, travelMode]);
+  }, [currentPos, destinationCoords]);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -416,44 +419,31 @@ export default function SafeWalkPage() {
                 </p>
               )}
 
-              <div>
-                <label className="text-sm font-medium">How are you getting there?</label>
-                <div className="grid grid-cols-3 gap-2 mt-2">
-                  {([
-                    { mode: "walk" as TravelMode, icon: Footprints, label: "Walking" },
-                    { mode: "bike" as TravelMode, icon: Bike, label: "Cycling" },
-                    { mode: "drive" as TravelMode, icon: Car, label: "Driving" },
-                  ]).map(({ mode, icon: Icon, label }) => {
-                    const est = currentPos ? estimateTravelMinutes(getDistanceKm(currentPos, destinationCoords), mode) : null;
-                    return (
-                      <Button
-                        key={mode}
-                        variant={travelMode === mode ? "default" : "outline"}
-                        className="flex flex-col h-auto py-3 gap-1"
-                        onClick={() => setTravelMode(mode)}
-                        data-testid={`button-mode-${mode}`}
-                      >
-                        <Icon className="h-5 w-5" />
-                        <span className="text-xs font-medium">{label}</span>
-                        {est && <span className="text-[10px] opacity-75">~{est} min</span>}
-                      </Button>
-                    );
-                  })}
+              {estimates && (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Estimated travel time</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Walking</p>
+                      <p className="font-semibold" data-testid="text-est-walk">~{estimates.walk} min</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Cycling</p>
+                      <p className="font-semibold" data-testid="text-est-bike">~{estimates.bike} min</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Driving</p>
+                      <p className="font-semibold" data-testid="text-est-drive">~{estimates.drive} min</p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Estimated time</span>
-                </div>
-                <span className="text-lg font-semibold" data-testid="text-estimated-time">
-                  {expectedMinutes < 60 ? `${expectedMinutes} min` : `${Math.floor(expectedMinutes / 60)}h ${expectedMinutes % 60}m`}
-                </span>
-              </div>
+              )}
 
               <p className="text-xs text-muted-foreground text-center">
-                Includes a 20% safety buffer. You can extend the time later if needed.
+                We'll use the walking estimate to be safe. Once you start moving, the app detects if you're driving or cycling and adjusts automatically.
               </p>
 
               <Input
