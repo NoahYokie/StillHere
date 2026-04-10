@@ -247,16 +247,22 @@ export default function ContactPage() {
                   {address}
                 </p>
               )}
-              <a
-                href={`https://www.google.com/maps?q=${locationLat},${locationLng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary mt-3"
-                data-testid="link-open-maps"
+              <Button
+                variant="default"
+                size="lg"
+                className="w-full mt-3 gap-2"
+                asChild
+                data-testid="button-navigate"
               >
-                <Navigation className="h-4 w-4" />
-                Open in Google Maps
-              </a>
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${locationLat},${locationLng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Navigation className="h-5 w-5" />
+                  Get Directions in Google Maps
+                </a>
+              </Button>
             </CardContent>
           </Card>
         )}
