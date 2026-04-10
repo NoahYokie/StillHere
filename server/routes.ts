@@ -3164,9 +3164,9 @@ export async function registerRoutes(
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="10">
-    <Say voice="alice">This is StillHere, your safety check in app. If you are safe, please press 1.</Say>
+    <Say voice="Google.en-AU-Neural2-A">Hi there, this is StillHere, your safety check-in app. If you are safe, please press 1.</Say>
   </Gather>
-  <Say voice="alice">We did not receive a response. Your emergency contacts will be notified.</Say>
+  <Say voice="Google.en-AU-Neural2-A">We did not receive a response. Your emergency contacts will be notified.</Say>
 </Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
@@ -3194,12 +3194,12 @@ export async function registerRoutes(
           console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call`);
         }
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="alice">Thank you. You have been checked in. Stay safe.</Say></Response>`;
+<Response><Say voice="Google.en-AU-Neural2-A">Thank you. You have been checked in. Stay safe.</Say></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="alice">We did not receive a valid response. Your emergency contacts will be notified.</Say></Response>`;
+<Response><Say voice="Google.en-AU-Neural2-A">We did not receive a valid response. Your emergency contacts will be notified.</Say></Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call gather:", error);
