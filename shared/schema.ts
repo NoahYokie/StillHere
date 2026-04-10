@@ -45,7 +45,7 @@ export const settings = pgTable("settings", {
   fallDetection: boolean("fall_detection").notNull().default(false),
   discreetSos: boolean("discreet_sos").notNull().default(false),
   escalationMinutes: integer("escalation_minutes").notNull().default(20),
-  smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(false),
+  smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(true),
   drivingSafety: boolean("driving_safety").notNull().default(false),
   speedLimitKmh: integer("speed_limit_kmh").notNull().default(120),
   allowReports: boolean("allow_reports").notNull().default(true),

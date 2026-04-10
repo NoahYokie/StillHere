@@ -2079,9 +2079,6 @@ export async function registerRoutes(
       }
       
       const userSettings = await storage.getSettings(user.id);
-      if (!userSettings?.smsCheckinEnabled) {
-        return res.type("text/xml").send('<Response><Message>SMS checkin is not enabled for your account. Enable it in Settings.</Message></Response>');
-      }
       
       const affirmatives = ["yes", "ok", "y", "yep", "yeah", "im ok", "i'm ok", "safe", "good", "fine", "here", "alive", "checkin", "check in"];
       const isCheckin = affirmatives.some(a => body.includes(a));
@@ -2091,6 +2088,8 @@ export async function registerRoutes(
         await storage.resetReminderState(user.id);
         
         const openIncident = await storage.getOpenIncident(user.id);
+        const contacts = await storage.getContacts(user.id);
+        
         if (openIncident) {
           await storage.updateIncident(openIncident.id, {
             status: "resolved",
@@ -2104,7 +2103,7 @@ export async function registerRoutes(
           
           const contactsWithTokens = await storage.getContactTokensForUser(user.id);
           const baseUrl = getBaseUrl();
-          console.log(`[SMS-CHECKIN] Notifying contacts that user is OK...`);
+          console.log(`[SMS-CHECKIN] Notifying ${contactsWithTokens.length} contacts that user is OK...`);
           for (const { contact, token } of contactsWithTokens) {
             const normalizedContactPhone = normalizePhone(contact.phone);
             const link = `${baseUrl}/emergency/${token}`;
@@ -2114,8 +2113,20 @@ export async function registerRoutes(
           console.log(`[SMS-CHECKIN] All clear notifications sent, links revoked`);
         }
         
+        const contactNames = contacts.map(c => c.name).join(", ");
+        const hasContacts = contacts.length > 0;
+        
         console.log(`[SMS-CHECKIN] Checkin recorded for user ***${normalized.slice(-4)}`);
-        return res.type("text/xml").send('<Response><Message>Thanks! Your checkin has been recorded. Your emergency contacts have been notified. Stay safe.</Message></Response>');
+        
+        let replyMsg = `StillHere Confirmation\n\nHi ${user.name}, your safety checkin has been recorded successfully.`;
+        if (openIncident && hasContacts) {
+          replyMsg += `\n\nYour emergency contact${contacts.length > 1 ? "s" : ""} (${contactNames}) ${contacts.length > 1 ? "have" : "has"} been notified that you are safe. The alert has been resolved.`;
+        } else if (openIncident) {
+          replyMsg += `\n\nThe alert has been resolved.`;
+        }
+        replyMsg += `\n\nThank you for checking in. Stay safe.`;
+        
+        return res.type("text/xml").send(`<Response><Message>${replyMsg}</Message></Response>`);
       }
       
       if (body === "help" || body === "sos") {
