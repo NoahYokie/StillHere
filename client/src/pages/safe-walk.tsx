@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock } from "lucide-react";
+import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock, Footprints, Bike, Car } from "lucide-react";
 import { useLocation } from "wouter";
 import LocationMap from "@/components/location-map";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
@@ -26,6 +26,25 @@ function getActivityFromSpeed(speedMps: number | null): string {
   return "driving";
 }
 
+function getDistanceKm(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = (to.lat - from.lat) * Math.PI / 180;
+  const dLng = (to.lng - from.lng) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(from.lat * Math.PI / 180) * Math.cos(to.lat * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function estimateTravelMinutes(distanceKm: number, mode: "walk" | "bike" | "drive"): number {
+  const speeds: Record<string, number> = { walk: 5, bike: 15, drive: 40 };
+  const raw = (distanceKm / speeds[mode]) * 60;
+  const withBuffer = Math.ceil(raw * 1.2);
+  return Math.max(5, withBuffer);
+}
+
+type TravelMode = "walk" | "bike" | "drive";
+
 const EXTEND_OPTIONS = [
   { label: "+15 min", value: 15 },
   { label: "+30 min", value: 30 },
@@ -42,6 +61,7 @@ export default function SafeWalkPage() {
   const [destinationName, setDestinationName] = useState("");
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [expectedMinutes, setExpectedMinutes] = useState(30);
+  const [travelMode, setTravelMode] = useState<TravelMode>("walk");
   const [note, setNote] = useState("");
   const [remaining, setRemaining] = useState(0);
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -62,6 +82,13 @@ export default function SafeWalkPage() {
   const { data: geofences } = useQuery<Geofence[]>({
     queryKey: ["/api/geofences"],
   });
+
+  useEffect(() => {
+    if (currentPos && destinationCoords) {
+      const dist = getDistanceKm(currentPos, destinationCoords);
+      setExpectedMinutes(estimateTravelMinutes(dist, travelMode));
+    }
+  }, [currentPos, destinationCoords, travelMode]);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -377,28 +404,57 @@ export default function SafeWalkPage() {
 
         {destinationCoords && (
           <Card>
-            <CardContent className="pt-4 space-y-3">
+            <CardContent className="pt-4 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Destination</span>
-                <span className="text-sm text-muted-foreground">{destinationName || "Selected"}</span>
+                <span className="text-sm text-muted-foreground truncate ml-2 max-w-[200px]">{destinationName || "Selected"}</span>
               </div>
 
+              {currentPos && (
+                <p className="text-xs text-muted-foreground">
+                  {getDistanceKm(currentPos, destinationCoords).toFixed(1)} km away
+                </p>
+              )}
+
               <div>
-                <label className="text-sm font-medium">Expected travel time</label>
-                <div className="flex gap-2 mt-1">
-                  {[15, 30, 45, 60, 90, 120].map(m => (
-                    <Button
-                      key={m}
-                      variant={expectedMinutes === m ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setExpectedMinutes(m)}
-                      data-testid={`button-time-${m}`}
-                    >
-                      {m < 60 ? `${m}m` : `${m / 60}h`}
-                    </Button>
-                  ))}
+                <label className="text-sm font-medium">How are you getting there?</label>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {([
+                    { mode: "walk" as TravelMode, icon: Footprints, label: "Walking" },
+                    { mode: "bike" as TravelMode, icon: Bike, label: "Cycling" },
+                    { mode: "drive" as TravelMode, icon: Car, label: "Driving" },
+                  ]).map(({ mode, icon: Icon, label }) => {
+                    const est = currentPos ? estimateTravelMinutes(getDistanceKm(currentPos, destinationCoords), mode) : null;
+                    return (
+                      <Button
+                        key={mode}
+                        variant={travelMode === mode ? "default" : "outline"}
+                        className="flex flex-col h-auto py-3 gap-1"
+                        onClick={() => setTravelMode(mode)}
+                        data-testid={`button-mode-${mode}`}
+                      >
+                        <Icon className="h-5 w-5" />
+                        <span className="text-xs font-medium">{label}</span>
+                        {est && <span className="text-[10px] opacity-75">~{est} min</span>}
+                      </Button>
+                    );
+                  })}
                 </div>
               </div>
+
+              <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">Estimated time</span>
+                </div>
+                <span className="text-lg font-semibold" data-testid="text-estimated-time">
+                  {expectedMinutes < 60 ? `${expectedMinutes} min` : `${Math.floor(expectedMinutes / 60)}h ${expectedMinutes % 60}m`}
+                </span>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center">
+                Includes a 20% safety buffer. You can extend the time later if needed.
+              </p>
 
               <Input
                 placeholder="Add a note (optional)"
