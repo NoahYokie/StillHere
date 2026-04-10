@@ -647,8 +647,8 @@ export async function registerRoutes(
         await storage.createLocationSession(userId, "emergency", incident.id);
       }
       
-      // Get tokens and base URL for contacts
-      const tokens = await storage.getContactTokensForUser(userId);
+      // Generate fresh tokens for this emergency
+      const tokens = await storage.regenerateTokensForUser(userId);
       const user = await storage.getUser(userId);
       const baseUrl = getBaseUrl();
       
@@ -722,6 +722,9 @@ export async function registerRoutes(
           await sendAllClearNotification(normalizedPhone, user.name, link);
         }
         console.log("[Resolve] All clear notifications sent");
+        
+        await storage.revokeAllTokensForUser(userId);
+        console.log("[Resolve] Emergency links revoked");
       }
       
       res.json({ success: true });
@@ -1832,6 +1835,7 @@ export async function registerRoutes(
 
       const incident = await storage.createIncident(userId, "sos");
 
+      await storage.revokeAllTokensForUser(userId);
       const contactsRaw = await storage.getContacts(userId);
       const sortedContacts = contactsRaw.sort((a, b) => a.priority - b.priority);
       const baseUrl = getBaseUrl();
@@ -2106,7 +2110,8 @@ export async function registerRoutes(
             const link = `${baseUrl}/emergency/${token}`;
             await sendAllClearNotification(normalizedContactPhone, user.name, link);
           }
-          console.log(`[SMS-CHECKIN] All clear notifications sent`);
+          await storage.revokeAllTokensForUser(user.id);
+          console.log(`[SMS-CHECKIN] All clear notifications sent, links revoked`);
         }
         
         console.log(`[SMS-CHECKIN] Checkin recorded for user ***${normalized.slice(-4)}`);
@@ -2119,7 +2124,7 @@ export async function registerRoutes(
           const incident = await storage.createIncident(user.id, "sos");
           const allContacts = await storage.getContacts(user.id);
           const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
-          const tokens = await storage.getContactTokensForUser(user.id);
+          const tokens = await storage.regenerateTokensForUser(user.id);
           const baseUrl = getBaseUrl();
           const first = sorted[0];
           if (first) {
@@ -2742,7 +2747,7 @@ export async function registerRoutes(
             await storage.createLocationSession(user.id, "emergency", incident.id);
           }
           
-          const tokens = await storage.getContactTokensForUser(user.id);
+          const tokens = await storage.regenerateTokensForUser(user.id);
           const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
           const firstContact = sortedContacts[0];
           

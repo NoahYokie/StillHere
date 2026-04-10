@@ -92,6 +92,8 @@ export interface IStorage {
   // Contact Tokens
   getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined>;
   generateToken(contactId: string): Promise<ContactToken>;
+  revokeAllTokensForUser(userId: string): Promise<void>;
+  regenerateTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
   
   // Checkins
   getLastCheckin(userId: string): Promise<Checkin | undefined>;
@@ -548,6 +550,27 @@ export class DatabaseStorage implements IStorage {
       expiresAt: null,
     }).returning();
     return result;
+  }
+
+  async revokeAllTokensForUser(userId: string): Promise<void> {
+    const userContacts = await this.getContacts(userId);
+    for (const contact of userContacts) {
+      await db.update(contactTokens)
+        .set({ revoked: true })
+        .where(and(eq(contactTokens.contactId, contact.id), eq(contactTokens.revoked, false)));
+    }
+  }
+
+  async regenerateTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]> {
+    await this.revokeAllTokensForUser(userId);
+    const userContacts = await this.getContacts(userId);
+    const result: { contact: Contact; token: string }[] = [];
+    for (const contact of userContacts) {
+      if (contact.softDeletedAt) continue;
+      const tokenRecord = await this.generateToken(contact.id);
+      result.push({ contact, token: tokenRecord.token });
+    }
+    return result.sort((a, b) => a.contact.priority - b.contact.priority);
   }
 
   async getLastCheckin(userId: string): Promise<Checkin | undefined> {
