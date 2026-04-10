@@ -522,7 +522,11 @@ export class DatabaseStorage implements IStorage {
     if (!tokenRecord) return undefined;
     
     if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) < new Date()) {
-      return undefined;
+      const newExpiry = new Date();
+      newExpiry.setDate(newExpiry.getDate() + 365);
+      await db.update(contactTokens)
+        .set({ expiresAt: newExpiry })
+        .where(eq(contactTokens.id, tokenRecord.id));
     }
 
     const contact = await this.getContact(tokenRecord.contactId);
@@ -544,7 +548,7 @@ export class DatabaseStorage implements IStorage {
       token += chars[bytes[i] % chars.length];
     }
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setDate(expiresAt.getDate() + 365);
     const [result] = await db.insert(contactTokens).values({
       contactId,
       token,
