@@ -743,14 +743,11 @@ export default function Home() {
           <button
             onClick={() => checkinMutation.mutate()}
             disabled={checkinMutation.isPending}
-            className="w-44 h-44 rounded-full font-bold text-2xl transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100 flex flex-col items-center justify-center mx-auto bg-gradient-to-b from-green-400 to-green-600 text-white border-[3px] border-green-300/50 dark:border-green-700/50"
-            style={{
-              boxShadow: "0 8px 24px rgba(34,197,94,0.35), 0 4px 8px rgba(0,0,0,0.1), inset 0 2px 4px rgba(255,255,255,0.25), inset 0 -2px 4px rgba(0,0,0,0.1)",
-            }}
+            className="w-36 h-36 rounded-full font-semibold text-xl transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center mx-auto bg-green-500 dark:bg-green-600 text-white shadow-md"
             data-testid="button-im-ok"
           >
-            <Check className="h-12 w-12 mb-2 drop-shadow-sm" />
-            <span className="drop-shadow-sm">I'm OK</span>
+            <Check className="h-10 w-10 mb-1.5" />
+            <span>I'm OK</span>
           </button>
           <p className="text-sm text-muted-foreground mt-4">
             Tap "I'm OK" anytime
@@ -773,52 +770,48 @@ export default function Home() {
           </Card>
         )}
 
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-3 gap-3">
           <button
-            className="flex flex-col items-center text-center gap-1.5 p-3 rounded-2xl bg-gradient-to-b from-orange-50 to-orange-100 dark:from-orange-950/40 dark:to-orange-950/60 border border-orange-200/80 dark:border-orange-800/50 transition-all duration-150 active:scale-95 hover:scale-[1.02]"
-            style={{ boxShadow: "0 4px 12px rgba(234,88,12,0.15), inset 0 1px 2px rgba(255,255,255,0.6), inset 0 -1px 2px rgba(0,0,0,0.05)" }}
+            className="flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl bg-orange-50 dark:bg-orange-950/30 transition-all duration-150 active:scale-95 active:bg-orange-100 dark:active:bg-orange-950/50"
             onClick={() => setLocation("/safety-timer")}
             data-testid="card-safety-timer"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-orange-400 to-orange-600 flex items-center justify-center border border-orange-300/50" style={{ boxShadow: "0 3px 8px rgba(234,88,12,0.3), inset 0 1px 2px rgba(255,255,255,0.3)" }}>
-              <Timer className="h-4 w-4 text-white drop-shadow-sm" />
+            <div className="w-11 h-11 rounded-2xl bg-orange-500 flex items-center justify-center">
+              <Timer className="h-5 w-5 text-white" />
             </div>
-            <span className="font-semibold text-xs text-orange-900 dark:text-orange-200">Timer</span>
+            <span className="font-medium text-xs text-foreground">Timer</span>
           </button>
           <button
-            className="flex flex-col items-center text-center gap-1.5 p-3 rounded-2xl bg-gradient-to-b from-teal-50 to-teal-100 dark:from-teal-950/40 dark:to-teal-950/60 border border-teal-200/80 dark:border-teal-800/50 transition-all duration-150 active:scale-95 hover:scale-[1.02]"
-            style={{ boxShadow: "0 4px 12px rgba(20,184,166,0.15), inset 0 1px 2px rgba(255,255,255,0.6), inset 0 -1px 2px rgba(0,0,0,0.05)" }}
+            className="flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl bg-teal-50 dark:bg-teal-950/30 transition-all duration-150 active:scale-95 active:bg-teal-100 dark:active:bg-teal-950/50"
             onClick={() => setLocation("/safe-walk")}
             data-testid="card-safe-walk"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-b from-teal-400 to-teal-600 flex items-center justify-center border border-teal-300/50" style={{ boxShadow: "0 3px 8px rgba(20,184,166,0.3), inset 0 1px 2px rgba(255,255,255,0.3)" }}>
-              <Navigation className="h-4 w-4 text-white drop-shadow-sm" />
+            <div className="w-11 h-11 rounded-2xl bg-teal-500 flex items-center justify-center">
+              <Navigation className="h-5 w-5 text-white" />
             </div>
-            <span className="font-semibold text-xs text-teal-900 dark:text-teal-200">Safe Walk</span>
+            <span className="font-medium text-xs text-foreground">Safe Walk</span>
           </button>
           <button
-            className={`flex flex-col items-center text-center gap-1.5 p-3 rounded-2xl bg-gradient-to-b border transition-all duration-150 active:scale-95 hover:scale-[1.02] ${driveActive ? "from-blue-100 to-blue-200 dark:from-blue-900/60 dark:to-blue-900/80 border-blue-400/60 dark:border-blue-600/50" : "from-blue-50 to-blue-100 dark:from-blue-950/40 dark:to-blue-950/60 border-blue-200/80 dark:border-blue-800/50"}`}
-            style={{ boxShadow: driveActive ? "0 4px 12px rgba(59,130,246,0.3), inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.05)" : "0 4px 12px rgba(59,130,246,0.15), inset 0 1px 2px rgba(255,255,255,0.6), inset 0 -1px 2px rgba(0,0,0,0.05)" }}
+            className={`flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl transition-all duration-150 active:scale-95 ${driveActive ? "bg-blue-100 dark:bg-blue-950/50 active:bg-blue-200" : "bg-blue-50 dark:bg-blue-950/30 active:bg-blue-100 dark:active:bg-blue-950/50"}`}
             onClick={() => setLocation("/drive")}
             data-testid="card-drive"
           >
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${driveActive ? "bg-gradient-to-b from-blue-500 to-blue-700 border-blue-400/50 animate-pulse" : "bg-gradient-to-b from-blue-400 to-blue-600 border-blue-300/50"}`} style={{ boxShadow: "0 3px 8px rgba(59,130,246,0.3), inset 0 1px 2px rgba(255,255,255,0.3)" }}>
-              <Car className="h-4 w-4 text-white drop-shadow-sm" />
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${driveActive ? "bg-blue-600 animate-pulse" : "bg-blue-500"}`}>
+              <Car className="h-5 w-5 text-white" />
             </div>
-            <span className="font-semibold text-xs text-blue-900 dark:text-blue-200">{driveActive ? "Driving" : "Drive"}</span>
+            <span className="font-medium text-xs text-foreground">{driveActive ? "Driving" : "Drive"}</span>
           </button>
         </div>
 
         <div className="space-y-3">
           <button
-            className="w-full py-5 text-lg font-bold rounded-2xl bg-gradient-to-b from-red-500 to-red-700 text-white border border-red-400/40 transition-all duration-150 active:scale-[0.98] hover:scale-[1.01] disabled:opacity-50 flex items-center justify-center gap-2"
-            style={{ boxShadow: "0 6px 20px rgba(220,38,38,0.35), inset 0 2px 4px rgba(255,255,255,0.2), inset 0 -2px 4px rgba(0,0,0,0.15)" }}
+            className="w-full py-4 text-base font-semibold rounded-2xl bg-red-500 dark:bg-red-600 text-white transition-all duration-150 active:scale-[0.98] active:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
             onClick={() => setShowSosConfirm(true)}
             disabled={sosMutation.isPending}
             data-testid="button-sos"
           >
-            <AlertTriangle className="h-5 w-5 drop-shadow-sm" />
-            <span className="drop-shadow-sm">I Need Help</span>
+            <AlertTriangle className="h-5 w-5" />
+            <span>I Need Help</span>
           </button>
             {(status?.settings as any)?.discreetSos && (
               <div className="mt-4">
