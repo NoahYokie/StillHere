@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History, Smartphone, Satellite, RadioTower } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Gauge, History, Smartphone, Satellite, RadioTower, Timer, Navigation, Shield } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -852,6 +852,35 @@ export default function Home() {
             </CardContent>
           </Card>
         )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <Card
+            className="cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => setLocation("/safety-timer")}
+            data-testid="card-safety-timer"
+          >
+            <CardContent className="pt-4 pb-4 flex flex-col items-center text-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-950/30 flex items-center justify-center">
+                <Timer className="h-5 w-5 text-orange-600" />
+              </div>
+              <span className="font-medium text-sm">Safety Timer</span>
+              <p className="text-xs text-muted-foreground leading-tight">Dead man's switch for solo activities</p>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => setLocation("/safe-walk")}
+            data-testid="card-safe-walk"
+          >
+            <CardContent className="pt-4 pb-4 flex flex-col items-center text-center gap-2">
+              <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-950/30 flex items-center justify-center">
+                <Navigation className="h-5 w-5 text-teal-600" />
+              </div>
+              <span className="font-medium text-sm">Safe Walk</span>
+              <p className="text-xs text-muted-foreground leading-tight">Track your journey to a destination</p>
+            </CardContent>
+          </Card>
+        </div>
 
         {drivingSafetyEnabled && (
           <Card className={driveActive ? "border-blue-500/50 bg-blue-50/50 dark:bg-blue-950/20" : ""} data-testid="card-driving">

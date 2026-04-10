@@ -37,6 +37,8 @@ import LiveLocationPage from "@/pages/live-location";
 import LiveLocationViewPage from "@/pages/live-location-view";
 import PrivacyPolicyPage from "@/pages/privacy-policy";
 import TermsOfServicePage from "@/pages/terms-of-service";
+import SafetyTimerPage from "@/pages/safety-timer";
+import SafeWalkPage from "@/pages/safe-walk";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -167,6 +169,20 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <LiveLocationViewPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/safety-timer">
+        <RequireAuth>
+          <RequireSetup>
+            <SafetyTimerPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/safe-walk">
+        <RequireAuth>
+          <RequireSetup>
+            <SafeWalkPage />
           </RequireSetup>
         </RequireAuth>
       </Route>

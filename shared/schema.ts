@@ -48,6 +48,7 @@ export const settings = pgTable("settings", {
   smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(true),
   drivingSafety: boolean("driving_safety").notNull().default(false),
   speedLimitKmh: integer("speed_limit_kmh").notNull().default(120),
+  autoWellnessCall: boolean("auto_wellness_call").notNull().default(false),
   allowReports: boolean("allow_reports").notNull().default(true),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
@@ -616,6 +617,91 @@ export const appRatingsRelations = relations(appRatings, ({ one }) => ({
   }),
 }));
 
+// Safety Timer (Dead Man's Switch)
+export const safetyTimerStatusEnum = pgEnum("safety_timer_status", ["active", "grace_period", "escalated", "cancelled", "safe"]);
+
+export const safetyTimers = pgTable("safety_timers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  durationMinutes: integer("duration_minutes").notNull(),
+  note: text("note"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  status: safetyTimerStatusEnum("status").notNull().default("active"),
+  lastLat: doublePrecision("last_lat"),
+  lastLng: doublePrecision("last_lng"),
+  lastActivity: text("last_activity"),
+  lastSpeed: doublePrecision("last_speed"),
+  lastLocationAt: timestamp("last_location_at"),
+  resolvedAt: timestamp("resolved_at"),
+}, (table) => [
+  index("safety_timer_user_idx").on(table.userId),
+  index("safety_timer_status_idx").on(table.status),
+]);
+
+export const safetyTimersRelations = relations(safetyTimers, ({ one }) => ({
+  user: one(users, {
+    fields: [safetyTimers.userId],
+    references: [users.id],
+  }),
+}));
+
+// Safe Walk / Safe Ride
+export const safeWalkStatusEnum = pgEnum("safe_walk_status", ["active", "arrived", "overdue", "escalated", "cancelled"]);
+
+export const safeWalks = pgTable("safe_walks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  destinationLat: doublePrecision("destination_lat").notNull(),
+  destinationLng: doublePrecision("destination_lng").notNull(),
+  destinationName: text("destination_name"),
+  destinationType: text("destination_type").notNull().default("pin"),
+  note: text("note"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  expectedArrivalAt: timestamp("expected_arrival_at").notNull(),
+  arrivalRadiusMeters: integer("arrival_radius_meters").notNull().default(200),
+  status: safeWalkStatusEnum("status").notNull().default("active"),
+  lastLat: doublePrecision("last_lat"),
+  lastLng: doublePrecision("last_lng"),
+  lastActivity: text("last_activity"),
+  lastSpeed: doublePrecision("last_speed"),
+  lastLocationAt: timestamp("last_location_at"),
+  resolvedAt: timestamp("resolved_at"),
+}, (table) => [
+  index("safe_walk_user_idx").on(table.userId),
+  index("safe_walk_status_idx").on(table.status),
+]);
+
+export const safeWalksRelations = relations(safeWalks, ({ one }) => ({
+  user: one(users, {
+    fields: [safeWalks.userId],
+    references: [users.id],
+  }),
+}));
+
+// Trip Points (location trail for Safety Timer and Safe Walk)
+export const tripPoints = pgTable("trip_points", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tripId: uuid("trip_id").notNull(),
+  tripType: text("trip_type").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lat: doublePrecision("lat").notNull(),
+  lng: doublePrecision("lng").notNull(),
+  speed: doublePrecision("speed"),
+  activity: text("activity"),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+}, (table) => [
+  index("trip_points_trip_idx").on(table.tripId, table.tripType),
+  index("trip_points_user_idx").on(table.userId),
+]);
+
+export const tripPointsRelations = relations(tripPoints, ({ one }) => ({
+  user: one(users, {
+    fields: [tripPoints.userId],
+    references: [users.id],
+  }),
+}));
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
@@ -640,6 +726,9 @@ export const insertDriveSessionSchema = createInsertSchema(driveSessions).omit({
 export const insertSpeedAlertSchema = createInsertSchema(speedAlerts).omit({ id: true, createdAt: true });
 export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, createdAt: true });
 export const insertAppRatingSchema = createInsertSchema(appRatings).omit({ id: true, createdAt: true });
+export const insertSafetyTimerSchema = createInsertSchema(safetyTimers).omit({ id: true, startedAt: true });
+export const insertSafeWalkSchema = createInsertSchema(safeWalks).omit({ id: true, startedAt: true });
+export const insertTripPointSchema = createInsertSchema(tripPoints).omit({ id: true, recordedAt: true });
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -713,6 +802,15 @@ export type InsertErrorReport = z.infer<typeof insertErrorReportSchema>;
 export type AppRating = typeof appRatings.$inferSelect;
 export type InsertAppRating = z.infer<typeof insertAppRatingSchema>;
 
+export type SafetyTimer = typeof safetyTimers.$inferSelect;
+export type InsertSafetyTimer = z.infer<typeof insertSafetyTimerSchema>;
+
+export type SafeWalk = typeof safeWalks.$inferSelect;
+export type InsertSafeWalk = z.infer<typeof insertSafeWalkSchema>;
+
+export type TripPoint = typeof tripPoints.$inferSelect;
+export type InsertTripPoint = z.infer<typeof insertTripPointSchema>;
+
 export interface ReportData {
   userName: string;
   periodStart: string;
@@ -773,4 +871,7 @@ export interface ContactPageData {
   incident: Incident | null;
   locationSession: LocationSession | null;
   handlingContact: Contact | null;
+  safetyTimer: SafetyTimer | null;
+  safeWalk: SafeWalk | null;
+  tripTrail: TripPoint[];
 }

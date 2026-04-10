@@ -118,11 +118,13 @@ export default function ContactPage() {
     );
   }
 
-  const { user, contact, lastCheckin, incident, locationSession, handlingContact } = data;
+  const { user, contact, lastCheckin, incident, locationSession, handlingContact, safetyTimer, safeWalk, tripTrail } = data;
   const hasActiveIncident = incident && incident.status !== "resolved";
   const isBeingHandled = incident?.status === "paused" && handlingContact;
   const isMissedCheckin = incident?.reason === "missed_checkin";
   const isSOS = incident?.reason === "sos";
+  const hasTrip = safetyTimer || safeWalk;
+  const trailPoints = (tripTrail || []).map((p: any) => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt?.toString() }));
 
   const getStatusColor = () => {
     if (isSOS) return "text-destructive";
@@ -212,6 +214,46 @@ export default function ContactPage() {
               </ol>
             </div>
           </>
+        )}
+
+        {hasTrip && (
+          <Card className="border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 flex-shrink-0 mt-0.5 text-orange-600" />
+                <div>
+                  <p className="font-medium text-orange-700 dark:text-orange-400">
+                    {safetyTimer ? "Safety Timer Expired" : "Safe Walk Overdue"}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {safetyTimer
+                      ? `${user.name} set a safety timer${safetyTimer.note ? ` (${safetyTimer.note})` : ""} and did not check back in.`
+                      : `${user.name} was heading${safeWalk?.destinationName ? ` to ${safeWalk.destinationName}` : ""} and has not arrived.`}
+                  </p>
+                </div>
+              </div>
+
+              {trailPoints.length > 0 && (
+                <div className="mt-4">
+                  <LocationMap
+                    center={trailPoints[trailPoints.length - 1]}
+                    points={trailPoints}
+                    zoom={14}
+                    className="w-full h-48"
+                    showTrail={true}
+                    markerLabel="Last position"
+                  />
+                  <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" />Stationary</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500" />Walking</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" />Running</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />Cycling</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-purple-500" />Driving</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* Location Map */}

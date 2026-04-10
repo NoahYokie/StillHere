@@ -60,6 +60,12 @@ import {
   liveLocationPoints,
   type LiveLocationShare,
   type LiveLocationPoint,
+  safetyTimers,
+  safeWalks,
+  tripPoints,
+  type SafetyTimer,
+  type SafeWalk,
+  type TripPoint,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -227,6 +233,24 @@ export interface IStorage {
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
   getIncidentHistory(userId: string, from: Date, to: Date): Promise<Incident[]>;
   getDailyStatus(watcherUserId: string, watchedUserId: string): Promise<DailyStatus>;
+
+  // Safety Timer
+  createSafetyTimer(userId: string, durationMinutes: number, note?: string): Promise<SafetyTimer>;
+  getActiveSafetyTimer(userId: string): Promise<SafetyTimer | undefined>;
+  getSafetyTimer(id: string): Promise<SafetyTimer | undefined>;
+  updateSafetyTimer(id: string, updates: Partial<SafetyTimer>): Promise<SafetyTimer>;
+  getExpiredSafetyTimers(): Promise<SafetyTimer[]>;
+
+  // Safe Walk
+  createSafeWalk(userId: string, data: { destinationLat: number; destinationLng: number; destinationName?: string; destinationType: string; expectedArrivalAt: Date; note?: string; arrivalRadiusMeters?: number }): Promise<SafeWalk>;
+  getActiveSafeWalk(userId: string): Promise<SafeWalk | undefined>;
+  getSafeWalk(id: string): Promise<SafeWalk | undefined>;
+  updateSafeWalk(id: string, updates: Partial<SafeWalk>): Promise<SafeWalk>;
+  getOverdueSafeWalks(): Promise<SafeWalk[]>;
+
+  // Trip Points
+  addTripPoint(data: { tripId: string; tripType: string; userId: string; lat: number; lng: number; speed?: number; activity?: string }): Promise<TripPoint>;
+  getTripPoints(tripId: string, tripType: string): Promise<TripPoint[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -771,6 +795,27 @@ export class DatabaseStorage implements IStorage {
       handlingContact = (await this.getContact(incident.handledByContactId)) || null;
     }
 
+    let safetyTimer = await this.getActiveSafetyTimer(user.id);
+    let safeWalk = await this.getActiveSafeWalk(user.id);
+    if (!safetyTimer) {
+      const [escalated] = await db.select().from(safetyTimers)
+        .where(and(eq(safetyTimers.userId, user.id), eq(safetyTimers.status, "escalated")))
+        .orderBy(desc(safetyTimers.createdAt)).limit(1);
+      if (escalated) safetyTimer = escalated;
+    }
+    if (!safeWalk) {
+      const [escalated] = await db.select().from(safeWalks)
+        .where(and(eq(safeWalks.userId, user.id), eq(safeWalks.status, "escalated")))
+        .orderBy(desc(safeWalks.createdAt)).limit(1);
+      if (escalated) safeWalk = escalated;
+    }
+    let tripTrail: TripPoint[] = [];
+    if (safetyTimer) {
+      tripTrail = await this.getTripPoints(safetyTimer.id, "timer");
+    } else if (safeWalk) {
+      tripTrail = await this.getTripPoints(safeWalk.id, "walk");
+    }
+
     return {
       user: {
         id: user.id,
@@ -782,6 +827,9 @@ export class DatabaseStorage implements IStorage {
       incident: incident || null,
       locationSession: locationSession || null,
       handlingContact,
+      safetyTimer: safetyTimer || null,
+      safeWalk: safeWalk || null,
+      tripTrail,
     };
   }
 
@@ -1562,6 +1610,123 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return results;
+  }
+  // Safety Timer
+  async createSafetyTimer(userId: string, durationMinutes: number, note?: string): Promise<SafetyTimer> {
+    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+    const [timer] = await db.insert(safetyTimers).values({
+      userId,
+      durationMinutes,
+      note: note || null,
+      expiresAt,
+      status: "active",
+    }).returning();
+    return timer;
+  }
+
+  async getActiveSafetyTimer(userId: string): Promise<SafetyTimer | undefined> {
+    const [timer] = await db.select().from(safetyTimers)
+      .where(and(
+        eq(safetyTimers.userId, userId),
+        or(eq(safetyTimers.status, "active"), eq(safetyTimers.status, "grace_period"))
+      ))
+      .orderBy(desc(safetyTimers.startedAt))
+      .limit(1);
+    return timer || undefined;
+  }
+
+  async getSafetyTimer(id: string): Promise<SafetyTimer | undefined> {
+    const [timer] = await db.select().from(safetyTimers).where(eq(safetyTimers.id, id));
+    return timer || undefined;
+  }
+
+  async updateSafetyTimer(id: string, updates: Partial<SafetyTimer>): Promise<SafetyTimer> {
+    const [timer] = await db.update(safetyTimers)
+      .set(updates)
+      .where(eq(safetyTimers.id, id))
+      .returning();
+    return timer;
+  }
+
+  async getExpiredSafetyTimers(): Promise<SafetyTimer[]> {
+    const now = new Date();
+    return db.select().from(safetyTimers)
+      .where(and(
+        eq(safetyTimers.status, "active"),
+        lt(safetyTimers.expiresAt, now)
+      ));
+  }
+
+  // Safe Walk
+  async createSafeWalk(userId: string, data: { destinationLat: number; destinationLng: number; destinationName?: string; destinationType: string; expectedArrivalAt: Date; note?: string; arrivalRadiusMeters?: number }): Promise<SafeWalk> {
+    const [walk] = await db.insert(safeWalks).values({
+      userId,
+      destinationLat: data.destinationLat,
+      destinationLng: data.destinationLng,
+      destinationName: data.destinationName || null,
+      destinationType: data.destinationType,
+      expectedArrivalAt: data.expectedArrivalAt,
+      note: data.note || null,
+      arrivalRadiusMeters: data.arrivalRadiusMeters || 200,
+      status: "active",
+    }).returning();
+    return walk;
+  }
+
+  async getActiveSafeWalk(userId: string): Promise<SafeWalk | undefined> {
+    const [walk] = await db.select().from(safeWalks)
+      .where(and(
+        eq(safeWalks.userId, userId),
+        or(eq(safeWalks.status, "active"), eq(safeWalks.status, "overdue"))
+      ))
+      .orderBy(desc(safeWalks.startedAt))
+      .limit(1);
+    return walk || undefined;
+  }
+
+  async getSafeWalk(id: string): Promise<SafeWalk | undefined> {
+    const [walk] = await db.select().from(safeWalks).where(eq(safeWalks.id, id));
+    return walk || undefined;
+  }
+
+  async updateSafeWalk(id: string, updates: Partial<SafeWalk>): Promise<SafeWalk> {
+    const [walk] = await db.update(safeWalks)
+      .set(updates)
+      .where(eq(safeWalks.id, id))
+      .returning();
+    return walk;
+  }
+
+  async getOverdueSafeWalks(): Promise<SafeWalk[]> {
+    const now = new Date();
+    return db.select().from(safeWalks)
+      .where(and(
+        eq(safeWalks.status, "active"),
+        lt(safeWalks.expectedArrivalAt, now)
+      ));
+  }
+
+  // Trip Points
+  async addTripPoint(data: { tripId: string; tripType: string; userId: string; lat: number; lng: number; speed?: number; activity?: string }): Promise<TripPoint> {
+    const [point] = await db.insert(tripPoints).values({
+      tripId: data.tripId,
+      tripType: data.tripType,
+      userId: data.userId,
+      lat: data.lat,
+      lng: data.lng,
+      speed: data.speed ?? null,
+      activity: data.activity ?? null,
+    }).returning();
+    return point;
+  }
+
+  async getTripPoints(tripId: string, tripType: string): Promise<TripPoint[]> {
+    return db.select().from(tripPoints)
+      .where(and(
+        eq(tripPoints.tripId, tripId),
+        eq(tripPoints.tripType, tripType)
+      ))
+      .orderBy(tripPoints.recordedAt);
   }
 }
 

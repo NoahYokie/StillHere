@@ -741,7 +741,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports, drivingSafety, speedLimitKmh } = req.body;
+      const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports, drivingSafety, speedLimitKmh, autoWellnessCall } = req.body;
       
       if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
         return res.status(400).json({ error: "Checkin interval must be between 12 and 48 hours" });
@@ -779,6 +779,9 @@ export async function registerRoutes(
       if (speedLimitKmh !== undefined && (typeof speedLimitKmh !== "number" || speedLimitKmh < 20 || speedLimitKmh > 300)) {
         return res.status(400).json({ error: "Speed limit must be between 20 and 300 km/h" });
       }
+      if (autoWellnessCall !== undefined && typeof autoWellnessCall !== "boolean") {
+        return res.status(400).json({ error: "Auto wellness call must be a boolean" });
+      }
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -794,6 +797,7 @@ export async function registerRoutes(
       if (allowReports !== undefined) updates.allowReports = allowReports;
       if (drivingSafety !== undefined) updates.drivingSafety = drivingSafety;
       if (speedLimitKmh !== undefined) updates.speedLimitKmh = speedLimitKmh;
+      if (autoWellnessCall !== undefined) updates.autoWellnessCall = autoWellnessCall;
       
       // Update user timezone if provided
       if (timezone) {
@@ -2711,6 +2715,295 @@ export async function registerRoutes(
     return linkedContacts.some(c => c.userId === watchedUserId);
   }
 
+  // ===== SAFETY TIMER (Dead Man's Switch) =====
+  app.post("/api/safety-timer/start", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { durationMinutes, note } = req.body;
+      if (!durationMinutes || durationMinutes < 5 || durationMinutes > 1440) {
+        return res.status(400).json({ error: "Duration must be between 5 and 1440 minutes" });
+      }
+      const existing = await storage.getActiveSafetyTimer(userId);
+      if (existing) {
+        return res.status(400).json({ error: "You already have an active safety timer" });
+      }
+      const timer = await storage.createSafetyTimer(userId, durationMinutes, note);
+      res.json(timer);
+    } catch (error) {
+      console.error("Error starting safety timer:", error);
+      res.status(500).json({ error: "Failed to start safety timer" });
+    }
+  });
+
+  app.get("/api/safety-timer/active", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const timer = await storage.getActiveSafetyTimer(userId);
+      res.json(timer || null);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get active timer" });
+    }
+  });
+
+  app.post("/api/safety-timer/cancel", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const timer = await storage.getActiveSafetyTimer(userId);
+      if (!timer) return res.status(404).json({ error: "No active timer found" });
+      await storage.updateSafetyTimer(timer.id, { status: "safe", resolvedAt: new Date() });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel timer" });
+    }
+  });
+
+  app.post("/api/safety-timer/extend", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { additionalMinutes } = req.body;
+      if (!additionalMinutes || additionalMinutes < 5 || additionalMinutes > 480) {
+        return res.status(400).json({ error: "Extension must be between 5 and 480 minutes" });
+      }
+      const timer = await storage.getActiveSafetyTimer(userId);
+      if (!timer) return res.status(404).json({ error: "No active timer found" });
+      const newExpiry = new Date(timer.expiresAt.getTime() + additionalMinutes * 60 * 1000);
+      const updated = await storage.updateSafetyTimer(timer.id, {
+        expiresAt: newExpiry,
+        status: "active",
+        durationMinutes: timer.durationMinutes + additionalMinutes,
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to extend timer" });
+    }
+  });
+
+  app.post("/api/safety-timer/location", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { lat, lng, speed, activity } = req.body;
+      const timer = await storage.getActiveSafetyTimer(userId);
+      if (!timer) return res.status(404).json({ error: "No active timer" });
+      await storage.updateSafetyTimer(timer.id, {
+        lastLat: lat,
+        lastLng: lng,
+        lastSpeed: speed || null,
+        lastActivity: activity || null,
+        lastLocationAt: new Date(),
+      });
+      await storage.addTripPoint({
+        tripId: timer.id,
+        tripType: "timer",
+        userId: userId,
+        lat, lng, speed, activity,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update location" });
+    }
+  });
+
+  app.get("/api/safety-timer/trail", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const timer = await storage.getActiveSafetyTimer(userId);
+      if (!timer) return res.json([]);
+      const points = await storage.getTripPoints(timer.id, "timer");
+      res.json(points);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get trail" });
+    }
+  });
+
+  // ===== SAFE WALK / SAFE RIDE =====
+  app.post("/api/safe-walk/start", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { destinationLat, destinationLng, destinationName, destinationType, expectedMinutes, note, arrivalRadiusMeters } = req.body;
+      if (destinationLat == null || destinationLng == null || !expectedMinutes) {
+        return res.status(400).json({ error: "Destination and expected time required" });
+      }
+      const existing = await storage.getActiveSafeWalk(userId);
+      if (existing) {
+        return res.status(400).json({ error: "You already have an active Safe Walk" });
+      }
+      const expectedArrivalAt = new Date(Date.now() + expectedMinutes * 60 * 1000);
+      const walk = await storage.createSafeWalk(userId, {
+        destinationLat,
+        destinationLng,
+        destinationName,
+        destinationType: destinationType || "pin",
+        expectedArrivalAt,
+        note,
+        arrivalRadiusMeters: arrivalRadiusMeters || 200,
+      });
+      res.json(walk);
+    } catch (error) {
+      console.error("Error starting safe walk:", error);
+      res.status(500).json({ error: "Failed to start Safe Walk" });
+    }
+  });
+
+  app.get("/api/safe-walk/active", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const walk = await storage.getActiveSafeWalk(userId);
+      res.json(walk || null);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get active walk" });
+    }
+  });
+
+  app.post("/api/safe-walk/cancel", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const walk = await storage.getActiveSafeWalk(userId);
+      if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
+      await storage.updateSafeWalk(walk.id, { status: "cancelled", resolvedAt: new Date() });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to cancel walk" });
+    }
+  });
+
+  app.post("/api/safe-walk/arrived", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const walk = await storage.getActiveSafeWalk(userId);
+      if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
+      await storage.updateSafeWalk(walk.id, { status: "arrived", resolvedAt: new Date() });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark arrival" });
+    }
+  });
+
+  app.post("/api/safe-walk/extend", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { additionalMinutes } = req.body;
+      if (!additionalMinutes || additionalMinutes < 5 || additionalMinutes > 480) {
+        return res.status(400).json({ error: "Extension must be between 5 and 480 minutes" });
+      }
+      const walk = await storage.getActiveSafeWalk(userId);
+      if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
+      const newExpiry = new Date(walk.expectedArrivalAt.getTime() + additionalMinutes * 60 * 1000);
+      const updated = await storage.updateSafeWalk(walk.id, {
+        expectedArrivalAt: newExpiry,
+        status: "active",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to extend walk" });
+    }
+  });
+
+  app.post("/api/safe-walk/location", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const { lat, lng, speed, activity } = req.body;
+      const walk = await storage.getActiveSafeWalk(userId);
+      if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
+
+      await storage.updateSafeWalk(walk.id, {
+        lastLat: lat,
+        lastLng: lng,
+        lastSpeed: speed || null,
+        lastActivity: activity || null,
+        lastLocationAt: new Date(),
+      });
+      await storage.addTripPoint({
+        tripId: walk.id,
+        tripType: "walk",
+        userId: userId,
+        lat, lng, speed, activity,
+      });
+
+      // Check if user has arrived at destination
+      const distanceToDestination = getDistanceMeters(lat, lng, walk.destinationLat, walk.destinationLng);
+      if (distanceToDestination <= walk.arrivalRadiusMeters) {
+        await storage.updateSafeWalk(walk.id, { status: "arrived", resolvedAt: new Date() });
+        return res.json({ success: true, arrived: true });
+      }
+
+      res.json({ success: true, arrived: false, distanceToDestination: Math.round(distanceToDestination) });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update location" });
+    }
+  });
+
+  app.get("/api/safe-walk/trail", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const walk = await storage.getActiveSafeWalk(userId);
+      if (!walk) return res.json([]);
+      const points = await storage.getTripPoints(walk.id, "walk");
+      res.json(points);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get trail" });
+    }
+  });
+
+  // Helper: Calculate distance between two GPS coordinates in meters
+  function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // ===== AUTOMATED WELLNESS CHECK CALL =====
+  app.post("/api/wellness-call/respond", async (req, res) => {
+    try {
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="10">
+    <Say voice="alice">This is StillHere, your safety check in app. If you are safe, please press 1.</Say>
+  </Gather>
+  <Say voice="alice">We did not receive a response. Your emergency contacts will be notified.</Say>
+</Response>`;
+      res.type("text/xml").send(twiml);
+    } catch (error) {
+      console.error("Error in wellness call TwiML:", error);
+      res.status(500).send("");
+    }
+  });
+
+  app.post("/api/wellness-call/gather", async (req, res) => {
+    try {
+      const digits = req.body.Digits;
+      const calledNumber = req.body.To;
+
+      if (digits === "1" && calledNumber) {
+        const normalizedPhone = calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`;
+        const user = await storage.getUserByPhone(normalizedPhone);
+        if (user) {
+          await storage.createCheckin(user.id, "auto", {});
+          await storage.resetReminderState(user.id);
+          const incident = await storage.getOpenIncident(user.id);
+          if (incident) {
+            await storage.updateIncident(incident.id, { status: "resolved", resolvedAt: new Date() });
+            await storage.revokeAllTokensForUser(user.id);
+          }
+          console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call`);
+        }
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="alice">Thank you. You have been checked in. Stay safe.</Say></Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="alice">We did not receive a valid response. Your emergency contacts will be notified.</Say></Response>`;
+      res.type("text/xml").send(twiml);
+    } catch (error) {
+      console.error("Error in wellness call gather:", error);
+      res.status(500).send("");
+    }
+  });
+
   const locationWakeThrottles = new Map<string, number>();
   let cronRunning = false;
 
@@ -2779,6 +3072,22 @@ export async function registerRoutes(
             contact1NotifiedAt: now,
             nextActionAt: addMinutes(now, settings.escalationMinutes || 20),
           });
+
+          if ((settings as any).autoWellnessCall && isTwilioConfigured() && user.phone) {
+            try {
+              const twilio = (await import("twilio")).default;
+              const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
+              await client.calls.create({
+                to: user.phone,
+                from: process.env.TWILIO_PHONE_NUMBER!,
+                url: `${baseUrl}/api/wellness-call/respond`,
+                method: "POST",
+              });
+              console.log(`[CRON] Wellness call initiated to ${user.name}`);
+            } catch (err) {
+              console.error("[CRON] Wellness call failed:", err);
+            }
+          }
           
           alertsSent++;
           await storage.resetReminderState(user.id);
@@ -3089,8 +3398,107 @@ export async function registerRoutes(
         console.error("[CRON] Soft-delete cleanup failed:", err);
       }
 
+      // Safety Timer escalation
+      let timerEscalations = 0;
+      try {
+        const expiredTimers = await storage.getExpiredSafetyTimers();
+        for (const timer of expiredTimers) {
+          try {
+            await storage.updateSafetyTimer(timer.id, { status: "escalated", resolvedAt: new Date() });
+            const user = await storage.getUser(timer.userId);
+            if (!user) continue;
+
+            const incident = await storage.createIncident(timer.userId, "sos");
+            const tokens = await storage.regenerateTokensForUser(timer.userId);
+
+            for (const { contact, token } of tokens) {
+              const link = `${baseUrl}/emergency/${token}`;
+              let locationInfo = "";
+              if (timer.lastLat && timer.lastLng) {
+                locationInfo = `\nLast known location: https://www.google.com/maps?q=${timer.lastLat},${timer.lastLng}`;
+                if (timer.lastActivity) locationInfo += `\nActivity: ${timer.lastActivity}`;
+              }
+              const noteInfo = timer.note ? `\nNote: ${timer.note}` : "";
+
+              if (contact.phone) {
+                try {
+                  await sendSms(contact.phone,
+                    `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                  );
+                } catch {}
+              }
+              if (contact.email) {
+                try {
+                  const { sendEmail } = await import("./email");
+                  await sendEmail(contact.email,
+                    `StillHere Alert: ${user.name}'s Safety Timer Expired`,
+                    `${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                  );
+                } catch {}
+              }
+            }
+            timerEscalations++;
+            console.log(`[CRON] Safety timer escalated for ${user.name}`);
+          } catch (err) {
+            console.error("[CRON] Safety timer escalation failed:", err);
+          }
+        }
+      } catch (err) {
+        console.error("[CRON] Safety timer check failed:", err);
+      }
+
+      // Safe Walk escalation
+      let walkEscalations = 0;
+      try {
+        const overdueWalks = await storage.getOverdueSafeWalks();
+        for (const walk of overdueWalks) {
+          try {
+            await storage.updateSafeWalk(walk.id, { status: "escalated", resolvedAt: new Date() });
+            const user = await storage.getUser(walk.userId);
+            if (!user) continue;
+
+            const incident = await storage.createIncident(walk.userId, "sos");
+            const tokens = await storage.regenerateTokensForUser(walk.userId);
+
+            for (const { contact, token } of tokens) {
+              const link = `${baseUrl}/emergency/${token}`;
+              let locationInfo = "";
+              if (walk.lastLat && walk.lastLng) {
+                locationInfo = `\nLast known location: https://www.google.com/maps?q=${walk.lastLat},${walk.lastLng}`;
+                if (walk.lastActivity) locationInfo += `\nActivity: ${walk.lastActivity}`;
+              }
+              const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
+              const noteInfo = walk.note ? `\nNote: ${walk.note}` : "";
+
+              if (contact.phone) {
+                try {
+                  await sendSms(contact.phone,
+                    `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                  );
+                } catch {}
+              }
+              if (contact.email) {
+                try {
+                  const { sendEmail } = await import("./email");
+                  await sendEmail(contact.email,
+                    `StillHere Alert: ${user.name} Did Not Arrive${destInfo}`,
+                    `${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                  );
+                } catch {}
+              }
+            }
+            walkEscalations++;
+            console.log(`[CRON] Safe Walk escalated for ${user.name}`);
+          } catch (err) {
+            console.error("[CRON] Safe Walk escalation failed:", err);
+          }
+        }
+      } catch (err) {
+        console.error("[CRON] Safe Walk check failed:", err);
+      }
+
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);

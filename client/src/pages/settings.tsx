@@ -68,6 +68,7 @@ export default function SettingsPage() {
   const [drivingSafety, setDrivingSafety] = useState(false);
   const [speedLimitKmh, setSpeedLimitKmh] = useState(120);
   const [allowReports, setAllowReports] = useState(true);
+  const [autoWellnessCall, setAutoWellnessCall] = useState(false);
   const [escalationMinutes, setEscalationMinutes] = useState(20);
   const [customInterval, setCustomInterval] = useState("");
   const [customPauseHours, setCustomPauseHours] = useState("");
@@ -111,6 +112,7 @@ export default function SettingsPage() {
       setDrivingSafety((status.settings as any)?.drivingSafety || false);
       setSpeedLimitKmh((status.settings as any)?.speedLimitKmh || 120);
       setAllowReports((status.settings as any)?.allowReports !== false);
+      setAutoWellnessCall((status.settings as any)?.autoWellnessCall || false);
       setEscalationMinutes((status.settings as any)?.escalationMinutes || 20);
 
       if (!contactsInitialized && status.contacts?.length) {
@@ -125,7 +127,7 @@ export default function SettingsPage() {
   }, [status, contactsInitialized]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; drivingSafety?: boolean; speedLimitKmh?: number; escalationMinutes?: number; allowReports?: boolean }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; drivingSafety?: boolean; speedLimitKmh?: number; escalationMinutes?: number; allowReports?: boolean; autoWellnessCall?: boolean }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -947,6 +949,26 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground mt-3">
               When enabled, your guardians and emergency contacts can receive reports with your checkin history, incidents, and health data. You can turn this off at any time.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="auto-wellness-call" className="font-medium">Automated wellness call</Label>
+              <Switch
+                id="auto-wellness-call"
+                checked={autoWellnessCall}
+                onCheckedChange={(checked) => {
+                  setAutoWellnessCall(checked);
+                  settingsMutation.mutate({ autoWellnessCall: checked });
+                }}
+                data-testid="switch-auto-wellness-call"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mt-3">
+              If you miss a check-in, we'll call your phone. Press 1 to confirm you're safe — no app needed.
             </p>
           </CardContent>
         </Card>
