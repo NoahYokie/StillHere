@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock } from "lucide-react";
+import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock, Footprints, Bike, Bus, Car } from "lucide-react";
 import { useLocation } from "wouter";
 import LocationMap from "@/components/location-map";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
@@ -57,9 +57,12 @@ async function fetchRouteEstimate(
   }
 }
 
+type TravelMode = "walk" | "bike" | "transit" | "drive";
+
 interface TravelEstimates {
   walk: { min: number; km: number };
   bike: { min: number; km: number };
+  transit: { min: number; km: number };
   drive: { min: number; km: number };
 }
 
@@ -82,6 +85,7 @@ export default function SafeWalkPage() {
   const [expectedMinutes, setExpectedMinutes] = useState(30);
   const [estimates, setEstimates] = useState<TravelEstimates | null>(null);
   const [estimatesLoading, setEstimatesLoading] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<TravelMode>("walk");
   const [note, setNote] = useState("");
   const [remaining, setRemaining] = useState(0);
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -105,38 +109,58 @@ export default function SafeWalkPage() {
   });
 
   useEffect(() => {
-    if (!currentPos || !destinationCoords) return;
+    if (!destinationCoords) return;
     let cancelled = false;
     setEstimatesLoading(true);
 
     (async () => {
-      const [walk, bike, drive] = await Promise.all([
-        fetchRouteEstimate(currentPos, destinationCoords, "foot"),
-        fetchRouteEstimate(currentPos, destinationCoords, "bike"),
-        fetchRouteEstimate(currentPos, destinationCoords, "car"),
-      ]);
+      if (currentPos) {
+        const [walk, bike, drive] = await Promise.all([
+          fetchRouteEstimate(currentPos, destinationCoords, "foot"),
+          fetchRouteEstimate(currentPos, destinationCoords, "bike"),
+          fetchRouteEstimate(currentPos, destinationCoords, "car"),
+        ]);
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (walk || bike || drive) {
         const straightLine = getDistanceKm(currentPos, destinationCoords);
         const fallback = (speedKmh: number) => Math.max(5, Math.ceil((straightLine / speedKmh) * 60 * 1.2));
-        const est: TravelEstimates = {
-          walk: walk ? { min: walk.durationMin, km: walk.distanceKm } : { min: fallback(5), km: straightLine },
-          bike: bike ? { min: bike.durationMin, km: bike.distanceKm } : { min: fallback(15), km: straightLine },
-          drive: drive ? { min: drive.durationMin, km: drive.distanceKm } : { min: fallback(40), km: straightLine },
-        };
-        setEstimates(est);
-        setExpectedMinutes(Math.max(5, est.walk.min));
+
+        if (walk || bike || drive) {
+          const driveEst = drive ? { min: drive.durationMin, km: drive.distanceKm } : { min: fallback(40), km: Math.round(straightLine * 12) / 10 };
+          const transitMin = Math.max(5, Math.ceil(driveEst.min * 1.5));
+          const est: TravelEstimates = {
+            walk: walk ? { min: walk.durationMin, km: walk.distanceKm } : { min: fallback(5), km: Math.round(straightLine * 13) / 10 },
+            bike: bike ? { min: bike.durationMin, km: bike.distanceKm } : { min: fallback(15), km: Math.round(straightLine * 12) / 10 },
+            transit: { min: transitMin, km: driveEst.km },
+            drive: driveEst,
+          };
+          setEstimates(est);
+          setSelectedMode("walk");
+          setExpectedMinutes(Math.max(5, est.walk.min));
+        } else {
+          const fallbackEst = (s: number) => Math.max(5, Math.ceil((straightLine / s) * 60 * 1.2));
+          const driveMin = fallbackEst(40);
+          const est: TravelEstimates = {
+            walk: { min: fallbackEst(5), km: Math.round(straightLine * 13) / 10 },
+            bike: { min: fallbackEst(15), km: Math.round(straightLine * 12) / 10 },
+            transit: { min: Math.max(5, Math.ceil(driveMin * 1.5)), km: Math.round(straightLine * 12) / 10 },
+            drive: { min: driveMin, km: Math.round(straightLine * 12) / 10 },
+          };
+          setEstimates(est);
+          setSelectedMode("walk");
+          setExpectedMinutes(fallbackEst(5));
+        }
       } else {
-        const dist = getDistanceKm(currentPos, destinationCoords);
-        const fallback = (s: number) => Math.max(5, Math.ceil((dist / s) * 60 * 1.2));
+        if (cancelled) return;
         setEstimates({
-          walk: { min: fallback(5), km: dist },
-          bike: { min: fallback(15), km: dist },
-          drive: { min: fallback(40), km: dist },
+          walk: { min: 30, km: 0 },
+          bike: { min: 15, km: 0 },
+          transit: { min: 20, km: 0 },
+          drive: { min: 10, km: 0 },
         });
-        setExpectedMinutes(fallback(5));
+        setSelectedMode("walk");
+        setExpectedMinutes(30);
       }
       setEstimatesLoading(false);
     })();
@@ -276,7 +300,7 @@ export default function SafeWalkPage() {
       let results: any[] = [];
 
       if (currentPos) {
-        const nearDeg = 0.15;
+        const nearDeg = 0.25;
         const nearUrl = `${base}?${common}&viewbox=${currentPos.lng - nearDeg},${currentPos.lat + nearDeg},${currentPos.lng + nearDeg},${currentPos.lat - nearDeg}&bounded=1`;
         const nearRes = await fetch(nearUrl, { headers: { "Accept-Language": lang } });
         results = await nearRes.json();
@@ -548,48 +572,56 @@ export default function SafeWalkPage() {
         {destinationCoords && (
           <Card>
             <CardContent className="pt-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Destination</span>
-                <span className="text-sm text-muted-foreground truncate ml-2 max-w-[200px]">{destinationName || "Selected"}</span>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-medium truncate">{destinationName || "Selected destination"}</span>
               </div>
 
               {estimatesLoading && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
                   <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  Calculating route...
+                  Calculating routes...
                 </div>
               )}
 
               {estimates && !estimatesLoading && (
-                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Estimated travel time</span>
+                <>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {([
+                      { mode: "walk" as TravelMode, icon: Footprints, label: "Walk", est: estimates.walk },
+                      { mode: "bike" as TravelMode, icon: Bike, label: "Bike", est: estimates.bike },
+                      { mode: "transit" as TravelMode, icon: Bus, label: "Bus", est: estimates.transit },
+                      { mode: "drive" as TravelMode, icon: Car, label: "Drive", est: estimates.drive },
+                    ]).map(({ mode, icon: Icon, label, est }) => (
+                      <button
+                        key={mode}
+                        onClick={() => {
+                          setSelectedMode(mode);
+                          setExpectedMinutes(Math.max(5, est.min));
+                        }}
+                        className={`flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl transition-all duration-150 active:scale-95 ${
+                          selectedMode === mode
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                        }`}
+                        data-testid={`button-mode-${mode}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="text-xs font-semibold">{est.min} min</span>
+                        <span className="text-[10px] opacity-75">{est.km} km</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                    <div>
-                      <p className="text-muted-foreground text-xs">Walking</p>
-                      <p className="font-semibold" data-testid="text-est-walk">{estimates.walk.min} min</p>
-                      <p className="text-[10px] text-muted-foreground">{estimates.walk.km} km</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">Cycling</p>
-                      <p className="font-semibold" data-testid="text-est-bike">{estimates.bike.min} min</p>
-                      <p className="text-[10px] text-muted-foreground">{estimates.bike.km} km</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">Driving</p>
-                      <p className="font-semibold" data-testid="text-est-drive">{estimates.drive.min} min</p>
-                      <p className="text-[10px] text-muted-foreground">{estimates.drive.km} km</p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
-              {estimates && !estimatesLoading && (
-                <p className="text-xs text-muted-foreground text-center">
-                  We start with the walking estimate to be safe. Once you're moving, we detect your speed and adjust automatically.
-                </p>
+                  <div className="bg-muted/40 rounded-lg px-3 py-2.5 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Expected travel time</span>
+                    <span className="text-sm font-semibold" data-testid="text-expected-minutes">{expectedMinutes} min</span>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+                    Select how you're travelling. Once moving, we detect your speed and adjust automatically.
+                  </p>
+                </>
               )}
 
               <Input
