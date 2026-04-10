@@ -24,6 +24,30 @@ uri = "file://attached_assets/icon-option-4.png"
 type = "image"
 title = "StillHere app icon person check"
 
+[[generated]]
+id = "-qxeqAfQk2ioeAMObFxmI"
+uri = "file://attached_assets/generated_images/safety-timer-setup.png"
+type = "image"
+title = "Safety Timer setup page"
+
+[[generated]]
+id = "i6HwrY-mATv9WrYnEv5eV"
+uri = "file://attached_assets/generated_images/safety-timer-active.png"
+type = "image"
+title = "Safety Timer active countdown"
+
+[[generated]]
+id = "xXWIspLvs9T5f1-9VJnGl"
+uri = "file://attached_assets/generated_images/safe-walk-setup.png"
+type = "image"
+title = "Safe Walk destination picker"
+
+[[generated]]
+id = "_9ZgQmq_jnGL18pm08328"
+uri = "file://attached_assets/generated_images/emergency-portal-report.png"
+type = "image"
+title = "Emergency portal with trail report"
+
 [[outputs]]
 id = "KIHSnRb4Sh7ggJEJAvFB_"
 uri = "file://FULL_APP_REPORT.md"
