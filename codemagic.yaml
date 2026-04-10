@@ -28,6 +28,11 @@ workflows:
       - name: Set up code signing
         script: |
           xcode-project use-profiles
+      - name: Bump build number
+        script: |
+          cd ios/App
+          agvtool new-version -all 3
+          agvtool new-marketing-version 1.0
       - name: Build iOS app
         script: |
           xcode-project build-ipa \
