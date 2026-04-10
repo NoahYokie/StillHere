@@ -240,9 +240,22 @@ export default function SafeWalkPage() {
   const searchAddress = useCallback(async (query: string) => {
     if (query.length < 3) { setAddressResults([]); return; }
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=8&addressdetails=1`;
+      if (currentPos) {
+        url += `&viewbox=${currentPos.lng - 0.5},${currentPos.lat + 0.5},${currentPos.lng + 0.5},${currentPos.lat - 0.5}&bounded=0`;
+      }
+      const res = await fetch(url, {
+        headers: { "Accept-Language": navigator.language || "en" },
+      });
       const data = await res.json();
-      setAddressResults(data.map((r: any) => ({
+      const sorted = currentPos
+        ? [...data].sort((a: any, b: any) => {
+            const distA = Math.abs(parseFloat(a.lat) - currentPos.lat) + Math.abs(parseFloat(a.lon) - currentPos.lng);
+            const distB = Math.abs(parseFloat(b.lat) - currentPos.lat) + Math.abs(parseFloat(b.lon) - currentPos.lng);
+            return distA - distB;
+          })
+        : data;
+      setAddressResults(sorted.slice(0, 5).map((r: any) => ({
         name: r.display_name,
         lat: parseFloat(r.lat),
         lng: parseFloat(r.lon),
@@ -250,7 +263,7 @@ export default function SafeWalkPage() {
     } catch {
       setAddressResults([]);
     }
-  }, []);
+  }, [currentPos]);
 
   const handleAddressInput = (value: string) => {
     setAddressQuery(value);
