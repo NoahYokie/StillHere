@@ -36,25 +36,39 @@ function getDistanceKm(from: { lat: number; lng: number }, to: { lat: number; ln
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function fetchRouteEstimate(
+async function fetchGoogleDirections(
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
-  profile: "foot" | "bike" | "car"
-): Promise<{ durationMin: number; distanceKm: number } | null> {
+): Promise<TravelEstimates | null> {
   try {
-    const osrmProfile = profile === "foot" ? "foot" : profile === "bike" ? "bicycle" : "car";
-    const url = `https://router.project-osrm.org/route/v1/${osrmProfile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
-    const res = await fetch(url);
+    const url = `/api/places/directions?originLat=${from.lat}&originLng=${from.lng}&destLat=${to.lat}&destLng=${to.lng}`;
+    const res = await fetch(url, { credentials: "include" });
+    if (!res.ok) return null;
     const data = await res.json();
-    if (data.code !== "Ok" || !data.routes?.length) return null;
-    const route = data.routes[0];
+    if (!data.walk && !data.bike && !data.transit && !data.drive) return null;
+
+    const straightLine = getDistanceKm(from, to);
+    const fallback = (speedKmh: number) => ({
+      min: Math.max(5, Math.ceil((straightLine / speedKmh) * 60 * 1.2)),
+      km: Math.round(straightLine * 12) / 10,
+    });
+
     return {
-      durationMin: Math.ceil(route.duration / 60),
-      distanceKm: Math.round(route.distance / 100) / 10,
+      walk: data.walk || fallback(5),
+      bike: data.bike || fallback(15),
+      transit: data.transit || (data.drive ? { min: Math.ceil(data.drive.min * 1.5), km: data.drive.km } : fallback(25)),
+      drive: data.drive || fallback(40),
     };
   } catch {
     return null;
   }
+}
+
+interface PlacePrediction {
+  placeId: string;
+  name: string;
+  subtitle: string;
+  description: string;
 }
 
 type TravelMode = "walk" | "bike" | "transit" | "drive";
@@ -78,7 +92,7 @@ export default function SafeWalkPage() {
   const [destinationType, setDestinationType] = useState<"saved" | "address" | "pin">("saved");
   const [selectedGeofence, setSelectedGeofence] = useState<Geofence | null>(null);
   const [addressQuery, setAddressQuery] = useState("");
-  const [addressResults, setAddressResults] = useState<{ name: string; subtitle?: string; type?: string; lat: number; lng: number; distance?: string | null }[]>([]);
+  const [addressResults, setAddressResults] = useState<PlacePrediction[]>([]);
   const [searching, setSearching] = useState(false);
   const [destinationName, setDestinationName] = useState("");
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -115,41 +129,27 @@ export default function SafeWalkPage() {
 
     (async () => {
       if (currentPos) {
-        const [walk, bike, drive] = await Promise.all([
-          fetchRouteEstimate(currentPos, destinationCoords, "foot"),
-          fetchRouteEstimate(currentPos, destinationCoords, "bike"),
-          fetchRouteEstimate(currentPos, destinationCoords, "car"),
-        ]);
+        const googleEst = await fetchGoogleDirections(currentPos, destinationCoords);
 
         if (cancelled) return;
 
-        const straightLine = getDistanceKm(currentPos, destinationCoords);
-        const fallback = (speedKmh: number) => Math.max(5, Math.ceil((straightLine / speedKmh) * 60 * 1.2));
-
-        if (walk || bike || drive) {
-          const driveEst = drive ? { min: drive.durationMin, km: drive.distanceKm } : { min: fallback(40), km: Math.round(straightLine * 12) / 10 };
-          const transitMin = Math.max(5, Math.ceil(driveEst.min * 1.5));
-          const est: TravelEstimates = {
-            walk: walk ? { min: walk.durationMin, km: walk.distanceKm } : { min: fallback(5), km: Math.round(straightLine * 13) / 10 },
-            bike: bike ? { min: bike.durationMin, km: bike.distanceKm } : { min: fallback(15), km: Math.round(straightLine * 12) / 10 },
-            transit: { min: transitMin, km: driveEst.km },
-            drive: driveEst,
-          };
-          setEstimates(est);
+        if (googleEst) {
+          setEstimates(googleEst);
           setSelectedMode("walk");
-          setExpectedMinutes(Math.max(5, est.walk.min));
+          setExpectedMinutes(Math.max(5, googleEst.walk.min));
         } else {
-          const fallbackEst = (s: number) => Math.max(5, Math.ceil((straightLine / s) * 60 * 1.2));
-          const driveMin = fallbackEst(40);
+          const dist = getDistanceKm(currentPos, destinationCoords);
+          const fb = (s: number) => ({ min: Math.max(5, Math.ceil((dist / s) * 60 * 1.2)), km: Math.round(dist * 12) / 10 });
+          const driveMin = fb(40).min;
           const est: TravelEstimates = {
-            walk: { min: fallbackEst(5), km: Math.round(straightLine * 13) / 10 },
-            bike: { min: fallbackEst(15), km: Math.round(straightLine * 12) / 10 },
-            transit: { min: Math.max(5, Math.ceil(driveMin * 1.5)), km: Math.round(straightLine * 12) / 10 },
-            drive: { min: driveMin, km: Math.round(straightLine * 12) / 10 },
+            walk: fb(5),
+            bike: fb(15),
+            transit: { min: Math.max(5, Math.ceil(driveMin * 1.5)), km: fb(40).km },
+            drive: fb(40),
           };
           setEstimates(est);
           setSelectedMode("walk");
-          setExpectedMinutes(fallbackEst(5));
+          setExpectedMinutes(est.walk.min);
         }
       } else {
         if (cancelled) return;
@@ -263,86 +263,47 @@ export default function SafeWalkPage() {
     return () => clearInterval(interval);
   }, [activeWalk?.expectedArrivalAt]);
 
-  const haversineKm = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }, []);
-
-  const formatDistance = useCallback((km: number) => {
-    if (km < 1) return `${Math.round(km * 1000)} m`;
-    if (km < 10) return `${km.toFixed(1)} km`;
-    return `${Math.round(km)} km`;
-  }, []);
-
-  const cleanPlaceName = useCallback((r: any) => {
-    const parts = (r.display_name || "").split(",").map((s: string) => s.trim());
-    const name = r.namedetails?.name || parts[0] || "";
-    const type = r.type?.replace(/_/g, " ") || "";
-    const city = r.address?.city || r.address?.town || r.address?.village || r.address?.suburb || parts[1] || "";
-    const area = r.address?.state || r.address?.county || parts[2] || "";
-    const country = r.address?.country || "";
-    let subtitle = [city, area].filter(Boolean).join(", ");
-    if (country && !subtitle.includes(country)) subtitle = subtitle ? `${subtitle}, ${country}` : country;
-    return { name, subtitle, type };
-  }, []);
-
   const searchAddress = useCallback(async (query: string) => {
     if (query.length < 2) { setAddressResults([]); setSearching(false); return; }
     const thisSearchId = ++searchIdRef.current;
     setSearching(true);
     try {
-      const base = "https://nominatim.openstreetmap.org/search";
-      const common = `format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&namedetails=1`;
-      const lang = navigator.language || "en";
-      let results: any[] = [];
-
+      let url = `/api/places/autocomplete?input=${encodeURIComponent(query)}`;
       if (currentPos) {
-        const nearDeg = 0.25;
-        const nearUrl = `${base}?${common}&viewbox=${currentPos.lng - nearDeg},${currentPos.lat + nearDeg},${currentPos.lng + nearDeg},${currentPos.lat - nearDeg}&bounded=1`;
-        const nearRes = await fetch(nearUrl, { headers: { "Accept-Language": lang } });
-        results = await nearRes.json();
-
-        if (results.length < 3) {
-          const wideDeg = 1.0;
-          const wideUrl = `${base}?${common}&viewbox=${currentPos.lng - wideDeg},${currentPos.lat + wideDeg},${currentPos.lng + wideDeg},${currentPos.lat - wideDeg}&bounded=0`;
-          const wideRes = await fetch(wideUrl, { headers: { "Accept-Language": lang } });
-          const wideData = await wideRes.json();
-          const existingIds = new Set(results.map((r: any) => r.place_id));
-          for (const r of wideData) {
-            if (!existingIds.has(r.place_id)) results.push(r);
-          }
-        }
-      } else {
-        const res = await fetch(`${base}?${common}`, { headers: { "Accept-Language": lang } });
-        results = await res.json();
+        url += `&lat=${currentPos.lat}&lng=${currentPos.lng}`;
       }
-
-      const sorted = currentPos
-        ? [...results].sort((a: any, b: any) => {
-            const distA = haversineKm(currentPos.lat, currentPos.lng, parseFloat(a.lat), parseFloat(a.lon));
-            const distB = haversineKm(currentPos.lat, currentPos.lng, parseFloat(b.lat), parseFloat(b.lon));
-            return distA - distB;
-          })
-        : results;
+      const res = await fetch(url, { credentials: "include" });
+      const data = await res.json();
 
       if (thisSearchId !== searchIdRef.current) return;
-      setAddressResults(sorted.slice(0, 6).map((r: any) => {
-        const { name, subtitle, type } = cleanPlaceName(r);
-        const lat = parseFloat(r.lat);
-        const lng = parseFloat(r.lon);
-        const dist = currentPos ? haversineKm(currentPos.lat, currentPos.lng, lat, lng) : null;
-        return { name, subtitle, type, lat, lng, distance: dist !== null ? formatDistance(dist) : null };
-      }));
+      setAddressResults(data.predictions || []);
     } catch {
       if (thisSearchId !== searchIdRef.current) return;
       setAddressResults([]);
     } finally {
       if (thisSearchId === searchIdRef.current) setSearching(false);
     }
-  }, [currentPos, haversineKm, formatDistance, cleanPlaceName]);
+  }, [currentPos]);
+
+  const selectPlace = useCallback(async (prediction: PlacePrediction) => {
+    setAddressQuery(prediction.name);
+    setAddressResults([]);
+    setDestinationName(prediction.name);
+
+    try {
+      const res = await fetch(`/api/places/details?placeId=${encodeURIComponent(prediction.placeId)}`, { credentials: "include" });
+      const data = await res.json();
+      if (data.lat && data.lng) {
+        setDestinationCoords({ lat: data.lat, lng: data.lng });
+        setSelectedGeofence(null);
+        setDestinationType("address");
+      } else {
+        toast({ title: "Error", description: "Could not get location for this place.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Could not get place details.", variant: "destructive" });
+    }
+  }, [toast]);
 
   useEffect(() => {
     return () => {
@@ -528,16 +489,9 @@ export default function SafeWalkPage() {
               <div className="mt-1.5 border rounded-xl divide-y max-h-60 overflow-y-auto bg-background shadow-lg">
                 {addressResults.map((r, i) => (
                   <button
-                    key={i}
+                    key={r.placeId}
                     className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors flex items-start gap-2.5"
-                    onClick={() => {
-                      setDestinationCoords({ lat: r.lat, lng: r.lng });
-                      setDestinationName(r.name);
-                      setAddressQuery(r.name);
-                      setAddressResults([]);
-                      setSelectedGeofence(null);
-                      setDestinationType("address");
-                    }}
+                    onClick={() => selectPlace(r)}
                     data-testid={`button-address-result-${i}`}
                   >
                     <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -545,7 +499,6 @@ export default function SafeWalkPage() {
                       <p className="text-sm font-medium truncate">{r.name}</p>
                       {r.subtitle && <p className="text-xs text-muted-foreground truncate">{r.subtitle}</p>}
                     </div>
-                    {r.distance && <span className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">{r.distance}</span>}
                   </button>
                 ))}
               </div>
@@ -556,7 +509,7 @@ export default function SafeWalkPage() {
           </CardContent>
         </Card>
 
-        {currentPos && destinationCoords && (
+        {destinationCoords && currentPos && (
           <Card>
             <CardContent className="p-2">
               <LocationMap

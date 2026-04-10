@@ -2198,6 +2198,171 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // GOOGLE MAPS API PROXY ENDPOINTS
+  // ============================================
+
+  app.get("/api/places/autocomplete", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { input, lat, lng } = req.query;
+      if (!input || typeof input !== "string" || input.length < 2) {
+        return res.json({ predictions: [] });
+      }
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Google Maps not configured" });
+
+      const body: any = {
+        input,
+        languageCode: req.headers["accept-language"]?.split(",")[0]?.split("-")[0] || "en",
+      };
+      if (lat && lng) {
+        body.locationBias = {
+          circle: {
+            center: { latitude: parseFloat(lat as string), longitude: parseFloat(lng as string) },
+            radius: 50000.0,
+          },
+        };
+      }
+
+      const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        console.error("[PLACES] Autocomplete error:", data.error.message);
+        return res.json({ predictions: [] });
+      }
+
+      const predictions = (data.suggestions || [])
+        .filter((s: any) => s.placePrediction)
+        .map((s: any) => {
+          const p = s.placePrediction;
+          return {
+            placeId: p.placeId || p.place?.split("/").pop() || "",
+            name: p.structuredFormat?.mainText?.text || p.text?.text?.split(",")[0] || "",
+            subtitle: p.structuredFormat?.secondaryText?.text || "",
+            description: p.text?.text || "",
+          };
+        });
+
+      res.json({ predictions });
+    } catch (err) {
+      console.error("[PLACES] Autocomplete failed:", err);
+      res.json({ predictions: [] });
+    }
+  });
+
+  app.get("/api/places/details", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { placeId } = req.query;
+      if (!placeId || typeof placeId !== "string") {
+        return res.status(400).json({ error: "placeId required" });
+      }
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Google Maps not configured" });
+
+      const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+        headers: {
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "displayName,formattedAddress,location",
+        },
+      });
+      const data = await response.json();
+
+      if (data.error || !data.location) {
+        console.error("[PLACES] Details error:", data.error?.message);
+        return res.status(404).json({ error: "Place not found" });
+      }
+
+      res.json({
+        lat: data.location.latitude,
+        lng: data.location.longitude,
+        name: data.displayName?.text || "",
+        address: data.formattedAddress || "",
+      });
+    } catch (err) {
+      console.error("[PLACES] Details failed:", err);
+      res.status(500).json({ error: "Failed to get place details" });
+    }
+  });
+
+  app.get("/api/places/directions", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { originLat, originLng, destLat, destLng } = req.query;
+      if (!originLat || !originLng || !destLat || !destLng) {
+        return res.status(400).json({ error: "Origin and destination coordinates required" });
+      }
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Google Maps not configured" });
+
+      const travelModes = [
+        { key: "walk", mode: "WALK" },
+        { key: "bike", mode: "BICYCLE" },
+        { key: "transit", mode: "TRANSIT" },
+        { key: "drive", mode: "DRIVE" },
+      ];
+
+      const results: Record<string, { min: number; km: number } | null> = {};
+
+      await Promise.all(travelModes.map(async ({ key, mode }) => {
+        try {
+          const body: any = {
+            origin: { location: { latLng: { latitude: parseFloat(originLat as string), longitude: parseFloat(originLng as string) } } },
+            destination: { location: { latLng: { latitude: parseFloat(destLat as string), longitude: parseFloat(destLng as string) } } },
+            travelMode: mode,
+          };
+
+          const response = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+              "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
+            },
+            body: JSON.stringify(body),
+          });
+          const data = await response.json();
+
+          if (data.routes?.length > 0) {
+            const route = data.routes[0];
+            const durationSec = parseInt(route.duration?.replace("s", "") || "0");
+            results[key] = {
+              min: Math.max(1, Math.ceil(durationSec / 60)),
+              km: Math.round((route.distanceMeters || 0) / 100) / 10,
+            };
+          } else {
+            results[key] = null;
+          }
+        } catch {
+          results[key] = null;
+        }
+      }));
+
+      res.json(results);
+    } catch (err) {
+      console.error("[PLACES] Directions failed:", err);
+      res.status(500).json({ error: "Failed to get directions" });
+    }
+  });
+
+  // ============================================
   // GEOFENCE ENDPOINTS
   // ============================================
   app.get("/api/geofences", async (req, res) => {
