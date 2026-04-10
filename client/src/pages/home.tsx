@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Smartphone, Satellite, RadioTower, Timer, Navigation } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Smartphone, Satellite, RadioTower, Timer, Navigation, Bookmark } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -662,6 +662,15 @@ export default function Home() {
               {localStorage.getItem("liveLocationActive") === "true" && (
                 <span className="absolute top-1 right-1 h-2.5 w-2.5 bg-green-400 rounded-full animate-pulse" />
               )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary-foreground"
+              onClick={() => setLocation("/saved-places")}
+              data-testid="button-saved-places"
+            >
+              <Bookmark className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost"

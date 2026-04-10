@@ -40,6 +40,7 @@ import PrivacyPolicyPage from "@/pages/privacy-policy";
 import TermsOfServicePage from "@/pages/terms-of-service";
 import SafetyTimerPage from "@/pages/safety-timer";
 import SafeWalkPage from "@/pages/safe-walk";
+import SavedPlacesPage from "@/pages/saved-places";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -182,6 +183,9 @@ function Router() {
             <SafetyTimerPage />
           </RequireSetup>
         </RequireAuth>
+      </Route>
+      <Route path="/saved-places">
+        <RequireAuth><SavedPlacesPage /></RequireAuth>
       </Route>
       <Route path="/safe-walk">
         <RequireAuth>
