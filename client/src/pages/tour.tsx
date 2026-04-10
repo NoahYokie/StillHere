@@ -246,7 +246,7 @@ function AlertScreen() {
           </div>
           <div className="flex-1">
             <p className="text-[9px] font-medium text-gray-700">Push notification sent</p>
-            <p className="text-[7px] text-gray-400">9:00 AM — no response</p>
+            <p className="text-[7px] text-gray-400">9:00 AM, no response</p>
           </div>
           <Check className="h-3 w-3 text-green-500" />
         </div>
@@ -256,7 +256,7 @@ function AlertScreen() {
           </div>
           <div className="flex-1">
             <p className="text-[9px] font-medium text-gray-700">SMS reminder sent</p>
-            <p className="text-[7px] text-gray-400">9:05 AM — no response</p>
+            <p className="text-[7px] text-gray-400">9:05 AM, no response</p>
           </div>
           <Check className="h-3 w-3 text-green-500" />
         </div>
@@ -266,7 +266,7 @@ function AlertScreen() {
           </div>
           <div className="flex-1">
             <p className="text-[9px] font-medium text-gray-700">Wellness call attempted</p>
-            <p className="text-[7px] text-gray-400">9:10 AM — no answer</p>
+            <p className="text-[7px] text-gray-400">9:10 AM, no answer</p>
           </div>
           <Check className="h-3 w-3 text-green-500" />
         </div>
@@ -275,7 +275,7 @@ function AlertScreen() {
             <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-[9px] font-semibold text-amber-800">Contacting John (1 of 2)</p>
-              <p className="text-[8px] text-amber-600 mt-0.5">9:15 AM — SMS & email sent</p>
+              <p className="text-[8px] text-amber-600 mt-0.5">9:15 AM, SMS and email sent</p>
             </div>
           </div>
         </div>
