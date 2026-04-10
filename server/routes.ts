@@ -3163,10 +3163,13 @@ export async function registerRoutes(
     try {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="10">
-    <Say voice="Google.en-AU-Neural2-A">Hi there, this is StillHere, your safety check-in app. If you are safe, please press 1.</Say>
+  <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="15">
+    <Say voice="Google.en-US-Neural2-F">Hello, this is StillHere. We noticed you missed your safety check-in. If you're doing okay, just press 1 to confirm.</Say>
+    <Pause length="3"/>
+    <Say voice="Google.en-US-Neural2-F">If you're safe, please press 1 now.</Say>
   </Gather>
-  <Say voice="Google.en-AU-Neural2-A">We did not receive a response. Your emergency contacts will be notified.</Say>
+  <Say voice="Google.en-US-Neural2-F">No response was received. Your emergency contacts will be notified shortly. Goodbye.</Say>
+  <Hangup/>
 </Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
@@ -3194,12 +3197,12 @@ export async function registerRoutes(
           console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call`);
         }
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-AU-Neural2-A">Thank you. You have been checked in. Stay safe.</Say></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You've been checked in safely. Take care.</Say><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-AU-Neural2-A">We did not receive a valid response. Your emergency contacts will be notified.</Say></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">We didn't receive a valid response. Your emergency contacts will be notified shortly. Goodbye.</Say><Hangup/></Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call gather:", error);
