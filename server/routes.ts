@@ -3308,19 +3308,26 @@ export async function registerRoutes(
             : Infinity;
           
           if (timeSinceLastReminder >= REMINDER_THROTTLE_MINUTES) {
-            // Send reminder to the user
-            console.log(`[REMINDER] Sending reminder ${remindersSentSoFar + 1}/${maxReminders}`);
+            const reminderNumber = remindersSentSoFar + 1;
+            console.log(`[REMINDER] Sending reminder ${reminderNumber}/${maxReminders}`);
             
-            // Use home page as the checkin link
             const checkInLink = `${baseUrl}/`;
-            await sendReminderPush(user.id, user.name);
-            if (user.phone) {
-              await sendReminderSms(user.phone, checkInLink, !!settings.smsCheckinEnabled);
+
+            if (reminderNumber === 1) {
+              await sendReminderPush(user.id, user.name);
+              console.log("[REMINDER] Push notification sent\n");
+            } else {
+              if (user.phone) {
+                await sendReminderSms(user.phone, checkInLink, !!settings.smsCheckinEnabled);
+                console.log("[REMINDER] SMS sent\n");
+              } else {
+                await sendReminderPush(user.id, user.name);
+                console.log("[REMINDER] Push notification sent (no phone for SMS)\n");
+              }
             }
+
             await storage.incrementRemindersSent(user.id);
             remindersSent++;
-            
-            console.log("[REMINDER] Sent\n");
           } else {
             console.log(`[REMINDER] Throttled, ${Math.round(REMINDER_THROTTLE_MINUTES - timeSinceLastReminder)} min until next reminder`);
           }
