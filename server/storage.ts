@@ -1699,10 +1699,11 @@ export class DatabaseStorage implements IStorage {
 
   async getOverdueSafeWalks(): Promise<SafeWalk[]> {
     const now = new Date();
+    const graceDeadline = new Date(now.getTime() - 10 * 60 * 1000);
     return db.select().from(safeWalks)
       .where(and(
-        eq(safeWalks.status, "active"),
-        lt(safeWalks.expectedArrivalAt, now)
+        or(eq(safeWalks.status, "active"), eq(safeWalks.status, "overdue")),
+        lt(safeWalks.expectedArrivalAt, graceDeadline)
       ));
   }
 

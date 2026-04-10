@@ -4,8 +4,8 @@ import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
-import { users, settings, authSessions } from "@shared/schema";
+import { eq, and, lt } from "drizzle-orm";
+import { users, settings, authSessions, safeWalks } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -2919,7 +2919,6 @@ export async function registerRoutes(
         lat, lng, speed, activity,
       });
 
-      // Auto-adjust expected arrival based on detected speed/activity
       const distanceToDestination = getDistanceMeters(lat, lng, walk.destinationLat, walk.destinationLng);
 
       if (distanceToDestination <= walk.arrivalRadiusMeters) {
@@ -2930,12 +2929,9 @@ export async function registerRoutes(
       if (speed && speed > 0.5) {
         const distKm = distanceToDestination / 1000;
         const speedKmh = speed * 3.6;
-        const etaMinutes = Math.ceil((distKm / speedKmh) * 60 * 1.2);
+        const etaMinutes = Math.ceil((distKm / speedKmh) * 60 * 1.15);
         const newArrival = new Date(Date.now() + Math.max(5, etaMinutes) * 60000);
-        const currentArrival = new Date(walk.expectedArrivalAt);
-        if (newArrival < currentArrival) {
-          await storage.updateSafeWalk(walk.id, { expectedArrivalAt: newArrival });
-        }
+        await storage.updateSafeWalk(walk.id, { expectedArrivalAt: newArrival });
       }
 
       res.json({ success: true, arrived: false, distanceToDestination: Math.round(distanceToDestination) });
@@ -3459,7 +3455,21 @@ export async function registerRoutes(
         console.error("[CRON] Safety timer check failed:", err);
       }
 
-      // Safe Walk escalation
+      // Safe Walk: mark newly overdue walks
+      try {
+        const nowDate = new Date();
+        const newlyOverdue = await db.select().from(safeWalks)
+          .where(and(eq(safeWalks.status, "active"), lt(safeWalks.expectedArrivalAt, nowDate)));
+        for (const w of newlyOverdue) {
+          await storage.updateSafeWalk(w.id, { status: "overdue" });
+          const u = await storage.getUser(w.userId);
+          console.log(`[CRON] Safe Walk now overdue for ${u?.name || w.userId} — 10 min grace period started`);
+        }
+      } catch (err) {
+        console.error("[CRON] Safe Walk overdue marking failed:", err);
+      }
+
+      // Safe Walk escalation (10 min grace period passed)
       let walkEscalations = 0;
       try {
         const overdueWalks = await storage.getOverdueSafeWalks();
