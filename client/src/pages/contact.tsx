@@ -15,9 +15,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User } from "lucide-react";
+import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation } from "lucide-react";
 import type { ContactPageData } from "@shared/schema";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import LocationMap from "@/components/location-map";
 
 export default function ContactPage() {
   const { token } = useParams<{ token: string }>();
@@ -30,11 +31,14 @@ export default function ContactPage() {
     queryKey: ["/api/emergency", token],
   });
 
-  // Fetch address from coordinates
+  const locationLat = data?.locationSession?.lastLat ?? data?.lastCheckin?.lat ?? null;
+  const locationLng = data?.locationSession?.lastLng ?? data?.lastCheckin?.lng ?? null;
+  const locationIsLive = !!(data?.locationSession?.active && data?.locationSession?.lastLat);
+  const locationTimestamp = data?.locationSession?.lastTimestamp ?? data?.lastCheckin?.createdAt ?? null;
+
   useEffect(() => {
-    const locationSession = data?.locationSession;
-    if (locationSession?.lastLat && locationSession?.lastLng) {
-      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${locationSession.lastLat}&lon=${locationSession.lastLng}`)
+    if (locationLat && locationLng) {
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${locationLat}&lon=${locationLng}`)
         .then(res => res.json())
         .then(result => {
           if (result.display_name) {
@@ -45,7 +49,7 @@ export default function ContactPage() {
           setAddress(null);
         });
     }
-  }, [data?.locationSession?.lastLat, data?.locationSession?.lastLng]);
+  }, [locationLat, locationLng]);
 
   const handleMutation = useMutation({
     mutationFn: async () => {
@@ -210,6 +214,53 @@ export default function ContactPage() {
           </>
         )}
 
+        {/* Location Map */}
+        {locationLat && locationLng && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <MapPin className="h-5 w-5" />
+                {locationIsLive ? "Live location" : "Last known location"}
+              </CardTitle>
+              <CardDescription className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {locationTimestamp
+                  ? formatDistanceToNow(new Date(locationTimestamp), { addSuffix: true })
+                  : "Unknown"}
+                {locationIsLive && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    Live
+                  </span>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <LocationMap
+                center={{ lat: locationLat, lng: locationLng }}
+                zoom={15}
+                className="w-full h-56"
+                markerLabel={user.name}
+              />
+              {address && (
+                <p className="text-sm text-foreground mt-3" data-testid="text-address">
+                  {address}
+                </p>
+              )}
+              <a
+                href={`https://www.google.com/maps?q=${locationLat},${locationLng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-primary mt-3"
+                data-testid="link-open-maps"
+              >
+                <Navigation className="h-4 w-4" />
+                Open in Google Maps
+              </a>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Contact Actions */}
         <div className="space-y-3">
           <Button
@@ -297,53 +348,6 @@ export default function ContactPage() {
           </Card>
         )}
 
-        {/* Location */}
-        {locationSession && locationSession.active && locationSession.lastLat && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MapPin className="h-5 w-5" />
-                Last known location
-              </CardTitle>
-              <CardDescription>
-                <Clock className="h-3 w-3 inline mr-1" />
-                {locationSession.lastTimestamp
-                  ? formatDistanceToNow(new Date(locationSession.lastTimestamp), { addSuffix: true })
-                  : "Unknown"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg h-48 overflow-hidden">
-                <iframe
-                  title="User location map"
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${locationSession.lastLng! - 0.01},${locationSession.lastLat - 0.01},${locationSession.lastLng! + 0.01},${locationSession.lastLat + 0.01}&layer=mapnik&marker=${locationSession.lastLat},${locationSession.lastLng}`}
-                  data-testid="map-location"
-                />
-              </div>
-              {address && (
-                <p className="text-sm text-foreground mt-3 text-center" data-testid="text-address">
-                  {address}
-                </p>
-              )}
-              <a
-                href={`https://www.google.com/maps?q=${locationSession.lastLat},${locationSession.lastLng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary underline mt-3 block text-center"
-                data-testid="link-open-maps"
-              >
-                Open in Google Maps
-              </a>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                Location sharing is controlled by the user.
-              </p>
-            </CardContent>
-          </Card>
-        )}
       </main>
 
       {/* Handle Confirmation Dialog */}
