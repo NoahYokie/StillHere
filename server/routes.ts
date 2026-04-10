@@ -3250,6 +3250,9 @@ export async function registerRoutes(
         // If past grace period, send alert regardless of reminder state
         // This prevents deadlock if cron runs late or reminders weren't sent
         if (isDueForAlert) {
+          const reminderHistory = await storage.getReminderTimeline(user.id);
+          const timeStr = now.toISOString();
+
           let incident = await storage.createIncident(user.id, "missed_checkin");
           const contacts = await storage.getContacts(user.id);
           
@@ -3260,24 +3263,8 @@ export async function registerRoutes(
           const tokens = await storage.regenerateTokensForUser(user.id);
           const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
           const firstContact = sortedContacts[0];
-          
-          if (firstContact) {
-            const token = tokens.find(t => t.contact.id === firstContact.id);
-            if (token) {
-              const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`[MISSED CHECK-IN] Alerting Contact #${firstContact.priority}`);
-              await notifyContact(firstContact, user.name, link, "missed_checkin", sendMissedCheckinAlert);
-              console.log("[MISSED CHECK-IN] Alert sent\n");
-            }
-          }
-          
-          incident = await storage.updateIncident(incident.id, {
-            escalationLevel: 1,
-            notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
-            lastContactNotifiedAt: now,
-            contact1NotifiedAt: now,
-            nextActionAt: addMinutes(now, settings.escalationMinutes || 20),
-          });
+
+          const timeline = [...reminderHistory];
 
           if ((settings as any).autoWellnessCall && isTwilioConfigured() && user.phone) {
             try {
@@ -3289,11 +3276,33 @@ export async function registerRoutes(
                 url: `${baseUrl}/api/wellness-call/respond`,
                 method: "POST",
               });
+              timeline.push({ type: "call", time: timeStr, detail: "Automated wellness call placed" });
               console.log(`[CRON] Wellness call initiated to ${user.name}`);
             } catch (err) {
+              timeline.push({ type: "call_failed", time: timeStr, detail: "Wellness call attempted but failed" });
               console.error("[CRON] Wellness call failed:", err);
             }
           }
+          
+          if (firstContact) {
+            const token = tokens.find(t => t.contact.id === firstContact.id);
+            if (token) {
+              const link = `${baseUrl}/emergency/${token.token}`;
+              console.log(`[MISSED CHECK-IN] Alerting Contact #${firstContact.priority}`);
+              await notifyContact(firstContact, user.name, link, "missed_checkin", sendMissedCheckinAlert);
+              timeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name}` });
+              console.log("[MISSED CHECK-IN] Alert sent\n");
+            }
+          }
+          
+          incident = await storage.updateIncident(incident.id, {
+            escalationLevel: 1,
+            notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
+            lastContactNotifiedAt: now,
+            contact1NotifiedAt: now,
+            nextActionAt: addMinutes(now, settings.escalationMinutes || 20),
+            escalationTimeline: JSON.stringify(timeline),
+          });
           
           alertsSent++;
           await storage.resetReminderState(user.id);
@@ -3313,15 +3322,20 @@ export async function registerRoutes(
             
             const checkInLink = `${baseUrl}/`;
 
+            const timeStr = now.toISOString();
+
             if (reminderNumber === 1) {
               await sendReminderPush(user.id, user.name);
+              await storage.addReminderTimelineEntry(user.id, { type: "push", time: timeStr, detail: "Push notification sent" });
               console.log("[REMINDER] Push notification sent\n");
             } else {
               if (user.phone) {
                 await sendReminderSms(user.phone, checkInLink, !!settings.smsCheckinEnabled);
+                await storage.addReminderTimelineEntry(user.id, { type: "sms", time: timeStr, detail: "SMS reminder sent" });
                 console.log("[REMINDER] SMS sent\n");
               } else {
                 await sendReminderPush(user.id, user.name);
+                await storage.addReminderTimelineEntry(user.id, { type: "push", time: timeStr, detail: "Push notification sent (no phone)" });
                 console.log("[REMINDER] Push notification sent (no phone for SMS)\n");
               }
             }
@@ -3444,6 +3458,9 @@ export async function registerRoutes(
               await notifyContact(nextSequential, user.name, link, reason, (p, n, l) => sendEscalationAlert(p, n, l, reason));
               console.log("[ESCALATION] Alert sent\n");
             }
+
+            const existingTimeline = JSON.parse(incident.escalationTimeline || "[]");
+            existingTimeline.push({ type: "contact_escalation", time: now.toISOString(), detail: `Escalated to emergency contact: ${nextSequential.name}` });
             
             notifiedIds.push(nextSequential.id);
             const newLevel = notifiedIds.length;
@@ -3455,6 +3472,7 @@ export async function registerRoutes(
               nextActionAt: addMinutes(now, escalationMinutes),
             };
             if (newLevel === 2) updateData.contact2NotifiedAt = now;
+            updateData.escalationTimeline = JSON.stringify(existingTimeline);
             
             await storage.updateIncident(incident.id, updateData);
             escalations++;

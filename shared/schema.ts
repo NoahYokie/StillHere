@@ -52,6 +52,7 @@ export const settings = pgTable("settings", {
   allowReports: boolean("allow_reports").notNull().default(true),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
+  reminderTimeline: text("reminder_timeline").notNull().default("[]"),
   pauseUntil: timestamp("pause_until"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -142,6 +143,7 @@ export const incidents = pgTable("incidents", {
   userNotifiedNoResponseAt: timestamp("user_notified_no_response_at"),
   contact1NotifiedAt: timestamp("contact1_notified_at"),
   contact2NotifiedAt: timestamp("contact2_notified_at"),
+  escalationTimeline: text("escalation_timeline").notNull().default("[]"),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),

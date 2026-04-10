@@ -80,6 +80,8 @@ export interface IStorage {
   getSettings(userId: string): Promise<Settings | undefined>;
   updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
   incrementRemindersSent(userId: string): Promise<Settings>;
+  addReminderTimelineEntry(userId: string, entry: { type: string; time: string; detail: string }): Promise<void>;
+  getReminderTimeline(userId: string): Promise<{ type: string; time: string; detail: string }[]>;
   resetReminderState(userId: string): Promise<Settings>;
   
   // Contacts
@@ -330,12 +332,27 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async addReminderTimelineEntry(userId: string, entry: { type: string; time: string; detail: string }): Promise<void> {
+    const existing = await this.getSettings(userId);
+    if (!existing) return;
+    const timeline = JSON.parse(existing.reminderTimeline || "[]");
+    timeline.push(entry);
+    await db.update(settings).set({ reminderTimeline: JSON.stringify(timeline), updatedAt: new Date() }).where(eq(settings.userId, userId));
+  }
+
+  async getReminderTimeline(userId: string): Promise<{ type: string; time: string; detail: string }[]> {
+    const existing = await this.getSettings(userId);
+    if (!existing) return [];
+    return JSON.parse(existing.reminderTimeline || "[]");
+  }
+
   async resetReminderState(userId: string): Promise<Settings> {
     const [result] = await db
       .update(settings)
       .set({ 
         remindersSent: 0,
         lastReminderAt: null,
+        reminderTimeline: "[]",
         updatedAt: new Date()
       })
       .where(eq(settings.userId, userId))

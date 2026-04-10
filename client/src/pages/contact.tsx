@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation } from "lucide-react";
+import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield } from "lucide-react";
 import type { ContactPageData } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import LocationMap from "@/components/location-map";
@@ -213,6 +213,67 @@ export default function ContactPage() {
                 <li>If still no response, call local emergency services</li>
               </ol>
             </div>
+
+            {/* Escalation Timeline */}
+            {incident?.escalationTimeline && (() => {
+              let timeline: { type: string; time: string; detail: string }[] = [];
+              try { timeline = JSON.parse(incident.escalationTimeline); } catch {}
+              if (timeline.length === 0) return null;
+
+              const getIcon = (type: string) => {
+                switch (type) {
+                  case "push": return <Bell className="h-3.5 w-3.5" />;
+                  case "sms": return <MessageCircleMore className="h-3.5 w-3.5" />;
+                  case "call": case "call_failed": return <PhoneCall className="h-3.5 w-3.5" />;
+                  case "contact_alert": case "contact_escalation": return <Shield className="h-3.5 w-3.5" />;
+                  default: return <Clock className="h-3.5 w-3.5" />;
+                }
+              };
+
+              const getColor = (type: string) => {
+                switch (type) {
+                  case "push": return "text-blue-600 bg-blue-100 dark:bg-blue-900/40 dark:text-blue-400";
+                  case "sms": return "text-green-600 bg-green-100 dark:bg-green-900/40 dark:text-green-400";
+                  case "call": return "text-purple-600 bg-purple-100 dark:bg-purple-900/40 dark:text-purple-400";
+                  case "call_failed": return "text-red-600 bg-red-100 dark:bg-red-900/40 dark:text-red-400";
+                  case "contact_alert": case "contact_escalation": return "text-orange-600 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-400";
+                  default: return "text-muted-foreground bg-muted";
+                }
+              };
+
+              return (
+                <Card className="mt-4">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      What we tried before contacting you
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {timeline.map((entry, i) => (
+                        <div key={i} className="flex items-start gap-3" data-testid={`timeline-entry-${i}`}>
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${getColor(entry.type)}`}>
+                            {getIcon(entry.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{entry.detail}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(entry.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })}
+                              {" \u2022 "}
+                              {new Date(entry.time).toLocaleDateString([], { month: "short", day: "numeric" })}
+                            </p>
+                          </div>
+                          {i < timeline.length - 1 && (
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">No response</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </>
         )}
 
