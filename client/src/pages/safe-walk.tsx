@@ -75,7 +75,8 @@ export default function SafeWalkPage() {
   const [destinationType, setDestinationType] = useState<"saved" | "address" | "pin">("saved");
   const [selectedGeofence, setSelectedGeofence] = useState<Geofence | null>(null);
   const [addressQuery, setAddressQuery] = useState("");
-  const [addressResults, setAddressResults] = useState<{ name: string; lat: number; lng: number }[]>([]);
+  const [addressResults, setAddressResults] = useState<{ name: string; subtitle?: string; type?: string; lat: number; lng: number; distance?: string | null }[]>([]);
+  const [searching, setSearching] = useState(false);
   const [destinationName, setDestinationName] = useState("");
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [expectedMinutes, setExpectedMinutes] = useState(30);
@@ -86,6 +87,7 @@ export default function SafeWalkPage() {
   const [currentPos, setCurrentPos] = useState<{ lat: number; lng: number } | null>(null);
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchIdRef = useRef(0);
 
   const { data: activeWalk, isLoading } = useQuery<SafeWalk | null>({
     queryKey: ["/api/safe-walk/active"],
@@ -264,7 +266,8 @@ export default function SafeWalkPage() {
   }, []);
 
   const searchAddress = useCallback(async (query: string) => {
-    if (query.length < 2) { setAddressResults([]); return; }
+    if (query.length < 2) { setAddressResults([]); setSearching(false); return; }
+    const thisSearchId = ++searchIdRef.current;
     setSearching(true);
     try {
       const base = "https://nominatim.openstreetmap.org/search";
@@ -301,23 +304,32 @@ export default function SafeWalkPage() {
           })
         : results;
 
+      if (thisSearchId !== searchIdRef.current) return;
       setAddressResults(sorted.slice(0, 6).map((r: any) => {
         const { name, subtitle, type } = cleanPlaceName(r);
         const lat = parseFloat(r.lat);
         const lng = parseFloat(r.lon);
         const dist = currentPos ? haversineKm(currentPos.lat, currentPos.lng, lat, lng) : null;
-        return { name, subtitle, type, lat, lng, distance: dist ? formatDistance(dist) : null };
+        return { name, subtitle, type, lat, lng, distance: dist !== null ? formatDistance(dist) : null };
       }));
     } catch {
+      if (thisSearchId !== searchIdRef.current) return;
       setAddressResults([]);
     } finally {
-      setSearching(false);
+      if (thisSearchId === searchIdRef.current) setSearching(false);
     }
   }, [currentPos, haversineKm, formatDistance, cleanPlaceName]);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, []);
 
   const handleAddressInput = (value: string) => {
     setAddressQuery(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (value.length < 2) { setAddressResults([]); setSearching(false); return; }
     searchTimeoutRef.current = setTimeout(() => searchAddress(value), 300);
   };
 
@@ -474,21 +486,29 @@ export default function SafeWalkPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <Input
-              placeholder="Search address..."
-              value={addressQuery}
-              onChange={(e) => handleAddressInput(e.target.value)}
-              data-testid="input-address"
-            />
+            <div className="relative">
+              <Input
+                placeholder="Where to?"
+                value={addressQuery}
+                onChange={(e) => handleAddressInput(e.target.value)}
+                className="pr-8"
+                data-testid="input-address"
+              />
+              {searching && (
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
             {addressResults.length > 0 && (
-              <div className="mt-2 border rounded-lg divide-y max-h-40 overflow-y-auto">
+              <div className="mt-1.5 border rounded-xl divide-y max-h-60 overflow-y-auto bg-background shadow-lg">
                 {addressResults.map((r, i) => (
                   <button
                     key={i}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                    className="w-full text-left px-3 py-2.5 hover:bg-muted/60 transition-colors flex items-start gap-2.5"
                     onClick={() => {
                       setDestinationCoords({ lat: r.lat, lng: r.lng });
-                      setDestinationName(r.name.split(",")[0]);
+                      setDestinationName(r.name);
                       setAddressQuery(r.name);
                       setAddressResults([]);
                       setSelectedGeofence(null);
@@ -496,10 +516,18 @@ export default function SafeWalkPage() {
                     }}
                     data-testid={`button-address-result-${i}`}
                   >
-                    {r.name}
+                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{r.name}</p>
+                      {r.subtitle && <p className="text-xs text-muted-foreground truncate">{r.subtitle}</p>}
+                    </div>
+                    {r.distance && <span className="text-xs text-muted-foreground whitespace-nowrap mt-0.5">{r.distance}</span>}
                   </button>
                 ))}
               </div>
+            )}
+            {addressQuery.length >= 2 && !searching && addressResults.length === 0 && !destinationCoords && (
+              <p className="text-xs text-muted-foreground mt-1.5 text-center">No results found</p>
             )}
           </CardContent>
         </Card>
