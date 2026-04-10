@@ -237,38 +237,88 @@ export default function SafeWalkPage() {
     return () => clearInterval(interval);
   }, [activeWalk?.expectedArrivalAt]);
 
+  const haversineKm = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }, []);
+
+  const formatDistance = useCallback((km: number) => {
+    if (km < 1) return `${Math.round(km * 1000)} m`;
+    if (km < 10) return `${km.toFixed(1)} km`;
+    return `${Math.round(km)} km`;
+  }, []);
+
+  const cleanPlaceName = useCallback((r: any) => {
+    const parts = (r.display_name || "").split(",").map((s: string) => s.trim());
+    const name = r.namedetails?.name || parts[0] || "";
+    const type = r.type?.replace(/_/g, " ") || "";
+    const city = r.address?.city || r.address?.town || r.address?.village || r.address?.suburb || parts[1] || "";
+    const area = r.address?.state || r.address?.county || parts[2] || "";
+    const country = r.address?.country || "";
+    let subtitle = [city, area].filter(Boolean).join(", ");
+    if (country && !subtitle.includes(country)) subtitle = subtitle ? `${subtitle}, ${country}` : country;
+    return { name, subtitle, type };
+  }, []);
+
   const searchAddress = useCallback(async (query: string) => {
-    if (query.length < 3) { setAddressResults([]); return; }
+    if (query.length < 2) { setAddressResults([]); return; }
+    setSearching(true);
     try {
-      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=8&addressdetails=1`;
+      const base = "https://nominatim.openstreetmap.org/search";
+      const common = `format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&namedetails=1`;
+      const lang = navigator.language || "en";
+      let results: any[] = [];
+
       if (currentPos) {
-        url += `&viewbox=${currentPos.lng - 0.5},${currentPos.lat + 0.5},${currentPos.lng + 0.5},${currentPos.lat - 0.5}&bounded=0`;
+        const nearDeg = 0.15;
+        const nearUrl = `${base}?${common}&viewbox=${currentPos.lng - nearDeg},${currentPos.lat + nearDeg},${currentPos.lng + nearDeg},${currentPos.lat - nearDeg}&bounded=1`;
+        const nearRes = await fetch(nearUrl, { headers: { "Accept-Language": lang } });
+        results = await nearRes.json();
+
+        if (results.length < 3) {
+          const wideDeg = 1.0;
+          const wideUrl = `${base}?${common}&viewbox=${currentPos.lng - wideDeg},${currentPos.lat + wideDeg},${currentPos.lng + wideDeg},${currentPos.lat - wideDeg}&bounded=0`;
+          const wideRes = await fetch(wideUrl, { headers: { "Accept-Language": lang } });
+          const wideData = await wideRes.json();
+          const existingIds = new Set(results.map((r: any) => r.place_id));
+          for (const r of wideData) {
+            if (!existingIds.has(r.place_id)) results.push(r);
+          }
+        }
+      } else {
+        const res = await fetch(`${base}?${common}`, { headers: { "Accept-Language": lang } });
+        results = await res.json();
       }
-      const res = await fetch(url, {
-        headers: { "Accept-Language": navigator.language || "en" },
-      });
-      const data = await res.json();
+
       const sorted = currentPos
-        ? [...data].sort((a: any, b: any) => {
-            const distA = Math.abs(parseFloat(a.lat) - currentPos.lat) + Math.abs(parseFloat(a.lon) - currentPos.lng);
-            const distB = Math.abs(parseFloat(b.lat) - currentPos.lat) + Math.abs(parseFloat(b.lon) - currentPos.lng);
+        ? [...results].sort((a: any, b: any) => {
+            const distA = haversineKm(currentPos.lat, currentPos.lng, parseFloat(a.lat), parseFloat(a.lon));
+            const distB = haversineKm(currentPos.lat, currentPos.lng, parseFloat(b.lat), parseFloat(b.lon));
             return distA - distB;
           })
-        : data;
-      setAddressResults(sorted.slice(0, 5).map((r: any) => ({
-        name: r.display_name,
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lon),
-      })));
+        : results;
+
+      setAddressResults(sorted.slice(0, 6).map((r: any) => {
+        const { name, subtitle, type } = cleanPlaceName(r);
+        const lat = parseFloat(r.lat);
+        const lng = parseFloat(r.lon);
+        const dist = currentPos ? haversineKm(currentPos.lat, currentPos.lng, lat, lng) : null;
+        return { name, subtitle, type, lat, lng, distance: dist ? formatDistance(dist) : null };
+      }));
     } catch {
       setAddressResults([]);
+    } finally {
+      setSearching(false);
     }
-  }, [currentPos]);
+  }, [currentPos, haversineKm, formatDistance, cleanPlaceName]);
 
   const handleAddressInput = (value: string) => {
     setAddressQuery(value);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => searchAddress(value), 500);
+    searchTimeoutRef.current = setTimeout(() => searchAddress(value), 300);
   };
 
   if (isLoading) {
