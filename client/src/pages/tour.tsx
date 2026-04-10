@@ -21,6 +21,11 @@ import {
   Watch,
   Activity,
   MapPin,
+  Clock,
+  Map,
+  Bookmark,
+  Home,
+  Briefcase,
 } from "lucide-react";
 
 const tourSteps = [
@@ -32,14 +37,20 @@ const tourSteps = [
   },
   {
     id: "reminder",
-    title: "We remind you first",
-    description: "If you forget, we'll send you a friendly reminder. No panic, you'll have extra time to respond.",
+    title: "Smart reminders",
+    description: "If you forget, we send a push notification first. Still no response? We follow up with an SMS. One step at a time, never all at once.",
     mockup: "reminder",
+  },
+  {
+    id: "wellnesscall",
+    title: "We call you first",
+    description: "Before alerting your contacts, we call your phone. Press 1 to confirm you're safe. Works on any phone, no app needed.",
+    mockup: "wellnesscall",
   },
   {
     id: "alert",
     title: "Contacts get notified",
-    description: "If you still don't respond after the grace period, we send a message to your emergency contacts so they can check on you.",
+    description: "Only after we've tried every option. Your contacts see a full timeline of what we tried, so they know the situation is real.",
     mockup: "alert",
   },
   {
@@ -71,6 +82,24 @@ const tourSteps = [
     title: "Chat and call in the app",
     description: "Message your contacts with real-time delivery and typing indicators. Make voice calls directly through StillHere.",
     mockup: "messaging",
+  },
+  {
+    id: "safetytimer",
+    title: "Safety timer",
+    description: "Going hiking or swimming alone? Set a countdown. If you don't press \"I'm Safe\" before it expires, your contacts are alerted with your last known location.",
+    mockup: "safetytimer",
+  },
+  {
+    id: "safewalk",
+    title: "Safe walk & ride",
+    description: "Set a destination and travel mode. The app tracks your journey with GPS and alerts contacts if you don't arrive on time.",
+    mockup: "safewalk",
+  },
+  {
+    id: "savedplaces",
+    title: "Saved places",
+    description: "Save your home, work, and favourite spots. Use them as quick destinations for Safe Walk, or set up safe zones that alert contacts when you leave.",
+    mockup: "savedplaces",
   },
   {
     id: "location",
@@ -105,12 +134,16 @@ function PhoneMockup({ step }: { step: string }) {
       <div className="flex-1 bg-slate-50 rounded-[2rem] overflow-hidden flex flex-col">
         {step === "checkin" && <CheckinScreen />}
         {step === "reminder" && <ReminderScreen />}
+        {step === "wellnesscall" && <WellnessCallScreen />}
         {step === "alert" && <AlertScreen />}
         {step === "sos" && <SOSScreen />}
         {step === "discreet" && <DiscreetScreen />}
         {step === "contacts" && <ContactsScreen />}
         {step === "contactpage" && <ContactPageScreen />}
         {step === "messaging" && <MessagingScreen />}
+        {step === "safetytimer" && <SafetyTimerScreen />}
+        {step === "safewalk" && <SafeWalkScreen />}
+        {step === "savedplaces" && <SavedPlacesScreen />}
         {step === "location" && <LocationScreen />}
         {step === "driving" && <DrivingScreen />}
         {step === "watch" && <WatchScreen />}
@@ -198,45 +231,57 @@ function ReminderScreen() {
 function AlertScreen() {
   return (
     <div className="flex flex-col h-full">
-      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+      <div className="bg-amber-500 text-white px-4 pt-5 pb-3">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <Heart className="h-3.5 w-3.5" />
-          <span className="text-xs font-semibold">StillHere</span>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Alert for Sarah</span>
         </div>
+        <p className="text-[10px] text-white/80">Escalation timeline</p>
       </div>
-      <div className="flex-1 px-3 py-3 space-y-2">
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+      <div className="flex-1 px-3 py-3 space-y-1.5 overflow-hidden">
+        <p className="text-[8px] text-gray-500 font-medium uppercase tracking-wide">What we tried first</p>
+        <div className="flex items-center gap-2 bg-green-50 rounded-lg p-2 border border-green-100">
+          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+            <Bell className="h-2.5 w-2.5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[9px] font-medium text-gray-700">Push notification sent</p>
+            <p className="text-[7px] text-gray-400">9:00 AM — no response</p>
+          </div>
+          <Check className="h-3 w-3 text-green-500" />
+        </div>
+        <div className="flex items-center gap-2 bg-green-50 rounded-lg p-2 border border-green-100">
+          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+            <MessageCircle className="h-2.5 w-2.5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[9px] font-medium text-gray-700">SMS reminder sent</p>
+            <p className="text-[7px] text-gray-400">9:05 AM — no response</p>
+          </div>
+          <Check className="h-3 w-3 text-green-500" />
+        </div>
+        <div className="flex items-center gap-2 bg-green-50 rounded-lg p-2 border border-green-100">
+          <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+            <Phone className="h-2.5 w-2.5 text-white" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[9px] font-medium text-gray-700">Wellness call attempted</p>
+            <p className="text-[7px] text-gray-400">9:10 AM — no answer</p>
+          </div>
+          <Check className="h-3 w-3 text-green-500" />
+        </div>
+        <div className="mt-1 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-[10px] font-semibold text-amber-800">Missed checkin alert</p>
-              <p className="text-[9px] text-amber-600 mt-0.5">
-                Contacting John (1 of 2)...
-              </p>
-              <div className="mt-1.5 flex gap-1">
-                <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                  <Check className="h-2.5 w-2.5 text-white" />
-                </div>
-                <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="text-[7px] text-gray-500">2</span>
-                </div>
-              </div>
+              <p className="text-[9px] font-semibold text-amber-800">Contacting John (1 of 2)</p>
+              <p className="text-[8px] text-amber-600 mt-0.5">9:15 AM — SMS & email sent</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-100">
-          <p className="text-[9px] text-gray-500 text-center">
-            Your contacts receive a message with a link to check your status
-          </p>
-          <div className="mt-2 bg-gray-50 rounded-md p-2 border border-gray-100">
-            <p className="text-[8px] text-gray-600">
-              "Hi John, Sarah hasn't checked in on StillHere. Please check on her."
-            </p>
-          </div>
-        </div>
-        <div className="text-center">
-          <p className="text-[8px] text-gray-400">Contacts are notified one by one</p>
-        </div>
+        <p className="text-[7px] text-gray-400 text-center">
+          Every step is logged so contacts understand the situation
+        </p>
       </div>
     </div>
   );
@@ -501,6 +546,212 @@ function LocationScreen() {
         <div className="bg-red-500 rounded-lg py-1.5 text-center">
           <span className="text-[10px] text-white font-semibold">Stop sharing</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WellnessCallScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-gray-900 text-white px-4 pt-6 pb-3">
+        <p className="text-[10px] text-gray-400">Incoming call</p>
+      </div>
+      <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 px-4">
+        <div className="w-16 h-16 rounded-full bg-sky-500 flex items-center justify-center mb-3">
+          <Heart className="h-8 w-8 text-white" />
+        </div>
+        <p className="text-white text-sm font-semibold mb-1">StillHere</p>
+        <p className="text-[10px] text-gray-400 mb-6">Wellness Check</p>
+        <div className="w-full bg-gray-800 rounded-xl p-3 mb-4">
+          <p className="text-[10px] text-gray-300 text-center leading-relaxed">
+            "Hi, this is StillHere. We noticed you haven't checked in today. If you're safe, press 1 now."
+          </p>
+        </div>
+        <div className="flex gap-6">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center mb-1">
+              <Phone className="h-5 w-5 text-white rotate-[135deg]" />
+            </div>
+            <p className="text-[8px] text-gray-400">Decline</p>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center mb-1 animate-pulse">
+              <Phone className="h-5 w-5 text-white" />
+            </div>
+            <p className="text-[8px] text-gray-400">Answer</p>
+          </div>
+        </div>
+      </div>
+      <div className="bg-gray-900 px-4 py-3">
+        <div className="bg-green-600 rounded-lg py-2 text-center">
+          <p className="text-[10px] text-white font-semibold">Press 1 to confirm you're safe</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SafetyTimerScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Clock className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Safety Timer</span>
+        </div>
+        <p className="text-[10px] text-white/70">Active</p>
+      </div>
+      <div className="flex-1 px-4 py-3 flex flex-col gap-3">
+        <div className="bg-white rounded-xl p-4 border border-gray-200 text-center">
+          <p className="text-[8px] text-gray-400 uppercase tracking-wide mb-2">Time remaining</p>
+          <p className="text-4xl font-bold text-gray-800">47:32</p>
+          <p className="text-[9px] text-gray-400 mt-1">of 60 minutes</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+          <p className="text-[9px] text-amber-700 font-medium">Hiking alone</p>
+          <p className="text-[8px] text-amber-600 mt-0.5">GPS tracking your route</p>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1 bg-sky-50 rounded-lg py-2 text-center border border-sky-100">
+            <p className="text-[9px] text-sky-600 font-medium">+15 min</p>
+          </div>
+          <div className="flex-1 bg-sky-50 rounded-lg py-2 text-center border border-sky-100">
+            <p className="text-[9px] text-sky-600 font-medium">+30 min</p>
+          </div>
+          <div className="flex-1 bg-sky-50 rounded-lg py-2 text-center border border-sky-100">
+            <p className="text-[9px] text-sky-600 font-medium">+60 min</p>
+          </div>
+        </div>
+        <div className="mt-auto bg-green-500 rounded-lg py-2.5 text-center">
+          <span className="text-[11px] text-white font-semibold">I'm Safe</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SafeWalkScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Navigation className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Safe Walk</span>
+        </div>
+        <p className="text-[10px] text-white/70">Walking to Work</p>
+      </div>
+      <div className="flex-1 bg-emerald-50 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-4 left-2 right-8 h-[1px] bg-gray-400" />
+          <div className="absolute top-12 left-6 right-2 h-[1px] bg-gray-400" />
+          <div className="absolute left-12 top-0 bottom-0 w-[1px] bg-gray-400" />
+          <div className="absolute left-24 top-0 bottom-0 w-[1px] bg-gray-400" />
+        </div>
+        <div className="absolute top-6 left-8">
+          <div className="w-5 h-5 rounded-full bg-sky-500 border-2 border-white shadow flex items-center justify-center">
+            <div className="w-1.5 h-1.5 bg-white rounded-full" />
+          </div>
+          <p className="text-[7px] text-gray-600 mt-0.5 font-medium">You</p>
+        </div>
+        <div className="absolute top-6 right-8">
+          <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white shadow flex items-center justify-center">
+            <MapPin className="h-2.5 w-2.5 text-white" />
+          </div>
+          <p className="text-[7px] text-gray-600 mt-0.5 font-medium">Work</p>
+        </div>
+        <div className="absolute top-[34px] left-[44px] right-[44px] border-t-2 border-dashed border-sky-400" />
+        <div className="absolute bottom-3 left-3 right-3 bg-white rounded-xl p-2.5 shadow-lg border border-gray-200">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[9px] font-semibold text-gray-800">ETA: 12 minutes</p>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[8px] text-green-600 font-medium">On track</span>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <div className="text-center">
+              <p className="text-[7px] text-gray-400">Distance</p>
+              <p className="text-[9px] font-semibold text-gray-800">0.8 km</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[7px] text-gray-400">Speed</p>
+              <p className="text-[9px] font-semibold text-gray-800">4.5 km/h</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[7px] text-gray-400">Deadline</p>
+              <p className="text-[9px] font-semibold text-gray-800">9:30 AM</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="px-3 py-2.5 bg-white border-t border-gray-200">
+        <div className="bg-green-500 rounded-lg py-1.5 text-center">
+          <span className="text-[10px] text-white font-semibold">I've Arrived</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SavedPlacesScreen() {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <Bookmark className="h-3.5 w-3.5" />
+          <span className="text-xs font-semibold">Saved Places</span>
+        </div>
+      </div>
+      <div className="flex-1 px-3 py-3 space-y-2">
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center">
+              <Home className="h-4 w-4 text-sky-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[11px] font-semibold text-gray-800">Home</p>
+              <p className="text-[8px] text-gray-400">123 Main Street</p>
+            </div>
+            <div className="bg-sky-50 px-1.5 py-0.5 rounded">
+              <p className="text-[7px] text-sky-600 font-medium">500m</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+              <Briefcase className="h-4 w-4 text-amber-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[11px] font-semibold text-gray-800">Work</p>
+              <p className="text-[8px] text-gray-400">45 Business Ave</p>
+            </div>
+            <div className="bg-amber-50 px-1.5 py-0.5 rounded">
+              <p className="text-[7px] text-amber-600 font-medium">1km</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+              <MapPin className="h-4 w-4 text-green-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[11px] font-semibold text-gray-800">Gym</p>
+              <p className="text-[8px] text-gray-400">12 Fitness Lane</p>
+            </div>
+            <div className="bg-green-50 px-1.5 py-0.5 rounded">
+              <p className="text-[7px] text-green-600 font-medium">200m</p>
+            </div>
+          </div>
+        </div>
+        <div className="border-2 border-dashed border-gray-200 rounded-lg p-3 text-center">
+          <p className="text-[10px] text-gray-400">+ Add a place</p>
+        </div>
+        <p className="text-[8px] text-gray-400 text-center mt-1">
+          Quick destinations for Safe Walk & geofencing alerts
+        </p>
       </div>
     </div>
   );

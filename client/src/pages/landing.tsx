@@ -535,9 +535,9 @@ export default function LandingPage() {
           <div className="space-y-8 md:hidden">
             {[
               { num: "1", title: "Check in each day", desc: "Open the app and tap \"I'm OK\". Takes less than 2 seconds.", last: false, accent: false },
-              { num: "2", title: "Miss a checkin?", desc: "We'll send you a reminder first. No panic, no rush.", last: false, accent: false },
-              { num: "3", title: "Your contacts are notified", desc: "They receive a text message with a link to check on you. No app needed on their end.", last: false, accent: false },
-              { num: "4", title: "Someone checks on you", desc: "Your family or friends can call, visit, or confirm they're on their way.", last: true, accent: true },
+              { num: "2", title: "Miss a checkin?", desc: "We nudge you gently: push notification first, then an SMS if needed.", last: false, accent: false },
+              { num: "3", title: "Wellness call", desc: "Still no response? We call your phone. Press 1 to confirm you're safe.", last: false, accent: false },
+              { num: "4", title: "Contacts alerted", desc: "Only after all reminders. Your contacts see a full timeline of every step we tried.", last: true, accent: true },
             ].map((step) => (
               <div key={step.num} className="flex gap-4">
                 <div className="flex flex-col items-center">
@@ -557,9 +557,9 @@ export default function LandingPage() {
           <div className="hidden md:grid md:grid-cols-4 gap-8">
             {[
               { num: "1", title: "Check in each day", desc: "Open the app and tap \"I'm OK\". Takes 2 seconds.", accent: false },
-              { num: "2", title: "Miss a checkin?", desc: "We send you a friendly reminder first. No panic.", accent: false },
-              { num: "3", title: "Contacts notified", desc: "They get a text with a link to check on you.", accent: false },
-              { num: "4", title: "Someone checks on you", desc: "They can call, visit, or confirm they're handling it.", accent: true },
+              { num: "2", title: "Miss a checkin?", desc: "Push notification first, then an SMS if needed.", accent: false },
+              { num: "3", title: "Wellness call", desc: "Still nothing? We call your phone. Press 1 to check in.", accent: false },
+              { num: "4", title: "Contacts alerted", desc: "Full timeline of every step we tried before reaching out.", accent: true },
             ].map((step) => (
               <div key={step.num} className="text-center">
                 <div className={`w-12 h-12 rounded-full ${step.accent ? "bg-accent" : "bg-primary"} text-white flex items-center justify-center font-bold text-lg mx-auto mb-4`}>
@@ -624,25 +624,25 @@ export default function LandingPage() {
             </div>
 
             <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
-              <div className="w-9 h-9 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
-                <Hand className="h-4.5 w-4.5 text-rose-500" />
+              <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
+                <Clock className="h-4.5 w-4.5 text-orange-500" />
               </div>
               <div>
-                <h3 className="font-semibold mb-1 text-sm">Discreet SOS</h3>
+                <h3 className="font-semibold mb-1 text-sm">Safety Timer</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Hold a button for 3 seconds to silently send an SOS. No confirmation dialog, no sound. Just a quiet alert to your contacts.
+                  Set a countdown for solo activities like hiking or swimming. If you don't press "I'm Safe" before it expires, your contacts are alerted with your last known location.
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
               <div className="w-9 h-9 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center flex-shrink-0">
-                <Radio className="h-4.5 w-4.5 text-teal-500" />
+                <Navigation className="h-4.5 w-4.5 text-teal-500" />
               </div>
               <div>
-                <h3 className="font-semibold mb-1 text-sm">SMS Checkin</h3>
+                <h3 className="font-semibold mb-1 text-sm">Safe Walk & Ride</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Reply YES to a text message to check in. No need to open the app. Perfect for basic phones or low-signal areas.
+                  Set a destination and travel mode. The app tracks your journey and alerts contacts if you don't arrive on time. Google-powered route estimates for walk, bike, bus, or drive.
                 </p>
               </div>
             </div>
@@ -652,9 +652,21 @@ export default function LandingPage() {
                 <Map className="h-4.5 w-4.5 text-indigo-500" />
               </div>
               <div>
-                <h3 className="font-semibold mb-1 text-sm">Geofencing</h3>
+                <h3 className="font-semibold mb-1 text-sm">Saved Places & Geofencing</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Set safe zones like home or work. If you leave a zone, your contacts are automatically notified.
+                  Save your frequently visited places like home, work, or gym. Use them as quick destinations in Safe Walk, and get alerts when you leave a safe zone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
+                <Phone className="h-4.5 w-4.5 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">Automated Wellness Call</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  If you miss a checkin, the app calls your phone automatically. Press 1 to confirm you're safe. No app needed, works on any phone.
                 </p>
               </div>
             </div>
@@ -690,7 +702,19 @@ export default function LandingPage() {
               <div>
                 <h3 className="font-semibold mb-1 text-sm">Multi-Channel Alerts</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Your contacts are reached via SMS, push notifications, and email. Every channel fires to make sure someone responds.
+                  Push notification first, then SMS, then a phone call. Escalates one step at a time so you're never bombarded.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 p-4 rounded-xl bg-muted/50 border border-border">
+              <div className="w-9 h-9 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center flex-shrink-0">
+                <Radio className="h-4.5 w-4.5 text-cyan-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1 text-sm">SMS Checkin</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Reply YES to a text message to check in. No need to open the app. Perfect for basic phones or low-signal areas.
                 </p>
               </div>
             </div>
