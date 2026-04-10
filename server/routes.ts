@@ -3197,7 +3197,7 @@ export async function registerRoutes(
           console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call`);
         }
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">You are now checked in.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care, and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">You are now checked in.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
