@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, MessageSquare, Phone, CheckCircle2, AlertTriangle, Clock,
-  Shield, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2,
+  Shield, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2, Car,
 } from "lucide-react";
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
@@ -324,7 +324,17 @@ export default function WatchedPage() {
               data-testid={`button-report-${user.userId}`}
             >
               <FileText className="w-4 h-4 mr-1.5" />
-              View Report
+              Safety Report
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setLocation(`/drive-report/${user.userId}`)}
+              data-testid={`button-drive-report-${user.userId}`}
+            >
+              <Car className="w-4 h-4 mr-1.5" />
+              Driving Report
             </Button>
           </div>
 

@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Car, Gauge, MapPin, Clock, AlertTriangle, History, Play, Square, Shield, Navigation, Zap } from "lucide-react";
+import { ArrowLeft, Car, Gauge, MapPin, Clock, AlertTriangle, History, Play, Square, Shield, Navigation, Zap, BarChart3 } from "lucide-react";
 import { useLocation } from "wouter";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import CrashCountdown from "@/components/crash-countdown";
@@ -400,15 +400,26 @@ export default function DrivePage() {
               </CardContent>
             </Card>
 
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setShowHistory(!showHistory)}
-              data-testid="button-toggle-history"
-            >
-              <History className="w-4 h-4 mr-2" />
-              {showHistory ? "Hide Drive History" : "View Drive History"}
-            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowHistory(!showHistory)}
+                data-testid="button-toggle-history"
+              >
+                <History className="w-4 h-4 mr-2" />
+                {showHistory ? "Hide History" : "Drive History"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate("/drive-report")}
+                data-testid="button-drive-report"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Driving Report
+              </Button>
+            </div>
 
             {showHistory && (
               <div className="space-y-3">

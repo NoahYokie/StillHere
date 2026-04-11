@@ -1951,6 +1951,138 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // DRIVING REPORT
+  // ============================================
+  app.get("/api/drive/report", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const periodParam = (req.query.period as string) || "week";
+      const report = await buildDriveReport(userId, periodParam);
+      res.json(report);
+    } catch (error) {
+      console.error("Error generating drive report:", error);
+      res.status(500).json({ error: "Failed to generate drive report" });
+    }
+  });
+
+  app.get("/api/drive/report/:userId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const targetUserId = req.params.userId;
+      if (currentUserId !== targetUserId) {
+        const canView = await checkWatcherPermission(currentUserId, targetUserId);
+        if (!canView) return res.status(403).json({ error: "Not authorized" });
+        const watchedSettings = await storage.getSettings(targetUserId);
+        if (watchedSettings && !watchedSettings.allowReports) {
+          return res.status(403).json({ error: "User has disabled report sharing" });
+        }
+      }
+      const periodParam = (req.query.period as string) || "week";
+      const report = await buildDriveReport(targetUserId, periodParam);
+      res.json(report);
+    } catch (error) {
+      console.error("Error generating drive report:", error);
+      res.status(500).json({ error: "Failed to generate drive report" });
+    }
+  });
+
+  app.get("/api/drive/trail-public/:sessionId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const session = await storage.getDriveSession(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.userId !== currentUserId) {
+        const canView = await checkWatcherPermission(currentUserId, session.userId);
+        if (!canView) return res.status(403).json({ error: "Not authorized" });
+        const watchedSettings = await storage.getSettings(session.userId);
+        if (watchedSettings && !watchedSettings.allowReports) {
+          return res.status(403).json({ error: "User has disabled report sharing" });
+        }
+      }
+      const points = await storage.getTripPoints(req.params.sessionId, "drive");
+      res.json(points);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get drive trail" });
+    }
+  });
+
+  async function buildDriveReport(userId: string, periodParam: string) {
+    const now = new Date();
+    let from: Date;
+    switch (periodParam) {
+      case "day": from = new Date(now.getTime() - 86400000); break;
+      case "fortnight": from = new Date(now.getTime() - 14 * 86400000); break;
+      case "month": from = new Date(now.getTime() - 30 * 86400000); break;
+      case "week":
+      default: from = new Date(now.getTime() - 7 * 86400000); break;
+    }
+
+    const user = await storage.getUser(userId);
+    if (!user) throw new Error("User not found");
+
+    const allSessions = await storage.getDriveHistory(userId, 500);
+    const sessions = allSessions.filter(s => new Date(s.startedAt) >= from);
+    const allAlerts = await storage.getSpeedAlerts(userId);
+    const sessionIds = new Set(sessions.map(s => s.id));
+    const alerts = allAlerts.filter(a => a.sessionId && sessionIds.has(a.sessionId));
+
+    const totalDrives = sessions.length;
+    const totalDistanceKm = sessions.reduce((sum, s) => sum + (s.distanceKm || 0), 0);
+    const topSpeedKmh = sessions.length > 0 ? Math.max(...sessions.map(s => s.maxSpeedKmh || 0)) : 0;
+    const avgSpeedKmh = sessions.length > 0
+      ? sessions.reduce((sum, s) => sum + (s.avgSpeedKmh || 0), 0) / sessions.length
+      : 0;
+    const totalDriveTimeMs = sessions.reduce((sum, s) => {
+      if (!s.endedAt) return sum;
+      return sum + (new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime());
+    }, 0);
+    const crashCount = sessions.filter(s => s.crashDetected).length;
+    const speedingCount = alerts.length;
+
+    const { format: fmtDate } = await import("date-fns");
+
+    const driveDetails = sessions.map(s => {
+      const sessionAlerts = alerts.filter(a => a.sessionId === s.id);
+      const durationMs = s.endedAt
+        ? new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()
+        : 0;
+      return {
+        id: s.id,
+        date: fmtDate(new Date(s.startedAt), "MMM d, yyyy"),
+        startTime: fmtDate(new Date(s.startedAt), "h:mm a"),
+        endTime: s.endedAt ? fmtDate(new Date(s.endedAt), "h:mm a") : null,
+        durationMinutes: Math.round(durationMs / 60000),
+        distanceKm: s.distanceKm || 0,
+        maxSpeedKmh: s.maxSpeedKmh || 0,
+        avgSpeedKmh: s.avgSpeedKmh || 0,
+        crashDetected: s.crashDetected || false,
+        speedAlerts: sessionAlerts.length,
+        startLat: s.startLat,
+        startLng: s.startLng,
+        endLat: s.endLat,
+        endLng: s.endLng,
+      };
+    });
+
+    return {
+      userName: user.name,
+      periodStart: fmtDate(from, "yyyy-MM-dd"),
+      periodEnd: fmtDate(now, "yyyy-MM-dd"),
+      totalDrives,
+      totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
+      topSpeedKmh: Math.round(topSpeedKmh),
+      avgSpeedKmh: Math.round(avgSpeedKmh),
+      totalDriveTimeMinutes: Math.round(totalDriveTimeMs / 60000),
+      crashCount,
+      speedingCount,
+      drives: driveDetails,
+    };
+  }
+
+  // ============================================
   // ERROR TRACKING
   // ============================================
   app.post("/api/errors/report", async (req, res) => {
@@ -2870,6 +3002,24 @@ export async function registerRoutes(
 
       const fallAlerts = incidentList.filter(i => i.reason === "sos").length;
 
+      let drivingSummary = null;
+      try {
+        const allSessions = await storage.getDriveHistory(watchedUserId, 100);
+        const driveSess = allSessions.filter(s => new Date(s.startedAt) >= from);
+        if (driveSess.length > 0) {
+          const allAlerts = await storage.getSpeedAlerts(watchedUserId);
+          const sessIds = new Set(driveSess.map(s => s.id));
+          const driveAlerts = allAlerts.filter(a => a.sessionId && sessIds.has(a.sessionId));
+          drivingSummary = {
+            totalDrives: driveSess.length,
+            totalDistanceKm: Math.round(driveSess.reduce((sum, s) => sum + (s.distanceKm || 0), 0) * 10) / 10,
+            topSpeedKmh: Math.round(Math.max(...driveSess.map(s => s.maxSpeedKmh || 0))),
+            speedingEvents: driveAlerts.length,
+            crashEvents: driveSess.filter(s => s.crashDetected).length,
+          };
+        }
+      } catch {}
+
       const { format: fmtDate } = await import("date-fns");
 
       const report = {
@@ -2893,6 +3043,7 @@ export async function registerRoutes(
             : null,
         })),
         heartRateSummary,
+        drivingSummary,
         locationEnabled: userSettings?.locationMode !== "off",
         fallDetectionEnabled: userSettings?.fallDetection || false,
         fallAlerts,

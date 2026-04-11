@@ -33,6 +33,7 @@ import ReportPage from "@/pages/report";
 import InboxPage from "@/pages/inbox";
 import DrivePage from "@/pages/drive";
 import DriveHistoryPage from "@/pages/drive-history";
+import DriveReportPage from "@/pages/drive-report";
 import SatellitePage from "@/pages/satellite";
 import LiveLocationPage from "@/pages/live-location";
 import LiveLocationViewPage from "@/pages/live-location-view";
@@ -155,6 +156,12 @@ function Router() {
       </Route>
       <Route path="/drive-history">
         <RequireAuth><DriveHistoryPage /></RequireAuth>
+      </Route>
+      <Route path="/drive-report/:userId">
+        <RequireAuth><DriveReportPage /></RequireAuth>
+      </Route>
+      <Route path="/drive-report">
+        <RequireAuth><DriveReportPage /></RequireAuth>
       </Route>
       <Route path="/satellite">
         <RequireAuth>

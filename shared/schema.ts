@@ -823,6 +823,7 @@ export interface ReportData {
   complianceRate: number;
   incidents: { date: string; reason: string; resolved: boolean; duration: string | null }[];
   heartRateSummary: { avgBpm: number; minBpm: number; maxBpm: number; alerts: number } | null;
+  drivingSummary: { totalDrives: number; totalDistanceKm: number; topSpeedKmh: number; speedingEvents: number; crashEvents: number } | null;
   locationEnabled: boolean;
   fallDetectionEnabled: boolean;
   fallAlerts: number;

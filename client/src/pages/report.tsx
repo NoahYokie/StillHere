@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Printer, CheckCircle2, AlertTriangle, Heart, MapPin, Activity } from "lucide-react";
+import { ArrowLeft, Printer, CheckCircle2, AlertTriangle, Heart, MapPin, Activity, Car, Gauge, Zap } from "lucide-react";
 import type { ReportData } from "@shared/schema";
 
 export default function ReportPage() {
@@ -172,6 +172,50 @@ export default function ReportPage() {
                       {report.heartRateSummary.alerts} heart rate alert(s) during this period
                     </p>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {report.drivingSummary && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Car className="w-4 h-4 text-blue-500" />
+                    Driving Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4 text-center mb-3">
+                    <div>
+                      <p className="text-xl font-bold text-blue-600" data-testid="text-drive-total">{report.drivingSummary.totalDrives}</p>
+                      <p className="text-xs text-muted-foreground">Drives</p>
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold" data-testid="text-drive-distance">{report.drivingSummary.totalDistanceKm} km</p>
+                      <p className="text-xs text-muted-foreground">Distance</p>
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold" data-testid="text-drive-top-speed">{report.drivingSummary.topSpeedKmh} km/h</p>
+                      <p className="text-xs text-muted-foreground">Top Speed</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {report.drivingSummary.speedingEvents > 0 && (
+                      <div className="flex items-center gap-2 text-sm text-orange-500" data-testid="text-drive-speeding">
+                        <Gauge className="w-4 h-4" />
+                        {report.drivingSummary.speedingEvents} speeding event{report.drivingSummary.speedingEvents !== 1 ? "s" : ""}
+                      </div>
+                    )}
+                    {report.drivingSummary.crashEvents > 0 && (
+                      <div className="flex items-center gap-2 text-sm text-red-500" data-testid="text-drive-crashes">
+                        <Zap className="w-4 h-4" />
+                        {report.drivingSummary.crashEvents} crash event{report.drivingSummary.crashEvents !== 1 ? "s" : ""}
+                      </div>
+                    )}
+                    {report.drivingSummary.speedingEvents === 0 && report.drivingSummary.crashEvents === 0 && (
+                      <p className="text-sm text-green-500" data-testid="text-drive-clean">No driving incidents</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )}

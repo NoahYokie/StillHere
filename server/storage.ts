@@ -1455,7 +1455,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(speedAlerts)
       .where(and(...conditions))
       .orderBy(desc(speedAlerts.createdAt))
-      .limit(50);
+      .limit(500);
   }
   async createErrorReport(data: { userId?: string; type: string; message: string; stack?: string; url?: string; userAgent?: string; metadata?: string }): Promise<ErrorReport> {
     const [report] = await db.insert(errorReports).values({
