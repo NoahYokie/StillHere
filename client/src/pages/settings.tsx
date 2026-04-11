@@ -968,7 +968,7 @@ export default function SettingsPage() {
               />
             </div>
             <p className="text-sm text-muted-foreground mt-3">
-              If you miss a check-in, we'll call your phone. Press 1 to confirm you're safe — no app needed.
+              If you miss a check-in, we'll call your phone. Press 1 to confirm you're safe, no app needed.
             </p>
           </CardContent>
         </Card>

@@ -343,7 +343,7 @@ export default function SafeWalkPage() {
               {isOverdue ? "Running Late" : "Safe Walk Active"}
             </h1>
             <p className="text-sm opacity-90">
-              {activeWalk.destinationName || "Destination"} — {formatCountdown(remaining)} {isOverdue ? "overdue" : "remaining"}
+              {activeWalk.destinationName || "Destination"} · {formatCountdown(remaining)} {isOverdue ? "overdue" : "remaining"}
             </p>
           </div>
         </header>

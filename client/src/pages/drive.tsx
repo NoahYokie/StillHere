@@ -472,7 +472,7 @@ export default function DrivePage() {
                           <div className="flex items-center justify-between mt-3 pt-2 border-t text-xs text-muted-foreground">
                             <span>
                               {format(new Date(session.startedAt), "h:mm a")}
-                              {session.endedAt && ` — ${format(new Date(session.endedAt), "h:mm a")}`}
+                              {session.endedAt && ` · ${format(new Date(session.endedAt), "h:mm a")}`}
                             </span>
                             {sessionAlerts.length > 0 && (
                               <span className="text-orange-500 font-medium">
