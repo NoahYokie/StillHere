@@ -3250,6 +3250,13 @@ export async function registerRoutes(
         // If past grace period, send alert regardless of reminder state
         // This prevents deadlock if cron runs late or reminders weren't sent
         if (isDueForAlert) {
+          // Skip if user already has an open incident (from safe walk, safety timer, or SOS)
+          const existingOpenIncident = await storage.getOpenIncident(user.id);
+          if (existingOpenIncident) {
+            console.log(`[ALERT] Skipping checkin alert for ${user.name} — open incident already exists (${existingOpenIncident.reason})`);
+            continue;
+          }
+
           const reminderHistory = await storage.getReminderTimeline(user.id);
           const timeStr = now.toISOString();
 
@@ -3641,6 +3648,7 @@ export async function registerRoutes(
 
             const incident = await storage.createIncident(timer.userId, "sos");
             const tokens = await storage.regenerateTokensForUser(timer.userId);
+            const allContactIds: string[] = [];
 
             for (const { contact, token } of tokens) {
               const link = `${baseUrl}/emergency/${token}`;
@@ -3667,7 +3675,19 @@ export async function registerRoutes(
                   );
                 } catch {}
               }
+              allContactIds.push(contact.id);
             }
+
+            await storage.updateIncident(incident.id, {
+              escalationLevel: allContactIds.length,
+              notifiedContactIds: JSON.stringify(allContactIds),
+              lastContactNotifiedAt: now,
+              contact1NotifiedAt: now,
+              contact2NotifiedAt: allContactIds.length > 1 ? now : undefined,
+              allContactsNotifiedAt: now,
+              nextActionAt: addMinutes(now, 30),
+            });
+
             timerEscalations++;
             console.log(`[CRON] Safety timer escalated for ${user.name}`);
           } catch (err) {
@@ -3678,7 +3698,7 @@ export async function registerRoutes(
         console.error("[CRON] Safety timer check failed:", err);
       }
 
-      // Safe Walk: mark newly overdue walks
+      // Safe Walk: mark newly overdue walks and notify user
       try {
         const nowDate = new Date();
         const newlyOverdue = await db.select().from(safeWalks)
@@ -3686,7 +3706,37 @@ export async function registerRoutes(
         for (const w of newlyOverdue) {
           await storage.updateSafeWalk(w.id, { status: "overdue" });
           const u = await storage.getUser(w.userId);
-          console.log(`[CRON] Safe Walk now overdue for ${u?.name || w.userId} — 10 min grace period started`);
+          if (!u) continue;
+          console.log(`[CRON] Safe Walk now overdue for ${u.name} — 10 min grace period started`);
+
+          const destInfo = w.destinationName ? ` to ${w.destinationName}` : "";
+
+          try {
+            const subs = await storage.getPushSubscriptions(w.userId);
+            for (const sub of subs) {
+              try {
+                await webpush.sendNotification(
+                  { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                  JSON.stringify({
+                    title: "Are you OK?",
+                    body: `You haven't arrived${destInfo} yet. Tap "I've Arrived" or extend your time.`,
+                    tag: "safe-walk-overdue",
+                    data: { url: "/safe-walk" },
+                  })
+                );
+              } catch {}
+            }
+            console.log(`[CRON] Sent push notification to ${u.name} — safe walk overdue`);
+          } catch {}
+
+          if (u.phone && isTwilioConfigured()) {
+            try {
+              await sendSms(u.phone,
+                `StillHere: You haven't arrived${destInfo} yet. Are you OK? Open the app to confirm you're safe, or reply YES to this message.`
+              );
+              console.log(`[CRON] Sent SMS to ${u.name} — safe walk overdue`);
+            } catch {}
+          }
         }
       } catch (err) {
         console.error("[CRON] Safe Walk overdue marking failed:", err);
@@ -3704,6 +3754,11 @@ export async function registerRoutes(
 
             const incident = await storage.createIncident(walk.userId, "sos");
             const tokens = await storage.regenerateTokensForUser(walk.userId);
+            const contacts = await storage.getContacts(walk.userId);
+            const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
+            const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
+            const noteInfo = walk.note ? `\nNote: ${walk.note}` : "";
+            const allContactIds: string[] = [];
 
             for (const { contact, token } of tokens) {
               const link = `${baseUrl}/emergency/${token}`;
@@ -3712,8 +3767,6 @@ export async function registerRoutes(
                 locationInfo = `\nLast known location: https://www.google.com/maps?q=${walk.lastLat},${walk.lastLng}`;
                 if (walk.lastActivity) locationInfo += `\nActivity: ${walk.lastActivity}`;
               }
-              const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
-              const noteInfo = walk.note ? `\nNote: ${walk.note}` : "";
 
               if (contact.phone) {
                 try {
@@ -3731,7 +3784,19 @@ export async function registerRoutes(
                   );
                 } catch {}
               }
+              allContactIds.push(contact.id);
             }
+
+            await storage.updateIncident(incident.id, {
+              escalationLevel: allContactIds.length,
+              notifiedContactIds: JSON.stringify(allContactIds),
+              lastContactNotifiedAt: now,
+              contact1NotifiedAt: now,
+              contact2NotifiedAt: allContactIds.length > 1 ? now : undefined,
+              allContactsNotifiedAt: now,
+              nextActionAt: addMinutes(now, 30),
+            });
+
             walkEscalations++;
             console.log(`[CRON] Safe Walk escalated for ${user.name}`);
           } catch (err) {
