@@ -26,8 +26,15 @@ export async function loadGoogleMaps(): Promise<typeof google.maps> {
       script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places,geometry,marker&v=weekly`;
       script.async = true;
       script.defer = true;
-      script.onload = () => { loaded = true; resolve(); };
-      script.onerror = () => reject(new Error("Failed to load Google Maps"));
+      script.onload = () => {
+        console.log("[MAPS] Google Maps JS API loaded successfully");
+        loaded = true;
+        resolve();
+      };
+      script.onerror = (e) => {
+        console.error("[MAPS] Failed to load Google Maps JS API script", e);
+        reject(new Error("Failed to load Google Maps"));
+      };
       document.head.appendChild(script);
     });
   })();

@@ -123,7 +123,10 @@ export default function GoogleMapComponent({
   useEffect(() => {
     loadGoogleMaps()
       .then(() => setMapsLoaded(true))
-      .catch(() => setLoadError(true));
+      .catch((err) => {
+        console.error("[MAPS] GoogleMap component failed to load:", err);
+        setLoadError(true);
+      });
   }, []);
 
   useEffect(() => {
