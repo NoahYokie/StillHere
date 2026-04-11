@@ -62,6 +62,25 @@ export default function LiveLocationPage() {
   const [locationDenied, setLocationDenied] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [browserLat, setBrowserLat] = useState<number | null>(null);
+  const [browserLng, setBrowserLng] = useState<number | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (currentLat == null || currentLng == null) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (mounted) {
+            setBrowserLat(pos.coords.latitude);
+            setBrowserLng(pos.coords.longitude);
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+    return () => { mounted = false; };
+  }, []);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
     queryKey: ["/api/live-location/status"],
@@ -211,6 +230,15 @@ export default function LiveLocationPage() {
       activity: currentActivity,
       isMe: true,
     });
+  } else if (!sharingActive && browserLat != null && browserLng != null) {
+    allPeople.push({
+      id: "me",
+      name: "Me",
+      lat: browserLat,
+      lng: browserLng,
+      activity: "stationary",
+      isMe: true,
+    });
   }
   Object.values(watchedLocations).forEach(share => {
     if (share.lastLat != null && share.lastLng != null) {
@@ -229,9 +257,11 @@ export default function LiveLocationPage() {
     ? { lat: allPeople[0].lat, lng: allPeople[0].lng }
     : currentLat != null && currentLng != null
       ? { lat: currentLat, lng: currentLng }
-      : { lat: -31.95, lng: 115.86 };
+      : browserLat != null && browserLng != null
+        ? { lat: browserLat, lng: browserLng }
+        : { lat: -31.95, lng: 115.86 };
 
-  const hasMap = allPeople.length > 0;
+  const hasMap = allPeople.length > 0 || (browserLat != null && browserLng != null);
   const watchedPeopleList = Object.values(watchedLocations);
 
   const handlePersonTap = useCallback((personId: string) => {

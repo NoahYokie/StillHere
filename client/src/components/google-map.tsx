@@ -80,6 +80,8 @@ interface GoogleMapProps {
   replayMode?: boolean;
   replayIndex?: number;
   safeWalkRoute?: { polyline: string; destLat: number; destLng: number; destName?: string; progress?: number };
+  showMyLocation?: boolean;
+  onRecenter?: () => void;
 }
 
 const activityColors: Record<string, string> = {
@@ -238,6 +240,8 @@ export default function GoogleMapComponent({
   replayMode = false,
   replayIndex = 0,
   safeWalkRoute,
+  showMyLocation = false,
+  onRecenter,
 }: GoogleMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -260,8 +264,13 @@ export default function GoogleMapComponent({
   const safeWalkDestMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const prevCenterRef = useRef<{ lat: number; lng: number } | null>(null);
   const userInteractedRef = useRef(false);
+  const initialFitDoneRef = useRef(false);
+  const programmaticMoveRef = useRef(false);
+  const myLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const mapListenersRef = useRef<google.maps.MapsEventListener[]>([]);
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [showRecenter, setShowRecenter] = useState(false);
   const initRef = useRef(false);
 
   useEffect(() => {
@@ -297,10 +306,12 @@ export default function GoogleMapComponent({
     mapInstanceRef.current = map;
     infoWindowRef.current = new google.maps.InfoWindow();
 
-    map.addListener("dragstart", () => { userInteractedRef.current = true; });
-    map.addListener("zoom_changed", () => {
-      if (initRef.current) userInteractedRef.current = true;
+    const l1 = map.addListener("dragstart", () => { userInteractedRef.current = true; setShowRecenter(true); });
+    const l2 = map.addListener("zoom_changed", () => {
+      if (programmaticMoveRef.current) return;
+      if (initRef.current) { userInteractedRef.current = true; setShowRecenter(true); }
     });
+    mapListenersRef.current = [l1, l2];
 
     if (!people || people.length === 0) {
       const markerEl = createMarkerElement(points?.[points.length - 1]?.activity);
@@ -414,12 +425,17 @@ export default function GoogleMapComponent({
         peoplePositionsRef.current.set(person.id, newPos);
       });
 
-      if (people.length > 1) {
-        const bounds = new google.maps.LatLngBounds();
-        people.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-        map.fitBounds(bounds, 50);
-      } else {
-        map.panTo({ lat: people[0].lat, lng: people[0].lng });
+      if (!initialFitDoneRef.current || !userInteractedRef.current) {
+        initialFitDoneRef.current = true;
+        programmaticMoveRef.current = true;
+        if (people.length > 1) {
+          const bounds = new google.maps.LatLngBounds();
+          people.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+          map.fitBounds(bounds, 50);
+        } else {
+          map.panTo({ lat: people[0].lat, lng: people[0].lng });
+        }
+        setTimeout(() => { programmaticMoveRef.current = false; }, 300);
       }
     } else if (markersRef.current.length > 0) {
       const marker = markersRef.current[0];
@@ -433,7 +449,9 @@ export default function GoogleMapComponent({
       }
       marker.content = createMarkerElement(points?.[points.length - 1]?.activity);
       if (!userInteractedRef.current) {
+        programmaticMoveRef.current = true;
         map.panTo(newPos);
+        setTimeout(() => { programmaticMoveRef.current = false; }, 300);
       }
       prevCenterRef.current = newPos;
     }
@@ -472,9 +490,11 @@ export default function GoogleMapComponent({
     }
 
     if (points.length > 2 && !userInteractedRef.current) {
+      programmaticMoveRef.current = true;
       const bounds = new google.maps.LatLngBounds();
       points.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
       map.fitBounds(bounds, 40);
+      setTimeout(() => { programmaticMoveRef.current = false; }, 300);
     }
   }, [points, showTrail]);
 
@@ -752,8 +772,12 @@ export default function GoogleMapComponent({
       replayTrailRef.current?.setMap(null);
       safeWalkPolylineRef.current?.setMap(null);
       if (safeWalkDestMarkerRef.current) safeWalkDestMarkerRef.current.map = null;
+      if (myLocationMarkerRef.current) myLocationMarkerRef.current.map = null;
       infoWindowRef.current?.close();
+      mapListenersRef.current.forEach(l => google.maps.event.removeListener(l));
+      mapListenersRef.current = [];
       initRef.current = false;
+      initialFitDoneRef.current = false;
     };
   }, []);
 
@@ -773,5 +797,46 @@ export default function GoogleMapComponent({
     );
   }
 
-  return <div ref={mapRef} className={`${className} rounded-lg`} data-testid="google-map" />;
+  const handleRecenter = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    userInteractedRef.current = false;
+    setShowRecenter(false);
+    programmaticMoveRef.current = true;
+
+    if (people && people.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      people.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+      map.fitBounds(bounds, 50);
+    } else if (people && people.length === 1) {
+      map.panTo({ lat: people[0].lat, lng: people[0].lng });
+      map.setZoom(zoom);
+    } else {
+      map.panTo({ lat: center.lat, lng: center.lng });
+      map.setZoom(zoom);
+    }
+    setTimeout(() => { programmaticMoveRef.current = false; }, 300);
+  };
+
+  return (
+    <div className={`${className} relative`}>
+      <div ref={mapRef} className="w-full h-full rounded-lg" data-testid="google-map" />
+      {showRecenter && (
+        <button
+          onClick={handleRecenter}
+          className="absolute bottom-4 right-4 z-10 bg-white dark:bg-gray-800 shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          data-testid="button-recenter-map"
+          title="Re-center map"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v4" />
+            <path d="M12 18v4" />
+            <path d="M2 12h4" />
+            <path d="M18 12h4" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
 }
