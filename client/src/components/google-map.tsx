@@ -259,6 +259,7 @@ export default function GoogleMapComponent({
   const safeWalkPolylineRef = useRef<google.maps.Polyline | null>(null);
   const safeWalkDestMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const prevCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+  const userInteractedRef = useRef(false);
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const initRef = useRef(false);
@@ -295,6 +296,11 @@ export default function GoogleMapComponent({
 
     mapInstanceRef.current = map;
     infoWindowRef.current = new google.maps.InfoWindow();
+
+    map.addListener("dragstart", () => { userInteractedRef.current = true; });
+    map.addListener("zoom_changed", () => {
+      if (initRef.current) userInteractedRef.current = true;
+    });
 
     if (!people || people.length === 0) {
       const markerEl = createMarkerElement(points?.[points.length - 1]?.activity);
@@ -426,7 +432,9 @@ export default function GoogleMapComponent({
         marker.position = newPos;
       }
       marker.content = createMarkerElement(points?.[points.length - 1]?.activity);
-      map.panTo(newPos);
+      if (!userInteractedRef.current) {
+        map.panTo(newPos);
+      }
       prevCenterRef.current = newPos;
     }
   }, [center.lat, center.lng, points, people]);
@@ -463,7 +471,7 @@ export default function GoogleMapComponent({
       }
     }
 
-    if (points.length > 2) {
+    if (points.length > 2 && !userInteractedRef.current) {
       const bounds = new google.maps.LatLngBounds();
       points.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
       map.fitBounds(bounds, 40);
