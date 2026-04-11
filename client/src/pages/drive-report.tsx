@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Car, Gauge, AlertTriangle, Clock, MapPin, Navigation, Zap, TrendingUp, Route, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Car, Gauge, AlertTriangle, Clock, MapPin, Navigation, Zap, TrendingUp, Route, ChevronDown, ChevronUp, Play } from "lucide-react";
 import GoogleMap from "@/components/google-map";
+import TripReplay from "@/components/trip-replay";
 import type { TripPoint } from "@shared/schema";
 
 interface DriveDetail {
@@ -49,6 +50,7 @@ function formatDuration(minutes: number): string {
 
 function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
 
   const trailEndpoint = isWatcher ? `/api/drive/trail-public/${drive.id}` : `/api/drive/trail/${drive.id}`;
 
@@ -183,17 +185,42 @@ function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolea
             </div>
 
             {mapCenter && mapPoints.length > 0 && (
-              <div className="rounded-lg overflow-hidden border">
-                <GoogleMap
-                  center={mapCenter}
-                  points={mapPoints}
-                  zoom={13}
-                  className="w-full h-48"
-                  showTrail={true}
-                  showMapTypeControl={true}
-                  startAddress={startGeo?.short || undefined}
-                  endAddress={endGeo?.short || undefined}
-                />
+              <div className="space-y-2">
+                {!showReplay ? (
+                  <div className="rounded-lg overflow-hidden border">
+                    <GoogleMap
+                      center={mapCenter}
+                      points={mapPoints}
+                      zoom={13}
+                      className="w-full h-48"
+                      showTrail={true}
+                      showMapTypeControl={true}
+                      startAddress={startGeo?.short || undefined}
+                      endAddress={endGeo?.short || undefined}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-lg overflow-hidden border p-2">
+                    <TripReplay
+                      points={trailPoints}
+                      className="w-full h-48"
+                      startAddress={startGeo?.short || undefined}
+                      endAddress={endGeo?.short || undefined}
+                    />
+                  </div>
+                )}
+                {trailPoints.length >= 2 && (
+                  <Button
+                    variant={showReplay ? "secondary" : "outline"}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowReplay(!showReplay)}
+                    data-testid={`button-replay-drive-${drive.id}`}
+                  >
+                    <Play className="h-3.5 w-3.5 mr-1.5" />
+                    {showReplay ? "Show Static Map" : "Replay Trip"}
+                  </Button>
+                )}
               </div>
             )}
           </div>

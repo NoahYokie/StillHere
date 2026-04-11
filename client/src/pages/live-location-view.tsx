@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Navigation, Footprints, Car, Bike, PersonStanding, Zap, RefreshCw, ExternalLink, Clock, Route, ArrowRight } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { ArrowLeft, MapPin, Navigation, Footprints, Car, Bike, PersonStanding, Zap, RefreshCw, ExternalLink, Clock, Route, ArrowRight, Shield, Hospital, Flame, History, Play, Pause, X, Layers } from "lucide-react";
 import { useLocation, useParams } from "wouter";
-import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes } from "date-fns";
+import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes, subDays, startOfDay, endOfDay } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { formatActivity, formatSpeed } from "@/lib/live-location";
 import GoogleMap from "@/components/google-map";
@@ -241,10 +242,48 @@ export default function LiveLocationViewPage() {
   const [livePoints, setLivePoints] = useState<LocationPoint[]>([]);
   const [currentPlace, setCurrentPlace] = useState<string>("");
   const [segmentPlaces, setSegmentPlaces] = useState<Record<number, { start: string; end: string }>>({});
+  const [showNearby, setShowNearby] = useState(false);
+  const [nearbyPlaces, setNearbyPlaces] = useState<{ name: string; lat: number; lng: number; type: "hospital" | "police" | "fire_station" }[]>([]);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [historyMode, setHistoryMode] = useState(false);
+  const [historyDate, setHistoryDate] = useState<Date>(new Date());
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const [historyPlaying, setHistoryPlaying] = useState(false);
 
   const { data: trail, refetch, isLoading } = useQuery<TrailData>({
     queryKey: ["/api/live-location/trail", targetUserId],
     refetchInterval: 15000,
+    enabled: !!targetUserId,
+  });
+
+  const { data: userGeofences = [] } = useQuery<{ id: string; name: string; lat: number; lng: number; radiusMeters: number }[]>({
+    queryKey: ["/api/geofences/for", targetUserId],
+    queryFn: async () => {
+      const res = await fetch(`/api/geofences/for/${targetUserId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 60000,
+    enabled: !!targetUserId,
+  });
+
+  const { data: activeSafeWalk } = useQuery<{
+    id: string;
+    destinationLat: number;
+    destinationLng: number;
+    destinationName: string | null;
+    expectedArrival: string;
+    status: string;
+  } | null>({
+    queryKey: ["/api/safe-walk/active-for", targetUserId],
+    queryFn: async () => {
+      const res = await fetch(`/api/safe-walk/watched/${targetUserId}`, { credentials: "include" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data?.status === "active" ? data : null;
+    },
+    refetchInterval: 30000,
     enabled: !!targetUserId,
   });
 
@@ -269,6 +308,58 @@ export default function LiveLocationViewPage() {
       });
     }
   }, [liveLat, liveLng]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const checkDark = () => setIsDarkMode(document.documentElement.classList.contains("dark") || mq.matches);
+    checkDark();
+    mq.addEventListener("change", checkDark);
+    const obs = new MutationObserver(checkDark);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => { mq.removeEventListener("change", checkDark); obs.disconnect(); };
+  }, []);
+
+  const { data: historyPoints = [] } = useQuery<LocationPoint[]>({
+    queryKey: ["/api/location/breadcrumbs", targetUserId, historyDate?.toISOString()?.slice(0, 10)],
+    queryFn: async () => {
+      const res = await fetch(`/api/location/breadcrumbs/${targetUserId}`, { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      const dayStart = startOfDay(historyDate);
+      const dayEnd = endOfDay(historyDate);
+      return (data as LocationPoint[]).filter(p => {
+        const t = new Date(p.recordedAt);
+        return t >= dayStart && t <= dayEnd;
+      });
+    },
+    enabled: historyMode && !!targetUserId,
+    staleTime: 60000,
+  });
+
+  useEffect(() => {
+    if (!historyPlaying || historyPoints.length < 2) return;
+    const interval = setInterval(() => {
+      setHistoryIndex(prev => {
+        if (prev >= historyPoints.length - 1) {
+          setHistoryPlaying(false);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 200);
+    return () => clearInterval(interval);
+  }, [historyPlaying, historyPoints.length]);
+
+  useEffect(() => {
+    if (!showNearby || liveLat == null || liveLng == null) {
+      setNearbyPlaces([]);
+      return;
+    }
+    fetch(`/api/maps/nearby-emergency?lat=${liveLat}&lng=${liveLng}`, { credentials: "include" })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setNearbyPlaces(data))
+      .catch(() => setNearbyPlaces([]));
+  }, [showNearby, liveLat, liveLng]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -374,14 +465,31 @@ export default function LiveLocationViewPage() {
         <>
           <div className="relative flex-1 min-h-[45vh]">
             <GoogleMap
-              center={{ lat: liveLat, lng: liveLng }}
-              points={livePoints.map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt }))}
+              center={historyMode && historyPoints.length > 0
+                ? { lat: historyPoints[historyIndex]?.lat ?? liveLat, lng: historyPoints[historyIndex]?.lng ?? liveLng }
+                : { lat: liveLat, lng: liveLng }}
+              points={historyMode
+                ? historyPoints.map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt }))
+                : livePoints.map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt }))}
               zoom={16}
               className="w-full h-full absolute inset-0"
-              showTrail={livePoints.length > 1}
+              showTrail={historyMode ? historyPoints.length > 1 : livePoints.length > 1}
               markerLabel={userName}
               showStreetView={true}
-              showTraffic={true}
+              showTraffic={!historyMode}
+              geofences={userGeofences}
+              nearbyPlaces={showNearby ? nearbyPlaces : undefined}
+              animateMarkers={true}
+              darkMode={isDarkMode}
+              heatmapData={showHeatmap ? livePoints.map(p => ({ lat: p.lat, lng: p.lng })) : undefined}
+              replayMode={historyMode && historyPoints.length > 1}
+              replayIndex={historyIndex}
+              safeWalkRoute={!historyMode && activeSafeWalk ? {
+                polyline: "",
+                destLat: activeSafeWalk.destinationLat,
+                destLng: activeSafeWalk.destinationLng,
+                destName: activeSafeWalk.destinationName || "Destination",
+              } : undefined}
             />
             {liveTimestamp && differenceInMinutes(new Date(), new Date(liveTimestamp)) >= 2 && (
               <div className="absolute top-3 left-3 right-3 z-10">
@@ -393,17 +501,127 @@ export default function LiveLocationViewPage() {
                 </div>
               </div>
             )}
-            <div className="absolute bottom-4 left-4 right-4 z-10 flex gap-2">
-              <Button
-                size="sm"
-                className="shadow-lg"
-                onClick={openInMaps}
-                data-testid="button-open-maps"
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Open in Google Maps
-              </Button>
-            </div>
+            {activeSafeWalk && (
+              <div className="absolute top-3 right-3 z-10">
+                <div className="bg-green-500 text-white rounded-lg px-3 py-2 shadow-lg" data-testid="banner-safe-walk-eta">
+                  <div className="flex items-center gap-2 text-xs font-medium">
+                    <Navigation className="h-3.5 w-3.5" />
+                    <span>Walking to {activeSafeWalk.destinationName || "destination"}</span>
+                  </div>
+                  <p className="text-[11px] opacity-90 mt-0.5">
+                    ETA: {new Date(activeSafeWalk.expectedArrival).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            )}
+            {historyMode && (
+              <div className="absolute bottom-0 left-0 right-0 z-10 bg-background/95 backdrop-blur border-t p-3 space-y-2" data-testid="history-scrubber">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="h-4 w-4 text-primary" />
+                    <input
+                      type="date"
+                      value={format(historyDate, "yyyy-MM-dd")}
+                      max={format(new Date(), "yyyy-MM-dd")}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value + "T00:00:00");
+                        setHistoryDate(d);
+                        setHistoryIndex(0);
+                        setHistoryPlaying(false);
+                      }}
+                      className="text-xs bg-muted rounded px-2 py-1 border-0"
+                      data-testid="input-history-date"
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => { setHistoryMode(false); setHistoryPlaying(false); }}
+                    data-testid="button-close-history"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                {historyPoints.length > 1 ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setHistoryPlaying(!historyPlaying)}
+                        data-testid="button-history-play"
+                      >
+                        {historyPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </Button>
+                      <Slider
+                        value={[historyIndex]}
+                        min={0}
+                        max={historyPoints.length - 1}
+                        step={1}
+                        onValueChange={([val]) => { setHistoryIndex(val); setHistoryPlaying(false); }}
+                        className="flex-1"
+                        data-testid="slider-history"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{historyPoints[0] ? format(new Date(historyPoints[0].recordedAt), "h:mm a") : ""}</span>
+                      <span className="font-medium text-foreground">
+                        {historyPoints[historyIndex] ? format(new Date(historyPoints[historyIndex].recordedAt), "h:mm:ss a") : ""}
+                        {historyPoints[historyIndex]?.activity ? ` · ${formatActivity(historyPoints[historyIndex].activity)}` : ""}
+                      </span>
+                      <span>{historyPoints[historyPoints.length - 1] ? format(new Date(historyPoints[historyPoints.length - 1].recordedAt), "h:mm a") : ""}</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-center text-muted-foreground py-2">No location data for this date</p>
+                )}
+              </div>
+            )}
+            {!historyMode && (
+              <div className="absolute bottom-4 left-4 right-4 z-10 flex gap-2">
+                <Button
+                  size="sm"
+                  className="shadow-lg"
+                  onClick={openInMaps}
+                  data-testid="button-open-maps"
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Open in Google Maps
+                </Button>
+                <Button
+                  size="sm"
+                  variant={showNearby ? "default" : "outline"}
+                  className="shadow-lg"
+                  onClick={() => setShowNearby(!showNearby)}
+                  data-testid="button-nearby-emergency"
+                >
+                  <Hospital className="h-3 w-3 mr-1" />
+                  {showNearby ? "Hide" : "Nearby"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={showHeatmap ? "default" : "outline"}
+                  className="shadow-lg"
+                  onClick={() => setShowHeatmap(!showHeatmap)}
+                  data-testid="button-heatmap"
+                >
+                  <Layers className="h-3 w-3 mr-1" />
+                  {showHeatmap ? "Hide" : "Heat"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shadow-lg"
+                  onClick={() => { setHistoryMode(true); setHistoryIndex(0); }}
+                  data-testid="button-history"
+                >
+                  <History className="h-3 w-3 mr-1" />
+                  History
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="bg-background border-t overflow-y-auto" style={{ maxHeight: "55vh" }}>

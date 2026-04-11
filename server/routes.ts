@@ -2380,6 +2380,44 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/maps/nearby-emergency", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { lat, lng } = req.query;
+      if (!lat || !lng) return res.status(400).json({ error: "lat and lng required" });
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      if (!key) return res.status(500).json({ error: "Maps not configured" });
+
+      const types = ["hospital", "police", "fire_station"];
+      const results: { name: string; lat: number; lng: number; type: string }[] = [];
+
+      await Promise.all(types.map(async (type) => {
+        try {
+          const response = await fetch(
+            `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=5000&type=${type}&key=${key}`
+          );
+          const data = await response.json();
+          if (data.results) {
+            data.results.slice(0, 5).forEach((place: any) => {
+              results.push({
+                name: place.name,
+                lat: place.geometry.location.lat,
+                lng: place.geometry.location.lng,
+                type,
+              });
+            });
+          }
+        } catch {}
+      }));
+
+      res.json(results);
+    } catch (error) {
+      console.error("Nearby emergency places error:", error);
+      res.status(500).json({ error: "Failed to fetch nearby places" });
+    }
+  });
+
   app.post("/api/maps/snap-to-road", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -2586,6 +2624,23 @@ export async function registerRoutes(
       res.json(fences);
     } catch (error) {
       console.error("Error getting geofences:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.get("/api/geofences/for/:userId", async (req, res) => {
+    try {
+      const requesterId = getUserId(req);
+      if (!requesterId) return res.status(401).json({ error: "Not authenticated" });
+      const targetUserId = req.params.userId;
+      const linkedContacts = await storage.getContactsLinkedToUser(requesterId);
+      const isWatcher = linkedContacts.some(c => c.userId === targetUserId);
+      if (!isWatcher && requesterId !== targetUserId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      const fences = await storage.getGeofences(targetUserId);
+      res.json(fences);
+    } catch (error) {
       res.status(500).json({ error: "Failed" });
     }
   });
@@ -3376,6 +3431,33 @@ export async function registerRoutes(
       res.json(points);
     } catch (error) {
       res.status(500).json({ error: "Failed to get trail" });
+    }
+  });
+
+  app.get("/api/safe-walk/watched/:userId", async (req, res) => {
+    const watcherId = getUserId(req);
+    if (!watcherId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const targetUserId = req.params.userId;
+      const contacts = await storage.getEmergencyContacts(targetUserId);
+      const watcher = await storage.getUserById(watcherId);
+      if (!watcher) return res.status(403).json({ error: "Forbidden" });
+      const isContact = contacts.some(c => c.phone === watcher.phone);
+      if (!isContact) return res.status(403).json({ error: "Not authorized to view this user's safe walk" });
+
+      const walk = await storage.getActiveSafeWalk(targetUserId);
+      if (!walk) return res.json(null);
+
+      res.json({
+        id: walk.id,
+        destinationLat: walk.destinationLat,
+        destinationLng: walk.destinationLng,
+        destinationName: walk.destinationName,
+        expectedArrival: walk.expectedArrivalAt,
+        status: walk.status,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get safe walk" });
     }
   });
 
