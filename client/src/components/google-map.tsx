@@ -819,12 +819,13 @@ export default function GoogleMapComponent({
   };
 
   return (
-    <div className={`${className} relative`}>
-      <div ref={mapRef} className="w-full h-full rounded-lg" data-testid="google-map" />
-      {showRecenter && (
+    <>
+      <div ref={mapRef} className={`${className} rounded-lg`} data-testid="google-map" />
+      {showRecenter && mapRef.current && (
         <button
           onClick={handleRecenter}
-          className="absolute bottom-4 right-4 z-10 bg-white dark:bg-gray-800 shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          style={{ position: "absolute", bottom: 16, right: 16, zIndex: 10 }}
+          className="bg-white dark:bg-gray-800 shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           data-testid="button-recenter-map"
           title="Re-center map"
         >
@@ -837,6 +838,6 @@ export default function GoogleMapComponent({
           </svg>
         </button>
       )}
-    </div>
+    </>
   );
 }
