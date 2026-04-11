@@ -62,24 +62,22 @@ export default function LiveLocationPage() {
   const [locationDenied, setLocationDenied] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
-  const [browserLat, setBrowserLat] = useState<number | null>(null);
-  const [browserLng, setBrowserLng] = useState<number | null>(null);
+  const [myGpsLat, setMyGpsLat] = useState<number | null>(null);
+  const [myGpsLng, setMyGpsLng] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    if (currentLat == null || currentLng == null) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (mounted) {
-            setBrowserLat(pos.coords.latitude);
-            setBrowserLng(pos.coords.longitude);
-          }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 5000 }
-      );
-    }
-    return () => { mounted = false; };
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (mounted) {
+          setMyGpsLat(pos.coords.latitude);
+          setMyGpsLng(pos.coords.longitude);
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+    );
+    return () => { mounted = false; navigator.geolocation.clearWatch(watchId); };
   }, []);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
@@ -220,23 +218,17 @@ export default function LiveLocationPage() {
     },
   });
 
+  const myLat = (sharingActive && currentLat != null) ? currentLat : myGpsLat;
+  const myLng = (sharingActive && currentLng != null) ? currentLng : myGpsLng;
+
   const allPeople = [];
-  if (sharingActive && currentLat != null && currentLng != null) {
+  if (myLat != null && myLng != null) {
     allPeople.push({
       id: "me",
       name: "Me",
-      lat: currentLat,
-      lng: currentLng,
-      activity: currentActivity,
-      isMe: true,
-    });
-  } else if (!sharingActive && browserLat != null && browserLng != null) {
-    allPeople.push({
-      id: "me",
-      name: "Me",
-      lat: browserLat,
-      lng: browserLng,
-      activity: "stationary",
+      lat: myLat,
+      lng: myLng,
+      activity: sharingActive ? currentActivity : "stationary",
       isMe: true,
     });
   }
@@ -255,13 +247,11 @@ export default function LiveLocationPage() {
 
   const mapCenter = allPeople.length > 0
     ? { lat: allPeople[0].lat, lng: allPeople[0].lng }
-    : currentLat != null && currentLng != null
-      ? { lat: currentLat, lng: currentLng }
-      : browserLat != null && browserLng != null
-        ? { lat: browserLat, lng: browserLng }
-        : { lat: -31.95, lng: 115.86 };
+    : myGpsLat != null && myGpsLng != null
+      ? { lat: myGpsLat, lng: myGpsLng }
+      : { lat: -31.95, lng: 115.86 };
 
-  const hasMap = allPeople.length > 0 || (browserLat != null && browserLng != null);
+  const hasMap = allPeople.length > 0;
   const watchedPeopleList = Object.values(watchedLocations);
 
   const handlePersonTap = useCallback((personId: string) => {
