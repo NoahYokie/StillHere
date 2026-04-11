@@ -23,6 +23,7 @@ interface LiveShare {
   lastSpeed: number | null;
   lastHeading: number | null;
   lastActivity: string | null;
+  lastAccuracy: number | null;
   lastUpdatedAt: string;
   userName?: string;
 }
@@ -64,15 +65,18 @@ export default function LiveLocationPage() {
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [myGpsLat, setMyGpsLat] = useState<number | null>(null);
   const [myGpsLng, setMyGpsLng] = useState<number | null>(null);
+  const [myGpsAccuracy, setMyGpsAccuracy] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        if (mounted) {
-          setMyGpsLat(pos.coords.latitude);
-          setMyGpsLng(pos.coords.longitude);
-        }
+        if (!mounted) return;
+        const acc = pos.coords.accuracy;
+        if (acc > 150) return;
+        setMyGpsLat(pos.coords.latitude);
+        setMyGpsLng(pos.coords.longitude);
+        setMyGpsAccuracy(acc);
       },
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
@@ -150,6 +154,7 @@ export default function LiveLocationPage() {
             lastSpeed: data.speed,
             lastHeading: data.heading,
             lastActivity: data.activity,
+            lastAccuracy: data.accuracy ?? null,
             lastUpdatedAt: data.timestamp || new Date().toISOString(),
           },
         };
@@ -230,6 +235,7 @@ export default function LiveLocationPage() {
       lng: myLng,
       activity: sharingActive ? currentActivity : "stationary",
       isMe: true,
+      accuracy: myGpsAccuracy,
     });
   }
   Object.values(watchedLocations).forEach(share => {
@@ -241,6 +247,7 @@ export default function LiveLocationPage() {
         lng: share.lastLng,
         activity: share.lastActivity,
         isMe: false,
+        accuracy: share.lastAccuracy,
       });
     }
   });

@@ -38,6 +38,7 @@ interface MapPerson {
   speed?: number | null;
   lastUpdated?: string;
   isMe?: boolean;
+  accuracy?: number | null;
 }
 
 interface GeofenceCircle {
@@ -249,6 +250,7 @@ export default function GoogleMapComponent({
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const peopleMarkersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
   const peoplePositionsRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
+  const accuracyCirclesRef = useRef<Map<string, google.maps.Circle>>(new Map());
   const trailPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const routePolylineRef = useRef<google.maps.Polyline | null>(null);
   const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null);
@@ -369,6 +371,8 @@ export default function GoogleMapComponent({
           marker.map = null;
           peopleMarkersRef.current.delete(id);
           peoplePositionsRef.current.delete(id);
+          accuracyCirclesRef.current.get(id)?.setMap(null);
+          accuracyCirclesRef.current.delete(id);
         }
       });
 
@@ -376,6 +380,33 @@ export default function GoogleMapComponent({
         const existing = peopleMarkersRef.current.get(person.id);
         const prevPos = peoplePositionsRef.current.get(person.id);
         const newPos = { lat: person.lat, lng: person.lng };
+
+        const accRadius = person.accuracy != null && person.accuracy > 10 ? person.accuracy : 0;
+        const existingCircle = accuracyCirclesRef.current.get(person.id);
+        const circleColor = person.isMe ? "#3b82f6" : "#8b5cf6";
+        if (accRadius > 0 && accRadius < 500) {
+          if (existingCircle) {
+            existingCircle.setCenter(newPos);
+            existingCircle.setRadius(accRadius);
+          } else {
+            const circle = new google.maps.Circle({
+              map,
+              center: newPos,
+              radius: accRadius,
+              fillColor: circleColor,
+              fillOpacity: 0.08,
+              strokeColor: circleColor,
+              strokeOpacity: 0.25,
+              strokeWeight: 1,
+              clickable: false,
+              zIndex: person.isMe ? 500 : 0,
+            });
+            accuracyCirclesRef.current.set(person.id, circle);
+          }
+        } else if (existingCircle) {
+          existingCircle.setMap(null);
+          accuracyCirclesRef.current.delete(person.id);
+        }
 
         if (existing) {
           if (animateMarkers && prevPos) {
@@ -774,6 +805,8 @@ export default function GoogleMapComponent({
       safeWalkPolylineRef.current?.setMap(null);
       if (safeWalkDestMarkerRef.current) safeWalkDestMarkerRef.current.map = null;
       if (myLocationMarkerRef.current) myLocationMarkerRef.current.map = null;
+      accuracyCirclesRef.current.forEach(c => c.setMap(null));
+      accuracyCirclesRef.current.clear();
       infoWindowRef.current?.close();
       mapListenersRef.current.forEach(l => google.maps.event.removeListener(l));
       mapListenersRef.current = [];

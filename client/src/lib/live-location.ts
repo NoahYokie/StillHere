@@ -132,6 +132,9 @@ async function sendLocationUpdate(position: GeolocationPosition, force = false):
   const now = Date.now();
   const activity = detectActivityFromSpeed(position.coords.speed);
 
+  const accuracy = position.coords.accuracy;
+  if (accuracy != null && accuracy > 150 && !force) return;
+
   if (!force) {
     const interval = activity === "stationary" ? STATIONARY_SEND_INTERVAL_MS : MOVING_SEND_INTERVAL_MS;
     if (now - lastSentTime < interval) return;
