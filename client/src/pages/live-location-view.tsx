@@ -8,7 +8,7 @@ import { useLocation, useParams } from "wouter";
 import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { formatActivity, formatSpeed } from "@/lib/live-location";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 
 interface LocationPoint {
   id: string;
@@ -373,13 +373,15 @@ export default function LiveLocationViewPage() {
       {liveLat != null && liveLng != null ? (
         <>
           <div className="relative flex-1 min-h-[45vh]">
-            <LocationMap
+            <GoogleMap
               center={{ lat: liveLat, lng: liveLng }}
               points={livePoints.map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt }))}
               zoom={16}
               className="w-full h-full absolute inset-0"
               showTrail={livePoints.length > 1}
               markerLabel={userName}
+              showStreetView={true}
+              showTraffic={true}
             />
             {liveTimestamp && differenceInMinutes(new Date(), new Date(liveTimestamp)) >= 2 && (
               <div className="absolute top-3 left-3 right-3 z-10">

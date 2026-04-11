@@ -2333,6 +2333,86 @@ export async function registerRoutes(
   // GOOGLE MAPS API PROXY ENDPOINTS
   // ============================================
 
+  app.get("/api/maps/config", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      if (!key) return res.status(500).json({ error: "Maps not configured" });
+      res.json({ apiKey: key });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to load maps config" });
+    }
+  });
+
+  app.get("/api/maps/geocode", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { lat, lng } = req.query;
+      if (!lat || !lng) return res.status(400).json({ error: "lat and lng required" });
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      if (!key) return res.status(500).json({ error: "Maps not configured" });
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}&result_type=street_address|route|locality`
+      );
+      const data = await response.json();
+      if (data.status === "OK" && data.results?.length > 0) {
+        const result = data.results[0];
+        const components = result.address_components || [];
+        const streetNumber = components.find((c: any) => c.types.includes("street_number"))?.short_name || "";
+        const route = components.find((c: any) => c.types.includes("route"))?.short_name || "";
+        const locality = components.find((c: any) => c.types.includes("locality"))?.long_name || "";
+        const suburb = components.find((c: any) => c.types.includes("sublocality_level_1") || c.types.includes("sublocality"))?.long_name || "";
+        const shortAddress = streetNumber && route ? `${streetNumber} ${route}` : route || suburb || locality || result.formatted_address;
+        res.json({
+          formatted: result.formatted_address,
+          short: shortAddress,
+          locality: locality || suburb,
+          placeId: result.place_id,
+        });
+      } else {
+        res.json({ formatted: null, short: null, locality: null, placeId: null });
+      }
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      res.status(500).json({ error: "Geocoding failed" });
+    }
+  });
+
+  app.post("/api/maps/snap-to-road", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { points } = req.body;
+      if (!Array.isArray(points) || points.length < 2) return res.status(400).json({ error: "At least 2 points required" });
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      if (!key) return res.status(500).json({ error: "Maps not configured" });
+
+      const maxPerRequest = 100;
+      const snappedPoints: { lat: number; lng: number }[] = [];
+
+      for (let i = 0; i < points.length; i += maxPerRequest) {
+        const batch = points.slice(i, i + maxPerRequest);
+        const path = batch.map((p: any) => `${p.lat},${p.lng}`).join("|");
+        const response = await fetch(
+          `https://roads.googleapis.com/v1/snapToRoads?path=${path}&interpolate=true&key=${key}`
+        );
+        const data = await response.json();
+        if (data.snappedPoints) {
+          for (const sp of data.snappedPoints) {
+            snappedPoints.push({ lat: sp.location.latitude, lng: sp.location.longitude });
+          }
+        }
+      }
+
+      res.json({ snappedPoints });
+    } catch (error) {
+      console.error("Snap to road error:", error);
+      res.status(500).json({ error: "Snap to road failed" });
+    }
+  });
+
   app.get("/api/places/autocomplete", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -2466,7 +2546,7 @@ export async function registerRoutes(
             headers: {
               "Content-Type": "application/json",
               "X-Goog-Api-Key": apiKey,
-              "X-Goog-FieldMask": "routes.duration,routes.distanceMeters",
+              "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
             },
             body: JSON.stringify(body),
           });
@@ -2478,6 +2558,7 @@ export async function registerRoutes(
             results[key] = {
               min: Math.max(1, Math.ceil(durationSec / 60)),
               km: Math.round((route.distanceMeters || 0) / 100) / 10,
+              polyline: route.polyline?.encodedPolyline || null,
             };
           } else {
             results[key] = null;

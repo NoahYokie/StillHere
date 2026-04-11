@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Shield, Clock, MapPin, ChevronLeft, Plus, X } from "lucide-react";
 import { useLocation } from "wouter";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 import type { SafetyTimer, TripPoint } from "@shared/schema";
 
 const DURATION_PRESETS = [
@@ -191,7 +191,7 @@ export default function SafetyTimerPage() {
           {center && (
             <Card className="w-full max-w-sm mb-4">
               <CardContent className="p-2">
-                <LocationMap
+                <GoogleMap
                   center={center}
                   points={trailPoints}
                   zoom={15}

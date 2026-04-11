@@ -11,7 +11,7 @@ import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 
 interface LiveShare {
   id: string;
@@ -291,7 +291,7 @@ export default function LiveLocationPage() {
 
       {hasMap ? (
         <div className="relative flex-1 min-h-[50vh]">
-          <LocationMap
+          <GoogleMap
             center={mapCenter}
             people={allPeople}
             zoom={15}

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Car, Gauge, AlertTriangle, Clock, MapPin, Navigation, Zap, TrendingUp, Route, ChevronDown, ChevronUp } from "lucide-react";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 import type { TripPoint } from "@shared/schema";
 
 interface DriveDetail {
@@ -60,6 +60,30 @@ function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolea
       return res.json();
     },
     enabled: expanded,
+  });
+
+  const { data: startGeo } = useQuery<{ short: string | null; locality: string | null }>({
+    queryKey: ["/api/maps/geocode", "start", drive.id],
+    queryFn: async () => {
+      if (drive.startLat == null || drive.startLng == null) return { short: null, locality: null };
+      const res = await fetch(`/api/maps/geocode?lat=${drive.startLat}&lng=${drive.startLng}`, { credentials: "include" });
+      if (!res.ok) return { short: null, locality: null };
+      return res.json();
+    },
+    enabled: expanded && drive.startLat != null && drive.startLng != null,
+    staleTime: Infinity,
+  });
+
+  const { data: endGeo } = useQuery<{ short: string | null; locality: string | null }>({
+    queryKey: ["/api/maps/geocode", "end", drive.id],
+    queryFn: async () => {
+      if (drive.endLat == null || drive.endLng == null) return { short: null, locality: null };
+      const res = await fetch(`/api/maps/geocode?lat=${drive.endLat}&lng=${drive.endLng}`, { credentials: "include" });
+      if (!res.ok) return { short: null, locality: null };
+      return res.json();
+    },
+    enabled: expanded && drive.endLat != null && drive.endLng != null,
+    staleTime: Infinity,
   });
 
   const mapPoints = trailPoints.map(p => ({
@@ -118,6 +142,25 @@ function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolea
 
         {expanded && (
           <div className="mt-3 pt-3 border-t space-y-3">
+            {(startGeo?.short || endGeo?.short) && (
+              <div className="space-y-1.5">
+                {startGeo?.short && (
+                  <div className="flex items-center gap-2 text-sm" data-testid={`text-start-address-${drive.id}`}>
+                    <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">A</div>
+                    <span className="text-foreground">{startGeo.short}</span>
+                    <span className="text-xs text-muted-foreground">{drive.startTime}</span>
+                  </div>
+                )}
+                {endGeo?.short && (
+                  <div className="flex items-center gap-2 text-sm" data-testid={`text-end-address-${drive.id}`}>
+                    <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">B</div>
+                    <span className="text-foreground">{endGeo.short}</span>
+                    <span className="text-xs text-muted-foreground">{drive.endTime}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               {drive.speedAlerts > 0 && (
                 <div className="flex items-center gap-1.5 bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 rounded-full px-3 py-1 text-xs font-medium">
@@ -141,12 +184,15 @@ function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolea
 
             {mapCenter && mapPoints.length > 0 && (
               <div className="rounded-lg overflow-hidden border">
-                <LocationMap
+                <GoogleMap
                   center={mapCenter}
                   points={mapPoints}
                   zoom={13}
                   className="w-full h-48"
                   showTrail={true}
+                  showMapTypeControl={true}
+                  startAddress={startGeo?.short || undefined}
+                  endAddress={endGeo?.short || undefined}
                 />
               </div>
             )}

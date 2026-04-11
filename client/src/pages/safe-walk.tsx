@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock, Footprints, Bike, Bus, Car } from "lucide-react";
 import { useLocation } from "wouter";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
 
 function formatCountdown(ms: number): string {
@@ -74,10 +74,10 @@ interface PlacePrediction {
 type TravelMode = "walk" | "bike" | "transit" | "drive";
 
 interface TravelEstimates {
-  walk: { min: number; km: number };
-  bike: { min: number; km: number };
-  transit: { min: number; km: number };
-  drive: { min: number; km: number };
+  walk: { min: number; km: number; polyline?: string | null };
+  bike: { min: number; km: number; polyline?: string | null };
+  transit: { min: number; km: number; polyline?: string | null };
+  drive: { min: number; km: number; polyline?: string | null };
 }
 
 const EXTEND_OPTIONS = [
@@ -351,7 +351,7 @@ export default function SafeWalkPage() {
         <main className="max-w-md mx-auto px-6 py-4 space-y-4">
           <Card>
             <CardContent className="p-2">
-              <LocationMap
+              <GoogleMap
                 center={center}
                 points={trailPoints}
                 zoom={14}
@@ -512,11 +512,13 @@ export default function SafeWalkPage() {
         {destinationCoords && currentPos && (
           <Card>
             <CardContent className="p-2">
-              <LocationMap
+              <GoogleMap
                 center={currentPos}
                 zoom={13}
-                className="w-full h-36"
+                className="w-full h-44"
                 markerLabel="You"
+                routePolyline={estimates?.[selectedMode]?.polyline || undefined}
+                showMapTypeControl={false}
               />
             </CardContent>
           </Card>

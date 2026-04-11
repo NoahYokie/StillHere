@@ -18,7 +18,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield } from "lucide-react";
 import type { ContactPageData } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 
 export default function ContactPage() {
   const { token } = useParams<{ token: string }>();
@@ -298,7 +298,7 @@ export default function ContactPage() {
 
               {trailPoints.length > 0 && (
                 <div className="mt-4">
-                  <LocationMap
+                  <GoogleMap
                     center={trailPoints[trailPoints.length - 1]}
                     points={trailPoints}
                     zoom={14}
@@ -341,11 +341,13 @@ export default function ContactPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <LocationMap
+              <GoogleMap
                 center={{ lat: locationLat, lng: locationLng }}
                 zoom={15}
                 className="w-full h-56"
                 markerLabel={user.name}
+                showStreetView={true}
+                showMapTypeControl={true}
               />
               {address && (
                 <p className="text-sm text-foreground mt-3" data-testid="text-address">

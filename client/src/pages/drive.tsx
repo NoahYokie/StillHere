@@ -9,7 +9,7 @@ import { ArrowLeft, Car, Gauge, MapPin, Clock, AlertTriangle, History, Play, Squ
 import { useLocation } from "wouter";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import CrashCountdown from "@/components/crash-countdown";
-import LocationMap from "@/components/location-map";
+import GoogleMap from "@/components/google-map";
 import type { DriveSession, SpeedAlert, TripPoint, UserStatus } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -318,7 +318,7 @@ export default function DrivePage() {
                       <span className="text-xs text-muted-foreground ml-auto">{mapPoints.length} points</span>
                     )}
                   </div>
-                  <LocationMap
+                  <GoogleMap
                     center={currentPosition}
                     points={mapPoints}
                     zoom={15}
