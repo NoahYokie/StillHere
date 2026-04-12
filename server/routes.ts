@@ -566,6 +566,24 @@ export async function registerRoutes(
   // PROTECTED ROUTES (require auth)
   // ============================================
 
+  app.post("/api/heartbeat", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { lat, lng, acc } = req.body || {};
+      await storage.recordHeartbeat(
+        userId,
+        typeof lat === "number" ? lat : undefined,
+        typeof lng === "number" ? lng : undefined,
+        typeof acc === "number" ? acc : undefined,
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error recording heartbeat:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Get user status
   app.get("/api/status", async (req, res) => {
     try {

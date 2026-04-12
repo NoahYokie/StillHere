@@ -75,6 +75,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
+  recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number): Promise<void>;
   
   // Settings
   getSettings(userId: string): Promise<Settings | undefined>;
@@ -283,6 +284,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  async recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        lastHeartbeatAt: new Date(),
+        lastHeartbeatLat: lat ?? null,
+        lastHeartbeatLng: lng ?? null,
+        lastHeartbeatAcc: acc ?? null,
+      })
+      .where(eq(users.id, userId));
   }
 
   async getSettings(userId: string): Promise<Settings | undefined> {

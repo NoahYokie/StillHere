@@ -22,6 +22,10 @@ export const users = pgTable("users", {
   timezone: text("timezone").notNull().default("Australia/Melbourne"),
   isPremium: boolean("is_premium").notNull().default(false),
   publicKey: text("public_key"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  lastHeartbeatLat: doublePrecision("last_heartbeat_lat"),
+  lastHeartbeatLng: doublePrecision("last_heartbeat_lng"),
+  lastHeartbeatAcc: doublePrecision("last_heartbeat_acc"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

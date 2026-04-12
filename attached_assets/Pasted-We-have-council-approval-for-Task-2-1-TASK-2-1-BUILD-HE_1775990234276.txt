@@ -1,0 +1,191 @@
+We have council approval for Task 2.1.
+
+---
+
+# 🔧 TASK 2.1 — BUILD HEARTBEAT PIPELINE
+
+## 🎯 OBJECTIVE
+
+Create the first heartbeat system for StillHere.
+
+This task is ONLY about:
+
+* client sends heartbeat every 60 seconds
+* server receives and stores it
+* no state transitions yet
+* no alerts yet
+* no UI changes yet
+
+---
+
+# ✅ ARCHITECTURE RULES (MUST FOLLOW)
+
+## 1. Heartbeat payload includes:
+
+* `ts`
+* optional `lat`
+* optional `lng`
+* optional `acc`
+
+Example:
+
+```json id="6wxu7p"
+{
+  "ts": 1712953676,
+  "lat": -33.8688,
+  "lng": 151.2093,
+  "acc": 18
+}
+```
+
+---
+
+## 2. HEARTBEAT LOCATION IS NON-AUTHORITATIVE
+
+This is critical:
+
+* Heartbeat coordinates are ONLY a snapshot from the existing `location-service`
+* They are NEVER a live map source
+* They must NEVER override the “Me” marker
+* They must NEVER become a second location authority
+
+---
+
+## 3. NO NEW GPS CALLS
+
+Heartbeat must:
+
+* read from existing `location-service` cache only
+
+If cache exists:
+
+* include lat/lng/acc
+
+If cache is empty:
+
+* send heartbeat with timestamp only
+
+🚨 Rule:
+Heartbeat must NEVER trigger a fresh GPS request.
+
+No `getCurrentPosition`
+No new `watchPosition`
+
+---
+
+# 🛠 BACKEND WORK
+
+## 4. Add heartbeat storage fields
+
+Add storage for:
+
+* `lastHeartbeatAt`
+* optional `lastHeartbeatLat`
+* optional `lastHeartbeatLng`
+* optional `lastHeartbeatAcc`
+
+Use existing user/settings/profile storage structure in the cleanest way possible.
+If a dedicated table is better, explain why before choosing it in your report.
+
+Preferred simple version:
+
+* add fields to `users` or `settings` if appropriate
+
+---
+
+## 5. Add endpoint
+
+Create:
+
+```id="skxkvb"
+POST /api/heartbeat
+```
+
+Authenticated route.
+
+Behavior:
+
+* accepts heartbeat payload
+* stores server receipt time
+* stores optional snapshot coords
+* returns success JSON
+
+Use server-side timestamp as source of truth for received time.
+
+---
+
+# 🛠 CLIENT WORK
+
+## 6. Add heartbeat sender
+
+Create a small heartbeat client module, for example:
+
+```id="jlwm4d"
+client/src/lib/heartbeat.ts
+```
+
+Responsibilities:
+
+* start heartbeat interval
+* stop heartbeat interval
+* every 60 seconds:
+
+  * read cached state from `location-service`
+  * send POST `/api/heartbeat`
+
+Payload rules:
+
+* always send `ts`
+* include `lat/lng/acc` only if cached location exists
+
+---
+
+## 7. Start heartbeat in the right place
+
+Integrate heartbeat into the authenticated app flow so it runs when a logged-in user is active in the app.
+
+Do NOT start it on public pages.
+Do NOT duplicate intervals across pages.
+
+One heartbeat loop per logged-in session only.
+
+---
+
+# 🚫 DO NOT BUILD YET
+
+Do NOT build:
+
+* Quiet / Concern transitions
+* cron worker / reaper
+* watcher UI
+* notifications
+* Safety State Engine logic
+
+This task is only the pipe.
+
+---
+
+# 📦 OUTPUT REQUIRED
+
+After completion, report:
+
+1. Where heartbeat data is stored
+2. Exact shape of POST `/api/heartbeat`
+3. How heartbeat avoids creating duplicate intervals
+4. Confirmation that no new GPS calls were introduced
+5. What happens when cached location is unavailable
+6. Any edge cases or risks noticed
+
+---
+
+# ✅ EXPECTED RESULT
+
+After this task:
+
+* logged-in app sends heartbeat every 60s
+* server records latest heartbeat
+* optional snapshot location stored
+* no false coupling with live map
+* foundation ready for state engine
+
+---

@@ -12,6 +12,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { RatingPrompt } from "@/components/rating-prompt";
 import { initErrorReporter } from "@/lib/error-reporter";
 import { resumeLiveTrackingIfNeeded } from "@/lib/live-location";
+import { startHeartbeat, stopHeartbeat } from "@/lib/heartbeat";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import LandingPage from "@/pages/landing";
@@ -235,6 +236,15 @@ function CapacitorInit() {
     if (auth?.authenticated) {
       resumeLiveTrackingIfNeeded().catch(() => {});
     }
+  }, [auth?.authenticated]);
+
+  useEffect(() => {
+    if (auth?.authenticated) {
+      startHeartbeat();
+    } else {
+      stopHeartbeat();
+    }
+    return () => stopHeartbeat();
   }, [auth?.authenticated]);
 
   return null;
