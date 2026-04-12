@@ -245,6 +245,13 @@ export default function LiveLocationViewPage() {
   const [showNearby, setShowNearby] = useState(false);
   const [nearbyPlaces, setNearbyPlaces] = useState<{ name: string; lat: number; lng: number; type: "hospital" | "police" | "fire_station" }[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [staleBannerDismissed, setStaleBannerDismissed] = useState(false);
+  useEffect(() => {
+    if (!staleBannerDismissed) {
+      const t = setTimeout(() => setStaleBannerDismissed(true), 8000);
+      return () => clearTimeout(t);
+    }
+  }, [staleBannerDismissed]);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [historyMode, setHistoryMode] = useState(false);
   const [historyDate, setHistoryDate] = useState<Date>(new Date());
@@ -491,13 +498,18 @@ export default function LiveLocationViewPage() {
                 destName: activeSafeWalk.destinationName || "Destination",
               } : undefined}
             />
-            {liveTimestamp && differenceInMinutes(new Date(), new Date(liveTimestamp)) >= 2 && (
-              <div className="absolute top-3 left-3 right-3 z-10">
-                <div className="bg-amber-100 dark:bg-amber-900 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2 flex items-center gap-2 shadow-md" data-testid="banner-stale-location">
+            {liveTimestamp && differenceInMinutes(new Date(), new Date(liveTimestamp)) >= 2 && !staleBannerDismissed && (
+              <div
+                className="absolute top-3 left-3 right-3 z-10 cursor-pointer"
+                onClick={() => setStaleBannerDismissed(true)}
+                data-testid="banner-stale-location"
+              >
+                <div className="bg-amber-100 dark:bg-amber-900 border border-amber-300 dark:border-amber-700 rounded-lg px-3 py-2 flex items-center gap-2 shadow-md">
                   <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <p className="text-xs text-amber-800 dark:text-amber-200">
-                    Last update {formatDistanceToNow(new Date(liveTimestamp), { addSuffix: true })}. {userName} may have the app in the background.
+                  <p className="text-xs text-amber-800 dark:text-amber-200 flex-1">
+                    Last update {formatDistanceToNow(new Date(liveTimestamp), { addSuffix: true })}
                   </p>
+                  <span className="text-amber-600 dark:text-amber-400 text-xs shrink-0">✕</span>
                 </div>
               </div>
             )}
