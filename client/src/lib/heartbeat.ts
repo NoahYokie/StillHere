@@ -1,29 +1,41 @@
 import { getCurrentPosition } from "./location-service";
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
+const STALE_THRESHOLD_MS = 300_000;
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
+let consecutiveFailures = 0;
 
 async function sendHeartbeat(): Promise<void> {
   try {
     const cached = getCurrentPosition();
     const body: Record<string, number> = { ts: Math.floor(Date.now() / 1000) };
-    if (cached) {
+    if (cached && (Date.now() - cached.timestamp) < STALE_THRESHOLD_MS) {
       body.lat = cached.lat;
       body.lng = cached.lng;
       body.acc = cached.accuracy;
     }
-    await fetch("/api/heartbeat", {
+    const res = await fetch("/api/heartbeat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(body),
     });
-  } catch {}
+    if (res.ok) {
+      consecutiveFailures = 0;
+    } else {
+      consecutiveFailures++;
+      console.warn(`[Heartbeat] send failed (count: ${consecutiveFailures}) HTTP ${res.status}`);
+    }
+  } catch (err: any) {
+    consecutiveFailures++;
+    console.warn(`[Heartbeat] send failed (count: ${consecutiveFailures}) ${err?.message || "network error"}`);
+  }
 }
 
 export function startHeartbeat(): void {
   if (intervalId !== null) return;
+  consecutiveFailures = 0;
   sendHeartbeat();
   intervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 }
