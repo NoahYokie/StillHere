@@ -62,7 +62,7 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
   const connectionLabel =
     connectionStatus === "connected" ? "Phone is online" :
     connectionStatus === "weak" ? `Last signal ${friendlyTimeAgo(user.lastHeartbeatAt)}` :
-    user.lastHeartbeatAt ? `Phone unreachable since ${friendlyTimeAgo(user.lastHeartbeatAt)}` :
+    user.lastHeartbeatAt ? `Phone offline since ${friendlyTimeAgo(user.lastHeartbeatAt)}` :
     "No connection yet";
 
   const locationLabel =
@@ -119,7 +119,7 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
     const mins = heartbeatAge ?? stateChangedAge ?? 0;
     return {
       trustLevel: "watching",
-      headline: `No updates in the last ${mins} ${mins === 1 ? "minute" : "minutes"}`,
+      headline: `Quiet for the last ${mins} ${mins === 1 ? "minute" : "minutes"}`,
       subtext: hasLocation
         ? `Last seen ${friendlyTimeAgo(locationTimestamp)}`
         : "Waiting for location",

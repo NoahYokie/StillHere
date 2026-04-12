@@ -22,6 +22,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { getWatcherInsight, ConnectionBadge, LocationBadge, TrustIndicator } from "@/components/watcher-status";
+import { ConcernTimelinePanel } from "@/components/concern-resolution";
 
 interface RemovedContact extends Contact {
   ownerName: string;
@@ -288,6 +289,10 @@ export default function WatchedPage() {
               <span>Next due: {format(new Date(user.nextCheckinDue), "h:mm a")}</span>
             </div>
           </div>
+
+          {(insight.trustLevel === "worried" || user.safetyState === "concern") && (
+            <ConcernTimelinePanel userId={user.userId} isWatcher={true} />
+          )}
 
           {isExpanded && <DailyStatusPanel userId={user.userId} />}
 

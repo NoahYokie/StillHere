@@ -588,6 +588,148 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/concern/resolve", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      if (user.safetyState !== "concern") {
+        return res.json({ success: true, alreadySafe: true });
+      }
+
+      await storage.updateSafetyState(userId, "active", "User confirmed safe");
+
+      const watcherContacts = await storage.getContactsLinkedToUser(userId);
+      for (const contact of watcherContacts) {
+        if (contact.linkedUserId) {
+          emitToUser(contact.linkedUserId, "concern:resolved", {
+            userId,
+            userName: user.name,
+            resolvedBy: "user",
+            resolvedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving concern:", error);
+      res.status(500).json({ error: "Failed to resolve concern" });
+    }
+  });
+
+  app.post("/api/concern/resolve-watcher/:userId", async (req, res) => {
+    try {
+      const watcherId = getUserId(req);
+      if (!watcherId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const targetUserId = req.params.userId;
+      const linkedContacts = await storage.getContactsLinkedToUser(targetUserId);
+      const isWatcher = linkedContacts.some(c => c.linkedUserId === watcherId);
+      if (!isWatcher) return res.status(403).json({ error: "Not authorized" });
+
+      const user = await storage.getUser(targetUserId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      if (user.safetyState !== "concern") {
+        return res.json({ success: true, alreadySafe: true });
+      }
+
+      const watcher = await storage.getUser(watcherId);
+      await storage.updateSafetyState(targetUserId, "active", `Marked safe by ${watcher?.name || "watcher"}`);
+
+      emitToUser(targetUserId, "concern:resolved", {
+        userId: targetUserId,
+        resolvedBy: "watcher",
+        resolvedByName: watcher?.name,
+        resolvedAt: new Date().toISOString(),
+      });
+
+      for (const contact of linkedContacts) {
+        if (contact.linkedUserId) {
+          emitToUser(contact.linkedUserId, "concern:resolved", {
+            userId: targetUserId,
+            userName: user.name,
+            resolvedBy: "watcher",
+            resolvedByName: watcher?.name,
+            resolvedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resolving concern as watcher:", error);
+      res.status(500).json({ error: "Failed to resolve concern" });
+    }
+  });
+
+  app.get("/api/concern/timeline/:userId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const targetUserId = req.params.userId;
+      const isSelf = currentUserId === targetUserId;
+      if (!isSelf) {
+        const linkedContacts = await storage.getContactsLinkedToUser(targetUserId);
+        const isWatcher = linkedContacts.some(c => c.linkedUserId === currentUserId);
+        if (!isWatcher) return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const user = await storage.getUser(targetUserId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const timeline: { type: string; time: string; detail: string }[] = [];
+
+      if (user.safetyStateChangedAt) {
+        timeline.push({
+          type: "state_change",
+          time: user.safetyStateChangedAt.toISOString(),
+          detail: user.safetyState === "concern"
+            ? "Concern triggered — no heartbeat received"
+            : user.safetyState === "quiet"
+              ? "Went quiet — waiting for response"
+              : `Status: ${user.safetyState} — ${user.safetyStateReason || ""}`,
+        });
+      }
+
+      const reminderTimeline = await storage.getReminderTimeline(targetUserId);
+      for (const entry of reminderTimeline) {
+        timeline.push(entry);
+      }
+
+      const openIncident = await storage.getOpenIncident(targetUserId);
+      if (openIncident) {
+        timeline.push({
+          type: "incident",
+          time: openIncident.createdAt.toISOString(),
+          detail: openIncident.reason === "sos"
+            ? "SOS alert triggered"
+            : "Missed check-in alert triggered",
+        });
+      }
+
+      timeline.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+      res.json({
+        userId: targetUserId,
+        userName: user.name,
+        safetyState: user.safetyState,
+        safetyStateReason: user.safetyStateReason,
+        safetyStateChangedAt: user.safetyStateChangedAt,
+        lastHeartbeatAt: user.lastHeartbeatAt,
+        timeline,
+      });
+    } catch (error) {
+      console.error("Error fetching concern timeline:", error);
+      res.status(500).json({ error: "Failed to fetch concern timeline" });
+    }
+  });
+
   // Get user status
   app.get("/api/status", async (req, res) => {
     try {

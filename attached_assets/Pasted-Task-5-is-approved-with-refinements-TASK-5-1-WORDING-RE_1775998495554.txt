@@ -1,0 +1,170 @@
+Task 5 is approved with refinements.
+
+---
+
+# 🔧 TASK 5.1 — WORDING REFINEMENT
+
+Update Trust UX wording:
+
+## Trust states
+
+🟢 Safe
+🟡 Quiet
+🔴 Concern
+
+---
+
+## Replace wording
+
+* "Phone unreachable since…" → "Phone offline since…"
+* "No updates in last X minutes" → "Quiet for the last X minutes"
+
+---
+
+## Tone rules
+
+* calm
+* human
+* reassuring
+* not technical
+* not alarming unless SOS
+
+---
+
+## Keep
+
+* "Everything looks good"
+* "Back online just now"
+
+---
+
+# 🎯 TASK 6 — CONCERN RESOLUTION FLOW
+
+We must complete the safety loop.
+
+---
+
+## OBJECTIVE
+
+When someone enters 🔴 Concern:
+
+→ watcher must understand:
+
+* what is happening
+* what actions are being taken
+* how to resolve it
+* when it is safe again
+
+---
+
+## BUILD REQUIREMENTS
+
+### 1. Concern Timeline
+
+Show:
+
+* when concern started
+* why (missed heartbeat / SOS / etc)
+* actions taken:
+
+  * push sent
+  * SMS sent
+  * call attempted
+  * contact notified
+
+---
+
+### 2. Resolution Actions
+
+Allow:
+
+#### User resolves
+
+* "I'm OK" button
+* biometric/passkey optional later
+
+#### Watcher resolves
+
+* "Mark as safe"
+
+---
+
+### 3. Resolution Feedback
+
+When resolved:
+
+Show:
+
+* "Sarah is safe now"
+* "Issue resolved at [time]"
+
+---
+
+### 4. Recovery UX
+
+After resolution:
+
+* transition from 🔴 → 🟢 must feel clear
+* show confirmation message
+* remove anxiety immediately
+
+---
+
+### 5. Prevent confusion
+
+If concern triggered but user comes back:
+
+Show:
+
+* "Connection restored"
+* "No further action needed"
+
+---
+
+### 6. Safety Guard
+
+Concern must NOT disappear silently.
+
+It must:
+
+* be acknowledged
+* be resolved explicitly
+
+---
+
+# 📦 OUTPUT REQUIRED
+
+Report back with:
+
+1. Concern flow UI
+2. Resolution actions
+3. Timeline display
+4. Example states:
+
+   * active concern
+   * resolved concern
+
+---
+
+# ⚠️ DO NOT TOUCH
+
+* heartbeat system
+* safety state engine logic
+
+This is UI + flow only
+
+---
+
+# ⚠️ ALSO
+
+We still need demo access.
+
+Please provide:
+
+* temporary login or OTP
+* safe demo account
+
+---
+
+Goal:
+→ inspect live product for UX validation

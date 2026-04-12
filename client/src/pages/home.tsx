@@ -20,6 +20,7 @@ import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, Us
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
+import { ConcernTimelinePanel } from "@/components/concern-resolution";
 import { createFallDetector, isDeviceMotionSupported, requestMotionPermission } from "@/lib/fall-detection";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import { getSocket } from "@/lib/socket";
@@ -712,6 +713,10 @@ export default function Home() {
               </Button>
             </div>
           </div>
+        )}
+
+        {status?.user?.safetyState === "concern" && !hasOpenIncident && (
+          <ConcernTimelinePanel userId={status.user.id} isWatcher={false} />
         )}
 
         <Card>
