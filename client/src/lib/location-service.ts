@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+
 export type LocationState = {
   lat: number;
   lng: number;
@@ -32,6 +34,8 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+type NativeBackgroundGeo = any;
+
 class LocationService {
   private currentState: LocationState | null = null;
   private watchId: number | null = null;
@@ -42,6 +46,15 @@ class LocationService {
 
   private highAccuracyRefCount = 0;
   private activeMode: LocationMode = "normal";
+
+  private nativePlugin: NativeBackgroundGeo | null = null;
+  private nativeReady = false;
+  private nativeStarted = false;
+  private nativeSubscriptions: Array<{ remove: () => void }> = [];
+  private nativeInitPromise: Promise<void> | null = null;
+  private capGeolocationPlugin: any = null;
+  private capWatchId: string | null = null;
+  private watchSessionId = 0;
 
   private shouldAccept(lat: number, lng: number, accuracy: number, timestamp: number): { ok: boolean; reason?: string } {
     if (accuracy > VALID_ACCURACY_THRESHOLD && this.currentState === null) {
@@ -81,7 +94,8 @@ class LocationService {
     this.locating = false;
     this.currentState = { lat: latitude, lng: longitude, accuracy, timestamp, speed, heading, isStale: false };
 
-    console.log(`[GPS] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, accuracy ${Math.round(accuracy)}m, mode=${this.activeMode}`);
+    const source = this.nativeStarted ? "native" : (this.capWatchId ? "cap-geo" : "browser");
+    console.log(`[GPS] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, accuracy ${Math.round(accuracy)}m, mode=${this.activeMode}, src=${source}`);
 
     if (wasLocating) {
       this.locatingSubscribers.forEach(fn => { try { fn(false); } catch {} });
@@ -90,10 +104,10 @@ class LocationService {
     this.subscribers.forEach(fn => { try { fn(this.currentState!); } catch {} });
   };
 
-  private handleError = (err: GeolocationPositionError) => {
-    const msg = err.code === err.PERMISSION_DENIED
+  private handleError = (err: GeolocationPositionError | { code: number; message: string }) => {
+    const msg = err.code === 1
       ? "Location permission denied"
-      : err.code === err.POSITION_UNAVAILABLE
+      : err.code === 2
         ? "Position unavailable"
         : "Location request timed out";
     console.log(`[GPS] Error: ${msg}`);
@@ -104,11 +118,189 @@ class LocationService {
     return this.highAccuracyRefCount > 0 ? "high_accuracy" : "normal";
   }
 
-  private startWatch() {
+  private isNativePlatform(): boolean {
+    try {
+      return Capacitor.isNativePlatform();
+    } catch {
+      return false;
+    }
+  }
+
+  private async initNativePlugin(): Promise<void> {
+    if (!this.isNativePlatform()) return;
+
+    try {
+      const pluginId = "@transistorsoft/capacitor-background-geolocation";
+      const mod = await import(/* @vite-ignore */ pluginId);
+      this.nativePlugin = mod.default || mod.BackgroundGeolocation;
+      if (this.nativePlugin) {
+        this.nativeReady = true;
+        console.log("[GPS] Native background geolocation plugin loaded");
+      }
+    } catch {
+      console.log("[GPS] Background geolocation plugin not available, trying @capacitor/geolocation");
+    }
+
+    if (!this.nativeReady) {
+      try {
+        const mod = await import("@capacitor/geolocation");
+        this.capGeolocationPlugin = mod.Geolocation;
+        console.log("[GPS] Capacitor Geolocation plugin loaded");
+      } catch {
+        console.log("[GPS] No native geolocation plugins available, falling back to browser API");
+      }
+    }
+  }
+
+  private async startNativeBackgroundWatch(): Promise<boolean> {
+    if (!this.nativePlugin || !this.nativeReady) return false;
+
+    try {
+      const BG = this.nativePlugin;
+      const isHighAccuracy = this.desiredMode() === "high_accuracy";
+
+      for (const sub of this.nativeSubscriptions) {
+        try { sub.remove(); } catch {}
+      }
+      this.nativeSubscriptions = [];
+
+      this.nativeSubscriptions.push(BG.onLocation((location: any) => {
+        const pos = {
+          coords: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            accuracy: location.coords.accuracy,
+            speed: location.coords.speed,
+            heading: location.coords.heading,
+            altitude: location.coords.altitude,
+            altitudeAccuracy: location.coords.altitude_accuracy,
+          },
+          timestamp: location.timestamp ? new Date(location.timestamp).getTime() : Date.now(),
+        } as GeolocationPosition;
+        this.handlePosition(pos);
+      }));
+
+      this.nativeSubscriptions.push(BG.onMotionChange((event: any) => {
+        console.log(`[GPS] Native motion change: isMoving=${event.isMoving}`);
+      }));
+
+      this.nativeSubscriptions.push(BG.onProviderChange((event: any) => {
+        console.log(`[GPS] Native provider change: enabled=${event.enabled}, status=${event.status}`);
+        if (!event.enabled) {
+          this.errorSubscribers.forEach(fn => { try { fn("Location services disabled"); } catch {} });
+        }
+      }));
+
+      const state = await BG.ready({
+        desiredAccuracy: isHighAccuracy ? BG.DESIRED_ACCURACY_HIGH : BG.DESIRED_ACCURACY_MEDIUM,
+        distanceFilter: isHighAccuracy ? 5 : 10,
+        stopOnTerminate: false,
+        startOnBoot: true,
+        heartbeatInterval: 60,
+        preventSuspend: true,
+        foregroundService: true,
+        notification: {
+          title: "StillHere",
+          text: "Safety tracking active",
+        },
+        enableHeadless: true,
+        stopTimeout: 5,
+        locationAuthorizationRequest: "Always",
+        backgroundPermissionRationale: {
+          title: "StillHere needs background location",
+          message: "StillHere monitors your safety even when the app is in the background. This ensures your emergency contacts can locate you if needed.",
+          positiveAction: "Allow",
+          negativeAction: "Cancel",
+        },
+      });
+
+      if (!state.enabled) {
+        await BG.start();
+      }
+
+      this.nativeStarted = true;
+      console.log(`[GPS] Native background tracking started (accuracy=${isHighAccuracy ? "high" : "medium"}, distanceFilter=${isHighAccuracy ? 5 : 10}m)`);
+      return true;
+    } catch (err: any) {
+      console.log(`[GPS] Native background tracking failed to start: ${err?.message || err}`);
+      return false;
+    }
+  }
+
+  private async stopNativeBackgroundWatch(): Promise<void> {
+    for (const sub of this.nativeSubscriptions) {
+      try { sub.remove(); } catch {}
+    }
+    this.nativeSubscriptions = [];
+
+    if (this.nativeStarted && this.nativePlugin) {
+      try {
+        await this.nativePlugin.stop();
+      } catch {}
+    }
+    this.nativeStarted = false;
+  }
+
+  private async startCapacitorWatch(): Promise<boolean> {
+    if (!this.capGeolocationPlugin) return false;
+
+    try {
+      const Geo = this.capGeolocationPlugin;
+      const isHighAccuracy = this.desiredMode() === "high_accuracy";
+
+      const id = await Geo.watchPosition(
+        {
+          enableHighAccuracy: true,
+          maximumAge: isHighAccuracy ? 2000 : 10000,
+          timeout: isHighAccuracy ? 5000 : 20000,
+        },
+        (position: any, err: any) => {
+          if (err) {
+            const code = err.code === 1 ? 1 : err.code === 3 ? 3 : 2;
+            this.handleError({ code, message: err.message || "Position unavailable" });
+            return;
+          }
+          if (position) {
+            const pos = {
+              coords: {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                speed: position.coords.speed,
+                heading: position.coords.heading,
+                altitude: position.coords.altitude,
+                altitudeAccuracy: position.coords.altitudeAccuracy,
+              },
+              timestamp: position.timestamp,
+            } as GeolocationPosition;
+            this.handlePosition(pos);
+          }
+        }
+      );
+
+      this.capWatchId = id;
+      console.log(`[GPS] Capacitor Geolocation watch started (watchId=${id})`);
+      return true;
+    } catch (err: any) {
+      console.log(`[GPS] Capacitor Geolocation watch failed: ${err?.message || err}`);
+      return false;
+    }
+  }
+
+  private async stopCapacitorWatch(): Promise<void> {
+    if (this.capWatchId && this.capGeolocationPlugin) {
+      try {
+        await this.capGeolocationPlugin.clearWatch({ id: this.capWatchId });
+      } catch {}
+      this.capWatchId = null;
+    }
+  }
+
+  private startBrowserWatch() {
     if (this.watchId !== null) return;
     this.activeMode = this.desiredMode();
     const opts = MODE_CONFIG[this.activeMode];
-    console.log(`[GPS] Starting GPS watch (mode=${this.activeMode})`);
+    console.log(`[GPS] Starting browser GPS watch (mode=${this.activeMode})`);
     this.locating = true;
     this.locatingSubscribers.forEach(fn => { try { fn(true); } catch {} });
     this.watchId = navigator.geolocation.watchPosition(
@@ -118,19 +310,91 @@ class LocationService {
     );
   }
 
-  private stopWatch() {
+  private stopBrowserWatch() {
     if (this.watchId === null) return;
-    console.log("[GPS] Stopping GPS watch");
+    console.log("[GPS] Stopping browser GPS watch");
     navigator.geolocation.clearWatch(this.watchId);
     this.watchId = null;
   }
 
-  private restartWatch() {
+  private async startWatch() {
+    const session = ++this.watchSessionId;
+    this.locating = true;
+    this.locatingSubscribers.forEach(fn => { try { fn(true); } catch {} });
+
+    if (this.isNativePlatform()) {
+      if (!this.nativeInitPromise) {
+        this.nativeInitPromise = this.initNativePlugin();
+      }
+      await this.nativeInitPromise;
+
+      if (session !== this.watchSessionId) return;
+
+      if (this.nativeReady) {
+        const started = await this.startNativeBackgroundWatch();
+        if (session !== this.watchSessionId) return;
+        if (started) return;
+      }
+
+      if (this.capGeolocationPlugin) {
+        const started = await this.startCapacitorWatch();
+        if (session !== this.watchSessionId) return;
+        if (started) return;
+      }
+    }
+
+    if (session !== this.watchSessionId) return;
+    this.startBrowserWatch();
+  }
+
+  private async stopWatch() {
+    ++this.watchSessionId;
+    if (this.nativeStarted) {
+      await this.stopNativeBackgroundWatch();
+    }
+    if (this.capWatchId) {
+      await this.stopCapacitorWatch();
+    }
+    this.stopBrowserWatch();
+  }
+
+  private async restartWatch() {
     const desired = this.desiredMode();
-    if (this.watchId === null || desired === this.activeMode) return;
+    if (desired === this.activeMode) return;
+
+    if (!this.isAnyWatchActive()) return;
+
     console.log(`[GPS] Mode change: ${this.activeMode} → ${desired}, restarting watch`);
-    this.stopWatch();
-    this.startWatch();
+    this.activeMode = desired;
+
+    if (this.nativeStarted && this.nativePlugin) {
+      const isHighAccuracy = desired === "high_accuracy";
+      try {
+        await this.nativePlugin.setConfig({
+          desiredAccuracy: isHighAccuracy
+            ? this.nativePlugin.DESIRED_ACCURACY_HIGH
+            : this.nativePlugin.DESIRED_ACCURACY_MEDIUM,
+          distanceFilter: isHighAccuracy ? 5 : 10,
+        });
+        console.log(`[GPS] Native config updated: accuracy=${isHighAccuracy ? "high" : "medium"}`);
+        return;
+      } catch {}
+    }
+
+    if (this.capWatchId) {
+      await this.stopCapacitorWatch();
+      await this.startCapacitorWatch();
+      return;
+    }
+
+    if (this.watchId !== null) {
+      this.stopBrowserWatch();
+      this.startBrowserWatch();
+    }
+  }
+
+  private isAnyWatchActive(): boolean {
+    return this.watchId !== null || this.nativeStarted || this.capWatchId !== null;
   }
 
   startHighAccuracyMode(): void {
@@ -147,6 +411,21 @@ class LocationService {
 
   getMode(): LocationMode {
     return this.activeMode;
+  }
+
+  isUsingNativeTracking(): boolean {
+    return this.nativeStarted;
+  }
+
+  isUsingCapacitorGeo(): boolean {
+    return this.capWatchId !== null;
+  }
+
+  getTrackingSource(): "native-bg" | "capacitor" | "browser" | "none" {
+    if (this.nativeStarted) return "native-bg";
+    if (this.capWatchId) return "capacitor";
+    if (this.watchId !== null) return "browser";
+    return "none";
   }
 
   subscribe(fn: LocationSubscriber): () => void {
@@ -189,10 +468,55 @@ class LocationService {
   }
 
   isWatching(): boolean {
-    return this.watchId !== null;
+    return this.watchId !== null || this.nativeStarted || this.capWatchId !== null;
   }
 
   forceRefresh(): void {
+    if (this.nativeStarted && this.nativePlugin) {
+      try {
+        this.nativePlugin.getCurrentPosition({ samples: 1, persist: false }).then((location: any) => {
+          const pos = {
+            coords: {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              accuracy: location.coords.accuracy,
+              speed: location.coords.speed,
+              heading: location.coords.heading,
+              altitude: location.coords.altitude,
+              altitudeAccuracy: location.coords.altitude_accuracy,
+            },
+            timestamp: location.timestamp ? new Date(location.timestamp).getTime() : Date.now(),
+          } as GeolocationPosition;
+          this.handlePosition(pos);
+        }).catch(() => {});
+      } catch {}
+      return;
+    }
+
+    if (this.capGeolocationPlugin) {
+      try {
+        this.capGeolocationPlugin.getCurrentPosition({ enableHighAccuracy: true, maximumAge: 0, timeout: 10000 })
+          .then((position: any) => {
+            if (position) {
+              const pos = {
+                coords: {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy,
+                  speed: position.coords.speed,
+                  heading: position.coords.heading,
+                  altitude: position.coords.altitude,
+                  altitudeAccuracy: position.coords.altitudeAccuracy,
+                },
+                timestamp: position.timestamp,
+              } as GeolocationPosition;
+              this.handlePosition(pos);
+            }
+          }).catch(() => {});
+      } catch {}
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       this.handlePosition,
       () => {},
@@ -261,4 +585,8 @@ export function stopHighAccuracyMode(): void {
 
 export function getMode(): LocationMode {
   return locationService.getMode();
+}
+
+export function getTrackingSource(): "native-bg" | "capacitor" | "browser" | "none" {
+  return locationService.getTrackingSource();
 }

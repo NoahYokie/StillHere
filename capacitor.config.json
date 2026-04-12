@@ -29,14 +29,29 @@
       "resizeOnFullScreen": true
     },
     "BackgroundGeolocation": {
-      "locationAuthorizationRequest": "Always"
+      "locationAuthorizationRequest": "Always",
+      "backgroundPermissionRationale": {
+        "title": "StillHere needs background location",
+        "message": "StillHere monitors your safety even when the app is in the background. This ensures your emergency contacts can locate you if needed.",
+        "positiveAction": "Allow",
+        "negativeAction": "Cancel"
+      }
+    },
+    "Geolocation": {
+      "iosLocationPermission": "always"
     }
   },
   "ios": {
     "contentInset": "automatic",
     "backgroundColor": "#0ea5e9",
     "preferredContentMode": "mobile",
-    "scheme": "stillhere"
+    "scheme": "stillhere",
+    "infoPlist": {
+      "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses your location to monitor your safety, share your position with emergency contacts, and send alerts if you need help.",
+      "NSLocationWhenInUseUsageDescription": "StillHere uses your location to show your position on the map and share it with your emergency contacts.",
+      "NSLocationAlwaysUsageDescription": "StillHere needs continuous location access to monitor your safety in the background, detect emergencies, and keep your emergency contacts informed.",
+      "UIBackgroundModes": ["location", "fetch", "remote-notification", "processing"]
+    }
   },
   "android": {
     "allowMixedContent": false,

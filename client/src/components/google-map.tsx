@@ -188,7 +188,7 @@ function formatInfoSpeed(speed: number | null | undefined): string {
   return `${Math.round(speed * 3.6)} km/h`;
 }
 
-const MIN_ZOOM = 12;
+const MIN_ZOOM = 14;
 const MAX_ZOOM = 18;
 
 function isPersonCameraEligible(p: MapPerson): boolean {
@@ -530,7 +530,7 @@ export default function GoogleMapComponent({
       });
 
       if (smartCamera) {
-        const hasSafetyOverride = people.some(p => p.safetyState === "concern" || p.hasSafetyEvent);
+        const hasSafetyOverride = people.some(p => p.safetyState === "concern");
         if (hasSafetyOverride) {
           userInteractedRef.current = false;
           setShowRecenter(false);
@@ -538,7 +538,7 @@ export default function GoogleMapComponent({
         if (isLocating) {
           // skip
         } else if (!userInteractedRef.current) {
-          const hasSafetyPriority = people.some(p => p.safetyState === "concern" || p.hasSafetyEvent);
+          const hasSafetyPriority = people.some(p => p.safetyState === "concern");
           const focus = determineFocusTarget(people, focusPersonId);
           const eligible = people.filter(isPersonCameraEligible);
 
@@ -951,7 +951,7 @@ export default function GoogleMapComponent({
     if (smartCamera && people && people.length > 0) {
       const focus = determineFocusTarget(people, focusPersonId);
       const eligible = people.filter(isPersonCameraEligible);
-      if (eligible.length > 1 && !people.some(p => p.safetyState === "concern" || p.hasSafetyEvent)) {
+      if (eligible.length > 1 && !people.some(p => p.safetyState === "concern")) {
         const bounds = new google.maps.LatLngBounds();
         eligible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
         map.fitBounds(bounds, 50);

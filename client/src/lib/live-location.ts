@@ -1,5 +1,5 @@
 import { apiRequest } from "./queryClient";
-import { subscribe as subscribeGps, subscribeError as subscribeGpsError, forceRefresh as forceGpsRefresh } from "./location-service";
+import { subscribe as subscribeGps, subscribeError as subscribeGpsError, forceRefresh as forceGpsRefresh, getTrackingSource } from "./location-service";
 
 type ActivityType = "stationary" | "walking" | "running" | "cycling" | "driving";
 
@@ -19,9 +19,7 @@ let lastSentTime = 0;
 let lastPosition: GeolocationPosition | null = null;
 let wakeLock: WakeLockSentinel | null = null;
 let persistentNotifShown = false;
-let nativePluginActive = false;
 let trackingSessionId = 0;
-let nativeSubscriptions: Array<{ remove: () => void }> = [];
 let silentAudioEl: HTMLAudioElement | null = null;
 const listeners = new Set<LocationListener>();
 let onErrorCb: ((err: string) => void) | null = null;
@@ -175,7 +173,6 @@ async function sendLocationUpdate(position: GeolocationPosition, force = false):
 }
 
 function startGpsSubscription() {
-  if (nativePluginActive) return;
   if (gpsUnsubscribe) return;
 
   gpsUnsubscribe = subscribeGps((state) => {
@@ -237,98 +234,12 @@ function startKeepAlive() {
   }, KEEPALIVE_CHECK_MS);
 }
 
-async function tryNativeBackgroundGeo(sessionId: number): Promise<boolean> {
-  try {
-    const pluginId = "@transistorsoft/capacitor-background-geolocation";
-    const mod = await import(/* @vite-ignore */ pluginId);
-    const BG = mod.default;
-
-    if (trackingSessionId !== sessionId) return false;
-
-    for (const sub of nativeSubscriptions) {
-      try { sub.remove(); } catch {}
-    }
-    nativeSubscriptions = [];
-
-    nativeSubscriptions.push(BG.onLocation((location: any) => {
-      const pos = {
-        coords: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          accuracy: location.coords.accuracy,
-          speed: location.coords.speed,
-          heading: location.coords.heading,
-          altitude: location.coords.altitude,
-          altitudeAccuracy: location.coords.altitude_accuracy,
-        },
-        timestamp: location.timestamp ? new Date(location.timestamp).getTime() : Date.now(),
-      } as GeolocationPosition;
-      lastPosition = pos;
-      sendLocationUpdate(pos, true);
-    }));
-
-    nativeSubscriptions.push(BG.onMotionChange((event: any) => {
-      if (event.isMoving) {
-        lastSentTime = 0;
-      }
-    }));
-
-    nativeSubscriptions.push(BG.onHeartbeat(() => {
-      BG.getCurrentPosition({ samples: 1, persist: false }).then((location: any) => {
-        const pos = {
-          coords: {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            accuracy: location.coords.accuracy,
-            speed: location.coords.speed,
-            heading: location.coords.heading,
-            altitude: location.coords.altitude,
-            altitudeAccuracy: location.coords.altitude_accuracy,
-          },
-          timestamp: Date.now(),
-        } as GeolocationPosition;
-        sendLocationUpdate(pos, true);
-      }).catch(() => {});
-    }));
-
-    if (trackingSessionId !== sessionId) return false;
-
-    const state = await BG.ready({
-      desiredAccuracy: BG.DESIRED_ACCURACY_HIGH,
-      distanceFilter: 10,
-      stopOnTerminate: false,
-      startOnBoot: true,
-      heartbeatInterval: 60,
-      preventSuspend: true,
-      foregroundService: true,
-      notification: {
-        title: "StillHere",
-        text: "Location sharing active",
-      },
-      enableHeadless: true,
-      stopTimeout: 5,
-      locationAuthorizationRequest: "Always",
-    });
-
-    if (trackingSessionId !== sessionId) return false;
-
-    if (!state.enabled) {
-      await BG.start();
-    }
-
-    nativePluginActive = true;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function startLiveTracking(opts?: {
   onError?: (err: string) => void;
   onExpired?: () => void;
   onUpdate?: (position: GeolocationPosition, activity: ActivityType) => void;
 }): boolean {
-  if (!navigator.geolocation) {
+  if (typeof navigator === "undefined" || (!navigator.geolocation && typeof (globalThis as any).Capacitor === "undefined")) {
     opts?.onError?.("Geolocation is not supported by this device");
     return false;
   }
@@ -346,13 +257,9 @@ export function startLiveTracking(opts?: {
     listeners.add(updateFn);
   }
 
-  const currentSession = ++trackingSessionId;
-  tryNativeBackgroundGeo(currentSession).then((nativeOk) => {
-    if (trackingSessionId !== currentSession) return;
-    if (!nativeOk) {
-      startGpsSubscription();
-    }
-  });
+  ++trackingSessionId;
+  startGpsSubscription();
+  console.log(`[LiveLocation] Started via location-service (source=${getTrackingSource()})`);
 
   localStorage.setItem("liveLocationActive", "true");
   return true;
@@ -378,20 +285,6 @@ export async function stopLiveTracking(): Promise<void> {
     keepAliveInterval = null;
   }
 
-  for (const sub of nativeSubscriptions) {
-    try { sub.remove(); } catch {}
-  }
-  nativeSubscriptions = [];
-
-  if (nativePluginActive) {
-    try {
-      const pluginId = "@transistorsoft/capacitor-background-geolocation";
-      const mod = await import(/* @vite-ignore */ pluginId);
-      await mod.default.stop();
-      nativePluginActive = false;
-    } catch {}
-  }
-
   lastPosition = null;
   lastSentTime = 0;
   listeners.clear();
@@ -404,7 +297,7 @@ export async function stopLiveTracking(): Promise<void> {
 }
 
 export function isLiveTrackingActive(): boolean {
-  return gpsUnsubscribe !== null || nativePluginActive;
+  return gpsUnsubscribe !== null;
 }
 
 export function isLiveTrackingEnabled(): boolean {
@@ -421,7 +314,7 @@ export function removeLocationListener(fn: LocationListener): void {
 }
 
 export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
-  if (watchId !== null || nativePluginActive) return true;
+  if (gpsUnsubscribe !== null) return true;
 
   const wasActive = localStorage.getItem("liveLocationActive") === "true";
   if (!wasActive) return false;
@@ -458,9 +351,9 @@ export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && localStorage.getItem("liveLocationActive") === "true") {
-    if (gpsUnsubscribe === null && !nativePluginActive) {
+    if (gpsUnsubscribe === null) {
       resumeLiveTrackingIfNeeded();
-    } else if (gpsUnsubscribe !== null) {
+    } else {
       lastSentTime = 0;
       forceGpsRefresh();
     }
@@ -474,7 +367,7 @@ document.addEventListener("visibilitychange", () => {
 
 window.addEventListener("focus", () => {
   if (localStorage.getItem("liveLocationActive") === "true") {
-    if (gpsUnsubscribe === null && !nativePluginActive) {
+    if (gpsUnsubscribe === null) {
       resumeLiveTrackingIfNeeded();
     }
   }
