@@ -869,6 +869,16 @@ export interface WatchedUser {
   hasOpenIncident: boolean;
   incidentReason: string | null;
   contactId: string;
+  safetyState: "active" | "quiet" | "concern" | null;
+  safetyStateReason: string | null;
+  safetyStateChangedAt: Date | null;
+  lastHeartbeatAt: Date | null;
+  lastHeartbeatLat: number | null;
+  lastHeartbeatLng: number | null;
+  lastHeartbeatAcc: number | null;
+  lastLocationAt: Date | null;
+  lastLocationLat: number | null;
+  lastLocationLng: number | null;
 }
 
 export interface ContactPageData {

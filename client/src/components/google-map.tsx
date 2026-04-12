@@ -118,19 +118,42 @@ function createMarkerElement(activity?: string | null): HTMLElement {
   return container;
 }
 
+function getSafetyColor(person: MapPerson): string {
+  if (person.isMe) return "#3b82f6";
+  if (person.safetyState === "concern") return "#ef4444";
+  if (person.hasSafetyEvent) return "#ef4444";
+  if (person.safetyState === "quiet") return "#f59e0b";
+  return "#22c55e";
+}
+
+function getSafetyLabel(person: MapPerson): string | null {
+  if (person.isMe) return null;
+  if (person.safetyState === "concern") return "Concern";
+  if (person.safetyState === "quiet") return "Quiet";
+  if (person.hasSafetyEvent) return "Help";
+  return null;
+}
+
 function createPersonMarker(person: MapPerson): HTMLElement {
-  const color = person.isMe ? "#3b82f6" : (activityColors[person.activity || "stationary"] || "#8b5cf6");
+  const color = getSafetyColor(person);
+  const safetyLabel = getSafetyLabel(person);
   const size = person.isMe ? 44 : 38;
   const innerSize = person.isMe ? 36 : 30;
   const initial = person.isMe ? "" : (person.name?.charAt(0)?.toUpperCase() || "?");
+  const shouldPulse = person.safetyState === "concern" || person.hasSafetyEvent;
   const container = document.createElement("div");
   container.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transition:transform 0.3s ease";
+
+  const labelBorderColor = person.safetyState === "concern" ? "#fca5a5" : person.safetyState === "quiet" ? "#fcd34d" : "#e5e7eb";
+  const labelBgColor = person.safetyState === "concern" ? "#fef2f2" : person.safetyState === "quiet" ? "#fffbeb" : "white";
+
   container.innerHTML = `
     <div style="position:relative;width:${size}px;height:${size}px">
       <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.25;animation:gmap-pulse 2s ease-out infinite"></div>
       <div style="position:absolute;top:4px;left:4px;width:${innerSize}px;height:${innerSize}px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:${person.isMe ? 12 : 14}px;font-weight:700">${person.isMe ? "●" : escapeHtml(initial)}</div>
+      ${shouldPulse ? `<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid ${color};opacity:0.6;animation:gmap-pulse 1.5s ease-out infinite"></div>` : ""}
     </div>
-    ${!person.isMe ? `<div style="background:white;border-radius:12px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.2);border:1px solid #e5e7eb;max-width:100px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(person.name)}</div>` : ""}
+    ${!person.isMe ? `<div style="background:${labelBgColor};border-radius:12px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.2);border:1px solid ${labelBorderColor};max-width:100px;overflow:hidden;text-overflow:ellipsis">${safetyLabel ? `<span style="color:${color};margin-right:2px">●</span>` : ""}${escapeHtml(person.name)}</div>` : ""}
   `;
   ensurePulseStyle();
   return container;

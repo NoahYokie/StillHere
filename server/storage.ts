@@ -233,7 +233,7 @@ export interface IStorage {
   updateLiveLocation(shareId: string, userId: string, lat: number, lng: number, accuracy: number | null, speed: number | null, heading: number | null, activity: string): Promise<LiveLocationPoint>;
   getLiveLocationPoints(shareId: string, since?: Date, limit?: number): Promise<LiveLocationPoint[]>;
   getAllActiveLiveShares(): Promise<LiveLocationShare[]>;
-  getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string })[]>;
+  getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean })[]>;
 
   // Report Data
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
@@ -1150,6 +1150,18 @@ export class DatabaseStorage implements IStorage {
         nextCheckinDue = addHours(user.createdAt, userSettings?.checkinIntervalHours || 24);
       }
 
+      let lastLocationAt: Date | null = null;
+      let lastLocationLat: number | null = null;
+      let lastLocationLng: number | null = null;
+      const activeSession = await db.select().from(locationSessions).where(
+        and(eq(locationSessions.userId, user.id), eq(locationSessions.active, true))
+      ).limit(1);
+      if (activeSession.length > 0) {
+        lastLocationAt = activeSession[0].updatedAt;
+        lastLocationLat = activeSession[0].lastLat;
+        lastLocationLng = activeSession[0].lastLng;
+      }
+
       result.push({
         userId: user.id,
         userName: user.name,
@@ -1158,6 +1170,16 @@ export class DatabaseStorage implements IStorage {
         hasOpenIncident: !!openIncident,
         incidentReason: openIncident?.reason || null,
         contactId: contact.id,
+        safetyState: user.safetyState as "active" | "quiet" | "concern" | null,
+        safetyStateReason: user.safetyStateReason || null,
+        safetyStateChangedAt: user.safetyStateChangedAt || null,
+        lastHeartbeatAt: user.lastHeartbeatAt || null,
+        lastHeartbeatLat: user.lastHeartbeatLat || null,
+        lastHeartbeatLng: user.lastHeartbeatLng || null,
+        lastHeartbeatAcc: user.lastHeartbeatAcc || null,
+        lastLocationAt,
+        lastLocationLat,
+        lastLocationLng,
       });
     }
 
@@ -1672,14 +1694,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(liveLocationShares).where(eq(liveLocationShares.active, true));
   }
 
-  async getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string })[]> {
+  async getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean })[]> {
     const watcherContacts = await db.select().from(contacts)
       .where(and(
         eq(contacts.linkedUserId, watcherUserId),
         isNull(contacts.softDeletedAt)
       ));
 
-    const results: (LiveLocationShare & { userName: string })[] = [];
+    const results: (LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean })[] = [];
     for (const contact of watcherContacts) {
       const [share] = await db.select().from(liveLocationShares)
         .where(and(eq(liveLocationShares.userId, contact.userId), eq(liveLocationShares.active, true)))
@@ -1687,7 +1709,13 @@ export class DatabaseStorage implements IStorage {
       if (share) {
         const user = await this.getUser(contact.userId);
         if (user) {
-          results.push({ ...share, userName: user.name });
+          const openIncident = await this.getOpenIncident(contact.userId);
+          results.push({
+            ...share,
+            userName: user.name,
+            safetyState: user.safetyState,
+            hasSafetyEvent: !!openIncident,
+          });
         }
       }
     }

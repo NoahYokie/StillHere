@@ -15,11 +15,13 @@ import {
 import {
   ArrowLeft, MessageSquare, Phone, CheckCircle2, AlertTriangle, Clock,
   Shield, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2, Car,
+  MapPin,
 } from "lucide-react";
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { getWatcherInsight, ConnectionBadge, LocationBadge, TrustIndicator } from "@/components/watcher-status";
 
 interface RemovedContact extends Contact {
   ownerName: string;
@@ -76,30 +78,16 @@ export default function WatchedPage() {
     },
   });
 
-  function getStatusBadge(user: WatchedUser) {
-    if (user.hasOpenIncident) {
-      const label = user.incidentReason === "sos" ? "SOS Active" : "Missed Checkin";
-      return <Badge variant="destructive" data-testid={`badge-status-${user.userId}`}>{label}</Badge>;
-    }
-    const now = new Date();
-    const due = new Date(user.nextCheckinDue);
-    if (now > due) {
-      return <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" data-testid={`badge-status-${user.userId}`}>Overdue</Badge>;
-    }
-    return <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" data-testid={`badge-status-${user.userId}`}>OK</Badge>;
-  }
+  const sortedUsers = (watchedUsers || []).slice().sort((a, b) => {
+    const trustOrder = { worried: 0, watching: 1, safe: 2 };
+    const aInsight = getWatcherInsight(a);
+    const bInsight = getWatcherInsight(b);
+    return (trustOrder[aInsight.trustLevel] ?? 2) - (trustOrder[bInsight.trustLevel] ?? 2);
+  });
 
-  function getStatusIcon(user: WatchedUser) {
-    if (user.hasOpenIncident) return <AlertTriangle className="w-5 h-5 text-red-500" />;
-    const now = new Date();
-    const due = new Date(user.nextCheckinDue);
-    if (now > due) return <Clock className="w-5 h-5 text-amber-500" />;
-    return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-  }
-
-  const activeAlerts = watchedUsers?.filter(u => u.hasOpenIncident) || [];
-  const overdueUsers = watchedUsers?.filter(u => !u.hasOpenIncident && new Date() > new Date(u.nextCheckinDue)) || [];
-  const okUsers = watchedUsers?.filter(u => !u.hasOpenIncident && new Date() <= new Date(u.nextCheckinDue)) || [];
+  const worriedUsers = sortedUsers.filter(u => getWatcherInsight(u).trustLevel === "worried");
+  const watchingUsers = sortedUsers.filter(u => getWatcherInsight(u).trustLevel === "watching");
+  const safeUsers = sortedUsers.filter(u => getWatcherInsight(u).trustLevel === "safe");
 
   return (
     <div className="min-h-screen bg-background">
@@ -139,44 +127,44 @@ export default function WatchedPage() {
           </Card>
         )}
 
-        {activeAlerts.length > 0 && (
+        {worriedUsers.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <AlertTriangle className="w-4 h-4 text-red-500" />
               <span className="text-sm font-medium text-red-600 dark:text-red-400" data-testid="text-alerts-header">
-                Active Alerts ({activeAlerts.length})
+                Needs Attention ({worriedUsers.length})
               </span>
             </div>
             <div className="space-y-3">
-              {activeAlerts.map(user => renderUserCard(user))}
+              {worriedUsers.map(user => renderUserCard(user))}
             </div>
           </div>
         )}
 
-        {overdueUsers.length > 0 && (
+        {watchingUsers.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <Clock className="w-4 h-4 text-amber-500" />
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400" data-testid="text-overdue-header">
-                Overdue ({overdueUsers.length})
+              <span className="text-sm font-medium text-amber-600 dark:text-amber-400" data-testid="text-watching-header">
+                Keeping an Eye On ({watchingUsers.length})
               </span>
             </div>
             <div className="space-y-3">
-              {overdueUsers.map(user => renderUserCard(user))}
+              {watchingUsers.map(user => renderUserCard(user))}
             </div>
           </div>
         )}
 
-        {okUsers.length > 0 && (
+        {safeUsers.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 className="w-4 h-4 text-green-500" />
               <span className="text-sm font-medium text-green-600 dark:text-green-400" data-testid="text-ok-header">
-                All Clear ({okUsers.length})
+                All Good ({safeUsers.length})
               </span>
             </div>
             <div className="space-y-3">
-              {okUsers.map(user => renderUserCard(user))}
+              {safeUsers.map(user => renderUserCard(user))}
             </div>
           </div>
         )}
@@ -250,38 +238,49 @@ export default function WatchedPage() {
   function renderUserCard(user: WatchedUser) {
     const isExpanded = expandedUser === user.userId;
     const userPref = reportPrefs?.find(p => p.watchedUserId === user.userId);
+    const insight = getWatcherInsight(user);
+    const hasLoc = user.lastLocationLat != null || user.lastHeartbeatLat != null;
 
     return (
-      <Card key={user.userId} data-testid={`card-watched-user-${user.userId}`} className={user.hasOpenIncident ? "border-red-200 dark:border-red-800" : ""}>
+      <Card key={user.userId} data-testid={`card-watched-user-${user.userId}`} className={`${insight.borderClass} transition-colors`}>
         <CardContent className="py-4">
-          <div className="flex items-start justify-between mb-3">
+          <div className="flex items-start gap-3 mb-3">
             <div
-              className="flex items-center gap-3 cursor-pointer flex-1"
+              className="cursor-pointer"
               onClick={() => setExpandedUser(isExpanded ? null : user.userId)}
               data-testid={`toggle-expand-${user.userId}`}
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                user.hasOpenIncident ? "bg-red-100 dark:bg-red-900/30" : "bg-primary/10"
-              }`}>
-                {getStatusIcon(user)}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium" data-testid={`text-user-name-${user.userId}`}>{user.userName}</h3>
-                  {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                </div>
-                {getStatusBadge(user)}
-              </div>
+              <TrustIndicator insight={insight} />
             </div>
+            <div
+              className="flex-1 cursor-pointer min-w-0"
+              onClick={() => setExpandedUser(isExpanded ? null : user.userId)}
+            >
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium truncate" data-testid={`text-user-name-${user.userId}`}>{user.userName}</h3>
+                {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+              </div>
+              <p className={`text-sm font-medium mt-0.5 ${insight.iconColor}`} data-testid={`text-headline-${user.userId}`}>
+                {insight.headline}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-subtext-${user.userId}`}>
+                {insight.subtext}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            <ConnectionBadge status={insight.connection.status} label={insight.connection.label} />
+            <LocationBadge status={insight.location.status} label={insight.location.label} />
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
             <div className="flex items-center gap-1" data-testid={`text-last-checkin-${user.userId}`}>
               <Clock className="w-3 h-3" />
               {user.lastCheckinAt ? (
-                <span>Last checkin: {formatDistanceToNow(new Date(user.lastCheckinAt), { addSuffix: true })}</span>
+                <span>Checked in {formatDistanceToNow(new Date(user.lastCheckinAt), { addSuffix: true })}</span>
               ) : (
-                <span>No checkins yet</span>
+                <span>No check-ins yet</span>
               )}
             </div>
             <div className="flex items-center gap-1" data-testid={`text-next-due-${user.userId}`}>
@@ -313,6 +312,16 @@ export default function WatchedPage() {
               <Phone className="w-4 h-4 mr-1.5" />
               Call
             </Button>
+            {hasLoc && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLocation(`/live-location`)}
+                data-testid={`button-location-${user.userId}`}
+              >
+                <MapPin className="w-4 h-4" />
+              </Button>
+            )}
           </div>
 
           <div className="flex gap-2 mt-2">

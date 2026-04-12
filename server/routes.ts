@@ -2873,12 +2873,18 @@ export async function registerRoutes(
 
       emitToUser(userId, "live-location:updated", { lat, lng, speed, heading, activity: detectedActivity });
 
-      const watcherContacts = await storage.getContactsLinkedToUser(userId);
+      const [watcherContacts, updatedUser, openIncidentForEmit] = await Promise.all([
+        storage.getContactsLinkedToUser(userId),
+        storage.getUser(userId),
+        storage.getOpenIncident(userId),
+      ]);
       for (const contact of watcherContacts) {
         if (contact.linkedUserId) {
           emitToUser(contact.linkedUserId, "live-location:contact-updated", {
             userId, lat, lng, speed, heading, activity: detectedActivity,
             accuracy, timestamp: point.recordedAt,
+            safetyState: updatedUser?.safetyState || null,
+            hasSafetyEvent: !!openIncidentForEmit,
           });
         }
       }
