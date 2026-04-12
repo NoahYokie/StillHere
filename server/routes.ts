@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
+import { processLocationContext, getUserContext, getRecentContextEvents } from "./context-processor";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
 import { eq, and, lt } from "drizzle-orm";
@@ -60,6 +61,17 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   const dLng = toRad(lng2 - lng1);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatContextEvent(type: string, placeName: string | null): string {
+  const place = placeName || "a location";
+  switch (type) {
+    case "dwell_start": return `Arrived at ${place}`;
+    case "dwell_end": return `Left ${place}`;
+    case "trip_start": return placeName ? `Left ${place}` : "Started moving";
+    case "trip_end": return "Stopped moving";
+    default: return type;
+  }
 }
 
 function detectActivity(speedMs: number | null | undefined): string {
@@ -3015,11 +3027,14 @@ export async function registerRoutes(
 
       emitToUser(userId, "live-location:updated", { lat, lng, speed, heading, activity: detectedActivity });
 
-      const [watcherContacts, updatedUser, openIncidentForEmit] = await Promise.all([
+      const [,watcherContacts, updatedUser, openIncidentForEmit] = await Promise.all([
+        processLocationContext(userId, lat, lng, speed ?? null, detectedActivity).catch(() => {}),
         storage.getContactsLinkedToUser(userId),
         storage.getUser(userId),
         storage.getOpenIncident(userId),
       ]);
+
+      const ctx = getUserContext(userId);
       for (const contact of watcherContacts) {
         if (contact.linkedUserId) {
           emitToUser(contact.linkedUserId, "live-location:contact-updated", {
@@ -3027,6 +3042,7 @@ export async function registerRoutes(
             accuracy, timestamp: point.recordedAt,
             safetyState: updatedUser?.safetyState || null,
             hasSafetyEvent: !!openIncidentForEmit,
+            contextLine: ctx.contextLine || null,
           });
         }
       }
@@ -3034,6 +3050,35 @@ export async function registerRoutes(
       res.json(point);
     } catch (error) {
       res.status(500).json({ error: "Failed to update live location" });
+    }
+  });
+
+  app.get("/api/context/:userId", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) return res.status(401).json({ error: "Not authenticated" });
+
+      const targetUserId = req.params.userId;
+      const isSelf = currentUserId === targetUserId;
+      if (!isSelf) {
+        const linkedContacts = await storage.getContactsLinkedToUser(targetUserId);
+        const isWatcher = linkedContacts.some(c => c.linkedUserId === currentUserId);
+        if (!isWatcher) return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const ctx = getUserContext(targetUserId);
+      const events = await getRecentContextEvents(targetUserId, 20);
+
+      const timeline = events.reverse().map(e => ({
+        type: e.type,
+        time: e.createdAt.toISOString(),
+        placeName: e.placeName,
+        detail: formatContextEvent(e.type, e.placeName),
+      }));
+
+      res.json({ ...ctx, timeline });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get context" });
     }
   });
 

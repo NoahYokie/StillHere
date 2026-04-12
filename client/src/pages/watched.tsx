@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -264,9 +264,7 @@ export default function WatchedPage() {
               <p className={`text-sm font-medium mt-0.5 ${insight.iconColor}`} data-testid={`text-headline-${user.userId}`}>
                 {insight.headline}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-subtext-${user.userId}`}>
-                {insight.subtext}
-              </p>
+              <ContextLine userId={user.userId} fallback={insight.subtext} />
             </div>
           </div>
 
@@ -275,26 +273,30 @@ export default function WatchedPage() {
             <LocationBadge status={insight.location.status} label={insight.location.label} />
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
-            <div className="flex items-center gap-1" data-testid={`text-last-checkin-${user.userId}`}>
-              <Clock className="w-3 h-3" />
-              {user.lastCheckinAt ? (
-                <span>Checked in {formatDistanceToNow(new Date(user.lastCheckinAt), { addSuffix: true })}</span>
-              ) : (
-                <span>No check-ins yet</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1" data-testid={`text-next-due-${user.userId}`}>
-              <Clock className="w-3 h-3" />
-              <span>Next due: {format(new Date(user.nextCheckinDue), "h:mm a")}</span>
-            </div>
-          </div>
-
           {(insight.trustLevel === "worried" || user.safetyState === "concern") && (
             <ConcernTimelinePanel userId={user.userId} isWatcher={true} />
           )}
 
-          {isExpanded && <DailyStatusPanel userId={user.userId} />}
+          {isExpanded && (
+            <>
+              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
+                <div className="flex items-center gap-1" data-testid={`text-last-checkin-${user.userId}`}>
+                  <Clock className="w-3 h-3" />
+                  {user.lastCheckinAt ? (
+                    <span>Checked in {formatDistanceToNow(new Date(user.lastCheckinAt), { addSuffix: true })}</span>
+                  ) : (
+                    <span>No check-ins yet</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1" data-testid={`text-next-due-${user.userId}`}>
+                  <Clock className="w-3 h-3" />
+                  <span>Next due: {format(new Date(user.nextCheckinDue), "h:mm a")}</span>
+                </div>
+              </div>
+              <ContextTimeline userId={user.userId} />
+              <DailyStatusPanel userId={user.userId} />
+            </>
+          )}
 
           <div className="flex gap-2">
             <Button
@@ -526,6 +528,60 @@ function ReportPreferencePanel({ userId, existingPref }: { userId: string; exist
           </Button>
         </>
       )}
+    </div>
+  );
+}
+
+interface ContextData {
+  currentState: string;
+  contextLine: string;
+  timeline?: Array<{ type: string; time: string; placeName: string | null; detail: string }>;
+}
+
+function ContextLine({ userId, fallback }: { userId: string; fallback: string }) {
+  const { data } = useQuery<ContextData>({
+    queryKey: ["/api/context", userId],
+    refetchInterval: 30000,
+  });
+
+  const line = data?.contextLine || fallback;
+  if (!line) return null;
+
+  return (
+    <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-context-${userId}`}>
+      {line}
+    </p>
+  );
+}
+
+function ContextTimeline({ userId }: { userId: string }) {
+  const { data } = useQuery<ContextData>({
+    queryKey: ["/api/context", userId],
+    refetchInterval: 30000,
+  });
+
+  const timeline = data?.timeline;
+  if (!timeline || timeline.length === 0) return null;
+
+  return (
+    <div className="mb-3" data-testid={`context-timeline-${userId}`}>
+      <p className="text-xs font-medium text-muted-foreground mb-1.5">Recent Activity</p>
+      <div className="space-y-1.5">
+        {timeline.slice(-8).map((event, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              event.type === "dwell_start" ? "bg-blue-400" :
+              event.type === "dwell_end" ? "bg-orange-400" :
+              event.type === "trip_start" ? "bg-green-400" :
+              "bg-gray-400"
+            }`} />
+            <span className="truncate">{event.detail}</span>
+            <span className="ml-auto shrink-0 tabular-nums">
+              {new Date(event.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

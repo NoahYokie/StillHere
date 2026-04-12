@@ -487,6 +487,31 @@ export const insertLiveLocationPointSchema = createInsertSchema(liveLocationPoin
 export type LiveLocationPoint = typeof liveLocationPoints.$inferSelect;
 export type InsertLiveLocationPoint = z.infer<typeof insertLiveLocationPointSchema>;
 
+export const contextEventTypeEnum = pgEnum("context_event_type", ["dwell_start", "dwell_end", "trip_start", "trip_end"]);
+
+export const contextEvents = pgTable("context_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: contextEventTypeEnum("type").notNull(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  placeName: text("place_name"),
+  placeType: text("place_type"),
+  detail: text("detail"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("context_events_user_idx").on(table.userId, table.createdAt),
+]);
+
+export const contextEventsRelations = relations(contextEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [contextEvents.userId],
+    references: [users.id],
+  }),
+}));
+
+export type ContextEvent = typeof contextEvents.$inferSelect;
+
 // Satellite Devices table
 export const satelliteDevices = pgTable("satellite_devices", {
   id: uuid("id").defaultRandom().primaryKey(),
