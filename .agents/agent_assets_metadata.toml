@@ -317,3 +317,9 @@ id = "9DYRFVoHJt8Yeu4rcYrt3"
 uri = "file://.local/competitive-analysis.md"
 type = "text"
 title = "StillHere Competitive Analysis (Updated)"
+
+[[outputs]]
+id = "KD50rzg2XAJlk6-HB01IF"
+uri = "file://StillHere_Full_Report_For_AI_Council.md"
+type = "text"
+title = "StillHere Full Report for AI Council (GPT/Claude/Google AI)"

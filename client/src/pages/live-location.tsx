@@ -69,17 +69,21 @@ export default function LiveLocationPage() {
 
   useEffect(() => {
     let mounted = true;
+    let hasInitialFix = false;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         if (!mounted) return;
         const acc = pos.coords.accuracy;
-        if (acc > 150) return;
+        if (hasInitialFix && acc > 500) return;
+        hasInitialFix = true;
         setMyGpsLat(pos.coords.latitude);
         setMyGpsLng(pos.coords.longitude);
         setMyGpsAccuracy(acc);
       },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) setLocationDenied(true);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
     );
     return () => { mounted = false; navigator.geolocation.clearWatch(watchId); };
   }, []);
@@ -223,8 +227,8 @@ export default function LiveLocationPage() {
     },
   });
 
-  const myLat = (sharingActive && currentLat != null) ? currentLat : myGpsLat;
-  const myLng = (sharingActive && currentLng != null) ? currentLng : myGpsLng;
+  const myLat = myGpsLat != null ? myGpsLat : currentLat;
+  const myLng = myGpsLng != null ? myGpsLng : currentLng;
 
   const allPeople = [];
   if (myLat != null && myLng != null) {
