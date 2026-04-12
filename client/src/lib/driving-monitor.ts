@@ -1,4 +1,5 @@
 import { apiRequest } from "./queryClient";
+import { subscribe as subscribeLocation, startHighAccuracyMode, stopHighAccuracyMode, getOneShotPosition, type LocationState } from "./location-service";
 
 interface DrivingMonitorCallbacks {
   onSpeedUpdate: (speedKmh: number, speedLimit: number) => void;
@@ -16,14 +17,13 @@ interface Position {
   accuracy: number;
 }
 
-const SPEED_UPDATE_INTERVAL = 3000;
 const SPEED_REPORT_INTERVAL = 15000;
 const CRASH_THRESHOLD_MS2 = 98;
 const CRASH_COOLDOWN_MS = 30000;
 const MIN_ACCURACY_METERS = 50;
 
 class DrivingMonitor {
-  private watchId: number | null = null;
+  private locationUnsub: (() => void) | null = null;
   private motionListener: ((e: DeviceMotionEvent) => void) | null = null;
   private callbacks: DrivingMonitorCallbacks | null = null;
   private positions: Position[] = [];
@@ -68,24 +68,15 @@ class DrivingMonitor {
     this.lastCrashTime = 0;
     this.lastSpeedAlertTime = 0;
 
-    if (!navigator.geolocation) {
-      callbacks.onError("Geolocation is not supported");
-      return;
-    }
+    startHighAccuracyMode();
 
     let startLat: number | undefined;
     let startLng: number | undefined;
 
-    try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-        });
-      });
-      startLat = pos.coords.latitude;
-      startLng = pos.coords.longitude;
-    } catch {
+    const pos = await getOneShotPosition();
+    if (pos) {
+      startLat = pos.lat;
+      startLng = pos.lng;
     }
 
     try {
@@ -105,17 +96,9 @@ class DrivingMonitor {
     this.active = true;
     callbacks.onSessionStarted();
 
-    this.watchId = navigator.geolocation.watchPosition(
-      (position) => this.handlePosition(position),
-      (error) => {
-        console.error("[DRIVE] GPS error:", error.message);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 2000,
-        timeout: 5000,
-      }
-    );
+    this.locationUnsub = subscribeLocation((state) => {
+      if (!state.isStale) this.handlePosition(state);
+    });
 
     this.startCrashDetection();
   }
@@ -124,10 +107,12 @@ class DrivingMonitor {
     if (!this.active) return;
     this.active = false;
 
-    if (this.watchId !== null) {
-      navigator.geolocation.clearWatch(this.watchId);
-      this.watchId = null;
+    if (this.locationUnsub) {
+      this.locationUnsub();
+      this.locationUnsub = null;
     }
+
+    stopHighAccuracyMode();
 
     this.stopCrashDetection();
 
@@ -148,13 +133,12 @@ class DrivingMonitor {
     this.sessionId = null;
   }
 
-  private handlePosition(position: GeolocationPosition): void {
-    const { latitude, longitude, speed, accuracy } = position.coords;
-    const timestamp = position.timestamp;
+  private handlePosition(state: LocationState): void {
+    const { lat, lng, speed, accuracy, timestamp } = state;
 
     if (accuracy > MIN_ACCURACY_METERS) return;
 
-    const newPos: Position = { lat: latitude, lng: longitude, timestamp, accuracy };
+    const newPos: Position = { lat, lng, timestamp, accuracy };
 
     if (this.positions.length > 0) {
       const prevPos = this.positions[this.positions.length - 1];
@@ -165,14 +149,14 @@ class DrivingMonitor {
       if (speed !== null && speed >= 0) {
         this.currentSpeedKmh = speed * 3.6;
       } else {
-        const distKm = this.haversineDistance(prevPos.lat, prevPos.lng, latitude, longitude);
+        const distKm = this.haversineDistance(prevPos.lat, prevPos.lng, lat, lng);
         const timeDiffH = timeDiffS / 3600;
         this.currentSpeedKmh = timeDiffH > 0 ? distKm / timeDiffH : 0;
       }
 
       if (this.currentSpeedKmh > 300) return;
 
-      const segmentDist = this.haversineDistance(prevPos.lat, prevPos.lng, latitude, longitude);
+      const segmentDist = this.haversineDistance(prevPos.lat, prevPos.lng, lat, lng);
       this.totalDistanceKm += segmentDist;
 
       if (this.currentSpeedKmh > this.maxSpeedKmh) {
@@ -187,14 +171,14 @@ class DrivingMonitor {
         if (now - this.lastSpeedAlertTime > 30000) {
           this.lastSpeedAlertTime = now;
           this.callbacks?.onSpeedAlert(this.currentSpeedKmh, this.speedLimit);
-          this.reportSpeed(latitude, longitude);
+          this.reportSpeed(lat, lng);
         }
       }
 
       const now = Date.now();
       if (now - this.lastSpeedReport > SPEED_REPORT_INTERVAL) {
         this.lastSpeedReport = now;
-        this.reportSpeed(latitude, longitude);
+        this.reportSpeed(lat, lng);
       }
     }
 
@@ -252,10 +236,11 @@ class DrivingMonitor {
 
   async reportCrash(lat?: number, lng?: number): Promise<boolean> {
     this.active = false;
-    if (this.watchId !== null) {
-      navigator.geolocation.clearWatch(this.watchId);
-      this.watchId = null;
+    if (this.locationUnsub) {
+      this.locationUnsub();
+      this.locationUnsub = null;
     }
+    stopHighAccuracyMode();
     this.stopCrashDetection();
 
     try {

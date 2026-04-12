@@ -8,12 +8,19 @@ export type LocationState = {
   isStale: boolean;
 };
 
+export type LocationMode = "normal" | "high_accuracy";
+
 type LocationSubscriber = (state: LocationState) => void;
 type ErrorSubscriber = (msg: string) => void;
 
 const VALID_ACCURACY_THRESHOLD = 100;
 const JITTER_DISTANCE_KM = 5;
 const JITTER_TIME_MS = 10000;
+
+const MODE_CONFIG: Record<LocationMode, PositionOptions> = {
+  normal: { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
+  high_accuracy: { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 },
+};
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -32,6 +39,9 @@ class LocationService {
   private subscribers = new Set<LocationSubscriber>();
   private errorSubscribers = new Set<ErrorSubscriber>();
   private locatingSubscribers = new Set<(v: boolean) => void>();
+
+  private highAccuracyRefCount = 0;
+  private activeMode: LocationMode = "normal";
 
   private shouldAccept(lat: number, lng: number, accuracy: number, timestamp: number): { ok: boolean; reason?: string } {
     if (accuracy > VALID_ACCURACY_THRESHOLD && this.currentState === null) {
@@ -71,7 +81,7 @@ class LocationService {
     this.locating = false;
     this.currentState = { lat: latitude, lng: longitude, accuracy, timestamp, speed, heading, isStale: false };
 
-    console.log(`[GPS] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, accuracy ${Math.round(accuracy)}m`);
+    console.log(`[GPS] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, accuracy ${Math.round(accuracy)}m, mode=${this.activeMode}`);
 
     if (wasLocating) {
       this.locatingSubscribers.forEach(fn => { try { fn(false); } catch {} });
@@ -90,15 +100,21 @@ class LocationService {
     this.errorSubscribers.forEach(fn => { try { fn(msg); } catch {} });
   };
 
+  private desiredMode(): LocationMode {
+    return this.highAccuracyRefCount > 0 ? "high_accuracy" : "normal";
+  }
+
   private startWatch() {
     if (this.watchId !== null) return;
-    console.log("[GPS] Starting GPS watch");
+    this.activeMode = this.desiredMode();
+    const opts = MODE_CONFIG[this.activeMode];
+    console.log(`[GPS] Starting GPS watch (mode=${this.activeMode})`);
     this.locating = true;
     this.locatingSubscribers.forEach(fn => { try { fn(true); } catch {} });
     this.watchId = navigator.geolocation.watchPosition(
       this.handlePosition,
       this.handleError,
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+      opts
     );
   }
 
@@ -107,6 +123,30 @@ class LocationService {
     console.log("[GPS] Stopping GPS watch");
     navigator.geolocation.clearWatch(this.watchId);
     this.watchId = null;
+  }
+
+  private restartWatch() {
+    const desired = this.desiredMode();
+    if (this.watchId === null || desired === this.activeMode) return;
+    console.log(`[GPS] Mode change: ${this.activeMode} → ${desired}, restarting watch`);
+    this.stopWatch();
+    this.startWatch();
+  }
+
+  startHighAccuracyMode(): void {
+    this.highAccuracyRefCount++;
+    console.log(`[GPS] High accuracy requested (refCount=${this.highAccuracyRefCount})`);
+    this.restartWatch();
+  }
+
+  stopHighAccuracyMode(): void {
+    this.highAccuracyRefCount = Math.max(0, this.highAccuracyRefCount - 1);
+    console.log(`[GPS] High accuracy released (refCount=${this.highAccuracyRefCount})`);
+    this.restartWatch();
+  }
+
+  getMode(): LocationMode {
+    return this.activeMode;
   }
 
   subscribe(fn: LocationSubscriber): () => void {
@@ -209,4 +249,16 @@ export function forceRefresh(): void {
 
 export function getOneShotPosition(): Promise<LocationState | null> {
   return locationService.getOneShotPosition();
+}
+
+export function startHighAccuracyMode(): void {
+  locationService.startHighAccuracyMode();
+}
+
+export function stopHighAccuracyMode(): void {
+  locationService.stopHighAccuracyMode();
+}
+
+export function getMode(): LocationMode {
+  return locationService.getMode();
 }
