@@ -27,6 +27,8 @@ interface LiveShare {
   lastAccuracy: number | null;
   lastUpdatedAt: string;
   userName?: string;
+  safetyState?: string | null;
+  hasSafetyEvent?: boolean;
 }
 
 function getActivityIcon(activity: string | null) {
@@ -133,6 +135,8 @@ export default function LiveLocationPage() {
             lastActivity: data.activity,
             lastAccuracy: data.accuracy ?? null,
             lastUpdatedAt: data.timestamp || new Date().toISOString(),
+            safetyState: data.safetyState ?? existing.safetyState,
+            hasSafetyEvent: data.hasSafetyEvent ?? existing.hasSafetyEvent,
           },
         };
       });
@@ -220,8 +224,12 @@ export default function LiveLocationPage() {
         lat: share.lastLat,
         lng: share.lastLng,
         activity: share.lastActivity,
+        speed: share.lastSpeed,
+        lastUpdated: share.lastUpdatedAt,
         isMe: false,
         accuracy: share.lastAccuracy,
+        safetyState: share.safetyState as "active" | "quiet" | "concern" | undefined,
+        hasSafetyEvent: share.hasSafetyEvent,
       });
     }
   });
@@ -306,6 +314,9 @@ export default function LiveLocationPage() {
             className="w-full h-full absolute inset-0"
             showTrail={false}
             onPersonTap={handlePersonTap}
+            smartCamera
+            isLocating={isLocating}
+            focusPersonId={selectedPerson}
           />
 
           {sharingActive && (

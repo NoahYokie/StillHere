@@ -39,6 +39,8 @@ interface MapPerson {
   lastUpdated?: string;
   isMe?: boolean;
   accuracy?: number | null;
+  safetyState?: string | null;
+  hasSafetyEvent?: boolean;
 }
 
 interface GeofenceCircle {
@@ -83,6 +85,9 @@ interface GoogleMapProps {
   safeWalkRoute?: { polyline: string; destLat: number; destLng: number; destName?: string; progress?: number };
   showMyLocation?: boolean;
   onRecenter?: () => void;
+  isLocating?: boolean;
+  focusPersonId?: string | null;
+  smartCamera?: boolean;
 }
 
 const activityColors: Record<string, string> = {
@@ -183,6 +188,70 @@ function formatInfoSpeed(speed: number | null | undefined): string {
   return `${Math.round(speed * 3.6)} km/h`;
 }
 
+const MIN_ZOOM = 12;
+const MAX_ZOOM = 18;
+
+function isPersonCameraEligible(p: MapPerson): boolean {
+  if (p.accuracy != null && p.accuracy > 500) return false;
+  if (p.lastUpdated) {
+    const age = Date.now() - new Date(p.lastUpdated).getTime();
+    if (age > 180_000) return false;
+  }
+  return true;
+}
+
+function getVelocityZoom(people: MapPerson[]): number {
+  let maxSpeedMs = 0;
+  for (const p of people) {
+    if (p.speed != null && p.speed > maxSpeedMs) maxSpeedMs = p.speed;
+  }
+  const speedKmh = maxSpeedMs * 3.6;
+  if (speedKmh > 60) return 14;
+  if (speedKmh > 15) return 15;
+  if (speedKmh > 3) return 16;
+  return 17;
+}
+
+function determineFocusTarget(people: MapPerson[], focusOverride?: string | null): MapPerson | null {
+  if (!people.length) return null;
+
+  const eligible = people.filter(isPersonCameraEligible);
+  if (!eligible.length) return people.find(p => p.isMe) || people[0];
+
+  const concern = eligible.filter(p => p.safetyState === "concern");
+  if (concern.length) {
+    concern.sort((a, b) => {
+      const ta = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+      const tb = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+      return tb - ta;
+    });
+    return concern[0];
+  }
+
+  const safetyEvent = eligible.filter(p => p.hasSafetyEvent);
+  if (safetyEvent.length) {
+    safetyEvent.sort((a, b) => {
+      const ta = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+      const tb = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+      return tb - ta;
+    });
+    return safetyEvent[0];
+  }
+
+  if (focusOverride) {
+    const found = eligible.find(p => p.id === focusOverride);
+    if (found) return found;
+  }
+
+  const moving = eligible.filter(p => p.speed != null && p.speed > 1);
+  if (moving.length) {
+    moving.sort((a, b) => (b.speed || 0) - (a.speed || 0));
+    return moving[0];
+  }
+
+  return eligible.find(p => p.isMe) || eligible[0];
+}
+
 const activeAnimations = new WeakMap<google.maps.marker.AdvancedMarkerElement, number>();
 
 function animateMarkerPosition(
@@ -244,6 +313,9 @@ export default function GoogleMapComponent({
   safeWalkRoute,
   showMyLocation = false,
   onRecenter,
+  isLocating = false,
+  focusPersonId,
+  smartCamera = false,
 }: GoogleMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -457,7 +529,45 @@ export default function GoogleMapComponent({
         peoplePositionsRef.current.set(person.id, newPos);
       });
 
-      if (!initialFitDoneRef.current || !userInteractedRef.current) {
+      if (smartCamera) {
+        const hasSafetyOverride = people.some(p => p.safetyState === "concern" || p.hasSafetyEvent);
+        if (hasSafetyOverride) {
+          userInteractedRef.current = false;
+          setShowRecenter(false);
+        }
+        if (isLocating) {
+          // skip
+        } else if (!userInteractedRef.current) {
+          const hasSafetyPriority = people.some(p => p.safetyState === "concern" || p.hasSafetyEvent);
+          const focus = determineFocusTarget(people, focusPersonId);
+          const eligible = people.filter(isPersonCameraEligible);
+
+          programmaticMoveRef.current = true;
+
+          if (hasSafetyPriority && focus) {
+            const vZoom = getVelocityZoom([focus]);
+            map.panTo({ lat: focus.lat, lng: focus.lng });
+            map.setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+          } else if (eligible.length > 1) {
+            const bounds = new google.maps.LatLngBounds();
+            eligible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+            map.fitBounds(bounds, 50);
+            const listener = map.addListener("idle", () => {
+              const z = map.getZoom();
+              if (z != null && z < MIN_ZOOM) map.setZoom(MIN_ZOOM);
+              if (z != null && z > MAX_ZOOM) map.setZoom(MAX_ZOOM);
+              google.maps.event.removeListener(listener);
+            });
+          } else if (focus) {
+            const vZoom = getVelocityZoom(eligible.length ? eligible : [focus]);
+            map.panTo({ lat: focus.lat, lng: focus.lng });
+            map.setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+          }
+
+          initialFitDoneRef.current = true;
+          setTimeout(() => { programmaticMoveRef.current = false; }, 300);
+        }
+      } else if (!initialFitDoneRef.current || !userInteractedRef.current) {
         initialFitDoneRef.current = true;
         programmaticMoveRef.current = true;
         if (people.length > 1) {
@@ -487,7 +597,7 @@ export default function GoogleMapComponent({
       }
       prevCenterRef.current = newPos;
     }
-  }, [center.lat, center.lng, points, people]);
+  }, [center.lat, center.lng, points, people, focusPersonId, isLocating, smartCamera]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -838,7 +948,25 @@ export default function GoogleMapComponent({
     setShowRecenter(false);
     programmaticMoveRef.current = true;
 
-    if (people && people.length > 1) {
+    if (smartCamera && people && people.length > 0) {
+      const focus = determineFocusTarget(people, focusPersonId);
+      const eligible = people.filter(isPersonCameraEligible);
+      if (eligible.length > 1 && !people.some(p => p.safetyState === "concern" || p.hasSafetyEvent)) {
+        const bounds = new google.maps.LatLngBounds();
+        eligible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+        map.fitBounds(bounds, 50);
+        const listener = map.addListener("idle", () => {
+          const z = map.getZoom();
+          if (z != null && z < MIN_ZOOM) map.setZoom(MIN_ZOOM);
+          if (z != null && z > MAX_ZOOM) map.setZoom(MAX_ZOOM);
+          google.maps.event.removeListener(listener);
+        });
+      } else if (focus) {
+        const vZoom = getVelocityZoom(eligible.length ? eligible : [focus]);
+        map.panTo({ lat: focus.lat, lng: focus.lng });
+        map.setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+      }
+    } else if (people && people.length > 1) {
       const bounds = new google.maps.LatLngBounds();
       people.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
       map.fitBounds(bounds, 50);
