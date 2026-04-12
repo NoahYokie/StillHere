@@ -1,0 +1,181 @@
+Task 3 and Task 4 Phase 1 are fully approved.
+
+We now move to the most critical phase:
+
+---
+
+# 🔧 TASK 4 PHASE 2 — CODEMAGIC + TESTFLIGHT VALIDATION
+
+## 🎯 OBJECTIVE
+
+Get StillHere running on a **real iPhone via TestFlight** and verify that:
+
+→ background tracking actually works
+→ heartbeat continues in real-world conditions
+
+---
+
+# PHASE 2 — BUILD PIPELINE
+
+## 1. Codemagic iOS setup
+
+Configure:
+
+* iOS build workflow (Capacitor)
+* App Store Connect API key
+* signing:
+
+  * certificate
+  * provisioning profile
+
+---
+
+## 2. Transistorsoft license handling
+
+* store license key as environment variable
+* inject into build securely
+* do NOT hardcode in repo
+
+---
+
+## 3. iOS project validation
+
+Confirm in Xcode config:
+
+### Background modes:
+
+* location updates
+* background fetch
+* remote notifications
+* processing
+
+### Permissions:
+
+* Always location
+* Precise location
+
+---
+
+## 4. Info.plist purpose strings (VERY IMPORTANT)
+
+Add human-friendly messaging:
+
+Examples (improve if needed):
+
+```xml
+NSLocationAlwaysAndWhenInUseUsageDescription
+"StillHere uses your location in the background to ensure your safety. If you miss a check-in or need help, we can alert your trusted contacts."
+
+NSLocationWhenInUseUsageDescription
+"StillHere uses your location to show your current position and keep you safe."
+
+NSLocationAlwaysUsageDescription
+"Background location allows StillHere to monitor your safety even when your phone is locked."
+```
+
+Make them:
+
+* human
+* reassuring
+* NOT technical
+
+---
+
+## 5. Build & deploy
+
+* build via Codemagic
+* upload to App Store Connect
+* release to TestFlight
+
+---
+
+# 🧪 REAL DEVICE TESTING (CRITICAL)
+
+You MUST test these scenarios:
+
+## Scenario 1
+
+* phone locked
+* screen off
+* 10–30 minutes
+
+Check:
+
+* location updates continue
+* heartbeat continues
+
+---
+
+## Scenario 2
+
+* low power mode ON
+* background tracking
+
+---
+
+## Scenario 3
+
+* force-close app
+* lock phone
+
+Check:
+
+* does tracking recover?
+
+---
+
+## Scenario 4
+
+* move from WiFi → cellular
+
+---
+
+## Scenario 5
+
+* simulate real use:
+
+  * walking
+  * driving
+
+Check:
+
+* smooth tracking
+* no “teleporting”
+
+---
+
+# 📦 OUTPUT REQUIRED
+
+Report back with:
+
+1. Did TestFlight build succeed?
+2. Does background tracking work reliably?
+3. Does heartbeat continue in background?
+4. Any failures in the 5 scenarios
+5. Any iOS permission issues
+6. Any App Store warnings/errors
+
+---
+
+# ⚠️ DO NOT BUILD NEXT FEATURES YET
+
+Do NOT start:
+
+* trip history
+* dwell detection
+* driving analytics
+
+Until this phase is proven.
+
+---
+
+# ✅ EXPECTED RESULT
+
+After Task 4 Phase 2:
+
+* StillHere runs on real iPhone
+* tracking works in background
+* heartbeat is stable
+* system is ready for real-world usage
+
+---

@@ -47,9 +47,9 @@
     "preferredContentMode": "mobile",
     "scheme": "stillhere",
     "infoPlist": {
-      "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses your location to monitor your safety, share your position with emergency contacts, and send alerts if you need help.",
-      "NSLocationWhenInUseUsageDescription": "StillHere uses your location to show your position on the map and share it with your emergency contacts.",
-      "NSLocationAlwaysUsageDescription": "StillHere needs continuous location access to monitor your safety in the background, detect emergencies, and keep your emergency contacts informed.",
+      "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses your location in the background to keep you safe. If you miss a check-in or need help, we can alert your trusted contacts with your location so they can reach you quickly.",
+      "NSLocationWhenInUseUsageDescription": "StillHere uses your location to show where you are on the map and keep your trusted contacts informed that you're safe.",
+      "NSLocationAlwaysUsageDescription": "Background location lets StillHere watch over you even when your phone is locked. This way, your trusted contacts are always just a tap away if something happens.",
       "UIBackgroundModes": ["location", "fetch", "remote-notification", "processing"]
     }
   },

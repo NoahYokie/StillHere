@@ -16,23 +16,62 @@ workflows:
       - name: Install dependencies
         script: |
           npm install
+      - name: Install Transistorsoft plugin (if licensed)
+        script: |
+          if [ -n "$TRANSISTORSOFT_LICENSE_KEY" ]; then
+            echo "Transistorsoft license found, installing background geolocation plugin..."
+            npm install @transistorsoft/capacitor-background-geolocation
+          else
+            echo "No Transistorsoft license key — skipping native background geolocation plugin"
+            echo "App will use @capacitor/geolocation fallback"
+          fi
       - name: Build web assets
         script: |
           npm run build
+      - name: Inject Transistorsoft license (if available)
+        script: |
+          if [ -n "$TRANSISTORSOFT_LICENSE_KEY" ]; then
+            echo "Injecting Transistorsoft license key into Capacitor config..."
+            node -e "
+              const fs = require('fs');
+              const cfg = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
+              cfg.plugins = cfg.plugins || {};
+              cfg.plugins.BackgroundGeolocation = cfg.plugins.BackgroundGeolocation || {};
+              cfg.plugins.BackgroundGeolocation.license = process.env.TRANSISTORSOFT_LICENSE_KEY;
+              fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
+              console.log('License key injected successfully');
+            "
+          fi
       - name: Sync Capacitor
         script: |
           npx cap sync ios
       - name: Install CocoaPods
         script: |
           cd ios/App && pod install --repo-update
+      - name: Verify iOS project configuration
+        script: |
+          echo "=== Checking background modes ==="
+          cd ios/App/App
+          if [ -f Info.plist ]; then
+            /usr/libexec/PlistBuddy -c "Print :UIBackgroundModes" Info.plist 2>/dev/null || echo "UIBackgroundModes will be set by Capacitor sync"
+          fi
+          echo ""
+          echo "=== Checking location permissions ==="
+          if [ -f Info.plist ]; then
+            /usr/libexec/PlistBuddy -c "Print :NSLocationAlwaysAndWhenInUseUsageDescription" Info.plist 2>/dev/null || echo "Location permissions will be set by Capacitor sync"
+          fi
+          echo ""
+          echo "=== Build configuration looks good ==="
       - name: Set up code signing
         script: |
           xcode-project use-profiles
       - name: Bump build number
         script: |
           cd ios/App
-          agvtool new-version -all 3
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo 0) + 1))
+          agvtool new-version -all $BUILD_NUMBER
           agvtool new-marketing-version 1.0
+          echo "Build number: $BUILD_NUMBER"
       - name: Build iOS app
         script: |
           xcode-project build-ipa \
