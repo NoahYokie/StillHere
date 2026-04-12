@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed, addLocationListener } from "@/lib/live-location";
+import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
+import { subscribe as subscribeLocation } from "@/lib/location-service";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
@@ -56,36 +57,23 @@ export default function LiveLocationPage() {
   });
   const [currentActivity, setCurrentActivity] = useState<string>("stationary");
   const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
-  const [currentLat, setCurrentLat] = useState<number | null>(null);
-  const [currentLng, setCurrentLng] = useState<number | null>(null);
   const [duration, setDuration] = useState<string>("0");
   const [watchedLocations, setWatchedLocations] = useState<Record<string, LiveShare>>({});
   const [locationDenied, setLocationDenied] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [panelExpanded, setPanelExpanded] = useState(false);
-  const [myGpsLat, setMyGpsLat] = useState<number | null>(null);
-  const [myGpsLng, setMyGpsLng] = useState<number | null>(null);
-  const [myGpsAccuracy, setMyGpsAccuracy] = useState<number | null>(null);
+  const [myLat, setMyLat] = useState<number | null>(null);
+  const [myLng, setMyLng] = useState<number | null>(null);
+  const [myAccuracy, setMyAccuracy] = useState<number | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    let hasInitialFix = false;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        if (!mounted) return;
-        const acc = pos.coords.accuracy;
-        if (hasInitialFix && acc > 500) return;
-        hasInitialFix = true;
-        setMyGpsLat(pos.coords.latitude);
-        setMyGpsLng(pos.coords.longitude);
-        setMyGpsAccuracy(acc);
-      },
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) setLocationDenied(true);
-      },
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
-    );
-    return () => { mounted = false; navigator.geolocation.clearWatch(watchId); };
+    const unsub = subscribeLocation((state) => {
+      setMyLat(state.lat);
+      setMyLng(state.lng);
+      setMyAccuracy(state.accuracy);
+      if (state.speed != null) setCurrentSpeed(state.speed);
+    });
+    return unsub;
   }, []);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
@@ -102,15 +90,8 @@ export default function LiveLocationPage() {
     if (myStatus?.active) {
       setSharingActive(true);
       if (myStatus.share) {
-        if (myStatus.share.lastLat != null && myStatus.share.lastLng != null) {
-          setCurrentLat(myStatus.share.lastLat);
-          setCurrentLng(myStatus.share.lastLng);
-        }
         if (myStatus.share.lastActivity) {
           setCurrentActivity(myStatus.share.lastActivity);
-        }
-        if (myStatus.share.lastSpeed != null) {
-          setCurrentSpeed(myStatus.share.lastSpeed);
         }
       }
       if (!isLiveTrackingActive()) {
@@ -129,17 +110,6 @@ export default function LiveLocationPage() {
       setWatchedLocations(map);
     }
   }, [watchedShares]);
-
-  useEffect(() => {
-    if (!sharingActive) return;
-    const unsubscribe = addLocationListener((data) => {
-      setCurrentActivity(data.activity);
-      setCurrentSpeed(data.speed);
-      setCurrentLat(data.lat);
-      setCurrentLng(data.lng);
-    });
-    return unsubscribe;
-  }, [sharingActive]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -227,9 +197,6 @@ export default function LiveLocationPage() {
     },
   });
 
-  const myLat = myGpsLat != null ? myGpsLat : currentLat;
-  const myLng = myGpsLng != null ? myGpsLng : currentLng;
-
   const allPeople = [];
   if (myLat != null && myLng != null) {
     allPeople.push({
@@ -239,7 +206,7 @@ export default function LiveLocationPage() {
       lng: myLng,
       activity: sharingActive ? currentActivity : "stationary",
       isMe: true,
-      accuracy: myGpsAccuracy,
+      accuracy: myAccuracy,
     });
   }
   Object.values(watchedLocations).forEach(share => {
@@ -258,8 +225,8 @@ export default function LiveLocationPage() {
 
   const mapCenter = allPeople.length > 0
     ? { lat: allPeople[0].lat, lng: allPeople[0].lng }
-    : myGpsLat != null && myGpsLng != null
-      ? { lat: myGpsLat, lng: myGpsLng }
+    : myLat != null && myLng != null
+      ? { lat: myLat, lng: myLng }
       : { lat: -31.95, lng: 115.86 };
 
   const hasMap = allPeople.length > 0;

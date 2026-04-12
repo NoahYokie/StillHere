@@ -1,0 +1,159 @@
+We are refactoring the location system to eliminate all sources of stale or conflicting data.
+
+This is a critical architectural fix. Follow exactly.
+
+---
+
+# 🎯 OBJECTIVE
+
+Create a **Single Source of Truth for user location**.
+
+There must only be **ONE GPS stream** and **ONE state store** controlling location.
+
+---
+
+# ❌ REMOVE / FIX CURRENT PROBLEMS
+
+1. **Dual GPS watchers MUST be eliminated**
+
+* The app currently uses:
+
+  * watchPosition in the page (live-location.tsx)
+  * watchPosition in live-location.ts (tracking module)
+* This creates conflicting coordinates
+
+👉 ACTION:
+
+* Remove one completely
+* Keep ONLY ONE GPS watcher in the entire app
+
+---
+
+# ✅ NEW ARCHITECTURE (REQUIRED)
+
+## 1. Create a Central Location Service
+
+Create a single module:
+
+`client/src/lib/location-service.ts`
+
+Responsibilities:
+
+* Start/stop GPS tracking
+* Hold latest GPS position
+* Broadcast updates to app (observer pattern or event emitter)
+
+---
+
+## 2. GPS Rules
+
+Use:
+
+```ts
+navigator.geolocation.watchPosition
+```
+
+With:
+
+* enableHighAccuracy: true
+* maximumAge: 10000
+* timeout: 20000
+
+---
+
+## 3. Store ONLY ONE POSITION
+
+The app must follow this priority:
+
+```
+GPS (device) → UI
+GPS (device) → server
+Server NEVER overrides device position
+```
+
+👉 IMPORTANT:
+
+* Remove logic where server `lastLat/lastLng` overrides device GPS
+* Server is storage + distribution ONLY, not authority
+
+---
+
+## 4. Eliminate Race Conditions
+
+Ensure:
+
+* Only the location-service writes position state
+* No component directly sets lat/lng anymore
+* All components SUBSCRIBE to location-service
+
+---
+
+## 5. Add Timestamp + Accuracy Validation
+
+Every position must include:
+
+* lat
+* lng
+* accuracy
+* timestamp
+
+Reject updates if:
+
+* accuracy > 500m (after first fix)
+* timestamp is older than current state
+
+---
+
+## 6. UI Rule (CRITICAL)
+
+The "Me" marker must ONLY use:
+→ location-service current position
+
+Never:
+
+* server data
+* socket updates
+* fallback overrides
+
+---
+
+## 7. Logging (for debugging)
+
+Add console logs:
+
+```
+[GPS] New position: lat, lng, accuracy
+[GPS] Rejected position: reason
+```
+
+---
+
+# ✅ EXPECTED RESULT
+
+* No more "teleporting"
+* No stale server position overriding GPS
+* Smooth, consistent tracking
+* One clean data flow
+
+---
+
+# 🚨 DO NOT:
+
+* Do NOT add new features
+* Do NOT touch UI beyond necessary wiring
+* Do NOT implement native yet
+
+---
+
+# 📦 OUTPUT REQUIRED
+
+After completion, explain:
+
+1. Which GPS watcher was removed
+2. How location-service works
+3. How components now subscribe to location
+4. Any edge cases remaining
+
+This must be clean and production-safe.
+
+---

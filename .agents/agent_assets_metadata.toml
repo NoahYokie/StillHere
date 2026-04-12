@@ -323,3 +323,9 @@ id = "KD50rzg2XAJlk6-HB01IF"
 uri = "file://StillHere_Full_Report_For_AI_Council.md"
 type = "text"
 title = "StillHere Full Report for AI Council (GPT/Claude/Google AI)"
+
+[[outputs]]
+id = "rLJac3cuhoOuWFTajKoB9"
+uri = "file://Council_Report_Task1_LocationRefactor.md"
+type = "text"
+title = "Council Report: Task 1 — Location Refactor Complete"

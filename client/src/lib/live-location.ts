@@ -1,4 +1,5 @@
 import { apiRequest } from "./queryClient";
+import { subscribe as subscribeGps, subscribeError as subscribeGpsError, forceRefresh as forceGpsRefresh } from "./location-service";
 
 type ActivityType = "stationary" | "walking" | "running" | "cycling" | "driving";
 
@@ -10,7 +11,8 @@ type LocationListener = (data: {
   activity: ActivityType;
 }) => void;
 
-let watchId: number | null = null;
+let gpsUnsubscribe: (() => void) | null = null;
+let gpsErrorUnsubscribe: (() => void) | null = null;
 let updateInterval: ReturnType<typeof setInterval> | null = null;
 let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
 let lastSentTime = 0;
@@ -172,32 +174,30 @@ async function sendLocationUpdate(position: GeolocationPosition, force = false):
   }
 }
 
-function restartGpsWatch() {
-  if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-  }
-
-  watchId = navigator.geolocation.watchPosition(
-    (position) => {
-      lastPosition = position;
-      sendLocationUpdate(position);
-    },
-    (error) => {
-      onErrorCb?.(error.message);
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 20000,
-    }
-  );
-}
-
-function startGpsWatch() {
+function startGpsSubscription() {
   if (nativePluginActive) return;
+  if (gpsUnsubscribe) return;
 
-  restartGpsWatch();
+  gpsUnsubscribe = subscribeGps((state) => {
+    const pos = {
+      coords: {
+        latitude: state.lat,
+        longitude: state.lng,
+        accuracy: state.accuracy,
+        speed: state.speed,
+        heading: state.heading,
+        altitude: null,
+        altitudeAccuracy: null,
+      },
+      timestamp: state.timestamp,
+    } as GeolocationPosition;
+    lastPosition = pos;
+    sendLocationUpdate(pos);
+  });
+
+  gpsErrorUnsubscribe = subscribeGpsError((msg) => {
+    onErrorCb?.(msg);
+  });
 
   if (updateInterval) clearInterval(updateInterval);
   updateInterval = setInterval(() => {
@@ -226,21 +226,13 @@ function startKeepAlive() {
 
     if (wasSuspended || isStale) {
       lastSentTime = 0;
-      restartGpsWatch();
       acquireWakeLock();
 
       if (!silentAudioEl || silentAudioEl.paused) {
         startSilentAudio();
       }
 
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          lastPosition = pos;
-          sendLocationUpdate(pos, true);
-        },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-      );
+      forceGpsRefresh();
     }
   }, KEEPALIVE_CHECK_MS);
 }
@@ -358,7 +350,7 @@ export function startLiveTracking(opts?: {
   tryNativeBackgroundGeo(currentSession).then((nativeOk) => {
     if (trackingSessionId !== currentSession) return;
     if (!nativeOk) {
-      startGpsWatch();
+      startGpsSubscription();
     }
   });
 
@@ -369,9 +361,13 @@ export function startLiveTracking(opts?: {
 export async function stopLiveTracking(): Promise<void> {
   trackingSessionId++;
 
-  if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
+  if (gpsUnsubscribe) {
+    gpsUnsubscribe();
+    gpsUnsubscribe = null;
+  }
+  if (gpsErrorUnsubscribe) {
+    gpsErrorUnsubscribe();
+    gpsErrorUnsubscribe = null;
   }
   if (updateInterval) {
     clearInterval(updateInterval);
@@ -408,7 +404,7 @@ export async function stopLiveTracking(): Promise<void> {
 }
 
 export function isLiveTrackingActive(): boolean {
-  return watchId !== null || nativePluginActive;
+  return gpsUnsubscribe !== null || nativePluginActive;
 }
 
 export function isLiveTrackingEnabled(): boolean {
@@ -462,18 +458,11 @@ export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && localStorage.getItem("liveLocationActive") === "true") {
-    if (watchId === null && !nativePluginActive) {
+    if (gpsUnsubscribe === null && !nativePluginActive) {
       resumeLiveTrackingIfNeeded();
-    } else if (watchId !== null) {
+    } else if (gpsUnsubscribe !== null) {
       lastSentTime = 0;
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          lastPosition = pos;
-          sendLocationUpdate(pos, true);
-        },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-      );
+      forceGpsRefresh();
     }
     acquireWakeLock();
 
@@ -485,7 +474,7 @@ document.addEventListener("visibilitychange", () => {
 
 window.addEventListener("focus", () => {
   if (localStorage.getItem("liveLocationActive") === "true") {
-    if (watchId === null && !nativePluginActive) {
+    if (gpsUnsubscribe === null && !nativePluginActive) {
       resumeLiveTrackingIfNeeded();
     }
   }
