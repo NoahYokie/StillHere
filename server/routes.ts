@@ -3587,7 +3587,10 @@ export async function registerRoutes(
 
           const timeline = [...reminderHistory];
 
-          if ((settings as any).autoWellnessCall && isTwilioConfigured() && user.phone) {
+          const wellnessCallEnabled = (settings as any).autoWellnessCall && isTwilioConfigured() && user.phone;
+          let wellnessCallPlaced = false;
+
+          if (wellnessCallEnabled) {
             try {
               const twilio = (await import("twilio")).default;
               const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
@@ -3598,32 +3601,42 @@ export async function registerRoutes(
                 method: "POST",
               });
               timeline.push({ type: "call", time: timeStr, detail: "Automated wellness call placed" });
-              console.log(`[CRON] Wellness call initiated to ${user.name}`);
+              console.log(`[WELLNESS CALL] Call initiated to ${user.name}, waiting 2 min for response before alerting contacts`);
+              wellnessCallPlaced = true;
             } catch (err) {
-              timeline.push({ type: "call_failed", time: timeStr, detail: "Wellness call attempted but failed" });
-              console.error("[CRON] Wellness call failed:", err);
+              timeline.push({ type: "call_failed", time: timeStr, detail: "Wellness call attempted but failed — proceeding to contact alert" });
+              console.error("[WELLNESS CALL] Call failed, falling through to contact alert:", err);
             }
           }
-          
-          if (firstContact) {
-            const token = tokens.find(t => t.contact.id === firstContact.id);
-            if (token) {
-              const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`[MISSED CHECK-IN] Alerting Contact #${firstContact.priority}`);
-              await notifyContact(firstContact, user.name, link, "missed_checkin", sendMissedCheckinAlert);
-              timeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name}` });
-              console.log("[MISSED CHECK-IN] Alert sent\n");
+
+          if (wellnessCallPlaced) {
+            incident = await storage.updateIncident(incident.id, {
+              escalationLevel: 0,
+              notifiedContactIds: "[]",
+              nextActionAt: addMinutes(now, 2),
+              escalationTimeline: JSON.stringify(timeline),
+            });
+          } else {
+            if (firstContact) {
+              const token = tokens.find(t => t.contact.id === firstContact.id);
+              if (token) {
+                const link = `${baseUrl}/emergency/${token.token}`;
+                console.log(`[MISSED CHECK-IN] Alerting Contact #${firstContact.priority}`);
+                await notifyContact(firstContact, user.name, link, "missed_checkin", sendMissedCheckinAlert);
+                timeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name}` });
+                console.log("[MISSED CHECK-IN] Alert sent\n");
+              }
             }
+
+            incident = await storage.updateIncident(incident.id, {
+              escalationLevel: 1,
+              notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
+              lastContactNotifiedAt: now,
+              contact1NotifiedAt: now,
+              nextActionAt: addMinutes(now, settings.escalationMinutes || 20),
+              escalationTimeline: JSON.stringify(timeline),
+            });
           }
-          
-          incident = await storage.updateIncident(incident.id, {
-            escalationLevel: 1,
-            notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
-            lastContactNotifiedAt: now,
-            contact1NotifiedAt: now,
-            nextActionAt: addMinutes(now, settings.escalationMinutes || 20),
-            escalationTimeline: JSON.stringify(timeline),
-          });
           
           alertsSent++;
           await storage.resetReminderState(user.id);
