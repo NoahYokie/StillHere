@@ -1,0 +1,193 @@
+We have council approval for Task 2.2.
+
+---
+
+# 🔧 TASK 2.2 — BUILD SERVER-SIDE SAFETY STATE ENGINE (V1)
+
+## 🎯 OBJECTIVE
+
+Build the first server-side safety state engine using heartbeat silence.
+
+This task should create the core server logic for:
+
+* `active`
+* `quiet`
+* `concern`
+
+But only automate:
+
+* `active` → `quiet`
+* `quiet` → `active`
+
+Do NOT automate `quiet` → `concern` yet.
+
+---
+
+# ✅ REQUIRED STATE MODEL
+
+Add server-side support for:
+
+* `safetyState`
+* `safetyStateReason`
+* `safetyStateChangedAt`
+
+Allowed values:
+
+* `"active"`
+* `"quiet"`
+* `"concern"`
+
+Use human-readable reason text from day one.
+
+Examples:
+
+* `"Heartbeat received normally"`
+* `"No heartbeat received for 3 minutes"`
+* `"Heartbeat resumed"`
+* `"SOS triggered"` (future-compatible)
+
+---
+
+# ✅ REQUIRED MONITORING GUARD
+
+We must prevent false quiet states for users who are not actively being monitored.
+
+Add a simple server-side flag such as:
+
+* `trackingActive` or equivalent
+
+This flag must allow the worker to skip users who are not actively being tracked/monitored.
+
+Examples of users to skip:
+
+* logged out users
+* users who intentionally stopped monitoring
+* users not currently in an active protected session
+
+If an equivalent existing field already exists and is reliable, use it.
+If not, add the cleanest minimal field needed.
+
+In your report, explain exactly what guard you used.
+
+---
+
+# ✅ TRANSITION LOGIC
+
+## 1. quiet → active (immediate on heartbeat)
+
+Inside:
+
+```id="a1"
+POST /api/heartbeat
+```
+
+When heartbeat is received:
+
+* store heartbeat as already implemented
+* if current safety state is `quiet`
+
+  * set `safetyState = "active"`
+  * set `safetyStateReason = "Heartbeat resumed"`
+  * set `safetyStateChangedAt = now`
+
+Do not downgrade `concern` automatically here.
+If current state is already `active`, leave it unless you have a good reason to refresh reason text.
+
+---
+
+## 2. active → quiet (background worker)
+
+Add a background worker / cron-style process on the server.
+
+Run every:
+
+* **30 seconds**
+
+Logic:
+
+* find monitored/tracking-active users
+* if:
+
+  * `safetyState = "active"`
+  * and `lastHeartbeatAt` is older than **180 seconds**
+* then set:
+
+  * `safetyState = "quiet"`
+  * `safetyStateReason = "No heartbeat received for 3 minutes"`
+  * `safetyStateChangedAt = now`
+
+---
+
+# ✅ IMPLEMENTATION PATTERN
+
+Create a reusable helper like:
+
+```ts id="a2"
+updateSafetyState(userId, newState, reason)
+```
+
+This helper must:
+
+* update `safetyState`
+* update `safetyStateReason`
+* update `safetyStateChangedAt`
+
+Also add clear server logging for state transitions, for example:
+
+```ts id="a3"
+[SafetyState] user 123 active -> quiet (No heartbeat received for 3 minutes)
+```
+
+---
+
+# ✅ SCHEMA / STORAGE
+
+Add the new safety-state fields in the cleanest place.
+Likely existing user/profile/settings storage is fine unless you have a strong reason otherwise.
+
+Also store or use a monitoring/tracking guard field.
+
+---
+
+# ⚠️ IMPORTANT RULES
+
+## Do NOT build yet:
+
+* quiet → concern escalation
+* watcher notifications
+* UI changes
+* timeline/history table
+* complex network/battery interpretation
+* concern auto-clear rules
+
+## Do NOT allow:
+
+* heartbeat endpoint to auto-clear `concern`
+* worker to touch users who are not actively monitored
+
+---
+
+# 📦 OUTPUT REQUIRED
+
+After completion, report clearly:
+
+1. Where `safetyState`, `safetyStateReason`, and `safetyStateChangedAt` are stored
+2. What monitoring/tracking guard was used
+3. Exact worker interval and timeout threshold
+4. Exact transition rules implemented
+5. Whether heartbeat can restore only `quiet → active`, and not `concern`
+6. Any edge cases or risks noticed
+
+---
+
+# ✅ EXPECTED RESULT
+
+After this task:
+
+* server knows whether a monitored user is `active` or `quiet`
+* silence for 3 minutes moves them to `quiet`
+* next heartbeat immediately restores them to `active`
+* users not actively monitored are skipped
+* schema is ready for future `concern` logic
+
+---

@@ -13,6 +13,7 @@ export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto", "sm
 export const callStatusEnum = pgEnum("call_status", ["ringing", "active", "ended", "missed"]);
 export const callTypeEnum = pgEnum("call_type", ["video", "audio"]);
 export const reportFrequencyEnum = pgEnum("report_frequency", ["daily", "weekly", "fortnightly", "monthly"]);
+export const safetyStateEnum = pgEnum("safety_state", ["active", "quiet", "concern"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -26,6 +27,9 @@ export const users = pgTable("users", {
   lastHeartbeatLat: doublePrecision("last_heartbeat_lat"),
   lastHeartbeatLng: doublePrecision("last_heartbeat_lng"),
   lastHeartbeatAcc: doublePrecision("last_heartbeat_acc"),
+  safetyState: safetyStateEnum("safety_state").notNull().default("active"),
+  safetyStateReason: text("safety_state_reason").notNull().default("No heartbeat yet"),
+  safetyStateChangedAt: timestamp("safety_state_changed_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

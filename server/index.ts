@@ -187,6 +187,25 @@ app.use((req, res, next) => {
         }
       }, CRON_INTERVAL_MS);
       log("built-in cron scheduler started (every 2 minutes)", "cron");
+
+      const SAFETY_STATE_INTERVAL_MS = 30 * 1000;
+      const QUIET_THRESHOLD_SECONDS = 180;
+      setInterval(async () => {
+        try {
+          const response = await fetch(`http://localhost:${port}/api/safety-state/tick`, {
+            headers: { "x-cron-secret": cronSecret },
+          });
+          if (response.ok) {
+            const data = await response.json() as any;
+            if (data.transitioned > 0) {
+              log(`safety-state: ${data.transitioned} users moved to quiet`, "cron");
+            }
+          }
+        } catch (error) {
+          log(`safety-state tick failed: ${error}`, "cron");
+        }
+      }, SAFETY_STATE_INTERVAL_MS);
+      log(`safety-state worker started (every ${SAFETY_STATE_INTERVAL_MS / 1000}s, quiet threshold ${QUIET_THRESHOLD_SECONDS}s)`, "cron");
     },
   );
 })();

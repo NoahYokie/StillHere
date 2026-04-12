@@ -577,6 +577,10 @@ export async function registerRoutes(
         typeof lng === "number" ? lng : undefined,
         typeof acc === "number" ? acc : undefined,
       );
+      const user = await storage.getUser(userId);
+      if (user?.safetyState === "quiet") {
+        await storage.updateSafetyState(userId, "active", "Heartbeat resumed");
+      }
       res.json({ ok: true });
     } catch (error) {
       console.error("Error recording heartbeat:", error);
@@ -4158,6 +4162,27 @@ export async function registerRoutes(
       cronRunning = false;
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });
+    }
+  });
+
+  app.get("/api/safety-state/tick", async (req, res) => {
+    try {
+      const cronSecret = process.env.SESSION_SECRET;
+      if (!cronSecret) return res.status(500).json({ error: "Server misconfigured" });
+      const providedSecret = req.headers["x-cron-secret"];
+      if (providedSecret !== cronSecret) return res.status(403).json({ error: "Forbidden" });
+
+      const QUIET_THRESHOLD_SECONDS = 180;
+      const staleUsers = await storage.getStaleActiveUsers(QUIET_THRESHOLD_SECONDS);
+      let transitioned = 0;
+      for (const user of staleUsers) {
+        await storage.updateSafetyState(user.id, "quiet", "No heartbeat received for 3 minutes");
+        transitioned++;
+      }
+      res.json({ ok: true, transitioned });
+    } catch (error) {
+      console.error("Error in safety-state tick:", error);
+      res.status(500).json({ error: "Safety state tick failed" });
     }
   });
 

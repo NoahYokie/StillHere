@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { eq, desc, and, ne, gt, lt, or, isNull } from "drizzle-orm";
+import { eq, desc, and, ne, gt, lt, or, isNull, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -76,6 +76,8 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
   recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number): Promise<void>;
+  updateSafetyState(userId: string, newState: string, reason: string): Promise<void>;
+  getStaleActiveUsers(thresholdSeconds: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]>;
   
   // Settings
   getSettings(userId: string): Promise<Settings | undefined>;
@@ -296,6 +298,35 @@ export class DatabaseStorage implements IStorage {
         lastHeartbeatAcc: acc ?? null,
       })
       .where(eq(users.id, userId));
+  }
+
+  async updateSafetyState(userId: string, newState: string, reason: string): Promise<void> {
+    const user = await this.getUser(userId);
+    const oldState = user?.safetyState || "active";
+    await db
+      .update(users)
+      .set({
+        safetyState: newState as any,
+        safetyStateReason: reason,
+        safetyStateChangedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+    console.log(`[SafetyState] user ${userId} ${oldState} -> ${newState} (${reason})`);
+  }
+
+  async getStaleActiveUsers(thresholdSeconds: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]> {
+    const cutoff = new Date(Date.now() - thresholdSeconds * 1000);
+    const results = await db
+      .select({ id: users.id, safetyState: users.safetyState, lastHeartbeatAt: users.lastHeartbeatAt })
+      .from(users)
+      .where(
+        and(
+          eq(users.safetyState, "active"),
+          isNotNull(users.lastHeartbeatAt),
+          lte(users.lastHeartbeatAt, cutoff)
+        )
+      );
+    return results.filter((r): r is { id: string; safetyState: string; lastHeartbeatAt: Date } => r.lastHeartbeatAt !== null);
   }
 
   async getSettings(userId: string): Promise<Settings | undefined> {
