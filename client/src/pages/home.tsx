@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { subscribe as subscribeLocation, getOneShotPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -30,19 +31,13 @@ const triggerHaptic = (pattern: number | number[] = 50) => {
   }
 };
 
-function getCheckinLocation(): Promise<{ lat?: number; lng?: number; timezone?: string }> {
+async function getCheckinLocation(): Promise<{ lat?: number; lng?: number; timezone?: string }> {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve({ timezone });
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, timezone }),
-      () => resolve({ timezone }),
-      { timeout: 5000, maximumAge: 60000 }
-    );
-  });
+  try {
+    const pos = await getOneShotPosition();
+    if (pos) return { lat: pos.lat, lng: pos.lng, timezone };
+  } catch {}
+  return { timezone };
 }
 
 function EscalationBanner({ status }: { status: UserStatus }) {
@@ -265,7 +260,6 @@ export default function Home() {
   const longPressStartRef = useRef<number>(0);
   const fallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fallDetectorRef = useRef<ReturnType<typeof createFallDetector> | null>(null);
-  const locationWatchRef = useRef<number | null>(null);
   const [driveActive, setDriveActive] = useState(false);
 
   const { auth } = useAuth();
@@ -297,33 +291,32 @@ export default function Home() {
     return () => { socket.off("message:new", handleNewMessage); };
   }, [auth?.authenticated]);
 
-  const sendLocationToServer = async (position: GeolocationPosition) => {
+  const sendLocationToServer = async (state: { lat: number; lng: number; accuracy: number }) => {
     try {
       await apiRequest("POST", "/api/location/update", {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy,
+        lat: state.lat,
+        lng: state.lng,
+        accuracy: state.accuracy,
       });
     } catch (error) {
       console.log("Location update failed:", error);
     }
   };
 
+  const locationUnsubRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     if (locationEnabled && status?.activeLocationSession) {
-      navigator.geolocation.getCurrentPosition(sendLocationToServer);
-      
-      locationWatchRef.current = navigator.geolocation.watchPosition(
-        sendLocationToServer,
-        (error) => console.log("Location watch error:", error),
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
-      );
+      if (locationUnsubRef.current) locationUnsubRef.current();
+      locationUnsubRef.current = subscribeLocation((state) => {
+        sendLocationToServer(state);
+      });
     }
 
     return () => {
-      if (locationWatchRef.current !== null) {
-        navigator.geolocation.clearWatch(locationWatchRef.current);
-        locationWatchRef.current = null;
+      if (locationUnsubRef.current) {
+        locationUnsubRef.current();
+        locationUnsubRef.current = null;
       }
     };
   }, [locationEnabled, status?.activeLocationSession]);
@@ -498,16 +491,12 @@ export default function Home() {
       });
       
       if (status?.settings?.locationMode !== "off") {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            sendLocationToServer(position);
+        getOneShotPosition().then((pos) => {
+          if (pos) {
+            sendLocationToServer(pos);
             setLocationEnabled(true);
-          },
-          () => {
-            console.log("Could not get location for SOS");
-          },
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
+          }
+        });
       }
     },
     onError: () => {
@@ -560,22 +549,21 @@ export default function Home() {
 
   const handleLocationToggle = () => {
     if (!locationEnabled) {
-      navigator.geolocation.getCurrentPosition(
-        () => {
+      getOneShotPosition().then((pos) => {
+        if (pos) {
           setLocationEnabled(true);
           toast({
             title: "Location on",
             description: "Location sharing is on for emergencies.",
           });
-        },
-        () => {
+        } else {
           toast({
             title: "Location access denied",
             description: "Please enable location in your browser settings.",
             variant: "destructive",
           });
         }
-      );
+      });
     } else {
       setLocationEnabled(false);
       toast({

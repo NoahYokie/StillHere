@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { getOneShotPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -187,16 +188,15 @@ export default function SavedPlacesPage() {
     setSearchQuery("");
   };
 
-  const useCurrentLocation = () => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setSelectedCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setSelectedAddress("Current location");
-        setSearchQuery("Current location");
-      },
-      () => toast({ title: "Could not get location", variant: "destructive" }),
-      { enableHighAccuracy: true }
-    );
+  const useCurrentLocation = async () => {
+    const pos = await getOneShotPosition();
+    if (pos) {
+      setSelectedCoords({ lat: pos.lat, lng: pos.lng });
+      setSelectedAddress("Current location");
+      setSearchQuery("Current location");
+    } else {
+      toast({ title: "Could not get location", variant: "destructive" });
+    }
   };
 
   if (isLoading) {

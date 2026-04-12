@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { getOneShotPosition, subscribe as subscribeLocation } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -169,11 +170,10 @@ export default function SafeWalkPage() {
   }, [currentPos?.lat, currentPos?.lng, destinationCoords?.lat, destinationCoords?.lng]);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true }
-    );
+    const unsub = subscribeLocation((state) => {
+      setCurrentPos({ lat: state.lat, lng: state.lng });
+    });
+    return unsub;
   }, []);
 
   const startMutation = useMutation({
@@ -224,14 +224,13 @@ export default function SafeWalkPage() {
   const sendLocation = useCallback(async () => {
     if (!activeWalk) return;
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
-      const activity = getActivityFromSpeed(pos.coords.speed);
+      const pos = await getOneShotPosition();
+      if (!pos) return;
+      const activity = getActivityFromSpeed(pos.speed);
       const res = await apiRequest("POST", "/api/safe-walk/location", {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        speed: pos.coords.speed,
+        lat: pos.lat,
+        lng: pos.lng,
+        speed: pos.speed,
         activity,
       });
       const data = await res.json();
@@ -239,7 +238,7 @@ export default function SafeWalkPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/active"] });
         toast({ title: "You've arrived safely!", description: "Safe Walk ended automatically." });
       }
-      setCurrentPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setCurrentPos({ lat: pos.lat, lng: pos.lng });
     } catch {}
   }, [activeWalk, toast]);
 

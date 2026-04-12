@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { getOneShotPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -95,14 +96,13 @@ export default function SafetyTimerPage() {
   const sendLocation = useCallback(async () => {
     if (!activeTimer) return;
     try {
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
-      );
-      const activity = getActivityFromSpeed(pos.coords.speed);
+      const pos = await getOneShotPosition();
+      if (!pos) return;
+      const activity = getActivityFromSpeed(pos.speed);
       await apiRequest("POST", "/api/safety-timer/location", {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        speed: pos.coords.speed,
+        lat: pos.lat,
+        lng: pos.lng,
+        speed: pos.speed,
         activity,
       });
     } catch {}

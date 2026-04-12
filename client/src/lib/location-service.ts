@@ -1,124 +1,212 @@
-type LocationState = {
+export type LocationState = {
   lat: number;
   lng: number;
   accuracy: number;
   timestamp: number;
   speed: number | null;
   heading: number | null;
+  isStale: boolean;
 };
 
 type LocationSubscriber = (state: LocationState) => void;
 type ErrorSubscriber = (msg: string) => void;
 
-let currentState: LocationState | null = null;
-let watchId: number | null = null;
-let hasInitialFix = false;
-let subscriberCount = 0;
+const VALID_ACCURACY_THRESHOLD = 100;
+const JITTER_DISTANCE_KM = 5;
+const JITTER_TIME_MS = 10000;
 
-const subscribers = new Set<LocationSubscriber>();
-const errorSubscribers = new Set<ErrorSubscriber>();
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-function shouldAccept(accuracy: number, timestamp: number): boolean {
-  if (!hasInitialFix) return true;
-  if (accuracy > 500) {
-    console.log(`[GPS] Rejected position: accuracy ${Math.round(accuracy)}m > 500m`);
-    return false;
+class LocationService {
+  private currentState: LocationState | null = null;
+  private watchId: number | null = null;
+  private locating = true;
+  private subscribers = new Set<LocationSubscriber>();
+  private errorSubscribers = new Set<ErrorSubscriber>();
+  private locatingSubscribers = new Set<(v: boolean) => void>();
+
+  private shouldAccept(lat: number, lng: number, accuracy: number, timestamp: number): { ok: boolean; reason?: string } {
+    if (accuracy > VALID_ACCURACY_THRESHOLD && this.currentState === null) {
+      return { ok: false, reason: `accuracy ${Math.round(accuracy)}m > ${VALID_ACCURACY_THRESHOLD}m (waiting for valid first fix)` };
+    }
+
+    if (this.currentState && accuracy > 500) {
+      return { ok: false, reason: `accuracy ${Math.round(accuracy)}m > 500m` };
+    }
+
+    if (this.currentState && timestamp < this.currentState.timestamp) {
+      return { ok: false, reason: `timestamp older than current` };
+    }
+
+    if (this.currentState) {
+      const dist = haversineKm(this.currentState.lat, this.currentState.lng, lat, lng);
+      const dt = timestamp - this.currentState.timestamp;
+      if (dist > JITTER_DISTANCE_KM && dt < JITTER_TIME_MS) {
+        return { ok: false, reason: `jitter: ${dist.toFixed(1)}km in ${(dt / 1000).toFixed(1)}s` };
+      }
+    }
+
+    return { ok: true };
   }
-  if (currentState && timestamp < currentState.timestamp) {
-    console.log(`[GPS] Rejected position: timestamp ${timestamp} older than ${currentState.timestamp}`);
-    return false;
+
+  private handlePosition = (pos: GeolocationPosition) => {
+    const { latitude, longitude, accuracy, speed, heading } = pos.coords;
+    const timestamp = pos.timestamp;
+
+    const check = this.shouldAccept(latitude, longitude, accuracy, timestamp);
+    if (!check.ok) {
+      console.log(`[GPS] Rejected: ${check.reason}`);
+      return;
+    }
+
+    const wasLocating = this.locating;
+    this.locating = false;
+    this.currentState = { lat: latitude, lng: longitude, accuracy, timestamp, speed, heading, isStale: false };
+
+    console.log(`[GPS] Position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, accuracy ${Math.round(accuracy)}m`);
+
+    if (wasLocating) {
+      this.locatingSubscribers.forEach(fn => { try { fn(false); } catch {} });
+    }
+
+    this.subscribers.forEach(fn => { try { fn(this.currentState!); } catch {} });
+  };
+
+  private handleError = (err: GeolocationPositionError) => {
+    const msg = err.code === err.PERMISSION_DENIED
+      ? "Location permission denied"
+      : err.code === err.POSITION_UNAVAILABLE
+        ? "Position unavailable"
+        : "Location request timed out";
+    console.log(`[GPS] Error: ${msg}`);
+    this.errorSubscribers.forEach(fn => { try { fn(msg); } catch {} });
+  };
+
+  private startWatch() {
+    if (this.watchId !== null) return;
+    console.log("[GPS] Starting GPS watch");
+    this.locating = true;
+    this.locatingSubscribers.forEach(fn => { try { fn(true); } catch {} });
+    this.watchId = navigator.geolocation.watchPosition(
+      this.handlePosition,
+      this.handleError,
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
   }
-  return true;
+
+  private stopWatch() {
+    if (this.watchId === null) return;
+    console.log("[GPS] Stopping GPS watch");
+    navigator.geolocation.clearWatch(this.watchId);
+    this.watchId = null;
+  }
+
+  subscribe(fn: LocationSubscriber): () => void {
+    this.subscribers.add(fn);
+
+    if (this.subscribers.size === 1) {
+      this.startWatch();
+    }
+
+    if (this.currentState) {
+      const staleState = { ...this.currentState, isStale: (Date.now() - this.currentState.timestamp) > 30000 };
+      try { fn(staleState); } catch {}
+    }
+
+    return () => {
+      this.subscribers.delete(fn);
+      if (this.subscribers.size === 0) {
+        this.stopWatch();
+      }
+    };
+  }
+
+  subscribeError(fn: ErrorSubscriber): () => void {
+    this.errorSubscribers.add(fn);
+    return () => { this.errorSubscribers.delete(fn); };
+  }
+
+  subscribeLocating(fn: (v: boolean) => void): () => void {
+    this.locatingSubscribers.add(fn);
+    try { fn(this.locating); } catch {}
+    return () => { this.locatingSubscribers.delete(fn); };
+  }
+
+  getCurrentPosition(): LocationState | null {
+    return this.currentState;
+  }
+
+  getIsLocating(): boolean {
+    return this.locating;
+  }
+
+  isWatching(): boolean {
+    return this.watchId !== null;
+  }
+
+  forceRefresh(): void {
+    navigator.geolocation.getCurrentPosition(
+      this.handlePosition,
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    );
+  }
+
+  getOneShotPosition(): Promise<LocationState | null> {
+    if (this.currentState && (Date.now() - this.currentState.timestamp) < 30000) {
+      return Promise.resolve(this.currentState);
+    }
+    return new Promise((resolve) => {
+      const unsub = this.subscribe((state) => {
+        unsub();
+        resolve(state);
+      });
+      setTimeout(() => {
+        unsub();
+        resolve(this.currentState);
+      }, 10000);
+    });
+  }
 }
 
-function handlePosition(pos: GeolocationPosition) {
-  const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-  const timestamp = pos.timestamp;
-
-  if (!shouldAccept(accuracy, timestamp)) return;
-
-  hasInitialFix = true;
-  currentState = { lat: latitude, lng: longitude, accuracy, timestamp, speed, heading };
-
-  console.log(`[GPS] New position: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}, accuracy ${Math.round(accuracy)}m`);
-
-  subscribers.forEach(fn => {
-    try { fn(currentState!); } catch {}
-  });
-}
-
-function handleError(err: GeolocationPositionError) {
-  const msg = err.code === err.PERMISSION_DENIED
-    ? "Location permission denied"
-    : err.code === err.POSITION_UNAVAILABLE
-      ? "Position unavailable"
-      : "Location request timed out";
-  console.log(`[GPS] Error: ${msg}`);
-  errorSubscribers.forEach(fn => {
-    try { fn(msg); } catch {}
-  });
-}
-
-function startWatch() {
-  if (watchId !== null) return;
-
-  console.log("[GPS] Starting single GPS watch");
-  watchId = navigator.geolocation.watchPosition(
-    handlePosition,
-    handleError,
-    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
-  );
-}
-
-function stopWatch() {
-  if (watchId === null) return;
-  console.log("[GPS] Stopping GPS watch");
-  navigator.geolocation.clearWatch(watchId);
-  watchId = null;
-  hasInitialFix = false;
-  currentState = null;
-}
+export const locationService = new LocationService();
 
 export function subscribe(fn: LocationSubscriber): () => void {
-  subscribers.add(fn);
-  subscriberCount++;
-
-  if (subscriberCount === 1) {
-    startWatch();
-  }
-
-  if (currentState) {
-    try { fn(currentState); } catch {}
-  }
-
-  return () => {
-    subscribers.delete(fn);
-    subscriberCount--;
-    if (subscriberCount <= 0) {
-      subscriberCount = 0;
-      stopWatch();
-    }
-  };
+  return locationService.subscribe(fn);
 }
 
 export function subscribeError(fn: ErrorSubscriber): () => void {
-  errorSubscribers.add(fn);
-  return () => { errorSubscribers.delete(fn); };
+  return locationService.subscribeError(fn);
+}
+
+export function subscribeLocating(fn: (v: boolean) => void): () => void {
+  return locationService.subscribeLocating(fn);
 }
 
 export function getCurrentPosition(): LocationState | null {
-  return currentState;
+  return locationService.getCurrentPosition();
+}
+
+export function getIsLocating(): boolean {
+  return locationService.getIsLocating();
 }
 
 export function isWatching(): boolean {
-  return watchId !== null;
+  return locationService.isWatching();
 }
 
 export function forceRefresh(): void {
-  if (!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(
-    handlePosition,
-    () => {},
-    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-  );
+  locationService.forceRefresh();
+}
+
+export function getOneShotPosition(): Promise<LocationState | null> {
+  return locationService.getOneShotPosition();
 }

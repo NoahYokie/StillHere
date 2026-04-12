@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { subscribe as subscribeLocation, getOneShotPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -105,12 +106,10 @@ export default function DrivePage() {
 
   useEffect(() => {
     if (!driveActive) return;
-    const id = navigator.geolocation?.watchPosition(
-      (pos) => setCurrentPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-    );
-    return () => { if (id != null) navigator.geolocation.clearWatch(id); };
+    const unsub = subscribeLocation((state) => {
+      if (!state.isStale) setCurrentPosition({ lat: state.lat, lng: state.lng });
+    });
+    return unsub;
   }, [driveActive]);
 
   const startDrive = useCallback(async () => {
@@ -171,14 +170,9 @@ export default function DrivePage() {
 
   const handleCrashSos = useCallback(async () => {
     setCrashDetected(null);
-    let pos: GeolocationPosition | null = null;
+    const pos = await getOneShotPosition();
     try {
-      pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 })
-      );
-    } catch {}
-    try {
-      await drivingMonitor.reportCrash(pos?.coords.latitude, pos?.coords.longitude);
+      await drivingMonitor.reportCrash(pos?.lat, pos?.lng);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({ title: "Crash SOS sent", description: "Emergency contacts notified", variant: "destructive" });
     } catch {

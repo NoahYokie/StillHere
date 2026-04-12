@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
-import { subscribe as subscribeLocation } from "@/lib/location-service";
+import { subscribe as subscribeLocation, subscribeLocating } from "@/lib/location-service";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
@@ -65,15 +65,18 @@ export default function LiveLocationPage() {
   const [myLat, setMyLat] = useState<number | null>(null);
   const [myLng, setMyLng] = useState<number | null>(null);
   const [myAccuracy, setMyAccuracy] = useState<number | null>(null);
+  const [isLocating, setIsLocating] = useState(true);
 
   useEffect(() => {
     const unsub = subscribeLocation((state) => {
+      if (state.isStale) return;
       setMyLat(state.lat);
       setMyLng(state.lng);
       setMyAccuracy(state.accuracy);
       if (state.speed != null) setCurrentSpeed(state.speed);
     });
-    return unsub;
+    const unsubLocating = subscribeLocating(setIsLocating);
+    return () => { unsub(); unsubLocating(); };
   }, []);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
@@ -284,6 +287,13 @@ export default function LiveLocationPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {isLocating && !hasMap && (
+        <div className="flex flex-col items-center justify-center p-8 gap-3" data-testid="locating-indicator">
+          <Navigation className="h-8 w-8 text-blue-500 animate-pulse" />
+          <p className="text-sm text-muted-foreground">Locating you...</p>
         </div>
       )}
 
