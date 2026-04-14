@@ -86,6 +86,11 @@ export async function notifyConcern(
       continue;
     }
 
+    if (contact.linkedUserId === userId) {
+      console.log(`[NOTIFY] Concern skip: contact ${contact.name} is the user themselves`);
+      continue;
+    }
+
     const key = getCooldownKey(contact.linkedUserId, "concern", userId);
     if (isCoolingDown(key)) {
       console.log(`[NOTIFY] Concern cooldown: watcher=${contact.linkedUserId} for target=${userId} (skipping duplicate within ${COOLDOWN_MS / 1000}s)`);
@@ -135,6 +140,11 @@ export async function notifyRecovery(
       continue;
     }
 
+    if (contact.linkedUserId === userId) {
+      console.log(`[NOTIFY] Recovery skip: contact ${contact.name} is the user themselves`);
+      continue;
+    }
+
     const key = getCooldownKey(contact.linkedUserId, "recovery", userId);
     if (isCoolingDown(key)) {
       console.log(`[NOTIFY] Recovery cooldown: watcher=${contact.linkedUserId} for target=${userId} (skipping duplicate within ${COOLDOWN_MS / 1000}s)`);
@@ -170,6 +180,8 @@ export async function notifyArrival(
 
   for (const contact of watcherContacts) {
     if (!contact.linkedUserId) continue;
+
+    if (contact.linkedUserId === userId) continue;
 
     try {
       const prefEnabled = await getArrivalPrefEnabled(contact.linkedUserId, userId);
