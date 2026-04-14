@@ -63,13 +63,14 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatContextEvent(type: string, placeName: string | null): string {
-  const place = placeName || "a location";
+function formatContextEvent(type: string, placeName: string | null, detail: string | null): string {
+  if (detail) return detail;
+  const place = placeName || "nearby";
   switch (type) {
-    case "dwell_start": return `Arrived at ${place}`;
+    case "dwell_start": return `Settled in at ${place}`;
     case "dwell_end": return `Left ${place}`;
-    case "trip_start": return placeName ? `Left ${place}` : "Started moving";
-    case "trip_end": return "Stopped moving";
+    case "trip_start": return placeName ? `Left ${place}` : "Heading out";
+    case "trip_end": return placeName ? `Arrived at ${place}` : "Arrived safely";
     default: return type;
   }
 }
@@ -3073,7 +3074,7 @@ export async function registerRoutes(
         type: e.type,
         time: e.createdAt.toISOString(),
         placeName: e.placeName,
-        detail: formatContextEvent(e.type, e.placeName),
+        detail: formatContextEvent(e.type, e.placeName, e.detail || null),
       }));
 
       res.json({ ...ctx, timeline });

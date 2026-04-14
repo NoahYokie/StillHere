@@ -570,10 +570,10 @@ function ContextTimeline({ userId }: { userId: string }) {
         {timeline.slice(-8).map((event, i) => (
           <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
             <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-              event.type === "dwell_start" ? "bg-blue-400" :
-              event.type === "dwell_end" ? "bg-orange-400" :
-              event.type === "trip_start" ? "bg-green-400" :
-              "bg-gray-400"
+              event.type === "trip_end" ? "bg-green-500" :
+              event.type === "dwell_end" || event.type === "trip_start" ? "bg-blue-500" :
+              event.type === "dwell_start" ? "bg-green-500" :
+              "bg-amber-500"
             }`} />
             <span className="truncate">{event.detail}</span>
             <span className="ml-auto shrink-0 tabular-nums">

@@ -1,6 +1,7 @@
 import { db } from "./db";
-import { contextEvents } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { contextEvents, geofences } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
+import { storage } from "./storage";
 
 const DWELL_RADIUS_M = 50;
 const DWELL_MIN_MS = 5 * 60 * 1000;
@@ -21,6 +22,7 @@ interface UserContextState {
   tripStartedAt: number | null;
   tripCumulativeDistanceM: number;
   slowSampleCount: number;
+  lastActivity: string;
   lastLat: number | null;
   lastLng: number | null;
   lastUpdateAt: number;
@@ -36,6 +38,7 @@ function getState(userId: string): UserContextState {
       isDwelling: false, dwellPlaceName: null,
       isTripping: false, tripStartLat: null, tripStartLng: null, tripStartedAt: null,
       tripCumulativeDistanceM: 0, slowSampleCount: 0,
+      lastActivity: "stationary",
       lastLat: null, lastLng: null, lastUpdateAt: Date.now(),
     });
   }
@@ -58,6 +61,55 @@ async function withUserLock(userId: string, fn: () => Promise<void>): Promise<vo
   await next;
 }
 
+async function resolvePlace(userId: string, lat: number, lng: number): Promise<string | null> {
+  try {
+    const fences = await storage.getGeofences(userId);
+    for (const fence of fences) {
+      const dist = haversineM(lat, lng, fence.lat, fence.lng);
+      if (dist <= fence.radiusMeters) {
+        if (fence.type === "home") return "Home";
+        if (fence.type === "work") return "Work";
+        return fence.name;
+      }
+    }
+
+    const watchers = await storage.getContactsLinkedToUser(userId);
+    for (const contact of watchers) {
+      if (contact.linkedUserId) {
+        const watcherFences = await storage.getGeofences(contact.linkedUserId);
+        for (const fence of watcherFences) {
+          const dist = haversineM(lat, lng, fence.lat, fence.lng);
+          if (dist <= fence.radiusMeters) {
+            if (fence.type === "home") return "Home";
+            if (fence.type === "work") return "Work";
+            return fence.name;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  try {
+    const key = process.env.GOOGLE_MAPS_API_KEY;
+    if (key) {
+      const resp = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}&result_type=neighborhood|locality|sublocality`
+      );
+      const data = await resp.json();
+      if (data.results && data.results.length > 0) {
+        const components = data.results[0].address_components;
+        const neighborhood = components?.find((c: any) => c.types.includes("neighborhood"));
+        const sublocality = components?.find((c: any) => c.types.includes("sublocality"));
+        const locality = components?.find((c: any) => c.types.includes("locality"));
+        const best = neighborhood || sublocality || locality;
+        if (best) return best.short_name;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
 export async function processLocationContext(
   userId: string,
   lat: number,
@@ -69,6 +121,7 @@ export async function processLocationContext(
     const state = getState(userId);
     const now = Date.now();
     const speedKmh = speed != null ? speed * 3.6 : 0;
+    state.lastActivity = activity;
 
     if (state.dwellLat != null && state.dwellLng != null) {
       const distFromDwell = haversineM(state.dwellLat, state.dwellLng, lat, lng);
@@ -76,6 +129,9 @@ export async function processLocationContext(
       if (distFromDwell <= DWELL_RADIUS_M) {
         if (!state.isDwelling && state.dwellStartedAt && (now - state.dwellStartedAt) >= DWELL_MIN_MS) {
           state.isDwelling = true;
+          if (!state.dwellPlaceName) {
+            state.dwellPlaceName = await resolvePlace(userId, state.dwellLat, state.dwellLng);
+          }
           await emitEvent(userId, "dwell_start", state.dwellLat, state.dwellLng, state.dwellPlaceName);
         }
       } else {
@@ -125,11 +181,15 @@ export async function processLocationContext(
           state.isTripping = false;
           state.slowSampleCount = 0;
           state.tripCumulativeDistanceM = 0;
-          await emitEvent(userId, "trip_end", lat, lng, null);
+          const arrivalPlace = await resolvePlace(userId, lat, lng);
+          const arrivalLabel = arrivalPlace
+            ? `Arrived at ${arrivalPlace}`
+            : "Arrived safely";
+          await emitEvent(userId, "trip_end", lat, lng, arrivalPlace, arrivalLabel);
           state.dwellLat = lat;
           state.dwellLng = lng;
           state.dwellStartedAt = now;
-          state.dwellPlaceName = null;
+          state.dwellPlaceName = arrivalPlace;
         }
       } else {
         state.slowSampleCount = 0;
@@ -147,7 +207,8 @@ async function emitEvent(
   type: "dwell_start" | "dwell_end" | "trip_start" | "trip_end",
   lat: number,
   lng: number,
-  placeName: string | null
+  placeName: string | null,
+  detail?: string
 ): Promise<void> {
   try {
     await db.insert(contextEvents).values({
@@ -156,6 +217,7 @@ async function emitEvent(
       lat,
       lng,
       placeName,
+      detail: detail || null,
     });
   } catch (err) {
     console.error(`[Context] Failed to emit ${type} for ${userId}:`, err);
@@ -177,7 +239,7 @@ export function getUserContext(userId: string): UserContext {
   if (state.isDwelling && state.dwellStartedAt) {
     const durationMs = now - state.dwellStartedAt;
     const durationStr = formatDuration(durationMs);
-    const place = state.dwellPlaceName || "this location";
+    const place = state.dwellPlaceName || "nearby";
     return {
       currentState: "dwelling",
       placeName: state.dwellPlaceName,
@@ -188,14 +250,19 @@ export function getUserContext(userId: string): UserContext {
   }
 
   if (state.isTripping && state.tripStartedAt) {
-    const durationMs = now - state.tripStartedAt;
-    const durationStr = formatDuration(durationMs);
+    const activity = state.lastActivity;
+    let verb = "On the way";
+    if (activity === "driving") verb = "Driving";
+    else if (activity === "walking") verb = "Heading out";
+    else if (activity === "running") verb = "On a run";
+    else if (activity === "cycling") verb = "Cycling";
+
     return {
       currentState: "traveling",
       placeName: null,
       dwellingSince: null,
       tripStartedAt: new Date(state.tripStartedAt).toISOString(),
-      contextLine: `On the move for ${durationStr}`,
+      contextLine: verb,
     };
   }
 
