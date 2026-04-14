@@ -1,12 +1,15 @@
 import { formatDistanceToNow } from "date-fns";
 import type { WatchedUser } from "@shared/schema";
 import {
-  Wifi, WifiOff, MapPin, MapPinOff, Signal, SignalLow, SignalZero,
+  Wifi, WifiOff, MapPin, MapPinOff, SignalLow,
+  Battery, BatteryLow, BatteryCharging, BatteryWarning,
+  Navigation, Clock,
 } from "lucide-react";
 
 export type ConnectionStatus = "connected" | "weak" | "unreachable";
 export type LocationStatus = "live" | "stale" | "unavailable";
 export type TrustLevel = "safe" | "watching" | "worried";
+export type ConfidenceBand = "strong" | "limited" | "low";
 
 export interface WatcherInsight {
   trustLevel: TrustLevel;
@@ -23,6 +26,20 @@ export interface WatcherInsight {
   iconColor: string;
 }
 
+export interface DeviceInfo {
+  batteryText: string | null;
+  batteryIcon: "ok" | "low" | "charging" | "critical" | null;
+  networkText: string | null;
+  confidenceBand: ConfidenceBand;
+  confidenceText: string;
+}
+
+export interface EtaInfo {
+  etaText: string;
+  destinationName: string | null;
+  isDelayed: boolean;
+}
+
 const STALE_LOCATION_MS = 5 * 60 * 1000;
 const WEAK_HEARTBEAT_MS = 3 * 60 * 1000;
 const UNREACHABLE_HEARTBEAT_MS = 6 * 60 * 1000;
@@ -37,6 +54,158 @@ function friendlyTimeAgo(date: Date | string | null): string {
   if (!date) return "unknown";
   const d = typeof date === "string" ? new Date(date) : date;
   return formatDistanceToNow(d, { addSuffix: true });
+}
+
+export function getDeviceInfo(user: WatchedUser): DeviceInfo {
+  const heartbeatAge = minutesAgo(user.lastHeartbeatAt);
+  const locationAge = minutesAgo(user.lastLocationAt ?? user.lastHeartbeatAt);
+  const hasLocation = user.lastLocationLat != null || user.lastHeartbeatLat != null;
+  const batt = user.batteryLevel;
+  const chg = user.batteryCharging;
+  const net = user.networkType;
+
+  let batteryText: string | null = null;
+  let batteryIcon: "ok" | "low" | "charging" | "critical" | null = null;
+
+  if (batt != null) {
+    const pct = Math.round(batt * 100);
+    if (chg) {
+      batteryText = `Charging (${pct}%)`;
+      batteryIcon = "charging";
+    } else if (pct <= 10) {
+      batteryText = `Battery very low (${pct}%)`;
+      batteryIcon = "critical";
+    } else if (pct <= 20) {
+      batteryText = `Battery low (${pct}%)`;
+      batteryIcon = "low";
+    } else {
+      batteryText = `Battery ${pct}%`;
+      batteryIcon = "ok";
+    }
+  }
+
+  let networkText: string | null = null;
+  if (net) {
+    switch (net) {
+      case "wifi": networkText = "On Wi-Fi"; break;
+      case "cell": networkText = "On mobile data"; break;
+      case "4g": networkText = "On mobile data"; break;
+      case "3g": networkText = "Weak connection"; break;
+      case "2g": networkText = "Very weak connection"; break;
+      case "slow-2g": networkText = "Very weak connection"; break;
+      case "offline": networkText = "Phone offline"; break;
+      case "online": networkText = "Online"; break;
+      default: networkText = "Online"; break;
+    }
+  }
+
+  let score = 100;
+
+  if (heartbeatAge === null) {
+    score -= 50;
+  } else if (heartbeatAge > 6) {
+    score -= 40;
+  } else if (heartbeatAge > 3) {
+    score -= 20;
+  }
+
+  if (!hasLocation) {
+    score -= 20;
+  } else if (locationAge !== null && locationAge > 5) {
+    score -= 15;
+  }
+
+  const acc = user.lastHeartbeatAcc;
+  if (acc != null && acc > 500) {
+    score -= 15;
+  } else if (acc != null && acc > 100) {
+    score -= 5;
+  }
+
+  if (batt != null && batt <= 0.1) {
+    score -= 10;
+  } else if (batt != null && batt <= 0.2) {
+    score -= 5;
+  }
+
+  if (net === "offline") {
+    score -= 15;
+  } else if (net === "2g" || net === "slow-2g") {
+    score -= 10;
+  } else if (net === "3g") {
+    score -= 5;
+  }
+
+  let confidenceBand: ConfidenceBand;
+  let confidenceText: string;
+
+  if (score >= 70) {
+    confidenceBand = "strong";
+    confidenceText = "Everything looks reliable";
+  } else if (score >= 40) {
+    confidenceBand = "limited";
+    if (net === "offline" || net === "2g" || net === "slow-2g") {
+      confidenceText = "Phone is on, but connection looks weak";
+    } else if (!hasLocation && heartbeatAge !== null && heartbeatAge < 6) {
+      confidenceText = "Phone is online, but location is less clear";
+    } else if (heartbeatAge !== null && heartbeatAge > 3) {
+      confidenceText = "Updates may be delayed right now";
+    } else {
+      confidenceText = "Updates may be delayed right now";
+    }
+  } else {
+    confidenceBand = "low";
+    if (heartbeatAge === null || heartbeatAge > 6) {
+      confidenceText = "Phone may be offline";
+    } else {
+      confidenceText = "Connection appears unstable";
+    }
+  }
+
+  return { batteryText, batteryIcon, networkText, confidenceBand, confidenceText };
+}
+
+export function getEtaInfo(user: WatchedUser): EtaInfo | null {
+  if (!user.activeSafeWalk) return null;
+  const walk = user.activeSafeWalk;
+  if (walk.status !== "active") return null;
+
+  const expectedAt = new Date(walk.expectedArrivalAt);
+  const now = Date.now();
+  const remainingMs = expectedAt.getTime() - now;
+  const remainingMin = Math.round(remainingMs / 60000);
+
+  if (remainingMin <= 0) {
+    return {
+      etaText: "Running a little later than expected",
+      destinationName: walk.destinationName,
+      isDelayed: true,
+    };
+  }
+
+  const expectedDuration = walk.lastLocationAt
+    ? expectedAt.getTime() - new Date(walk.lastLocationAt).getTime()
+    : remainingMs;
+  const isDelayed = expectedDuration > 0 && remainingMs > expectedDuration * 1.3;
+
+  if (isDelayed) {
+    return {
+      etaText: "Running a little later than expected",
+      destinationName: walk.destinationName,
+      isDelayed: true,
+    };
+  }
+
+  let etaText: string;
+  if (remainingMin <= 2) {
+    etaText = "Almost there";
+  } else if (remainingMin <= 5) {
+    etaText = "A few minutes away";
+  } else {
+    etaText = `About ${remainingMin} minutes away`;
+  }
+
+  return { etaText, destinationName: walk.destinationName, isDelayed: false };
 }
 
 export function getWatcherInsight(user: WatchedUser): WatcherInsight {
@@ -198,6 +367,64 @@ export function LocationBadge({ status, label }: { status: LocationStatus; label
     <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${bg}`} data-testid="badge-location">
       <Icon className={`w-3.5 h-3.5 ${color}`} />
       <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+export function BatteryBadge({ device }: { device: DeviceInfo }) {
+  if (!device.batteryText) return null;
+
+  let Icon = Battery;
+  let color = "text-green-500";
+  let bg = "bg-green-50 dark:bg-green-950/30";
+
+  if (device.batteryIcon === "charging") {
+    Icon = BatteryCharging;
+    color = "text-blue-500";
+    bg = "bg-blue-50 dark:bg-blue-950/30";
+  } else if (device.batteryIcon === "critical") {
+    Icon = BatteryWarning;
+    color = "text-red-500";
+    bg = "bg-red-50 dark:bg-red-950/30";
+  } else if (device.batteryIcon === "low") {
+    Icon = BatteryLow;
+    color = "text-amber-500";
+    bg = "bg-amber-50 dark:bg-amber-950/30";
+  }
+
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${bg}`} data-testid="badge-battery">
+      <Icon className={`w-3.5 h-3.5 ${color}`} />
+      <span className="text-xs text-muted-foreground">{device.batteryText}</span>
+    </div>
+  );
+}
+
+export function ConfidenceBadge({ device }: { device: DeviceInfo }) {
+  if (device.confidenceBand === "strong") return null;
+
+  const color = device.confidenceBand === "limited" ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400";
+  const bg = device.confidenceBand === "limited" ? "bg-amber-50/50 dark:bg-amber-950/20" : "bg-red-50/50 dark:bg-red-950/20";
+
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${bg}`} data-testid="badge-confidence">
+      <SignalLow className={`w-3.5 h-3.5 ${color}`} />
+      <span className={`text-xs ${color}`}>{device.confidenceText}</span>
+    </div>
+  );
+}
+
+export function EtaBadge({ eta }: { eta: EtaInfo }) {
+  const color = eta.isDelayed ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400";
+  const bg = eta.isDelayed ? "bg-amber-50 dark:bg-amber-950/30" : "bg-blue-50 dark:bg-blue-950/30";
+  const Icon = eta.isDelayed ? Clock : Navigation;
+
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${bg}`} data-testid="badge-eta">
+      <Icon className={`w-3.5 h-3.5 ${color}`} />
+      <span className={`text-xs ${color}`}>
+        {eta.destinationName ? `${eta.etaText} (${eta.destinationName})` : eta.etaText}
+      </span>
     </div>
   );
 }

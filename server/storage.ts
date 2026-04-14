@@ -75,7 +75,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
-  recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number): Promise<void>;
+  recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number, batt?: number, chg?: boolean, net?: string): Promise<void>;
   updateSafetyState(userId: string, newState: string, reason: string): Promise<void>;
   getStaleActiveUsers(thresholdSeconds: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]>;
   
@@ -288,15 +288,22 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number): Promise<void> {
+  async recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number, batt?: number, chg?: boolean, net?: string): Promise<void> {
+    const updates: Record<string, any> = {
+      lastHeartbeatAt: new Date(),
+      lastHeartbeatLat: lat ?? null,
+      lastHeartbeatLng: lng ?? null,
+      lastHeartbeatAcc: acc ?? null,
+    };
+    if (batt !== undefined) updates.batteryLevel = batt;
+    if (chg !== undefined) updates.batteryCharging = chg;
+    if (net !== undefined) updates.networkType = net;
+    if (batt !== undefined || chg !== undefined || net !== undefined) {
+      updates.lastDeviceStatusAt = new Date();
+    }
     await db
       .update(users)
-      .set({
-        lastHeartbeatAt: new Date(),
-        lastHeartbeatLat: lat ?? null,
-        lastHeartbeatLng: lng ?? null,
-        lastHeartbeatAcc: acc ?? null,
-      })
+      .set(updates)
       .where(eq(users.id, userId));
   }
 
@@ -1162,6 +1169,8 @@ export class DatabaseStorage implements IStorage {
         lastLocationLng = activeSession[0].lastLng;
       }
 
+      const activeWalk = await this.getActiveSafeWalk(user.id);
+
       result.push({
         userId: user.id,
         userName: user.name,
@@ -1180,6 +1189,17 @@ export class DatabaseStorage implements IStorage {
         lastLocationAt,
         lastLocationLat,
         lastLocationLng,
+        batteryLevel: user.batteryLevel ?? null,
+        batteryCharging: user.batteryCharging ?? null,
+        networkType: user.networkType ?? null,
+        lastDeviceStatusAt: user.lastDeviceStatusAt ?? null,
+        activeSafeWalk: activeWalk ? {
+          destinationName: activeWalk.destinationName,
+          expectedArrivalAt: activeWalk.expectedArrivalAt,
+          lastSpeed: activeWalk.lastSpeed,
+          lastLocationAt: activeWalk.lastLocationAt,
+          status: activeWalk.status,
+        } : null,
       });
     }
 

@@ -27,6 +27,10 @@ export const users = pgTable("users", {
   lastHeartbeatLat: doublePrecision("last_heartbeat_lat"),
   lastHeartbeatLng: doublePrecision("last_heartbeat_lng"),
   lastHeartbeatAcc: doublePrecision("last_heartbeat_acc"),
+  batteryLevel: real("battery_level"),
+  batteryCharging: boolean("battery_charging"),
+  networkType: text("network_type"),
+  lastDeviceStatusAt: timestamp("last_device_status_at"),
   safetyState: safetyStateEnum("safety_state").notNull().default("active"),
   safetyStateReason: text("safety_state_reason").notNull().default("No heartbeat yet"),
   safetyStateChangedAt: timestamp("safety_state_changed_at").defaultNow().notNull(),
@@ -927,6 +931,17 @@ export interface WatchedUser {
   lastLocationAt: Date | null;
   lastLocationLat: number | null;
   lastLocationLng: number | null;
+  batteryLevel: number | null;
+  batteryCharging: boolean | null;
+  networkType: string | null;
+  lastDeviceStatusAt: Date | null;
+  activeSafeWalk: {
+    destinationName: string | null;
+    expectedArrivalAt: Date;
+    lastSpeed: number | null;
+    lastLocationAt: Date | null;
+    status: string;
+  } | null;
 }
 
 export interface ContactPageData {

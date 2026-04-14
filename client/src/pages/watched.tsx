@@ -21,7 +21,7 @@ import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@share
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { getWatcherInsight, ConnectionBadge, LocationBadge, TrustIndicator } from "@/components/watcher-status";
+import { getWatcherInsight, getDeviceInfo, getEtaInfo, ConnectionBadge, LocationBadge, BatteryBadge, ConfidenceBadge, EtaBadge, TrustIndicator } from "@/components/watcher-status";
 import { ConcernTimelinePanel } from "@/components/concern-resolution";
 
 interface RemovedContact extends Contact {
@@ -240,6 +240,8 @@ export default function WatchedPage() {
     const isExpanded = expandedUser === user.userId;
     const userPref = reportPrefs?.find(p => p.watchedUserId === user.userId);
     const insight = getWatcherInsight(user);
+    const device = getDeviceInfo(user);
+    const eta = getEtaInfo(user);
     const hasLoc = user.lastLocationLat != null || user.lastHeartbeatLat != null;
 
     return (
@@ -271,7 +273,11 @@ export default function WatchedPage() {
           <div className="flex flex-wrap gap-1.5 mb-3">
             <ConnectionBadge status={insight.connection.status} label={insight.connection.label} />
             <LocationBadge status={insight.location.status} label={insight.location.label} />
+            <BatteryBadge device={device} />
+            {eta && <EtaBadge eta={eta} />}
           </div>
+
+          <ConfidenceBadge device={device} />
 
           {(insight.trustLevel === "worried" || user.safetyState === "concern") && (
             <ConcernTimelinePanel userId={user.userId} isWatcher={true} />

@@ -584,12 +584,15 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const { lat, lng, acc } = req.body || {};
+      const { lat, lng, acc, batt, chg, net } = req.body || {};
       await storage.recordHeartbeat(
         userId,
         typeof lat === "number" ? lat : undefined,
         typeof lng === "number" ? lng : undefined,
         typeof acc === "number" ? acc : undefined,
+        typeof batt === "number" ? batt : undefined,
+        typeof chg === "boolean" ? chg : undefined,
+        typeof net === "string" ? net : undefined,
       );
       const user = await storage.getUser(userId);
       if (user?.safetyState === "quiet") {
