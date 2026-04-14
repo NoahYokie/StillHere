@@ -692,21 +692,6 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Resolve any open incident
-    const openIncident = await this.getOpenIncident(userId);
-    if (openIncident) {
-      await this.updateIncident(openIncident.id, {
-        status: "resolved",
-        resolvedAt: new Date(),
-      });
-    }
-
-    // End any active location session
-    const session = await this.getActiveLocationSession(userId);
-    if (session) {
-      await this.endLocationSession(session.id);
-    }
-
     return checkin;
   }
 

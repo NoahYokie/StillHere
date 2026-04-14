@@ -750,8 +750,9 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      if (user.safetyState !== "concern" && user.safetyState !== "quiet") {
-        console.log(`[RESOLVE] Concern resolve skipped for ${user.name}: safetyState=${user.safetyState} (already safe)`);
+      const openIncident = await storage.getOpenIncident(userId);
+      if (user.safetyState !== "concern" && user.safetyState !== "quiet" && !openIncident) {
+        console.log(`[RESOLVE] Concern resolve skipped for ${user.name}: safetyState=${user.safetyState}, no open incident`);
         return res.json({ success: true, alreadySafe: true });
       }
 
@@ -778,8 +779,9 @@ export async function registerRoutes(
       const user = await storage.getUser(targetUserId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      if (user.safetyState !== "concern" && user.safetyState !== "quiet") {
-        console.log(`[RESOLVE] Watcher resolve skipped for ${user.name}: safetyState=${user.safetyState} (already safe)`);
+      const openIncident = await storage.getOpenIncident(targetUserId);
+      if (user.safetyState !== "concern" && user.safetyState !== "quiet" && !openIncident) {
+        console.log(`[RESOLVE] Watcher resolve skipped for ${user.name}: safetyState=${user.safetyState}, no open incident`);
         return res.json({ success: true, alreadySafe: true });
       }
 
@@ -948,8 +950,9 @@ export async function registerRoutes(
         return res.json({ success: true, incident: existingIncident, alreadyActive: true });
       }
       
-      // Create SOS incident
+      // Create SOS incident and set safety state to concern
       let incident = await storage.createIncident(userId, "sos");
+      await storage.updateSafetyState(userId, "concern", "SOS triggered");
       
       // Get contacts sorted by priority
       const contacts = await storage.getContacts(userId);
@@ -1270,6 +1273,17 @@ export async function registerRoutes(
       const hasLocation = location.lat != null || location.timezone;
       const checkin = await storage.createCheckin(result.userId, "auto", hasLocation ? location as any : undefined);
       await storage.resetReminderState(result.userId);
+
+      const wearUser = await storage.getUser(result.userId);
+      if (wearUser && (wearUser.safetyState === "concern" || wearUser.safetyState === "quiet")) {
+        await resolveCheckin(result.userId, "app", { skipCreateCheckin: true });
+      } else {
+        const openInc = await storage.getOpenIncident(result.userId);
+        if (openInc) {
+          await resolveCheckin(result.userId, "app", { skipCreateCheckin: true });
+        }
+      }
+
       res.json({ ok: true, checkinId: checkin.id, at: checkin.createdAt });
     } catch (error) {
       console.error("Error in quick checkin:", error);
@@ -2141,6 +2155,7 @@ export async function registerRoutes(
       }
 
       const incident = await storage.createIncident(userId, "sos");
+      await storage.updateSafetyState(userId, "concern", "Crash detected");
       notifyConcern(userId, user.name, "crash_detection").catch((err) => {
         console.error(`[CRASH] notifyConcern failed for ${user.name}:`, err?.message || err);
       });
@@ -3340,6 +3355,14 @@ export async function registerRoutes(
       if (action === "checkin") {
         await storage.createCheckin(user.id, "auto");
         await storage.resetReminderState(user.id);
+        if (user.safetyState === "concern" || user.safetyState === "quiet") {
+          await resolveCheckin(user.id, "app", { skipCreateCheckin: true });
+        } else {
+          const openInc = await storage.getOpenIncident(user.id);
+          if (openInc) {
+            await resolveCheckin(user.id, "app", { skipCreateCheckin: true });
+          }
+        }
         if (lat != null && lng != null) {
           const session = await storage.getActiveLocationSession(user.id);
           if (session) {
@@ -3947,6 +3970,7 @@ export async function registerRoutes(
           const timeStr = now.toISOString();
 
           let incident = await storage.createIncident(user.id, "missed_checkin");
+          await storage.updateSafetyState(user.id, "concern", "Missed check-in");
           notifyConcern(user.id, user.name, "missed_checkin").catch((err) => {
             console.error(`[CRON] notifyConcern failed for ${user.name}:`, err?.message || err);
           });
@@ -4394,6 +4418,7 @@ export async function registerRoutes(
             if (!user) continue;
 
             const incident = await storage.createIncident(timer.userId, "sos");
+            await storage.updateSafetyState(timer.userId, "concern", "Safety timer expired");
             notifyConcern(timer.userId, user.name, "sos").catch((err) => {
               console.error(`[TIMER] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
@@ -4515,6 +4540,7 @@ export async function registerRoutes(
             if (!user) continue;
 
             const incident = await storage.createIncident(walk.userId, "sos");
+            await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue — not responding");
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
