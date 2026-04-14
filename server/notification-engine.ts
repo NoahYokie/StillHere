@@ -96,7 +96,9 @@ export async function notifyConcern(
         true
       );
       if (sent) markSent(key);
-    } catch {}
+    } catch (err: any) {
+      console.error(`[NOTIFY] Concern delivery failed for watcher=${contact.linkedUserId} target=${userId} reason=${reason}:`, err?.message || err);
+    }
   }
 }
 
@@ -104,15 +106,21 @@ export async function notifyRecovery(
   userId: string,
   userName: string,
   resolvedBy: "user" | "watcher",
-  resolverName?: string
+  resolverName?: string,
+  method?: string
 ): Promise<void> {
   const watcherContacts = await storage.getContactsLinkedToUser(userId);
 
+  const timeStr = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   let body: string;
-  if (resolvedBy === "user") {
-    body = `${userName} is safe — they confirmed just now.`;
-  } else {
+  if (resolvedBy === "watcher") {
     body = `${userName} is safe now — confirmed by ${resolverName || "a watcher"}.`;
+  } else if (method === "call") {
+    body = `${userName} confirmed safe — responded to our check-in call at ${timeStr}.`;
+  } else if (method === "sms") {
+    body = `${userName} confirmed safe — replied to our check-in message at ${timeStr}.`;
+  } else {
+    body = `${userName} is safe — they confirmed just now.`;
   }
 
   for (const contact of watcherContacts) {
@@ -131,7 +139,9 @@ export async function notifyRecovery(
         true
       );
       if (sent) markSent(key);
-    } catch {}
+    } catch (err: any) {
+      console.error(`[NOTIFY] Recovery delivery failed for watcher=${contact.linkedUserId} target=${userId}:`, err?.message || err);
+    }
   }
 }
 
@@ -165,7 +175,9 @@ export async function notifyArrival(
         false
       );
       if (sent) markSent(key);
-    } catch {}
+    } catch (err: any) {
+      console.error(`[NOTIFY] Arrival delivery failed for watcher=${contact.linkedUserId} target=${userId} place=${placeName}:`, err?.message || err);
+    }
   }
 }
 

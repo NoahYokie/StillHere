@@ -1,0 +1,127 @@
+⚙️ PART 2 — TASK 10.1 (REPLIT — MUST FIX NOW)
+🎯 Objective:
+
+Create a 100% reliable escalation + resolution system
+
+🛠️ REQUIRED FIX (Gemini + Claude merged)
+1. 🔥 FORCE SINGLE RESOLUTION PATH
+
+Every resolution MUST go through:
+
+resolveCheckin()
+
+NO exceptions.
+
+2. 🚨 CREATE GLOBAL EVENT
+
+When resolved:
+
+EVENT_SAFETY_RESOLVED
+
+This must ALWAYS trigger:
+
+Push to watchers
+SMS fallback (if needed)
+State reset
+Timeline update
+3. ❗ REMOVE ALL SILENT SKIPS
+
+No condition should ever silently skip notifications.
+
+If something is skipped:
+👉 LOG IT
+👉 SHOW IT
+👉 EXPLAIN IT
+
+4. 🔍 AUDIT ALL ENTRY POINTS
+
+Replit must confirm ALL of these call resolveCheckin():
+
+App “I’m OK”
+SMS reply
+Voice “Press 1”
+Auto-recovery (heartbeat resumes)
+5. 📞 FIX CALL FLOW SPECIFICALLY
+
+We need to know:
+
+Why User A gets calls but User B does not
+Is it:
+phone format (E.164)?
+contact verification?
+Twilio rejection?
+settings flag?
+
+👉 No guessing — log the reason
+
+6. 🧾 ADD LOGGING (MANDATORY)
+
+For every escalation attempt:
+
+call_attempted: true/false
+call_skipped_reason
+sms_sent: true/false
+watcher_notified: true/false
+🧠 PART 3 — UX REQUIREMENT (Claude)
+When user resolves via call:
+
+Watcher MUST see:
+
+“Sarah confirmed safe — responded to our check-in call at 2:22 PM”
+
+NOT:
+
+technical language
+vague status
+silent resolution
+Timeline entry must be:
+
+“Confirmed safe by phone”
+
+📊 PART 4 — SAFETY REPORT (APPROVED NEXT STEP)
+
+After escalation is fixed:
+
+We proceed with:
+Task 10.2 — Safety Report Redesign
+Gemini Decision:
+
+✔ Server-side summary object → APPROVED
+
+Claude Decision:
+
+✔ Hybrid tone → APPROVED
+
+Final Direction:
+Summary:
+Human paragraph
+No numbers
+Timeline:
+Narrative events
+Clean timestamps
+Formatting:
+No “1679 min”
+No duplicates
+🧠 PART 5 — FINAL STRATEGY (THIS IS IMPORTANT)
+
+We are now in Phase 3 of product building:
+
+Phase 1 — Build features ✅
+Phase 2 — Make them work ✅
+Phase 3 — Make them trustworthy ← YOU ARE HERE
+⚠️ HARD TRUTH
+
+Right now:
+
+System is powerful ✅
+UX is strong ✅
+Notifications are smart ✅
+
+BUT:
+
+👉 Reliability is not yet proven ❌
+
+🏁 FINAL PRIORITY ORDER
+1. 🔴 Escalation audit + fix (NOW)
+2. 🟡 Safety Report redesign
+3. 🟢 Reliability Layer (battery + confidenc

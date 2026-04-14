@@ -43,7 +43,7 @@ Key architectural features include:
 - **Safety Timer (Dead Man's Switch):** Countdown timer for solo activities, triggering alerts if not dismissed, with GPS tracking.
 - **Safe Walk/Ride:** Destination-based journey tracking with Google-powered route estimates, GPS tracking, and alerts for late arrivals.
 - **Automated Wellness Check Call:** An optional feature where Twilio calls the user if a check-in is missed, allowing safety confirmation by pressing a key.
-- **Unified Resolution Pipeline:** A single `resolveCheckin` function handles all check-in resolution paths (app, SMS, call), ensuring consistent state updates, notifications, and incident resolution.
+- **Unified Resolution Pipeline:** A single `resolveCheckin` function handles all check-in resolution paths (app, SMS, call, watcher, heartbeat), ensuring consistent state updates, notifications, and incident resolution. Accepts `ResolveOptions` for watcher context (`resolvedBy`, `resolverName`) and `skipCreateCheckin` to prevent duplicate records. All entry points (`/api/concern/resolve`, `/api/concern/resolve-watcher`, `/api/heartbeat` auto-recovery, `/api/checkin`) route through this function. Structured `SAFETY_RESOLVED` and `CALL_FLOW_DIAGNOSTIC` JSON logs emitted for every resolution and wellness call decision. No silent `catch {}` blocks remain in the notification engine or resolution pipeline.
 
 ### External Dependencies
 - **Location Services:** Google Maps Platform (Places API New, Routes API)
