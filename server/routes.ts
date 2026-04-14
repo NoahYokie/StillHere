@@ -4036,9 +4036,9 @@ export async function registerRoutes(
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="15">
-    <Say voice="Google.en-US-Neural2-F">Hello, this is StillHere. We noticed you missed your safety check-in. If you're doing okay, just press 1 to confirm.</Say>
+    <Say voice="Google.en-US-Neural2-F">Hello, this is StillHere. We noticed you missed your safety check-in. Press 1 if you're okay. Press 2 if you need help.</Say>
     <Pause length="3"/>
-    <Say voice="Google.en-US-Neural2-F">If you're safe, please press 1 now.</Say>
+    <Say voice="Google.en-US-Neural2-F">Press 1 if you're safe. Press 2 if you need help.</Say>
   </Gather>
   <Say voice="Google.en-US-Neural2-F">No response was received. Your emergency contacts will be notified shortly. Goodbye.</Say>
   <Hangup/>
@@ -4055,18 +4055,33 @@ export async function registerRoutes(
       const digits = req.body.Digits;
       const calledNumber = req.body.To;
 
-      if (digits === "1" && calledNumber) {
-        const normalizedPhone = calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`;
-        const user = await storage.getUserByPhone(normalizedPhone);
-        if (user) {
-          const result = await resolveCheckin(user.id, "call");
-          console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
-        } else {
-          console.error(`[WELLNESS CALL] No user found for phone ${normalizedPhone.slice(-4)}`);
-        }
+      const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
+      const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
+
+      if (digits === "1" && user) {
+        const result = await resolveCheckin(user.id, "call");
+        console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You are now checked in and your emergency contacts have been notified that you are safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
+      }
+
+      if (digits === "2" && user) {
+        console.log(`[WELLNESS CALL] User ${user.name} pressed 2 — SOS triggered via phone call`);
+        const incident = await storage.createIncident(user.id, "sos");
+        await storage.updateSafetyState(user.id, "concern", "SOS triggered via phone call");
+        try {
+          await sendSosAlert(user.id, user.name, user.phone);
+        } catch (err) {
+          console.error(`[WELLNESS CALL] SOS alert failed for ${user.name}:`, err);
+        }
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Google.en-US-Neural2-F">We hear you. Help is on the way. Your emergency contacts are being notified right now. Stay on the line if you can.</Say><Pause length="2"/><Say voice="Google.en-US-Neural2-F">Someone will reach out to you very soon. You are not alone.</Say><Pause length="3"/><Hangup/></Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      if (!user && normalizedPhone) {
+        console.error(`[WELLNESS CALL] No user found for phone ${normalizedPhone.slice(-4)}`);
       }
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
