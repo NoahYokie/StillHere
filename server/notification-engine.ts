@@ -120,13 +120,13 @@ export async function notifyRecovery(
   const timeStr = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   let body: string;
   if (resolvedBy === "watcher") {
-    body = `${userName} is safe now — confirmed by ${resolverName || "a watcher"}.`;
+    body = `${userName} is safe now — confirmed by ${resolverName || "a watcher"} at ${timeStr}.`;
   } else if (method === "call") {
-    body = `${userName} confirmed safe — responded to our check-in call at ${timeStr}.`;
+    body = `Confirmed safe by phone call at ${timeStr} — ${userName} is OK.`;
   } else if (method === "sms") {
-    body = `${userName} confirmed safe — replied to our check-in message at ${timeStr}.`;
+    body = `Confirmed safe by SMS at ${timeStr} — ${userName} is OK.`;
   } else {
-    body = `${userName} is safe — they confirmed just now.`;
+    body = `Confirmed safe in app at ${timeStr} — ${userName} is OK.`;
   }
 
   for (const contact of watcherContacts) {

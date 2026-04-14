@@ -156,7 +156,8 @@ export async function sendAllClearNotification(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Update\n\n${userName} has confirmed they are safe. The previous alert has been resolved.\n\nNo further action is needed. You can view their current status:\n${link}`;
+  const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const body = `Good news — ${userName} confirmed safe at ${timeLabel}. No action needed.\n\nView status: ${link}`;
   return sendSms(contactPhone, body);
 }
 

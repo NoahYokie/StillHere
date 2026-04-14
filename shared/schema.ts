@@ -156,6 +156,10 @@ export const incidents = pgTable("incidents", {
   contact1NotifiedAt: timestamp("contact1_notified_at"),
   contact2NotifiedAt: timestamp("contact2_notified_at"),
   escalationTimeline: text("escalation_timeline").notNull().default("[]"),
+  pushSentAt: timestamp("push_sent_at"),
+  smsSentAt: timestamp("sms_sent_at"),
+  callSentAt: timestamp("call_sent_at"),
+  lastEscalationStep: text("last_escalation_step"),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),
