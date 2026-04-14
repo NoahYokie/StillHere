@@ -44,6 +44,7 @@ import TermsOfServicePage from "@/pages/terms-of-service";
 import SafetyTimerPage from "@/pages/safety-timer";
 import SafeWalkPage from "@/pages/safe-walk";
 import SavedPlacesPage from "@/pages/saved-places";
+import WeeklyReportPage from "@/pages/weekly-report";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -207,6 +208,9 @@ function Router() {
             <SafeWalkPage />
           </RequireSetup>
         </RequireAuth>
+      </Route>
+      <Route path="/weekly-report">
+        <RequireAuth><WeeklyReportPage /></RequireAuth>
       </Route>
       <Route path="/tour" component={TourPage} />
       <Route path="/help" component={HelpPage} />

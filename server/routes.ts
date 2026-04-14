@@ -6,8 +6,8 @@ import { processLocationContext, getUserContext, getRecentContextEvents } from "
 import { notifyConcern, notifyRecovery } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
-import { eq, and, lt } from "drizzle-orm";
-import { users, settings, authSessions, safeWalks, watcherNotificationPrefs } from "@shared/schema";
+import { eq, and, lt, gte, desc } from "drizzle-orm";
+import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -3438,6 +3438,165 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reports/weekly", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      const weekIncidents = await db
+        .select()
+        .from(incidents)
+        .where(and(eq(incidents.userId, userId), gte(incidents.startedAt, weekAgo)))
+        .orderBy(desc(incidents.startedAt));
+
+      const weekCheckins = await db
+        .select()
+        .from(checkins)
+        .where(and(eq(checkins.userId, userId), gte(checkins.createdAt, weekAgo)))
+        .orderBy(desc(checkins.createdAt));
+
+      const weekContext = await db
+        .select()
+        .from(contextEvents)
+        .where(and(eq(contextEvents.userId, userId), gte(contextEvents.createdAt, weekAgo)))
+        .orderBy(desc(contextEvents.createdAt));
+
+      const reasonMap: Record<string, string> = {
+        missed_checkin: "Missed check-in",
+        sos: "SOS alert triggered",
+        test: "Test alert",
+        crash_detected: "Crash detected",
+        safety_timer: "Safety timer expired",
+        safe_walk: "Late arrival detected",
+      };
+
+      const methodMap: Record<string, string> = {
+        button: "Confirmed safe in app",
+        app: "Confirmed safe in app",
+        sms: "Confirmed safe by SMS",
+        auto: "Resolved automatically",
+        call: "Confirmed safe by phone call",
+        voice: "Confirmed safe by phone call",
+      };
+
+      const contextMap: Record<string, (name: string) => string> = {
+        dwell_start: (name: string) => `Arrived at ${name || "a location"}`,
+        dwell_end: (name: string) => `Left ${name || "a location"}`,
+        trip_start: () => "Started a trip",
+        trip_end: () => "Finished a trip",
+      };
+
+      type TimelineEntry = { text: string; baseText: string; time: string; rawTime: Date; category: "incident" | "checkin" | "context"; count: number };
+      const rawTimeline: TimelineEntry[] = [];
+
+      for (const inc of weekIncidents) {
+        const reasonText = reasonMap[inc.reason] || inc.reason;
+        let resolutionText = "";
+
+        if (inc.status === "resolved" && inc.resolvedAt) {
+          const lastCheckin = weekCheckins.find(
+            (c) => c.createdAt && Math.abs(c.createdAt.getTime() - inc.resolvedAt!.getTime()) < 60000
+          );
+          if (lastCheckin) {
+            resolutionText = ` — ${methodMap[lastCheckin.method] || "Confirmed safe"}`;
+          } else {
+            resolutionText = " — Resolved shortly after";
+          }
+        } else if (inc.status === "open") {
+          resolutionText = " — Awaiting response";
+        }
+
+        const entryText = `${reasonText}${resolutionText}`;
+        rawTimeline.push({
+          text: entryText,
+          baseText: entryText,
+          time: formatReportTime(inc.startedAt),
+          rawTime: inc.startedAt,
+          category: "incident",
+          count: 1,
+        });
+      }
+
+      for (const ctx of weekContext) {
+        const formatter = contextMap[ctx.type];
+        if (formatter) {
+          const ctxText = formatter(ctx.placeName || "");
+          rawTimeline.push({
+            text: ctxText,
+            baseText: ctxText,
+            time: formatReportTime(ctx.createdAt),
+            rawTime: ctx.createdAt,
+            category: "context",
+            count: 1,
+          });
+        }
+      }
+
+      rawTimeline.sort((a, b) => b.rawTime.getTime() - a.rawTime.getTime());
+
+      const deduped: TimelineEntry[] = [];
+      for (const entry of rawTimeline) {
+        const existing = deduped.find(
+          (d) =>
+            d.baseText === entry.baseText &&
+            Math.abs(d.rawTime.getTime() - entry.rawTime.getTime()) < 60 * 60 * 1000
+        );
+        if (existing) {
+          existing.count++;
+          existing.text = `${existing.baseText} (${existing.count} times)`;
+        } else {
+          deduped.push({ ...entry });
+        }
+      }
+
+      const totalIncidents = weekIncidents.length;
+      const unresolvedIncidents = weekIncidents.filter((i) => i.status !== "resolved");
+      const slowResolutions = weekIncidents.filter((i) => {
+        if (!i.resolvedAt) return false;
+        return i.resolvedAt.getTime() - i.startedAt.getTime() > 30 * 60 * 1000;
+      });
+
+      let summaryTone: "good" | "mixed" | "concern";
+      let summary: string;
+
+      if (totalIncidents === 0) {
+        summaryTone = "good";
+        summary =
+          "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up — this is exactly what peace of mind looks like.";
+      } else if (totalIncidents <= 2 && unresolvedIncidents.length === 0 && slowResolutions.length === 0) {
+        summaryTone = "mixed";
+        summary =
+          "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay. The system worked exactly as it should — catching the small things so nothing gets missed.";
+      } else {
+        summaryTone = "concern";
+        if (unresolvedIncidents.length > 0) {
+          summary =
+            "There was a moment this week where we couldn't confirm safety right away. We want you to know that every alert was taken seriously, and your contacts were kept informed throughout. If anything felt off, consider reviewing your check-in schedule.";
+        } else {
+          summary =
+            "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases. Your safety network stepped in when it mattered most.";
+        }
+      }
+
+      const timeline = deduped.map(({ text, time }) => ({ text, time }));
+
+      res.json({
+        summaryTone,
+        summary,
+        timeline,
+        weekStart: weekAgo.toISOString(),
+        weekEnd: now.toISOString(),
+        totalCheckins: weekCheckins.length,
+      });
+    } catch (error) {
+      console.error("Error generating weekly report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
   app.get("/api/reports/preferences", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -4635,4 +4794,21 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+function formatReportTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+
+  const timeStr = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  if (diffDays === 0) return `Today, ${timeStr}`;
+  if (diffDays === 1) return `Yesterday, ${timeStr}`;
+  const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
+  return `${dayName}, ${timeStr}`;
 }

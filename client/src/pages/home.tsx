@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Smartphone, Satellite, RadioTower, Timer, Navigation, Bookmark } from "lucide-react";
+import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Smartphone, Satellite, RadioTower, Timer, Navigation, Bookmark, FileText } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -804,6 +804,16 @@ export default function Home() {
               <Car className="h-5 w-5 text-white" />
             </div>
             <span className="font-medium text-xs text-foreground">{driveActive ? "Driving" : "Drive"}</span>
+          </button>
+          <button
+            className="flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl transition-all duration-150 active:scale-95 bg-indigo-50 dark:bg-indigo-950/30 active:bg-indigo-100 dark:active:bg-indigo-950/50"
+            onClick={() => setLocation("/weekly-report")}
+            data-testid="card-weekly-report"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-indigo-500 flex items-center justify-center">
+              <FileText className="h-5 w-5 text-white" />
+            </div>
+            <span className="font-medium text-xs text-foreground">Report</span>
           </button>
         </div>
 
