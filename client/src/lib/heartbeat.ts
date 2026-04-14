@@ -35,6 +35,10 @@ async function sendHeartbeat(): Promise<void> {
   try {
     const cached = getCurrentPosition();
     const body: Record<string, any> = { ts: Math.floor(Date.now() / 1000) };
+    try {
+      body.tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {}
+
     if (cached && (Date.now() - cached.timestamp) < STALE_THRESHOLD_MS) {
       body.lat = cached.lat;
       body.lng = cached.lng;

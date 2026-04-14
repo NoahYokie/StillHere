@@ -20,6 +20,7 @@ import {
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getViewerTimezone, formatDualTime, formatTimeForViewer, shouldShowDualTime } from "@/lib/timezone";
 import { useToast } from "@/hooks/use-toast";
 import { getWatcherInsight, getDeviceInfo, getEtaInfo, ConnectionBadge, LocationBadge, BatteryBadge, ConfidenceBadge, EtaBadge, TrustIndicator } from "@/components/watcher-status";
 import { ConcernTimelinePanel } from "@/components/concern-resolution";
@@ -296,7 +297,7 @@ export default function WatchedPage() {
                 </div>
                 <div className="flex items-center gap-1" data-testid={`text-next-due-${user.userId}`}>
                   <Clock className="w-3 h-3" />
-                  <span>Next due: {format(new Date(user.nextCheckinDue), "h:mm a")}</span>
+                  <span>Next due: {formatDualTime(user.nextCheckinDue, user.userTimezone, getViewerTimezone())}</span>
                 </div>
               </div>
               <ContextTimeline userId={user.userId} />
@@ -424,7 +425,7 @@ function DailyStatusPanel({ userId }: { userId: string }) {
           {daily.todayCheckins.map((c, i) => (
             <div key={i} className="flex items-center gap-2" data-testid={`today-checkin-${userId}-${i}`}>
               <CheckCircle2 className="w-3 h-3 text-green-500" />
-              <span>{c.time} via {c.method}</span>
+              <span>{formatTimeForViewer(c.time)} via {c.method}</span>
             </div>
           ))}
         </div>
@@ -584,7 +585,7 @@ function ContextTimeline({ userId }: { userId: string }) {
             }`} />
             <span className="truncate">{event.detail}</span>
             <span className="ml-auto shrink-0 tabular-nums">
-              {new Date(event.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              {formatTimeForViewer(event.time)}
             </span>
           </div>
         ))}

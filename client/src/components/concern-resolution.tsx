@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatTimeForViewer } from "@/lib/timezone";
 import { useToast } from "@/hooks/use-toast";
 
 interface TimelineEntry {
@@ -178,7 +179,7 @@ export function ConcernTimelinePanel({ userId, isWatcher }: { userId: string; is
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-foreground">{getTimelineLabel(entry)}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {format(new Date(entry.time), "h:mm a")}
+                  {formatTimeForViewer(entry.time)}
                 </p>
               </div>
             </div>

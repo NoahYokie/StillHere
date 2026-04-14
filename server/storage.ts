@@ -70,6 +70,34 @@ import {
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
 
+function startOfDayInTimezone(date: Date, tz: string): Date {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const dateStr = fmt.format(date);
+    const guess = new Date(`${dateStr}T00:00:00Z`);
+    const offset = getTimezoneOffsetMs(guess, tz);
+    const midnight = new Date(guess.getTime() - offset);
+    const checkOffset = getTimezoneOffsetMs(midnight, tz);
+    if (checkOffset !== offset) {
+      return new Date(guess.getTime() - checkOffset);
+    }
+    return midnight;
+  } catch {
+    return startOfDay(date);
+  }
+}
+
+function getTimezoneOffsetMs(date: Date, tz: string): number {
+  const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" });
+  const tzStr = date.toLocaleString("en-US", { timeZone: tz });
+  return new Date(tzStr).getTime() - new Date(utcStr).getTime();
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -1159,6 +1187,7 @@ export class DatabaseStorage implements IStorage {
       result.push({
         userId: user.id,
         userName: user.name,
+        userTimezone: user.timezone || "Australia/Melbourne",
         lastCheckinAt: lastCheckin?.createdAt || null,
         nextCheckinDue,
         hasOpenIncident: !!openIncident,
@@ -1446,7 +1475,8 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUser(watchedUserId);
     if (!user) throw new Error("User not found");
 
-    const today = startOfDay(new Date());
+    const userTz = user.timezone || "UTC";
+    const today = startOfDayInTimezone(new Date(), userTz);
     const todayCheckins = await db.select().from(checkins)
       .where(and(eq(checkins.userId, watchedUserId), gte(checkins.createdAt, today)))
       .orderBy(desc(checkins.createdAt));
@@ -1465,7 +1495,7 @@ export class DatabaseStorage implements IStorage {
       userName: user.name,
       checkedInToday: todayCheckins.length > 0,
       todayCheckins: todayCheckins.map(c => ({
-        time: format(c.createdAt, "h:mm a"),
+        time: c.createdAt.toISOString(),
         method: c.method,
       })),
       lastCheckinAt: lastCheckin?.createdAt?.toISOString() || null,

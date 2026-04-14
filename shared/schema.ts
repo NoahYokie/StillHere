@@ -920,6 +920,7 @@ export interface UserStatus {
 export interface WatchedUser {
   userId: string;
   userName: string;
+  userTimezone: string;
   lastCheckinAt: Date | null;
   nextCheckinDue: Date;
   hasOpenIncident: boolean;

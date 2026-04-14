@@ -734,7 +734,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const { lat, lng, acc, batt, chg, net } = req.body || {};
+      const { lat, lng, acc, batt, chg, net, tz } = req.body || {};
       await storage.recordHeartbeat(
         userId,
         typeof lat === "number" ? lat : undefined,
@@ -744,7 +744,11 @@ export async function registerRoutes(
         typeof chg === "boolean" ? chg : undefined,
         typeof net === "string" ? net : undefined,
       );
-      const user = await storage.getUser(userId);
+      let user = await storage.getUser(userId);
+      if (typeof tz === "string" && tz.includes("/") && user && user.timezone !== tz) {
+        await storage.updateUser(userId, { timezone: tz });
+        user = { ...user, timezone: tz };
+      }
       if (user?.safetyState === "quiet") {
         const openIncident = await storage.getOpenIncident(userId);
         if (openIncident) {
