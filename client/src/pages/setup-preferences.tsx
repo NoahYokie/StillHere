@@ -59,9 +59,9 @@ export default function SetupPreferencesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({
-        title: "Setup complete",
+        title: "Preferences saved",
       });
-      setLocation("/");
+      setLocation("/setup/permissions");
     },
     onError: (error: any) => {
       if (error?.requiresLogin) {

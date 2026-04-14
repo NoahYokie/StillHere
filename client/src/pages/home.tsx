@@ -21,6 +21,7 @@ import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
 import { ConcernTimelinePanel } from "@/components/concern-resolution";
+import { PermissionRecoveryCard } from "@/components/permission-recovery";
 import { createFallDetector, isDeviceMotionSupported, requestMotionPermission } from "@/lib/fall-detection";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import { getSocket } from "@/lib/socket";
@@ -695,6 +696,7 @@ export default function Home() {
 
       <main className="max-w-md mx-auto px-6 py-8 space-y-8">
         <PushNotificationBanner />
+        <PermissionRecoveryCard />
 
         {hasOpenIncident && status && (
           <div className="space-y-3">

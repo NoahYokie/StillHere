@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted } from "@/lib/permissions";
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -40,7 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge, ChevronRight, ChevronUp, ChevronDown, User } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge, ChevronRight, ChevronUp, ChevronDown, User, CheckCircle2, PhoneOff } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { requestMotionPermission } from "@/lib/fall-detection";
@@ -50,6 +51,108 @@ interface ContactEntry {
   name: string;
   phone: string;
   email: string;
+}
+
+function SafetyHealthCard() {
+  const health = usePermissionHealth();
+  const [fixing, setFixing] = useState(false);
+
+  if (health.loading) return null;
+
+  const locationOk = isLocationFullyGranted(health.location);
+  const locationPartial = health.location === "when_in_use";
+  const notifOk = health.notifications === "granted";
+  const motionOk = health.motion === "granted";
+
+  const items = [
+    {
+      key: "location",
+      label: "Location",
+      ok: locationOk && !locationPartial,
+      partial: locationPartial,
+      denied: health.location === "denied",
+      unknown: health.location === "unknown",
+      description: getLocationLabel(health.location),
+      fix: async () => { setFixing(true); await requestLocationPermission(); health.refresh(); setFixing(false); },
+    },
+    {
+      key: "notifications",
+      label: "Notifications",
+      ok: notifOk,
+      partial: false,
+      denied: health.notifications === "denied",
+      unknown: health.notifications === "unknown",
+      description: notifOk ? "Enabled" : health.notifications === "denied" ? "Blocked — update in phone Settings" : "Not enabled",
+      fix: async () => { setFixing(true); await requestNotificationPermission(); health.refresh(); setFixing(false); },
+    },
+    {
+      key: "motion",
+      label: "Motion detection",
+      ok: motionOk,
+      partial: false,
+      denied: health.motion === "denied",
+      unknown: health.motion === "unknown",
+      description: motionOk ? "Enabled" : health.motion === "unknown" ? "Not available" : "Not enabled",
+      fix: async () => { setFixing(true); await requestMotionPermissionWrapper(); health.refresh(); setFixing(false); },
+    },
+  ];
+
+  return (
+    <Card data-testid="card-safety-health">
+      <CardContent className="pt-4 pb-3">
+        <div className="flex items-center gap-2 mb-3">
+          <Shield className="h-5 w-5 text-primary" />
+          <h2 className="font-semibold text-sm">Safety Health</h2>
+        </div>
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.key} className="flex items-center justify-between py-1.5" data-testid={`health-${item.key}`}>
+              <div className="flex items-center gap-2">
+                {item.ok ? (
+                  <div className="h-5 w-5 flex items-center justify-center">
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  </div>
+                ) : item.partial ? (
+                  <div className="h-5 w-5 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <AlertCircle className="h-3 w-3 text-amber-500" />
+                  </div>
+                ) : item.unknown ? (
+                  <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center">
+                    <HelpCircle className="h-3 w-3 text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="h-5 w-5 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className={`text-[11px] ${item.ok ? "text-green-600 dark:text-green-400" : item.unknown ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400"}`}>
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+              {(!item.ok || item.partial) && !item.denied && !item.unknown && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={item.fix}
+                  disabled={fixing}
+                  data-testid={`button-fix-${item.key}`}
+                >
+                  {item.partial ? "Update" : "Enable"}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">
+          Permission status refreshes when you return to the app.
+        </p>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function SettingsPage() {
@@ -504,7 +607,8 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {/* Accordion sections for everything else */}
+        <SafetyHealthCard />
+
         <Card>
           <Accordion type="multiple" defaultValue={["checkin"]} className="px-4">
             {/* Check-in Schedule */}
@@ -711,6 +815,17 @@ export default function SettingsPage() {
                   </div>
                   <Switch id="auto-wellness-call" checked={autoWellnessCall} onCheckedChange={(checked) => { setAutoWellnessCall(checked); settingsMutation.mutate({ autoWellnessCall: checked }); }} data-testid="switch-auto-wellness-call" />
                 </div>
+                {!autoWellnessCall && (
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-2.5" data-testid="warning-wellness-call-off">
+                    <PhoneOff className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Phone call escalation is off</p>
+                      <p className="text-[11px] text-amber-700/70 dark:text-amber-400/60 mt-0.5">
+                        StillHere won't call you if a check-in is missed. Your emergency contacts may still be notified by text and push notification.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <div>
                     <Label htmlFor="allow-reports" className="text-sm font-medium">Safety reports</Label>

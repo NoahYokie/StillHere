@@ -1,0 +1,210 @@
+Task 10 — Permissions + Onboarding Optimization (iOS-first)
+
+We have council approval.
+
+This task is about making sure users understand the permissions that power StillHere’s safety features.
+
+The goal is not to pressure users.
+The goal is to help them make an informed choice so StillHere can protect them properly.
+
+---
+
+# 🎯 OBJECTIVE
+
+Increase successful adoption of the permissions that StillHere needs to function as a real safety product, especially on iPhone.
+
+Focus on:
+
+* background location (“Always Allow”)
+* notifications
+* motion/activity where relevant
+* transparency around wellness-call settings
+
+---
+
+# CORE PRODUCT RULES
+
+## 1. Explain BEFORE asking
+
+The system permission prompt must never be the first explanation the user sees.
+
+## 2. Be honest, not manipulative
+
+No fear tactics.
+No guilt.
+Explain the consequence calmly and clearly.
+
+## 3. Preserve autonomy
+
+Tell users they can change permissions later in Settings.
+
+## 4. iOS-first scope
+
+Do not dilute this task by trying to optimize Android-specific flows at the same time.
+
+---
+
+# REQUIRED FEATURES
+
+## PART 1 — PRE-PERMISSION EDUCATION SCREENS
+
+Add a short pre-permission explanation screen before the iOS system prompt for each critical permission.
+
+### A. Always Allow location
+
+Explain in plain language, for example:
+
+* StillHere can only check on you in the background if your phone allows location access all the time
+* this helps trusted contacts know where you are if you miss a check-in
+* you can change this later in Settings
+
+### B. Notifications
+
+Explain:
+
+* notifications let StillHere warn you before escalation
+* they also let your trusted contacts get updates when you are safe again
+
+### C. Motion/activity (if requested in current app/native flow)
+
+Explain:
+
+* motion helps detect driving and possible incidents more reliably
+
+Do NOT trigger the OS prompt until the user taps something like:
+
+* “I understand”
+* “Continue”
+* “Allow protection”
+
+Use calm language.
+
+---
+
+## PART 2 — PERMISSION HEALTH STATUS
+
+Add a visible “Safety Health” / permission health section in settings (or equivalent clear location).
+
+Show current state clearly, for example:
+
+* ✅ Location: Always Allow
+* ⚠️ Location: While Using only — tap to update
+* ✅ Notifications: Enabled
+* ⚠️ Motion: Not enabled
+
+If possible, check permission status on app resume so changes made in device Settings are reflected.
+
+If the native plugin provides a more reliable “Always” permission state, use that.
+
+---
+
+## PART 3 — EXISTING USER RECOVERY PROMPT
+
+For users who already granted partial permissions:
+
+Add a gentle, dismissible prompt/card in the dashboard or settings area.
+
+Example tone:
+
+* “Your location settings may limit protection. Tap to learn more.”
+
+This must:
+
+* not block the app
+* not nag constantly
+* be dismissible
+* reappear only after a meaningful delay or if status changes
+
+One tap should open:
+
+* a simple explanation
+* guidance to update in Settings
+
+---
+
+## PART 4 — WELLNESS CALL TRANSPARENCY
+
+If `autoWellnessCall` is disabled anywhere in settings/onboarding, show a clear warning-style message.
+
+Required meaning:
+
+* Turning this off means StillHere won’t call you if a check-in is missed
+* emergency contacts may still be notified by other methods
+
+Preferred style:
+
+* visible warning treatment
+* specific consequence
+* not alarmist
+
+Example:
+
+* “Escalation via phone call is currently disabled. StillHere won’t call you if a check-in is missed.”
+
+Also improve any related onboarding copy if wellness call is configured there.
+
+---
+
+## PART 5 — TONE REQUIREMENTS
+
+All copy must feel:
+
+* calm
+* human
+* respectful
+* safety-focused
+
+Avoid:
+
+* “Without this you are unprotected”
+* “You must enable this”
+* anything guilt-driven or manipulative
+
+Prefer:
+
+* “For StillHere to check on you in the background, your phone needs to allow location access at all times.”
+* “You can change this later in Settings.”
+
+---
+
+# TECHNICAL REQUIREMENTS
+
+## Permission checks
+
+* check current permission status on relevant screens
+* refresh status when app resumes
+* use Capacitor/native plugin state checks where possible for iOS accuracy
+
+## Scope boundaries
+
+Do NOT build Android-specific permission optimization in this task.
+Do NOT build native battery plugin in this task.
+
+---
+
+# OUTPUT REQUIRED
+
+After completion, report:
+
+1. What pre-permission education screens were added
+2. Exact copy used for the location permission explanation
+3. Where permission health is shown
+4. How partial-permission recovery prompt works
+5. How wellness call transparency is displayed
+6. Any limitations found with detecting iOS permission states
+
+---
+
+# GOAL
+
+Make “Always Allow” feel like:
+
+* protection
+* clarity
+* informed choice
+
+Not:
+
+* spying
+* pressure
+* technical friction

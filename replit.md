@@ -1,7 +1,7 @@
 # StillHere - Safety Check-in App
 
 ### Overview
-StillHere is a safety check-in application providing a crucial safety net for elderly individuals, solo dwellers, and lone workers. It enables users to easily confirm their safety, and in case of missed check-ins or emergencies, it automatically notifies pre-selected emergency contacts. The application prioritizes user-friendliness, timely communication, and peace of mind through a simple yet effective personal safety monitoring solution.
+StillHere is a safety check-in application designed to provide a crucial safety net for vulnerable individuals such as the elderly, solo dwellers, and lone workers. It allows users to easily confirm their safety and automatically notifies pre-selected emergency contacts if check-ins are missed or in emergency situations. The application aims to deliver peace of mind through a user-friendly, timely, and effective personal safety monitoring solution.
 
 ### User Preferences
 - I want to interact with the agent in a clear and structured way.
@@ -13,56 +13,50 @@ StillHere is a safety check-in application providing a crucial safety net for el
 ### System Architecture
 
 **UI/UX Decisions:**
-The application utilizes a clean, reassuring UI with a blue primary scheme, green accents for positive actions, and red for alerts. It features prominent "I'm OK" and "I Need Help" SOS buttons, an onboarding flow, and a 3-step registration. In-app banners, haptic feedback, and post-check-in motivational quotes enhance the user experience.
+The application features a clean, reassuring user interface with a primary blue color scheme, green for positive actions, and red for alerts. Key UI elements include prominent "I'm OK" and "I Need Help" SOS buttons, a streamlined onboarding process, and a 3-step registration. User experience is enhanced with in-app banners, haptic feedback, and post-check-in motivational quotes. The map uses `userInteractedRef` + `programmaticMoveRef` guards for camera control and auto-switches to dark mode.
 
 **Technical Implementations:**
-The frontend is built with React, TypeScript, Tailwind CSS, and shadcn/ui. The backend uses Express.js with Helmet for security and `express-rate-limit`. PostgreSQL is managed with Drizzle ORM. Authentication relies on Passkey (WebAuthn/FIDO2) with phone OTP fallback, using 30-day httpOnly secure cookies for sessions.
+The frontend is built using React, TypeScript, Tailwind CSS, and shadcn/ui. The backend utilizes Express.js, secured with Helmet and `express-rate-limit`. PostgreSQL is the database, managed with Drizzle ORM. Authentication uses Passkey (WebAuthn/FIDO2) with phone OTP as a fallback, employing 30-day httpOnly secure cookies for sessions.
 
-Key features include:
-- **Check-in Mechanism:** Supports manual and scheduled automatic check-ins with configurable grace periods and SMS reminders. Location and timezone are auto-detected.
-- **Emergency System:** SOS alerts, sequential contact escalation, fall detection with countdown, and discreet SOS via shake gesture.
-- **Notifications:** Multi-channel notification system using SMS, push notifications (VAPID web-push), and email to ensure emergency contacts are always reached. Includes a **Notification Engine** (`server/notification-engine.ts`) that sends concern, recovery, and arrival notifications to watchers via push (with SMS fallback for concern/recovery). Features 2-minute per-event deduplication cooldowns to prevent spam from geofence edge oscillation. Watcher notification preferences (`watcherNotificationPrefs` table) allow toggling arrival notifications per watched user (concern notifications are always on). Human-tone messaging: "Sarah missed their check-in", "All clear — Sarah is safe", "Sarah arrived at Home".
-- **Communication:** Real-time in-app messaging via Socket.IO with optimistic UI, typing indicators, and read receipts. WebRTC voice calling with Twilio TURN relay is integrated, supporting native call UI via Capacitor plugins.
-- **Driving Safety:** A dedicated driving dashboard includes a speedometer, live route map, stats, and crash detection with a 60-second auto-SOS countdown. It also generates Life360-style driving habit reports for users and emergency contacts. Trip replay animation with play/pause/speed controls allows reviewing past drives on the map.
-- **Watcher System:** Automatically detects and provides an enhanced dashboard for emergency contacts who are also StillHere users, offering status overviews and quick actions. Watchers can opt-out with soft-delete and restore options. Features a **Trust UX** system (`client/src/components/watcher-status.tsx`) that interprets raw safety data (heartbeat, safety state, location, incidents) into human-readable insights with three trust levels: `safe` (green), `watching` (amber), `worried` (red). Cards show connection status (phone online/offline), location status (live/stale/unavailable), calm headlines ("Everything looks good", "Quiet for the last X minutes"), and recovery messages ("Back online just now"). Map markers color-code by safety state with animated pulse for concern/incident states. Live location sharing API and socket events include `safetyState` and `hasSafetyEvent` fields for real-time map marker updates.
-- **Concern Resolution Flow:** Complete safety loop for the `concern` state. When concern triggers: concern timeline panel (`client/src/components/concern-resolution.tsx`) shows what happened (state change, push sent, SMS sent, call attempted), resolution actions (user "I'm OK" button, watcher "Mark as safe" button), resolution feedback ("[Name] is safe now" with timestamp), and recovery UX (red → green with "Connection restored — no further action needed"). Concern never disappears silently — must be explicitly acknowledged. APIs: `POST /api/concern/resolve` (user self), `POST /api/concern/resolve-watcher/:userId` (watcher), `GET /api/concern/timeline/:userId`. Socket event `concern:resolved` broadcasts resolution to all watchers in real-time.
-- **Heartbeat System:** Client sends heartbeat POST every 60s with optional cached GPS snapshot (omitted if >5min stale), plus device telemetry: battery level/charging (Battery Status API), network type (Navigator.connection). Server stores `lastHeartbeatAt`, `batteryLevel`, `batteryCharging`, `networkType`, `lastDeviceStatusAt` on users table. Consecutive failure counting with console warnings. No new GPS calls — reads from location-service cache only.
-- **Reliability Layer (Phase 1):** Watcher cards enhanced with device intelligence. **Battery badge** shows level/charging with contextual icons. **Confidence model** (`getDeviceInfo` in `watcher-status.tsx`) scores heartbeat freshness, location freshness, GPS accuracy, battery, and network into three bands (strong/limited/low) with human-readable text ("Everything looks reliable", "Updates may be delayed right now", "Phone may be offline"). **ETA display** for active Safe Walks only — calm delay language ("Running a little later than expected", "About 14 minutes away"). No anxiety language, no fake precision, no passive commute prediction.
-- **Safety State Engine (V1):** Server-side `safetyState` enum (`active`/`quiet`/`concern`) on users table with `safetyStateReason` and `safetyStateChangedAt`. Background worker runs every 30s: `active → quiet` after 180s without heartbeat. Heartbeat endpoint auto-restores `quiet → active`. `concern` state is never auto-cleared. Monitoring guard: only users with non-null `lastHeartbeatAt` are evaluated.
-- **Live Location Sharing:** Real-time GPS location sharing with adaptive update frequency, activity detection, and "Open in Google Maps" integration. Uses a **central location service** (`client/src/lib/location-service.ts`) as the single source of truth for GPS — ONE `watchPosition`, ONE state store, observer pattern, adaptive mode support (`normal`/`high_accuracy` with reference counting). The tracking module and UI pages subscribe to this service. Server data is storage/distribution only, never overrides device GPS for the user's own "Me" marker. Includes robust background persistence mechanisms and native Capacitor plugin support. Enhanced with smooth animated marker transitions, info windows (tap markers to see speed/activity/time), geofence circle overlays, nearby emergency places overlay (hospitals/police/fire stations via Google Places API), activity heatmap layer, location history timeline with day scrubber and animated playback, ETA sharing for active Safe Walks on watcher maps, and auto-switching dark mode map theme. Map uses `userInteractedRef` + `programmaticMoveRef` guards so auto-centering only fires on initial load (not every 15s refresh), with a re-center button appearing when user pans away.
-- **Native Background Location (Phase 1):** Location-service is the single GPS source for all features (native + web). On native iOS: tries `@transistorsoft/capacitor-background-geolocation` first (continuous background, stopOnTerminate=false, startOnBoot, heartbeat every 60s), falls back to `@capacitor/geolocation`, then browser API. Session-guarded async start/stop prevents race conditions. `live-location.ts` no longer runs its own native plugin — it subscribes to location-service like all other features. iOS Info.plist configured with Always location permission, background modes (location, fetch, remote-notification, processing). `getTrackingSource()` exposes which source is active ("native-bg" | "capacitor" | "browser" | "none").
-- **Smart Map Camera:** Intelligent camera system on the live location map with priority-based focus (concern > safety event > selected > moving > self), velocity-aware zoom (driving=14, walking=16, stationary=17), stale/low-accuracy filtering (>180s or >500m excluded from camera calc), zoom limits (min 14, max 18), locating guard, manual override detection with re-center button, and safety override that forces camera to prioritize concern-state users.
-- **Geofencing:** Allows creation of named geofences with real-time zone departure detection and email alerts to contacts. Geofence circles are visualized on the watcher's live location map with name labels.
-- **Context Layer (Trip + Dwell Detection):** Server-side context processor (`server/context-processor.ts`) detects dwell starts/ends and trip starts/ends from live location updates. Uses cumulative distance thresholds (200m) with speed gates for trip detection, and multi-sample hysteresis (3 slow samples) for trip end to avoid false positives. Per-user mutex serialization prevents race conditions. State TTL eviction (30min) prevents memory leaks. `contextEvents` table stores events with type/lat/lng/placeName. API: `GET /api/context/:userId` returns current state + recent timeline. Watcher cards show a context line ("At this location for 15 minutes", "On the move for 8 minutes") replacing the subtext, with a collapsible timeline in expanded view showing color-coded event dots. Socket events include `contextLine` field for real-time updates.
-- **Location Breadcrumbs:** Stores a trail of location points during active sessions, accessible to watchers. Supports historical day-by-day replay via time scrubber.
-- **Satellite Device Integration:** API for registering, unregistering, and receiving webhooks from satellite communicators (e.g., Garmin inReach, SPOT).
-- **SMS Checkin:** Enables users to check in or trigger an SOS via SMS replies to a Twilio incoming webhook.
-- **Security:** Implements comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free logs, and bank-level security hardening.
+Key architectural features include:
+- **Check-in & Emergency System:** Supports manual and scheduled automatic check-ins with configurable grace periods and SMS reminders. Includes SOS alerts, sequential contact escalation, fall detection with a countdown, and discreet SOS via shake gesture.
+- **Multi-channel Notification Engine:** Delivers concern, recovery, and arrival notifications via SMS, push notifications (VAPID web-push), and email, with deduplication cooldowns. Watchers can customize arrival notification preferences.
+- **Real-time Communication:** In-app messaging via Socket.IO with optimistic UI, typing indicators, and read receipts. WebRTC voice calling is integrated using Twilio TURN relay, supporting native call UI.
+- **Driving Safety Features:** A dedicated dashboard for driving with speedometer, live route map, and crash detection with auto-SOS countdown. Generates driving habit reports and offers trip replay animation.
+- **Watcher System:** Provides an enhanced dashboard for emergency contacts (StillHere users) with status overviews, quick actions, and a "Trust UX" system that interprets safety data into human-readable insights (safe, watching, worried) with color-coded map markers.
+- **Concern Resolution Flow:** A comprehensive safety loop for resolving `concern` states, involving timeline panels, user/watcher resolution actions, and real-time updates to watchers.
+- **Heartbeat System:** Clients send regular heartbeats with device telemetry (battery, network) to the server, which tracks `lastHeartbeatAt` and other device statuses.
+- **Reliability Layer:** Enhances watcher cards with device intelligence, showing battery status and a "Confidence model" that scores heartbeat, location, GPS accuracy, battery, and network reliability into human-readable bands.
+- **Safety State Engine (V1):** Server-side `safetyState` enum (`active`/`quiet`/`concern`) with associated reasons and timestamps. A background worker manages state transitions (e.g., `active` to `quiet` if no heartbeat).
+- **Live Location Sharing:** Real-time GPS location sharing with adaptive update frequency, activity detection, and "Open in Google Maps" integration. Uses a central location service for robust background persistence, native plugin support, animated marker transitions, geofence overlays, nearby emergency places, activity heatmap, and a historical timeline with playback.
+- **Native Background Location:** Utilizes native plugins (`@transistorsoft/capacitor-background-geolocation`, `@capacitor/geolocation`) for continuous background location tracking, with fallbacks and permission optimization.
+- **Smart Map Camera:** Intelligent camera system on the live location map with priority-based focus, velocity-aware zoom, stale/low-accuracy filtering, and safety overrides.
+- **Geofencing:** Allows creating named geofences with real-time zone departure detection and email alerts, visualized on watcher maps.
+- **Context Layer:** Server-side processor detects dwell and trip starts/ends from location updates, storing events and displaying a "context line" on watcher cards.
+- **SMS Check-in:** Users can check in or trigger an SOS via SMS replies to a Twilio webhook.
+- **Permissions & Onboarding Optimization:** Pre-permission education screens and a permission health dashboard with one-tap fix actions, primarily for iOS.
+- **Security:** Comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free logs, and bank-level security hardening.
 - **PWA Support:** Full Progressive Web App capabilities for offline use and installability.
 - **Wearable API:** Dedicated API for companion watch apps for quick check-ins and status updates.
-- **Internationalization:** E.164 phone number normalization supports multiple countries.
-- **Apple Watch Companion App:** A SwiftUI app for one-tap check-in, SOS, custom 2-phase fall detection, and continuous heart rate monitoring via HealthKit, utilizing WatchConnectivity and WidgetKit.
-- **Heart Rate Monitoring:** Integrates HealthKit to read and display live heart rates from Apple Watch, with server-side alerts for abnormal BPM.
-- **Watcher Reporting:** Provides configurable scheduled safety reports via email to watchers, including daily quick-status panels and detailed report views with compliance stats and incident history.
-- **Error Tracking:** Automatic crash/error reporting for frontend and backend, with a user-scoped error view.
-- **App Ratings:** In-app 1-5 star rating prompt and feedback page displaying overall rating stats and anonymized reviews.
-- **Safety Timer (Dead Man's Switch):** A countdown timer for solo activities, triggering alerts to contacts if not dismissed, with GPS tracking throughout.
-- **Safe Walk/Ride:** Destination-based journey tracking with Google-powered route estimates, GPS tracking, and alerts if the user doesn't arrive on time.
-- **Automated Wellness Check Call:** An optional feature where Twilio calls the user if a check-in is missed, allowing them to confirm safety by pressing a key. Uses unified `resolveCheckin(userId, method)` function for resolution.
-- **Unified Resolution Pipeline:** Single `resolveCheckin(userId, method)` function (`server/routes.ts`) handles ALL check-in resolution paths (app tap, SMS reply, phone call). Guarantees: creates checkin record, resets reminder state, resolves safety state (concern/quiet → active), resolves open incident, ends location session, sends SMS all-clear to emergency contacts, sends push recovery to watchers, emits socket `concern:resolved` event, revokes emergency tokens. Method labeling tracks resolution source ("app", "sms", "call") in logs and notifications. Per-contact error isolation prevents one SMS failure from blocking others.
+- **Apple Watch Companion App:** SwiftUI app for one-tap check-in, SOS, 2-phase fall detection, and continuous heart rate monitoring via HealthKit.
+- **Watcher Reporting:** Configurable scheduled safety reports via email for watchers, including daily quick-status panels and detailed incident history.
+- **Safety Timer (Dead Man's Switch):** Countdown timer for solo activities, triggering alerts if not dismissed, with GPS tracking.
+- **Safe Walk/Ride:** Destination-based journey tracking with Google-powered route estimates, GPS tracking, and alerts for late arrivals.
+- **Automated Wellness Check Call:** An optional feature where Twilio calls the user if a check-in is missed, allowing safety confirmation by pressing a key.
+- **Unified Resolution Pipeline:** A single `resolveCheckin` function handles all check-in resolution paths (app, SMS, call), ensuring consistent state updates, notifications, and incident resolution.
 
 ### External Dependencies
-- **Location Search & Directions:** Google Maps Platform (Places API New, Routes API)
-- **SMS Gateway:** Twilio
+- **Location Services:** Google Maps Platform (Places API New, Routes API)
+- **SMS & Voice:** Twilio
 - **Push Notifications:** `web-push` library
-- **WebSocket:** `socket.io` / `socket.io-client`
+- **WebSockets:** `socket.io` / `socket.io-client`
 - **Frontend Framework:** React
 - **Styling:** Tailwind CSS, shadcn/ui
 - **Database:** PostgreSQL
 - **ORM:** Drizzle ORM
-- **HTTP Server:** Express.js
+- **Backend Framework:** Express.js
 - **Security Middleware:** Helmet
-- **Rate Limiting Middleware:** `express-rate-limit`
+- **Rate Limiting:** `express-rate-limit`
 - **Frontend Routing:** `wouter`
 - **Data Fetching:** `TanStack Query`
-- **Mobile/Desktop App Wrapper:** Capacitor
+- **Cross-Platform App Wrapper:** Capacitor

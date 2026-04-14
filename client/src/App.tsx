@@ -25,6 +25,7 @@ import OnboardingPage from "@/pages/onboarding";
 import SetupNamePage from "@/pages/setup-name";
 import SetupContactsPage from "@/pages/setup-contacts";
 import SetupPreferencesPage from "@/pages/setup-preferences";
+import SetupPermissionsPage from "@/pages/setup-permissions";
 import TrustPage from "@/pages/trust";
 import TourPage from "@/pages/tour";
 import WatchedPage from "@/pages/watched";
@@ -105,6 +106,11 @@ function Router() {
       <Route path="/setup/preferences">
         <RequireAuth>
           <SetupPreferencesPage />
+        </RequireAuth>
+      </Route>
+      <Route path="/setup/permissions">
+        <RequireAuth>
+          <SetupPermissionsPage />
         </RequireAuth>
       </Route>
       <Route path="/">
