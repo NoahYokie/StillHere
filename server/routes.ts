@@ -3,10 +3,11 @@ import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { processLocationContext, getUserContext, getRecentContextEvents } from "./context-processor";
+import { notifyConcern, notifyRecovery } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
 import { eq, and, lt } from "drizzle-orm";
-import { users, settings, authSessions, safeWalks } from "@shared/schema";
+import { users, settings, authSessions, safeWalks, watcherNotificationPrefs } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -593,6 +594,7 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (user?.safetyState === "quiet") {
         await storage.updateSafetyState(userId, "active", "Heartbeat resumed");
+        notifyRecovery(userId, user.name, "user").catch(() => {});
       }
       res.json({ ok: true });
     } catch (error) {
@@ -626,6 +628,8 @@ export async function registerRoutes(
           });
         }
       }
+
+      notifyRecovery(userId, user.name, "user").catch(() => {});
 
       res.json({ success: true });
     } catch (error) {
@@ -672,6 +676,8 @@ export async function registerRoutes(
           });
         }
       }
+
+      notifyRecovery(targetUserId, user.name, "watcher", watcher?.name || undefined).catch(() => {});
 
       res.json({ success: true });
     } catch (error) {
@@ -852,6 +858,8 @@ export async function registerRoutes(
         nextActionAt: addMinutes(now, sosSettings?.escalationMinutes || 20),
       });
       
+      notifyConcern(userId, user?.name || "Someone", "sos").catch(() => {});
+
       res.json({ success: true, incident });
     } catch (error) {
       console.error("Error sending SOS:", error);
@@ -2032,6 +2040,7 @@ export async function registerRoutes(
       }
 
       const incident = await storage.createIncident(userId, "sos");
+      notifyConcern(userId, user.name, "crash_detection").catch(() => {});
 
       await storage.revokeAllTokensForUser(userId);
       const contactsRaw = await storage.getContacts(userId);
@@ -3083,6 +3092,72 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/notification-prefs/:watchedUserId", async (req, res) => {
+    try {
+      const watcherId = getUserId(req);
+      if (!watcherId) return res.status(401).json({ error: "Not authenticated" });
+      const watchedUserId = req.params.watchedUserId;
+
+      const linkedContacts = await storage.getContactsLinkedToUser(watchedUserId);
+      const isWatcher = linkedContacts.some(c => c.linkedUserId === watcherId);
+      if (!isWatcher) return res.status(403).json({ error: "Not authorized" });
+
+      const [pref] = await db.select().from(watcherNotificationPrefs)
+        .where(and(
+          eq(watcherNotificationPrefs.watcherId, watcherId),
+          eq(watcherNotificationPrefs.watchedUserId, watchedUserId),
+        ))
+        .limit(1);
+
+      res.json({
+        arrivalNotifications: pref ? pref.arrivalNotifications : true,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get notification preferences" });
+    }
+  });
+
+  app.put("/api/notification-prefs/:watchedUserId", async (req, res) => {
+    try {
+      const watcherId = getUserId(req);
+      if (!watcherId) return res.status(401).json({ error: "Not authenticated" });
+      const watchedUserId = req.params.watchedUserId;
+
+      const linkedContacts = await storage.getContactsLinkedToUser(watchedUserId);
+      const isWatcher = linkedContacts.some(c => c.linkedUserId === watcherId);
+      if (!isWatcher) return res.status(403).json({ error: "Not authorized" });
+
+      const { arrivalNotifications } = req.body;
+
+      if (typeof arrivalNotifications !== "boolean") {
+        return res.status(400).json({ error: "arrivalNotifications must be boolean" });
+      }
+
+      const [existing] = await db.select().from(watcherNotificationPrefs)
+        .where(and(
+          eq(watcherNotificationPrefs.watcherId, watcherId),
+          eq(watcherNotificationPrefs.watchedUserId, watchedUserId),
+        ))
+        .limit(1);
+
+      if (existing) {
+        await db.update(watcherNotificationPrefs)
+          .set({ arrivalNotifications })
+          .where(eq(watcherNotificationPrefs.id, existing.id));
+      } else {
+        await db.insert(watcherNotificationPrefs).values({
+          watcherId,
+          watchedUserId,
+          arrivalNotifications,
+        });
+      }
+
+      res.json({ success: true, arrivalNotifications });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update notification preferences" });
+    }
+  });
+
   app.get("/api/live-location/watching", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -3791,6 +3866,7 @@ export async function registerRoutes(
           const timeStr = now.toISOString();
 
           let incident = await storage.createIncident(user.id, "missed_checkin");
+          notifyConcern(user.id, user.name, "missed_checkin").catch(() => {});
           const contacts = await storage.getContacts(user.id);
           
           if (settings.locationMode === "emergency_only" || settings.locationMode === "both") {
@@ -4190,6 +4266,7 @@ export async function registerRoutes(
             if (!user) continue;
 
             const incident = await storage.createIncident(timer.userId, "sos");
+            notifyConcern(timer.userId, user.name, "sos").catch(() => {});
             const tokens = await storage.regenerateTokensForUser(timer.userId);
             const allContactIds: string[] = [];
 
@@ -4296,6 +4373,7 @@ export async function registerRoutes(
             if (!user) continue;
 
             const incident = await storage.createIncident(walk.userId, "sos");
+            notifyConcern(walk.userId, user.name, "sos").catch(() => {});
             const tokens = await storage.regenerateTokensForUser(walk.userId);
             const contacts = await storage.getContacts(walk.userId);
             const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);

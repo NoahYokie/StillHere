@@ -2,6 +2,7 @@ import { db } from "./db";
 import { contextEvents, geofences } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { storage } from "./storage";
+import { notifyArrival } from "./notification-engine";
 
 const DWELL_RADIUS_M = 50;
 const DWELL_MIN_MS = 5 * 60 * 1000;
@@ -186,6 +187,12 @@ export async function processLocationContext(
             ? `Arrived at ${arrivalPlace}`
             : "Arrived safely";
           await emitEvent(userId, "trip_end", lat, lng, arrivalPlace, arrivalLabel);
+
+          const arrivalUser = await storage.getUser(userId);
+          if (arrivalUser) {
+            notifyArrival(userId, arrivalUser.name, arrivalPlace).catch(() => {});
+          }
+
           state.dwellLat = lat;
           state.dwellLng = lng;
           state.dwellStartedAt = now;

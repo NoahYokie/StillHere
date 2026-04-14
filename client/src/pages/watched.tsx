@@ -294,6 +294,7 @@ export default function WatchedPage() {
                 </div>
               </div>
               <ContextTimeline userId={user.userId} />
+              <NotificationToggle userId={user.userId} />
               <DailyStatusPanel userId={user.userId} />
             </>
           )}
@@ -582,6 +583,38 @@ function ContextTimeline({ userId }: { userId: string }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function NotificationToggle({ userId }: { userId: string }) {
+  const { data, isLoading } = useQuery<{ arrivalNotifications: boolean }>({
+    queryKey: ["/api/notification-prefs", userId],
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (arrivalNotifications: boolean) => {
+      await apiRequest("PUT", `/api/notification-prefs/${userId}`, { arrivalNotifications });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notification-prefs", userId] });
+    },
+  });
+
+  if (isLoading) return null;
+
+  return (
+    <div className="flex items-center justify-between mb-3 py-2 border-t border-border" data-testid={`notif-prefs-${userId}`}>
+      <div>
+        <p className="text-xs font-medium">Arrival notifications</p>
+        <p className="text-xs text-muted-foreground">Get notified when they arrive</p>
+      </div>
+      <Switch
+        checked={data?.arrivalNotifications ?? true}
+        onCheckedChange={(checked) => mutation.mutate(checked)}
+        disabled={mutation.isPending}
+        data-testid={`toggle-arrival-notif-${userId}`}
+      />
     </div>
   );
 }

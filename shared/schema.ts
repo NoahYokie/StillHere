@@ -556,6 +556,25 @@ export const reportPreferencesRelations = relations(reportPreferences, ({ one })
   }),
 }));
 
+// Watcher Notification Preferences (per watched user)
+export const watcherNotificationPrefs = pgTable("watcher_notification_prefs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  watcherId: uuid("watcher_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  watchedUserId: uuid("watched_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  arrivalNotifications: boolean("arrival_notifications").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("watcher_notif_prefs_watcher_idx").on(table.watcherId),
+  index("watcher_notif_prefs_watched_idx").on(table.watchedUserId),
+]);
+
+export const watcherNotificationPrefsRelations = relations(watcherNotificationPrefs, ({ one }) => ({
+  watcher: one(users, {
+    fields: [watcherNotificationPrefs.watcherId],
+    references: [users.id],
+  }),
+}));
+
 // Drive Sessions table
 export const driveSessions = pgTable("drive_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -757,6 +776,7 @@ export const insertGeofenceSchema = createInsertSchema(geofences).omit({ id: tru
 export const insertLocationBreadcrumbSchema = createInsertSchema(locationBreadcrumbs).omit({ id: true });
 export const insertSatelliteDeviceSchema = createInsertSchema(satelliteDevices).omit({ id: true, createdAt: true });
 export const insertReportPreferenceSchema = createInsertSchema(reportPreferences).omit({ id: true, createdAt: true });
+export const insertWatcherNotificationPrefSchema = createInsertSchema(watcherNotificationPrefs).omit({ id: true, createdAt: true });
 export const insertDriveSessionSchema = createInsertSchema(driveSessions).omit({ id: true, startedAt: true });
 export const insertSpeedAlertSchema = createInsertSchema(speedAlerts).omit({ id: true, createdAt: true });
 export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, createdAt: true });
@@ -824,6 +844,9 @@ export type InsertSatelliteDevice = z.infer<typeof insertSatelliteDeviceSchema>;
 
 export type ReportPreference = typeof reportPreferences.$inferSelect;
 export type InsertReportPreference = z.infer<typeof insertReportPreferenceSchema>;
+
+export type WatcherNotificationPref = typeof watcherNotificationPrefs.$inferSelect;
+export type InsertWatcherNotificationPref = z.infer<typeof insertWatcherNotificationPrefSchema>;
 
 export type DriveSession = typeof driveSessions.$inferSelect;
 export type InsertDriveSession = z.infer<typeof insertDriveSessionSchema>;
