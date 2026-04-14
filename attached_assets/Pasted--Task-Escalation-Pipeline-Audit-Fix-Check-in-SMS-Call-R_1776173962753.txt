@@ -1,0 +1,227 @@
+🚨 Task: Escalation Pipeline Audit + Fix (Check-in → SMS → Call → Resolution)
+
+We have discovered real-world failures in the escalation system during testing.
+
+This is a critical safety feature. Treat this as HIGH PRIORITY.
+
+---
+
+# 🧪 TEST SCENARIO (REAL ISSUE)
+
+User A and User B are mutual emergency contacts.
+
+Both intentionally miss check-ins.
+
+Observed behavior:
+
+1. User A:
+
+   * Receives call ✅
+   * Presses "1" to confirm safe ✅
+   * ❌ User B receives NO notification (SMS, push, or in-app)
+
+2. User B:
+
+   * ❌ Does NOT receive escalation call at all
+   * ❌ Does NOT receive SMS escalation
+
+This indicates broken escalation + notification pipeline.
+
+---
+
+# 🎯 EXPECTED SYSTEM BEHAVIOR
+
+When a user misses check-in:
+
+## Step 1 — Push
+
+* Push notification sent to user
+
+## Step 2 — SMS
+
+* SMS sent to user
+* User can reply YES to check in
+
+## Step 3 — Call
+
+* Automated call to user
+* Press 1 = confirm safe
+
+---
+
+# 🔁 CRITICAL: AFTER USER CONFIRMS SAFE (ANY METHOD)
+
+If user confirms via:
+
+* App
+* SMS reply
+* Phone call (press 1)
+
+THEN system MUST:
+
+1. Resolve concern/check-in state
+2. Trigger notification pipeline:
+
+### To Emergency Contacts:
+
+* SMS: "[Name] is safe — they checked in at 2:35 PM"
+
+### To Watchers:
+
+* Push notification
+* In-app update
+* Timeline event
+
+---
+
+# 🧠 TASK 1 — TRACE THE FLOW (REQUIRED)
+
+Trace FULL pipeline for:
+
+Call → Twilio webhook → backend handler → state update → notification trigger
+
+Report:
+
+1. What endpoint handles "press 1" from call
+2. What database field is updated
+3. Whether notification trigger is fired
+4. If NOT, where the chain breaks
+
+---
+
+# 🧠 TASK 2 — FIX RESOLUTION PIPELINE
+
+Ensure ALL resolution paths trigger same logic:
+
+Create ONE unified function:
+
+resolveCheckIn(userId, method)
+
+Where method =
+
+* "app"
+* "sms"
+* "call"
+
+This function MUST:
+
+1. Mark user as safe
+2. Update timestamps
+3. Log resolution event
+4. Trigger ALL notifications
+
+---
+
+# 🧠 TASK 3 — UNIFY CONTACT + WATCHER SYSTEM
+
+Ensure:
+
+Emergency Contacts AND Watchers BOTH receive updates.
+
+Audit:
+
+* Are they stored separately?
+* Are both included in notification loop?
+
+Fix so both receive:
+
+* SMS (contacts)
+* Push (watchers)
+* In-app updates
+
+---
+
+# 🧠 TASK 4 — FIX CALL ESCALATION LOGIC
+
+Investigate:
+
+Why User B did NOT receive a call.
+
+Check:
+
+1. Contact order logic
+2. Call retry / escalation sequence
+3. Twilio call failures or skipped contacts
+
+Expected behavior:
+
+* If user fails to respond:
+  → escalate to contacts sequentially
+
+---
+
+# 🧠 TASK 5 — ADD TRANSPARENCY (UX IMPROVEMENT)
+
+When check-in is resolved:
+
+User sees:
+
+* "You're all set — you're marked safe"
+
+Watcher sees:
+
+* "Dauda checked in via phone call at 2:35 PM"
+
+Timeline includes:
+
+* "Confirmed safe via call"
+
+---
+
+# 🧠 TASK 6 — ADD METHOD LABELING
+
+Store and expose how check-in was completed:
+
+* App tap
+* SMS reply
+* Phone call
+
+This must appear in:
+
+* timeline
+* notifications
+
+---
+
+# 🧠 TASK 7 — FAILURE LOGGING
+
+Add logs for:
+
+* SMS not sent
+* Call not triggered
+* Notification not delivered
+
+We need visibility into failures.
+
+---
+
+# 📦 OUTPUT REQUIRED
+
+Report back with:
+
+1. Root cause of missing notifications
+2. Root cause of missing call to partner
+3. Code changes made
+4. Updated flow diagram (simple)
+5. Example messages for:
+
+   * call resolution
+   * contact notification
+6. Confirmation both users now receive:
+
+   * call (when expected)
+   * notification (always)
+
+---
+
+# 🎯 GOAL
+
+Make escalation feel:
+
+* reliable
+* predictable
+* calming
+
+When someone checks in, EVERYONE must know.
+
+No silent success. No missing alerts.

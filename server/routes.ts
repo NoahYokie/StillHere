@@ -85,6 +85,91 @@ function detectActivity(speedMs: number | null | undefined): string {
   return "driving";
 }
 
+type CheckinMethod = "app" | "sms" | "call";
+
+async function resolveCheckin(userId: string, method: CheckinMethod): Promise<{ resolved: boolean; hadIncident: boolean }> {
+  const user = await storage.getUser(userId);
+  if (!user) {
+    console.error(`[RESOLVE] User not found: ${userId}`);
+    return { resolved: false, hadIncident: false };
+  }
+
+  const checkinMethod = method === "call" ? "auto" : method;
+  await storage.createCheckin(userId, checkinMethod as any, {});
+  await storage.resetReminderState(userId);
+  console.log(`[RESOLVE] Check-in recorded for ${user.name} via ${method}`);
+
+  if (user.safetyState === "concern" || user.safetyState === "quiet") {
+    await storage.updateSafetyState(userId, "active", `Confirmed safe via ${method}`);
+    console.log(`[RESOLVE] Safety state restored: ${user.safetyState} → active`);
+  }
+
+  const openIncident = await storage.getOpenIncident(userId);
+  let hadIncident = false;
+
+  if (openIncident) {
+    hadIncident = true;
+    await storage.updateIncident(openIncident.id, {
+      status: "resolved",
+      resolvedAt: new Date(),
+    });
+    console.log(`[RESOLVE] Incident ${openIncident.id} resolved (${openIncident.reason})`);
+
+    const session = await storage.getActiveLocationSession(userId);
+    if (session) {
+      await storage.endLocationSession(session.id);
+      console.log(`[RESOLVE] Location session ended`);
+    }
+
+    const baseUrl = getBaseUrl();
+    const contactsWithTokens = await storage.getContactTokensForUser(userId);
+    const methodLabel = method === "call" ? "phone call" : method === "sms" ? "SMS" : "the app";
+    const timeStr = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    let smsSuccess = 0;
+    let smsFailed = 0;
+    for (const { contact, token } of contactsWithTokens) {
+      try {
+        const normalizedPhone = normalizePhone(contact.phone);
+        const link = `${baseUrl}/emergency/${token}`;
+        await sendAllClearNotification(normalizedPhone, user.name, link);
+        smsSuccess++;
+      } catch (err) {
+        smsFailed++;
+        console.error(`[RESOLVE] Failed to send SMS to contact ${contact.name}:`, err);
+      }
+    }
+    console.log(`[RESOLVE] All-clear SMS sent: ${smsSuccess} success, ${smsFailed} failed`);
+
+    await storage.revokeAllTokensForUser(userId);
+    console.log(`[RESOLVE] Emergency tokens revoked`);
+  }
+
+  try {
+    notifyRecovery(userId, user.name, "user").catch((err) => {
+      console.error(`[RESOLVE] notifyRecovery failed:`, err);
+    });
+  } catch (err) {
+    console.error(`[RESOLVE] notifyRecovery threw:`, err);
+  }
+
+  const watcherContacts = await storage.getContactsLinkedToUser(userId);
+  for (const contact of watcherContacts) {
+    if (contact.linkedUserId) {
+      emitToUser(contact.linkedUserId, "concern:resolved", {
+        userId,
+        userName: user.name,
+        resolvedBy: "user",
+        method,
+        resolvedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  console.log(`[RESOLVE] Complete: ${user.name} confirmed safe via ${method}, incident=${hadIncident}`);
+  return { resolved: true, hadIncident };
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null },
   userName: string,
@@ -870,7 +955,6 @@ export async function registerRoutes(
     }
   });
 
-  // Resolve active incident (dismiss alert)
   app.post("/api/resolve-alert", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -883,37 +967,7 @@ export async function registerRoutes(
         return res.status(404).json({ error: "No active alert" });
       }
       
-      // Get user info for notification
-      const user = await storage.getUser(userId);
-      
-      // Resolve the incident
-      await storage.updateIncident(openIncident.id, {
-        status: "resolved",
-        resolvedAt: new Date(),
-      });
-      
-      // End any active location session
-      const session = await storage.getActiveLocationSession(userId);
-      if (session) {
-        await storage.endLocationSession(session.id);
-      }
-      
-      // Notify emergency contacts that user is OK now
-      if (user) {
-        const contactsWithTokens = await storage.getContactTokensForUser(userId);
-        const baseUrl = getBaseUrl();
-        
-        console.log("[Resolve] Notifying contacts that user is OK...");
-        for (const { contact, token } of contactsWithTokens) {
-          const normalizedPhone = normalizePhone(contact.phone);
-          const link = `${baseUrl}/emergency/${token}`;
-          await sendAllClearNotification(normalizedPhone, user.name, link);
-        }
-        console.log("[Resolve] All clear notifications sent");
-        
-        await storage.revokeAllTokensForUser(userId);
-        console.log("[Resolve] Emergency links revoked");
-      }
+      const result = await resolveCheckin(userId, "app");
       
       res.json({ success: true });
     } catch (error) {
@@ -2439,44 +2493,18 @@ export async function registerRoutes(
       const isCheckin = affirmatives.some(a => body.includes(a));
       
       if (isCheckin) {
-        await storage.createCheckin(user.id, "sms");
-        await storage.resetReminderState(user.id);
+        const result = await resolveCheckin(user.id, "sms");
         
-        const openIncident = await storage.getOpenIncident(user.id);
         const contacts = await storage.getContacts(user.id);
-        
-        if (openIncident) {
-          await storage.updateIncident(openIncident.id, {
-            status: "resolved",
-            resolvedAt: new Date(),
-          });
-          
-          const session = await storage.getActiveLocationSession(user.id);
-          if (session) {
-            await storage.endLocationSession(session.id);
-          }
-          
-          const contactsWithTokens = await storage.getContactTokensForUser(user.id);
-          const baseUrl = getBaseUrl();
-          console.log(`[SMS-CHECKIN] Notifying ${contactsWithTokens.length} contacts that user is OK...`);
-          for (const { contact, token } of contactsWithTokens) {
-            const normalizedContactPhone = normalizePhone(contact.phone);
-            const link = `${baseUrl}/emergency/${token}`;
-            await sendAllClearNotification(normalizedContactPhone, user.name, link);
-          }
-          await storage.revokeAllTokensForUser(user.id);
-          console.log(`[SMS-CHECKIN] All clear notifications sent, links revoked`);
-        }
-        
         const contactNames = contacts.map(c => c.name).join(", ");
         const hasContacts = contacts.length > 0;
         
         console.log(`[SMS-CHECKIN] Checkin recorded for user ***${normalized.slice(-4)}`);
         
         let replyMsg = `StillHere Confirmation\n\nHi ${user.name}, your safety checkin has been recorded successfully.`;
-        if (openIncident && hasContacts) {
+        if (result.hadIncident && hasContacts) {
           replyMsg += `\n\nYour emergency contact${contacts.length > 1 ? "s" : ""} (${contactNames}) ${contacts.length > 1 ? "have" : "has"} been notified that you are safe. The alert has been resolved.`;
-        } else if (openIncident) {
+        } else if (result.hadIncident) {
           replyMsg += `\n\nThe alert has been resolved.`;
         }
         replyMsg += `\n\nThank you for checking in. Stay safe.`;
@@ -3795,17 +3823,13 @@ export async function registerRoutes(
         const normalizedPhone = calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`;
         const user = await storage.getUserByPhone(normalizedPhone);
         if (user) {
-          await storage.createCheckin(user.id, "auto", {});
-          await storage.resetReminderState(user.id);
-          const incident = await storage.getOpenIncident(user.id);
-          if (incident) {
-            await storage.updateIncident(incident.id, { status: "resolved", resolvedAt: new Date() });
-            await storage.revokeAllTokensForUser(user.id);
-          }
-          console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call`);
+          const result = await resolveCheckin(user.id, "call");
+          console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
+        } else {
+          console.error(`[WELLNESS CALL] No user found for phone ${normalizedPhone.slice(-4)}`);
         }
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">You are now checked in.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You are now checked in and your emergency contacts have been notified that you are safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
@@ -3887,21 +3911,28 @@ export async function registerRoutes(
 
           if (wellnessCallEnabled) {
             try {
+              console.log(`[WELLNESS CALL] Attempting call to ${user.name} (phone: ***${user.phone.slice(-4)})`);
               const twilio = (await import("twilio")).default;
               const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
-              await client.calls.create({
+              const callResult = await client.calls.create({
                 to: user.phone,
                 from: process.env.TWILIO_PHONE_NUMBER!,
                 url: `${baseUrl}/api/wellness-call/respond`,
                 method: "POST",
               });
               timeline.push({ type: "call", time: timeStr, detail: "Automated wellness call placed" });
-              console.log(`[WELLNESS CALL] Call initiated to ${user.name}, waiting 2 min for response before alerting contacts`);
+              console.log(`[WELLNESS CALL] Call initiated to ${user.name} (SID: ${callResult.sid}), waiting 2 min for response`);
               wellnessCallPlaced = true;
-            } catch (err) {
-              timeline.push({ type: "call_failed", time: timeStr, detail: "Wellness call attempted but failed — proceeding to contact alert" });
-              console.error("[WELLNESS CALL] Call failed, falling through to contact alert:", err);
+            } catch (err: any) {
+              timeline.push({ type: "call_failed", time: timeStr, detail: `Wellness call failed: ${err?.message || "unknown error"} — proceeding to contact alert` });
+              console.error(`[WELLNESS CALL] Call FAILED for ${user.name}:`, err?.message || err);
             }
+          } else {
+            const reasons = [];
+            if (!(settings as any).autoWellnessCall) reasons.push("autoWellnessCall disabled");
+            if (!isTwilioConfigured()) reasons.push("Twilio not configured");
+            if (!user.phone) reasons.push("no phone number");
+            console.log(`[WELLNESS CALL] Skipped for ${user.name}: ${reasons.join(", ")}`);
           }
 
           if (wellnessCallPlaced) {

@@ -48,7 +48,8 @@ Key features include:
 - **App Ratings:** In-app 1-5 star rating prompt and feedback page displaying overall rating stats and anonymized reviews.
 - **Safety Timer (Dead Man's Switch):** A countdown timer for solo activities, triggering alerts to contacts if not dismissed, with GPS tracking throughout.
 - **Safe Walk/Ride:** Destination-based journey tracking with Google-powered route estimates, GPS tracking, and alerts if the user doesn't arrive on time.
-- **Automated Wellness Check Call:** An optional feature where Twilio calls the user if a check-in is missed, allowing them to confirm safety by pressing a key.
+- **Automated Wellness Check Call:** An optional feature where Twilio calls the user if a check-in is missed, allowing them to confirm safety by pressing a key. Uses unified `resolveCheckin(userId, method)` function for resolution.
+- **Unified Resolution Pipeline:** Single `resolveCheckin(userId, method)` function (`server/routes.ts`) handles ALL check-in resolution paths (app tap, SMS reply, phone call). Guarantees: creates checkin record, resets reminder state, resolves safety state (concern/quiet → active), resolves open incident, ends location session, sends SMS all-clear to emergency contacts, sends push recovery to watchers, emits socket `concern:resolved` event, revokes emergency tokens. Method labeling tracks resolution source ("app", "sms", "call") in logs and notifications. Per-contact error isolation prevents one SMS failure from blocking others.
 
 ### External Dependencies
 - **Location Search & Directions:** Google Maps Platform (Places API New, Routes API)
