@@ -196,7 +196,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         if (!data || !isValidUUID(data.senderId)) return;
         await storage.markMessagesRead(data.senderId, userId);
         io!.to(`user:${data.senderId}`).emit("message:read-receipt", { readBy: userId });
-      } catch {}
+      } catch (err: any) {
+        console.error(`[SOCKET] message:read failed for ${userId}:`, err?.message || err);
+      }
     });
 
     socket.on("typing:start", async (data: { receiverId: string }) => {
@@ -329,7 +331,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         await storage.updateCall(data.callId, { status: "ended", endedAt: new Date() });
         io!.to(`user:${data.targetUserId}`).emit("call:ended", { callId: data.callId });
         console.log(`[CALL] Call ${data.callId} ended`);
-      } catch {}
+      } catch (err: any) {
+        console.error(`[CALL] call:end failed for ${data?.callId}:`, err?.message || err);
+      }
     });
 
     socket.on("call:ice-restart", async (data: { targetUserId: string; offer: any }) => {
@@ -369,7 +373,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         await storage.updateCall(data.callId, { status: "missed", endedAt: new Date() });
         io!.to(`user:${data.callerId}`).emit("call:rejected", { callId: data.callId });
         console.log(`[CALL] Call ${data.callId} rejected`);
-      } catch {}
+      } catch (err: any) {
+        console.error(`[CALL] call:reject failed for ${data?.callId}:`, err?.message || err);
+      }
     });
 
     socket.on("disconnect", (reason) => {

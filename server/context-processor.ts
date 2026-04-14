@@ -88,7 +88,9 @@ async function resolvePlace(userId: string, lat: number, lng: number): Promise<s
         }
       }
     }
-  } catch {}
+  } catch (err: any) {
+    console.error(`[CONTEXT] Geofence lookup failed:`, err?.message || err);
+  }
 
   try {
     const key = process.env.GOOGLE_MAPS_API_KEY;
@@ -106,7 +108,9 @@ async function resolvePlace(userId: string, lat: number, lng: number): Promise<s
         if (best) return best.short_name;
       }
     }
-  } catch {}
+  } catch (err: any) {
+    console.error(`[CONTEXT] Reverse geocode failed:`, err?.message || err);
+  }
 
   return null;
 }

@@ -247,7 +247,9 @@ async function notifyContact(
         userName,
         reason,
       });
-    } catch {}
+    } catch (err: any) {
+      console.error(`[NOTIFY] Push/message to linked contact ${contact.name} failed:`, err?.message || err);
+    }
     console.log(`[NOTIFY] Also sent push notification to contact (in-app user)`);
   }
 }
@@ -358,7 +360,9 @@ export async function registerRoutes(
               await storage.linkContactToUser(contact.id, result.userId);
             }
           }
-        } catch {}
+        } catch (err: any) {
+          console.error(`[AUTH] Contact backfill failed for ${normalizedPhone}:`, err?.message || err);
+        }
       }
       
       res.json({
@@ -2667,7 +2671,9 @@ export async function registerRoutes(
               });
             });
           }
-        } catch {}
+        } catch (err: any) {
+          console.error(`[PLACES] Nearby places fetch failed for type:`, err?.message || err);
+        }
       }));
 
       res.json(results);
@@ -3000,7 +3006,9 @@ export async function registerRoutes(
             if (contact.email) {
               try {
                 await sendGeofenceEmail(contact.email, user?.name || "User", zone.name);
-              } catch {}
+              } catch (err: any) {
+                console.error(`[GEOFENCE] Email to ${contact.name} about zone ${zone.name} failed:`, err?.message || err);
+              }
             }
           }
         }
@@ -3520,7 +3528,9 @@ export async function registerRoutes(
             crashEvents: driveSess.filter(s => s.crashDetected).length,
           };
         }
-      } catch {}
+      } catch (err: any) {
+        console.error(`[REPORT] Driving stats aggregation failed:`, err?.message || err);
+      }
 
       const { format: fmtDate } = await import("date-fns");
 
@@ -4351,7 +4361,9 @@ export async function registerRoutes(
               if (result.sent > 0) {
                 locationWakeups++;
               }
-            } catch {}
+            } catch (err: any) {
+              console.error(`[CRON] Location wake-up push failed for ${share.userId}:`, err?.message || err);
+            }
           }
         }
         if (locationWakeups > 0) {
@@ -4402,7 +4414,11 @@ export async function registerRoutes(
                   await sendSms(contact.phone,
                     `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
                   );
-                } catch {}
+                } catch (err: any) {
+                  console.error(`[TIMER] SMS to ${contact.name} (***${contact.phone.slice(-4)}) failed:`, err?.message || err);
+                }
+              } else {
+                console.log(`[TIMER] Skipping SMS for ${contact.name}: no phone number`);
               }
               if (contact.email) {
                 try {
@@ -4411,7 +4427,9 @@ export async function registerRoutes(
                     `StillHere Alert: ${user.name}'s Safety Timer Expired`,
                     `${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
                   );
-                } catch {}
+                } catch (err: any) {
+                  console.error(`[TIMER] Email to ${contact.name} failed:`, err?.message || err);
+                }
               }
               allContactIds.push(contact.id);
             }
@@ -4462,10 +4480,14 @@ export async function registerRoutes(
                     data: { url: "/safe-walk" },
                   })
                 );
-              } catch {}
+              } catch (err: any) {
+                console.error(`[SAFE-WALK] Push notification failed for ${u.name}:`, err?.message || err);
+              }
             }
             console.log(`[CRON] Sent push notification to ${u.name} — safe walk overdue`);
-          } catch {}
+          } catch (err: any) {
+            console.error(`[SAFE-WALK] Push notification batch failed for ${u.name}:`, err?.message || err);
+          }
 
           if (u.phone && isTwilioConfigured()) {
             try {
@@ -4473,7 +4495,9 @@ export async function registerRoutes(
                 `StillHere: You haven't arrived${destInfo} yet. Are you OK? Open the app to confirm you're safe, or reply YES to this message.`
               );
               console.log(`[CRON] Sent SMS to ${u.name} — safe walk overdue`);
-            } catch {}
+            } catch (err: any) {
+              console.error(`[SAFE-WALK] Overdue SMS to ${u.name} failed:`, err?.message || err);
+            }
           }
         }
       } catch (err) {
@@ -4514,7 +4538,11 @@ export async function registerRoutes(
                   await sendSms(contact.phone,
                     `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
                   );
-                } catch {}
+                } catch (err: any) {
+                  console.error(`[SAFE-WALK] Escalation SMS to ${contact.name} (***${contact.phone.slice(-4)}) failed:`, err?.message || err);
+                }
+              } else {
+                console.log(`[SAFE-WALK] Skipping SMS for ${contact.name}: no phone number`);
               }
               if (contact.email) {
                 try {
@@ -4523,7 +4551,9 @@ export async function registerRoutes(
                     `StillHere Alert: ${user.name} Did Not Arrive${destInfo}`,
                     `${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
                   );
-                } catch {}
+                } catch (err: any) {
+                  console.error(`[SAFE-WALK] Escalation email to ${contact.name} failed:`, err?.message || err);
+                }
               }
               allContactIds.push(contact.id);
             }

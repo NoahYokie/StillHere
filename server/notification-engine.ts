@@ -81,10 +81,16 @@ export async function notifyConcern(
   }
 
   for (const contact of watcherContacts) {
-    if (!contact.linkedUserId) continue;
+    if (!contact.linkedUserId) {
+      console.log(`[NOTIFY] Concern skip: contact ${contact.name} not linked to an app user`);
+      continue;
+    }
 
     const key = getCooldownKey(contact.linkedUserId, "concern", userId);
-    if (isCoolingDown(key)) continue;
+    if (isCoolingDown(key)) {
+      console.log(`[NOTIFY] Concern cooldown: watcher=${contact.linkedUserId} for target=${userId} (skipping duplicate within ${COOLDOWN_MS / 1000}s)`);
+      continue;
+    }
 
     try {
       const sent = await deliverNotification(
@@ -124,10 +130,16 @@ export async function notifyRecovery(
   }
 
   for (const contact of watcherContacts) {
-    if (!contact.linkedUserId) continue;
+    if (!contact.linkedUserId) {
+      console.log(`[NOTIFY] Recovery skip: contact ${contact.name} not linked to an app user`);
+      continue;
+    }
 
     const key = getCooldownKey(contact.linkedUserId, "recovery", userId);
-    if (isCoolingDown(key)) continue;
+    if (isCoolingDown(key)) {
+      console.log(`[NOTIFY] Recovery cooldown: watcher=${contact.linkedUserId} for target=${userId} (skipping duplicate within ${COOLDOWN_MS / 1000}s)`);
+      continue;
+    }
 
     try {
       const sent = await deliverNotification(
@@ -161,10 +173,16 @@ export async function notifyArrival(
 
     try {
       const prefEnabled = await getArrivalPrefEnabled(contact.linkedUserId, userId);
-      if (!prefEnabled) continue;
+      if (!prefEnabled) {
+        console.log(`[NOTIFY] Arrival skip: watcher=${contact.linkedUserId} has arrival notifications disabled for ${userId}`);
+        continue;
+      }
 
       const key = getCooldownKey(contact.linkedUserId, "arrival", userId, placeName);
-      if (isCoolingDown(key)) continue;
+      if (isCoolingDown(key)) {
+        console.log(`[NOTIFY] Arrival cooldown: watcher=${contact.linkedUserId} for target=${userId} place=${placeName}`);
+        continue;
+      }
 
       const sent = await deliverNotification(
         contact.linkedUserId,
