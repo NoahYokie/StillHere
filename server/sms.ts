@@ -116,7 +116,7 @@ export async function sendMissedCheckinAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `STILLHERE SAFETY ALERT\n\n${userName} has not completed their scheduled safety checkin.\n\nPlease check on them and view their status:\n${link}\n\nIf you believe this is an emergency, please contact local emergency services.\n\nYou are receiving this message because you are registered as an emergency contact on StillHere.`;
+  const body = `StillHere Alert\n\nWe were unable to reach ${userName} after multiple attempts (push, SMS, and call).\n\nPlease check on them:\n${link}\n\nIf you cannot reach them, please contact local emergency services.`;
   return sendSms(contactPhone, body);
 }
 
@@ -177,8 +177,8 @@ export async function sendEscalationAlert(
 ): Promise<SendSmsResult> {
   const reasonText = reason === "sos"
     ? "activated an emergency SOS"
-    : "not completed their safety checkin";
-  const body = `STILLHERE ESCALATED ALERT\n\n${userName} has ${reasonText} and their primary emergency contact has not responded.\n\nYou are being contacted as a backup. Please respond urgently:\n${link}\n\nIf you cannot reach them, please contact local emergency services.\n\nYou are receiving this message because you are registered as an emergency contact on StillHere.`;
+    : "could not be reached after multiple attempts";
+  const body = `StillHere Alert\n\n${userName} has ${reasonText} and their primary emergency contact has not responded.\n\nPlease check on them urgently:\n${link}\n\nIf you cannot reach them, please contact local emergency services.`;
   return sendSms(contactPhone, body);
 }
 

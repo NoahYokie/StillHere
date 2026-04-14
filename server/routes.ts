@@ -149,6 +149,7 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
           const normalizedPhone = normalizePhone(contact.phone);
           const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, `${baseUrl}/`);
           smsSuccess++;
+          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
           console.log(`[ALL-CLEAR] Sent (fallback) to ${contact.name} (***${contact.phone.slice(-4)}), msgId=${allClearResult.messageId}`);
         } catch (err: any) {
           smsFailed++;
@@ -163,6 +164,7 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
           console.log(`[ALL-CLEAR] Sending to ${contact.name} (***${contact.phone.slice(-4)}), contactId=${contact.id}`);
           const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, link);
           smsSuccess++;
+          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
           console.log(`[ALL-CLEAR] SUCCESS to ${contact.name}, msgId=${allClearResult.messageId}`);
         } catch (err: any) {
           smsFailed++;
@@ -4301,14 +4303,15 @@ export async function registerRoutes(
         if (incident.status !== "open") continue;
 
         if (step === "push") {
+          console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress — step: push→sms", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
           const checkInLink = `${baseUrl}/`;
           if (user.phone) {
             await sendReminderSms(user.phone, checkInLink, !!userSettings?.smsCheckinEnabled);
-            existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user" });
+            existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user — still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: SMS sent to ${user.name} (***${user.phone.slice(-4)})`);
           } else {
             await sendReminderPush(user.id, user.name);
-            existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent (no phone)" });
+            existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent (no phone) — still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: Push sent to ${user.name} (no phone for SMS)`);
           }
           await storage.updateIncident(incident.id, {
@@ -4322,6 +4325,7 @@ export async function registerRoutes(
         }
 
         if (step === "sms") {
+          console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress — step: sms→call", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
           const autoWellnessCallFlag = !!(userSettings as any)?.autoWellnessCall;
           const twilioReady = isTwilioConfigured();
           const hasPhone = !!user.phone;
@@ -4389,10 +4393,10 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === firstContact.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`[ESCALATION] Notifying Contact #${firstContact.priority}: ${firstContact.name}`);
+              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted — emergency contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -4417,10 +4421,10 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === firstContact.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`[ESCALATION] Call unanswered — notifying Contact #${firstContact.priority}: ${firstContact.name}`);
+              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted — emergency contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -4466,7 +4470,7 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === nextSequential.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(`[ESCALATION] Escalating to Contact #${nextSequential.priority}: ${nextSequential.name}`);
+              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: nextSequential.name, reason: incident.reason, userId: user.id, step: `escalation_contact_${notifiedIds.length + 1}`, timestamp: timeStr }));
               const reason = incident.reason as "sos" | "missed_checkin";
               await notifyContact(nextSequential, user.name, link, reason, (p, n, l) => sendEscalationAlert(p, n, l, reason));
             }
