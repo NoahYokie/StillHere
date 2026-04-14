@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft, MessageSquare, Phone, CheckCircle2, AlertTriangle, Clock,
-  Shield, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2, Car,
+  Shield, ShieldCheck, ShieldAlert, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2, Car,
   MapPin,
 } from "lucide-react";
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
@@ -339,6 +339,8 @@ export default function WatchedPage() {
             )}
           </div>
 
+          <WeeklyReportPanel userId={user.userId} />
+
           <div className="flex gap-2 mt-2">
             <Button
               variant="outline"
@@ -348,7 +350,7 @@ export default function WatchedPage() {
               data-testid={`button-report-${user.userId}`}
             >
               <FileText className="w-4 h-4 mr-1.5" />
-              Safety Report
+              Full Report
             </Button>
             <Button
               variant="outline"
@@ -622,6 +624,152 @@ function NotificationToggle({ userId }: { userId: string }) {
         disabled={mutation.isPending}
         data-testid={`toggle-arrival-notif-${userId}`}
       />
+    </div>
+  );
+}
+
+interface WatcherWeeklyReport {
+  summaryTone: "good" | "mixed" | "concern";
+  summary: string;
+  timeline: { text: string; time: string }[];
+  weekStart: string;
+  weekEnd: string;
+  totalCheckins: number;
+  userName: string;
+}
+
+const weeklyToneConfig = {
+  good: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/30",
+    border: "border-emerald-200 dark:border-emerald-800",
+    accent: "text-emerald-700 dark:text-emerald-400",
+    iconBg: "bg-emerald-100 dark:bg-emerald-900/50",
+    icon: ShieldCheck,
+    label: "All Clear",
+    dot: "bg-emerald-500",
+  },
+  mixed: {
+    bg: "bg-amber-50 dark:bg-amber-950/30",
+    border: "border-amber-200 dark:border-amber-800",
+    accent: "text-amber-700 dark:text-amber-400",
+    iconBg: "bg-amber-100 dark:bg-amber-900/50",
+    icon: Shield,
+    label: "Some Activity",
+    dot: "bg-amber-500",
+  },
+  concern: {
+    bg: "bg-red-50 dark:bg-red-950/30",
+    border: "border-red-200 dark:border-red-800",
+    accent: "text-red-700 dark:text-red-400",
+    iconBg: "bg-red-100 dark:bg-red-900/50",
+    icon: ShieldAlert,
+    label: "Needs Attention",
+    dot: "bg-red-500",
+  },
+};
+
+function getWeeklyTimelineIcon(text: string) {
+  if (text.includes("SOS") || text.includes("Crash")) return AlertTriangle;
+  if (text.includes("Missed") || text.includes("expired") || text.includes("Late")) return Clock;
+  if (text.includes("Arrived") || text.includes("Left")) return MapPin;
+  if (text.includes("Confirmed") || text.includes("Resolved")) return CheckCircle2;
+  return Shield;
+}
+
+function getWeeklyTimelineColor(text: string) {
+  if (text.includes("SOS") || text.includes("Crash")) return "text-red-500";
+  if (text.includes("Missed") || text.includes("expired") || text.includes("Late") || text.includes("Awaiting")) return "text-amber-500";
+  if (text.includes("Arrived") || text.includes("Left") || text.includes("trip")) return "text-blue-500";
+  if (text.includes("Confirmed") || text.includes("Resolved")) return "text-emerald-500";
+  return "text-gray-500";
+}
+
+function WeeklyReportPanel({ userId }: { userId: string }) {
+  const { data: report, isLoading } = useQuery<WatcherWeeklyReport>({
+    queryKey: ["/api/reports", userId, "weekly"],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/${userId}/weekly`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="py-2 mt-2 flex justify-center">
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!report) return null;
+
+  const tone = weeklyToneConfig[report.summaryTone];
+  const ToneIcon = tone.icon;
+  const weekStart = new Date(report.weekStart);
+  const weekEnd = new Date(report.weekEnd);
+  const dateRange = `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+
+  return (
+    <div className={`rounded-xl border ${tone.border} ${tone.bg} p-3 mt-2`} data-testid={`panel-weekly-report-${userId}`}>
+      <div className="flex items-start gap-3 mb-2">
+        <div className={`p-2 rounded-lg ${tone.iconBg} shrink-0`}>
+          <ToneIcon className={`w-5 h-5 ${tone.accent}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-xs font-semibold uppercase tracking-wide ${tone.accent}`} data-testid={`text-weekly-tone-${userId}`}>
+              {tone.label}
+            </span>
+            <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+            <span className="text-[11px] text-muted-foreground ml-auto">{dateRange}</span>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground" data-testid={`text-weekly-summary-${userId}`}>
+            {report.summary}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+        <span>{report.totalCheckins} check-in{report.totalCheckins !== 1 ? "s" : ""} this week</span>
+      </div>
+
+      {report.timeline.length > 0 && (
+        <div className="space-y-0 mt-2">
+          {report.timeline.slice(0, 5).map((item, i) => {
+            const Icon = getWeeklyTimelineIcon(item.text);
+            const colorClass = getWeeklyTimelineColor(item.text);
+            const isLast = i === Math.min(report.timeline.length, 5) - 1;
+            return (
+              <div key={i} className="flex gap-2" data-testid={`weekly-timeline-${userId}-${i}`}>
+                <div className="flex flex-col items-center">
+                  <div className="p-1 rounded bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+                    <Icon className={`w-3 h-3 ${colorClass}`} />
+                  </div>
+                  {!isLast && <div className="w-px h-full min-h-[20px] bg-gray-200 dark:bg-gray-700 my-0.5" />}
+                </div>
+                <div className="pb-2 min-w-0">
+                  <p className="text-xs font-medium text-foreground leading-snug">{item.text}</p>
+                  <p className="text-[11px] text-muted-foreground">{item.time}</p>
+                </div>
+              </div>
+            );
+          })}
+          {report.timeline.length > 5 && (
+            <p className="text-[11px] text-muted-foreground text-center pt-1">
+              +{report.timeline.length - 5} more event{report.timeline.length - 5 !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
+      )}
+
+      {report.timeline.length === 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+          <span>A quiet week, no events to report</span>
+        </div>
+      )}
     </div>
   );
 }

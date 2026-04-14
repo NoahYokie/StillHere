@@ -99,7 +99,7 @@ export default function WeeklyReportPage() {
 
   const weekStart = new Date(report.weekStart);
   const weekEnd = new Date(report.weekEnd);
-  const dateRange = `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} — ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  const dateRange = `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -188,7 +188,7 @@ export default function WeeklyReportPage() {
           <div className="text-center py-8 space-y-2">
             <CheckCircle2 className="w-10 h-10 text-emerald-300 dark:text-emerald-700 mx-auto" />
             <p className="text-sm text-gray-400 dark:text-gray-500">
-              A quiet week — no events to report
+              A quiet week, no events to report
             </p>
           </div>
         )}
