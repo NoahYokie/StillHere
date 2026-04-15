@@ -24,9 +24,41 @@ import { getViewerTimezone, formatDualTime, formatTimeForViewer, shouldShowDualT
 import { useToast } from "@/hooks/use-toast";
 import { getWatcherInsight, getDeviceInfo, getEtaInfo, ConnectionBadge, LocationBadge, BatteryBadge, ConfidenceBadge, EtaBadge, TrustIndicator } from "@/components/watcher-status";
 import { ConcernTimelinePanel } from "@/components/concern-resolution";
+import { Hand } from "lucide-react";
 
 interface RemovedContact extends Contact {
   ownerName: string;
+}
+
+function ClaimButton({ incidentId, userId }: { incidentId: string; userId: string }) {
+  const { toast } = useToast();
+  const claimMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/incidents/${incidentId}/claim`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      toast({ title: "You've got this", description: "Other guardians have been notified you're handling it." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not claim", description: err.message || "Someone else may already be handling this.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Button
+      variant="default"
+      size="sm"
+      className="w-full mb-2 bg-primary"
+      onClick={() => claimMutation.mutate()}
+      disabled={claimMutation.isPending}
+      data-testid={`button-claim-${userId}`}
+    >
+      <Hand className="w-4 h-4 mr-1.5" />
+      {claimMutation.isPending ? "Claiming..." : "I've got this"}
+    </Button>
+  );
 }
 
 export default function WatchedPage() {
@@ -262,6 +294,12 @@ export default function WatchedPage() {
             >
               <div className="flex items-center gap-2">
                 <h3 className="font-medium truncate" data-testid={`text-user-name-${user.userId}`}>{user.userName}</h3>
+                {user.circleRole && (
+                  <Badge variant="outline" className="text-[10px] capitalize shrink-0" data-testid={`badge-role-${user.userId}`}>{user.circleRole}</Badge>
+                )}
+                {user.isInLearningMode && (
+                  <Badge variant="secondary" className="text-[10px] shrink-0">Learning</Badge>
+                )}
                 {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
               </div>
               <p className={`text-sm font-medium mt-0.5 ${insight.iconColor}`} data-testid={`text-headline-${user.userId}`}>
@@ -281,7 +319,21 @@ export default function WatchedPage() {
           <ConfidenceBadge device={device} />
 
           {(insight.trustLevel === "worried" || user.safetyState === "concern") && (
-            <ConcernTimelinePanel userId={user.userId} isWatcher={true} />
+            <>
+              {user.incidentIsDrill && (
+                <div className="mb-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 text-xs text-blue-700 dark:text-blue-300 text-center" data-testid={`banner-drill-${user.userId}`}>
+                  This is a safety drill. No real emergency.
+                </div>
+              )}
+              {user.incidentClaimedBy ? (
+                <div className="mb-2 p-2 rounded bg-green-50 dark:bg-green-950/30 text-xs text-green-700 dark:text-green-300 text-center" data-testid={`text-claimed-${user.userId}`}>
+                  {user.incidentClaimedBy} is handling this now. No action needed from you.
+                </div>
+              ) : user.hasOpenIncident && user.incidentId ? (
+                <ClaimButton incidentId={user.incidentId} userId={user.userId} />
+              ) : null}
+              <ConcernTimelinePanel userId={user.userId} isWatcher={true} />
+            </>
           )}
 
           {isExpanded && (

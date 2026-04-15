@@ -495,6 +495,9 @@ export default function SettingsPage() {
                           <p className="text-xs text-muted-foreground truncate">{contact.phone}</p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 capitalize" data-testid={`badge-role-${index}`}>
+                            {index === 0 ? "Primary" : index === 1 ? "Backup" : "Support"}
+                          </span>
                           {linkedUserId ? (
                             <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5" data-testid={`badge-on-stillhere-${index}`}>
                               On StillHere
@@ -511,7 +514,7 @@ export default function SettingsPage() {
                       <div className="p-3 space-y-2">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs font-medium text-muted-foreground">
-                            {index === 0 ? "Primary contact" : `Contact ${index + 1}`}
+                            {index === 0 ? "Primary Guardian" : index === 1 ? "Backup Guardian" : "Support"}
                           </Label>
                           <div className="flex items-center gap-1">
                             {contactEntries.length > 1 && index > 0 && (

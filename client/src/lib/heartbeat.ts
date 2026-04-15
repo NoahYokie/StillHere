@@ -1,10 +1,11 @@
 import { getCurrentPosition } from "./location-service";
 
-const HEARTBEAT_INTERVAL_MS = 60_000;
+const DEFAULT_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = 300_000;
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let consecutiveFailures = 0;
+let currentIntervalMs = DEFAULT_INTERVAL_MS;
 
 async function getBatteryInfo(): Promise<{ level: number; charging: boolean } | null> {
   try {
@@ -29,6 +30,20 @@ function getNetworkType(): string | null {
     return navigator.onLine ? "online" : "offline";
   } catch {}
   return null;
+}
+
+function getAdaptiveInterval(battery: { level: number; charging: boolean } | null): number {
+  if (!battery) return DEFAULT_INTERVAL_MS;
+  if (battery.level < 0.10 && !battery.charging) return 300_000;
+  if (battery.level < 0.30 && !battery.charging) return 120_000;
+  return DEFAULT_INTERVAL_MS;
+}
+
+function reschedule(newIntervalMs: number): void {
+  if (newIntervalMs === currentIntervalMs || intervalId === null) return;
+  currentIntervalMs = newIntervalMs;
+  clearInterval(intervalId);
+  intervalId = setInterval(sendHeartbeat, currentIntervalMs);
 }
 
 async function sendHeartbeat(): Promise<void> {
@@ -61,6 +76,8 @@ async function sendHeartbeat(): Promise<void> {
     });
     if (res.ok) {
       consecutiveFailures = 0;
+      const adaptiveMs = getAdaptiveInterval(battInfo);
+      reschedule(adaptiveMs);
     } else {
       consecutiveFailures++;
       console.warn(`[Heartbeat] send failed (count: ${consecutiveFailures}) HTTP ${res.status}`);
@@ -74,8 +91,9 @@ async function sendHeartbeat(): Promise<void> {
 export function startHeartbeat(): void {
   if (intervalId !== null) return;
   consecutiveFailures = 0;
+  currentIntervalMs = DEFAULT_INTERVAL_MS;
   sendHeartbeat();
-  intervalId = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+  intervalId = setInterval(sendHeartbeat, currentIntervalMs);
 }
 
 export function stopHeartbeat(): void {

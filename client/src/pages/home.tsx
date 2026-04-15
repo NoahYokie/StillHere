@@ -26,6 +26,7 @@ import { createFallDetector, isDeviceMotionSupported, requestMotionPermission } 
 import { drivingMonitor } from "@/lib/driving-monitor";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
+import { ProtectionPanel, GuardianViewPreview, SafetyDrillButton, LearningModeCard } from "@/components/protection-panel";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -721,6 +722,8 @@ export default function Home() {
           <ConcernTimelinePanel userId={status.user.id} isWatcher={false} />
         )}
 
+        <ProtectionPanel />
+
         <Card>
           <CardContent className="pt-6 text-center">
             <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
@@ -815,6 +818,11 @@ export default function Home() {
             </div>
             <span className="font-medium text-xs text-foreground">Report</span>
           </button>
+        </div>
+
+        <div className="space-y-3">
+          <GuardianViewPreview />
+          <SafetyDrillButton />
         </div>
 
         <div className="space-y-3">

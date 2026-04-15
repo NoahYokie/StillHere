@@ -294,9 +294,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const learningEnd = new Date();
+    learningEnd.setDate(learningEnd.getDate() + 30);
+    const [user] = await db.insert(users).values({
+      ...insertUser,
+      learningModeUntil: learningEnd,
+    }).returning();
     
-    // Create default settings
     await db.insert(settings).values({
       userId: user.id,
       checkinIntervalHours: 24,
@@ -1184,6 +1188,22 @@ export class DatabaseStorage implements IStorage {
 
       const activeWalk = await this.getActiveSafeWalk(user.id);
 
+      const mode = (user.sharingMode as "precise" | "area" | "presence" | "paused") || "precise";
+      const isConcern = user.safetyState === "concern";
+      const hideLocation = (mode === "presence" || mode === "paused") && !isConcern;
+      const isLearning = user.learningModeUntil ? new Date() < user.learningModeUntil : false;
+
+      let claimedByName: string | null = null;
+      if (openIncident?.claimedByContactId) {
+        const claimContact = await this.getContact(openIncident.claimedByContactId);
+        if (claimContact?.linkedUserId) {
+          const claimUser = await this.getUser(claimContact.linkedUserId);
+          claimedByName = claimUser?.name || claimContact.name;
+        } else if (claimContact) {
+          claimedByName = claimContact.name;
+        }
+      }
+
       result.push({
         userId: user.id,
         userName: user.name,
@@ -1192,21 +1212,28 @@ export class DatabaseStorage implements IStorage {
         nextCheckinDue,
         hasOpenIncident: !!openIncident,
         incidentReason: openIncident?.reason || null,
+        incidentId: openIncident?.id || null,
+        incidentClaimedBy: claimedByName,
+        incidentClaimedAt: openIncident?.claimedAt || null,
+        incidentIsDrill: openIncident?.isDrill || false,
         contactId: contact.id,
+        circleRole: (contact.circleRole as "primary" | "backup" | "support") || "primary",
         safetyState: user.safetyState as "active" | "quiet" | "concern" | null,
         safetyStateReason: user.safetyStateReason || null,
         safetyStateChangedAt: user.safetyStateChangedAt || null,
+        sharingMode: mode,
         lastHeartbeatAt: user.lastHeartbeatAt || null,
-        lastHeartbeatLat: user.lastHeartbeatLat || null,
-        lastHeartbeatLng: user.lastHeartbeatLng || null,
-        lastHeartbeatAcc: user.lastHeartbeatAcc || null,
-        lastLocationAt,
-        lastLocationLat,
-        lastLocationLng,
+        lastHeartbeatLat: hideLocation ? null : (user.lastHeartbeatLat || null),
+        lastHeartbeatLng: hideLocation ? null : (user.lastHeartbeatLng || null),
+        lastHeartbeatAcc: hideLocation ? null : (user.lastHeartbeatAcc || null),
+        lastLocationAt: hideLocation ? null : lastLocationAt,
+        lastLocationLat: hideLocation ? null : lastLocationLat,
+        lastLocationLng: hideLocation ? null : lastLocationLng,
         batteryLevel: user.batteryLevel ?? null,
         batteryCharging: user.batteryCharging ?? null,
         networkType: user.networkType ?? null,
         lastDeviceStatusAt: user.lastDeviceStatusAt ?? null,
+        isInLearningMode: isLearning,
         activeSafeWalk: activeWalk ? {
           destinationName: activeWalk.destinationName,
           expectedArrivalAt: activeWalk.expectedArrivalAt,

@@ -392,10 +392,17 @@ export function BatteryBadge({ device }: { device: DeviceInfo }) {
     bg = "bg-amber-50 dark:bg-amber-950/30";
   }
 
+  let contextHint = "";
+  if (device.batteryIcon === "critical") {
+    contextHint = " . Updates reduced to save battery.";
+  } else if (device.batteryIcon === "low") {
+    contextHint = " . Updates may be less frequent.";
+  }
+
   return (
     <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${bg}`} data-testid="badge-battery">
       <Icon className={`w-3.5 h-3.5 ${color}`} />
-      <span className="text-xs text-muted-foreground">{device.batteryText}</span>
+      <span className="text-xs text-muted-foreground">{device.batteryText}{contextHint}</span>
     </div>
   );
 }

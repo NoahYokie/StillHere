@@ -1,0 +1,368 @@
+Task 11.2 — Dignity, Trust, and Guardian Readiness Core
+
+We have alignment on the next build.
+
+This task is not about adding more “tracking.”
+It is about removing the three biggest uninstall triggers:
+
+1. false alarm
+2. feeling watched instead of protected
+3. confusion during the first real incident
+
+Build this as a user-first safety system, not a monitoring tool.
+
+---
+
+# 🎯 OBJECTIVE
+
+Make StillHere feel like:
+
+* quiet protection
+* clear control
+* guided response
+
+Not:
+
+* surveillance
+* battery drain
+* panic at the worst moment
+
+---
+
+# PART 1 — OBSERVABILITY / SAFE-START GUARD
+
+## 1. Learning mode for first 30 days
+
+For all new accounts, add a 30-day `learning_mode` / equivalent.
+
+### During learning mode:
+
+The system may use only:
+
+* missed check-in
+* SOS
+* crash detection
+* hard heartbeat silence threshold
+
+### During learning mode, do NOT use:
+
+* “unusual for you”
+* routine deviation
+* pattern-based concern language
+* inferred behavioral changes
+
+This is non-negotiable.
+
+If the system does not know, it must not pretend to know.
+
+---
+
+## 2. Sleep protection
+
+Add `sleep_start` and `sleep_end` user settings.
+
+Default:
+
+* 10:30 PM to 7:00 AM local user time
+
+### Rule:
+
+During sleep hours, suppress Quiet Companion probes and low-confidence watcher nudges for non-emergency events.
+
+Exceptions:
+
+* SOS
+* crash detection
+* explicit emergency
+* severe prolonged silence beyond a deeper threshold if applicable
+
+The app must not wake families for normal night silence.
+
+---
+
+# PART 2 — USER CONTROL / ANTI-SURVEILLANCE LAYER
+
+## 3. Your Protection panel (home screen, not buried in settings)
+
+Add a visible home-screen panel for the protected user.
+
+It must show:
+
+* who is currently in their Safety Circle / watching
+* what those people can currently see
+* the current sharing mode
+
+Examples:
+
+* “You’re sharing your safety with 2 people”
+* “They can currently see: your precise location + safety status”
+
+### Required control options:
+
+* Precise location
+* Area only / neighborhood-level
+* Presence only
+* Pause sharing
+
+### Required line:
+
+* “You decide what they can see.”
+
+This line matters. It should be visible.
+
+---
+
+## 4. “See my Guardian’s view”
+
+Add a one-tap way for the protected user to preview exactly what the watcher currently sees.
+
+This must be a synchronized mirror of the current watcher view, not a generic mockup.
+
+The goal:
+
+* no surprises
+* no shadow tracking fear
+* trust through transparency
+
+---
+
+## 5. Presence-only mode
+
+Implement a privacy mode / presence-only mode.
+
+### In this mode:
+
+Watchers do NOT get precise map data during normal safe states.
+
+Watcher sees only:
+
+* Active
+* Quiet
+* Concern
+* confidence / trust messaging where appropriate
+
+### Important exception:
+
+If safety_state becomes `concern`, the map/location may unlock for the duration of the incident so the system can actually help.
+
+### API behavior:
+
+When presence-only mode is active and safety_state is not concern:
+
+* do not send lat/lng to watcher-facing endpoints
+* return only safety/status/confidence payload needed for the watcher experience
+
+This is a major differentiator. Build it cleanly.
+
+---
+
+# PART 3 — BATTERY / RESOURCE TRUST
+
+## 6. Adaptive tracking / anti-parasitic drain
+
+Implement adaptive heartbeat / location behavior to reduce the “this app is draining my phone” feeling.
+
+### Rules:
+
+* Stationary + on power: low-frequency heartbeat
+* Stationary + battery okay: reduced frequency
+* Moving: higher frequency
+* Critical battery (<10%): minimal / significant-change-only style behavior if supported
+
+If platform limits apply, degrade honestly.
+
+### Watcher-facing transparency:
+
+When battery or power-saving mode changes tracking behavior, show plain-language context like:
+
+* “Battery is low — updates are reduced to help keep the phone alive.”
+* “Sarah is stationary — location updates are paused to save battery.”
+
+Do not make the app feel parasitic.
+
+---
+
+# PART 4 — SETUP CONFIRMATION / FIRST-WEEK TRUST
+
+## 7. Setup confirmation handshake
+
+After onboarding and permission verification, create a setup confirmation moment.
+
+### Protected user sees:
+
+* “You’re protected. [Watcher name] is now watching over you.”
+
+### Watcher sees:
+
+* “[Name] just set up StillHere. You’re now their Primary Guardian.”
+
+This should happen immediately once protection is actually active.
+
+The goal:
+
+* remove “Did I set this up right?”
+* establish trust before the first real incident
+
+---
+
+## 8. Learning-mode onboarding screen
+
+Add a clear onboarding screen explaining the first weeks.
+
+Suggested meaning:
+
+* StillHere is getting to know your routine
+* it may check in occasionally while it learns
+* your Safety Circle won’t be alerted unless something is genuinely serious
+
+This should make the user feel like they are training a guardian, not being judged by a half-trained algorithm.
+
+---
+
+# PART 5 — GUARDIAN READINESS / THIRD UNINSTALL FIX
+
+## 9. Guardian briefing on addition
+
+Whenever someone is added as a Primary / Backup / Support person, give them a clear explanation of what that means.
+
+Example meaning:
+
+* “You’ve been added as [Name]’s Primary Guardian.”
+* “If we can’t reach them, you’ll be the first person we contact.”
+* “We’ll guide you if anything ever needs your attention.”
+
+Most important line:
+
+* “You won’t need to figure anything out — we’ll guide you.”
+
+This should be shown proactively, not buried.
+
+---
+
+## 10. Action-first incident language
+
+During real incidents, any alert to the Safety Circle must contain a single clear action or a clear instruction to wait.
+
+Not vague information only.
+
+Examples:
+
+* “We haven’t heard from Sarah. Tap here to try reaching her.”
+* “We’re still trying to reach Sarah. No action needed yet.”
+* “Mum is handling this now — no action needed from others.”
+
+Do not leave people wondering what they are supposed to do.
+
+---
+
+## 11. Safety Circle dry run / test drill
+
+Build a test feature that lets the user simulate an incident with their Safety Circle.
+
+Suggested label:
+
+* “Test my Safety Circle”
+  or
+* “Run a safety check”
+
+### Goal:
+
+* show the user what happens
+* show the Guardian what they would receive
+* let both sides experience the flow once before it matters
+
+This should be clearly labeled as a test.
+No real panic.
+No real escalation to emergency authorities.
+No confusing fake alarms.
+
+This is a major trust builder and a category-level differentiator.
+
+---
+
+# PART 6 — SAFETY CIRCLE COORDINATION (LIGHT VERSION)
+
+## 12. Primary / Backup / Support
+
+Add the Safety Circle structure with plain labels:
+
+* Primary — first person we contact
+* Backup — next if Primary is unavailable
+* Support — kept informed if things become serious
+
+Keep setup simple.
+
+---
+
+## 13. “I’ve got this” / claim flow
+
+When a real incident reaches the circle, the first relevant responder should be able to claim it.
+
+### Behavior:
+
+If Primary taps “I’ve got this,” others see:
+
+* “[Primary name] is handling this now.”
+* “No action needed from others.”
+
+This must reduce family chaos, not create more dashboard complexity.
+
+Keep the UI minimal and human.
+
+---
+
+# PART 7 — STILLHERE VOICE RULES (USE THROUGHOUT THIS TASK)
+
+All new copy in this task must follow these principles:
+
+Tone:
+
+* calm
+* caring
+* quietly in control
+
+Rules:
+
+* use the person’s first name
+* no technical jargon
+* no fear tactics
+* no manipulative permission language
+* max 2 sentences in notifications
+* if something is happening, say what the system is doing about it
+
+Examples:
+
+* “Sarah’s okay — she just confirmed she’s safe.”
+* “It’s been quiet, so we checked in.”
+* “You’re protected. Mum is now watching over you.”
+
+---
+
+# REQUIRED OUTPUT
+
+After completion, report back with:
+
+1. How learning mode is implemented
+2. How sleep protection works
+3. What the Your Protection panel shows
+4. How presence-only mode filters watcher payloads
+5. How adaptive tracking behaves
+6. What setup confirmation messages look like
+7. What the Guardian briefing says
+8. How the Safety Circle dry run works
+9. How “I’ve got this” is implemented
+10. Any platform limitations found, especially on iPhone/PWA/native boundaries
+
+---
+
+# IMPORTANT
+
+This task is about dignity and trust.
+
+StillHere should never feel like:
+
+* “someone is watching me”
+
+It should feel like:
+
+* “someone has my back”

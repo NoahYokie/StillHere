@@ -14,6 +14,8 @@ export const callStatusEnum = pgEnum("call_status", ["ringing", "active", "ended
 export const callTypeEnum = pgEnum("call_type", ["video", "audio"]);
 export const reportFrequencyEnum = pgEnum("report_frequency", ["daily", "weekly", "fortnightly", "monthly"]);
 export const safetyStateEnum = pgEnum("safety_state", ["active", "quiet", "concern"]);
+export const sharingModeEnum = pgEnum("sharing_mode", ["precise", "area", "presence", "paused"]);
+export const circleRoleEnum = pgEnum("circle_role", ["primary", "backup", "support"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -34,6 +36,11 @@ export const users = pgTable("users", {
   safetyState: safetyStateEnum("safety_state").notNull().default("active"),
   safetyStateReason: text("safety_state_reason").notNull().default("No heartbeat yet"),
   safetyStateChangedAt: timestamp("safety_state_changed_at").defaultNow().notNull(),
+  learningModeUntil: timestamp("learning_mode_until"),
+  sleepStart: text("sleep_start").notNull().default("22:30"),
+  sleepEnd: text("sleep_end").notNull().default("07:00"),
+  sharingMode: sharingModeEnum("sharing_mode").notNull().default("precise"),
+  setupConfirmedAt: timestamp("setup_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -85,6 +92,7 @@ export const contacts = pgTable("contacts", {
   email: text("email"),
   priority: integer("priority").notNull(),
   canViewLocation: boolean("can_view_location").notNull().default(true),
+  circleRole: circleRoleEnum("circle_role").notNull().default("primary"),
   linkedUserId: uuid("linked_user_id").references(() => users.id),
   softDeletedAt: timestamp("soft_deleted_at"),
   softDeletedBy: text("soft_deleted_by"),
@@ -160,6 +168,9 @@ export const incidents = pgTable("incidents", {
   smsSentAt: timestamp("sms_sent_at"),
   callSentAt: timestamp("call_sent_at"),
   lastEscalationStep: text("last_escalation_step"),
+  claimedByContactId: uuid("claimed_by_contact_id").references(() => contacts.id),
+  claimedAt: timestamp("claimed_at"),
+  isDrill: boolean("is_drill").notNull().default(false),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),
@@ -925,10 +936,16 @@ export interface WatchedUser {
   nextCheckinDue: Date;
   hasOpenIncident: boolean;
   incidentReason: string | null;
+  incidentId: string | null;
+  incidentClaimedBy: string | null;
+  incidentClaimedAt: Date | null;
+  incidentIsDrill: boolean;
   contactId: string;
+  circleRole: "primary" | "backup" | "support";
   safetyState: "active" | "quiet" | "concern" | null;
   safetyStateReason: string | null;
   safetyStateChangedAt: Date | null;
+  sharingMode: "precise" | "area" | "presence" | "paused";
   lastHeartbeatAt: Date | null;
   lastHeartbeatLat: number | null;
   lastHeartbeatLng: number | null;
@@ -940,6 +957,7 @@ export interface WatchedUser {
   batteryCharging: boolean | null;
   networkType: string | null;
   lastDeviceStatusAt: Date | null;
+  isInLearningMode: boolean;
   activeSafeWalk: {
     destinationName: string | null;
     expectedArrivalAt: Date;

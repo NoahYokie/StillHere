@@ -6,8 +6,8 @@ import { processLocationContext, getUserContext, getRecentContextEvents } from "
 import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
-import { eq, and, lt, gte, desc } from "drizzle-orm";
-import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents } from "@shared/schema";
+import { eq, and, lt, gte, desc, isNull } from "drizzle-orm";
+import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -1165,6 +1165,251 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/sharing-mode", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { mode } = req.body;
+      if (!["precise", "area", "presence", "paused"].includes(mode)) {
+        return res.status(400).json({ error: "Invalid sharing mode" });
+      }
+      const user = await storage.updateUser(userId, { sharingMode: mode } as any);
+      res.json({ success: true, sharingMode: user.sharingMode });
+    } catch (error) {
+      console.error("Error updating sharing mode:", error);
+      res.status(500).json({ error: "Failed to update sharing mode" });
+    }
+  });
+
+  app.post("/api/sleep-hours", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { sleepStart, sleepEnd } = req.body;
+      if (!sleepStart || !sleepEnd) return res.status(400).json({ error: "sleepStart and sleepEnd required" });
+      const user = await storage.updateUser(userId, { sleepStart, sleepEnd } as any);
+      res.json({ success: true, sleepStart: user.sleepStart, sleepEnd: user.sleepEnd });
+    } catch (error) {
+      console.error("Error updating sleep hours:", error);
+      res.status(500).json({ error: "Failed to update sleep hours" });
+    }
+  });
+
+  app.get("/api/my-protection", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const userContacts = await storage.getContacts(userId);
+      const watchers = userContacts.filter(c => !c.softDeletedAt).map(c => ({
+        id: c.id,
+        name: c.name,
+        circleRole: c.circleRole || "primary",
+        linkedUserId: c.linkedUserId,
+      }));
+      const isLearning = user.learningModeUntil ? new Date() < user.learningModeUntil : false;
+      const learningDaysLeft = isLearning && user.learningModeUntil
+        ? Math.ceil((user.learningModeUntil.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+      res.json({
+        sharingMode: user.sharingMode || "precise",
+        watchers,
+        sleepStart: user.sleepStart || "22:30",
+        sleepEnd: user.sleepEnd || "07:00",
+        isLearning,
+        learningDaysLeft,
+        setupConfirmed: !!user.setupConfirmedAt,
+      });
+    } catch (error) {
+      console.error("Error fetching protection info:", error);
+      res.status(500).json({ error: "Failed to fetch protection info" });
+    }
+  });
+
+  app.get("/api/guardian-view-preview", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const userSettings = await storage.getSettings(userId);
+      const lastCheckin = await storage.getLastCheckin(userId);
+      const openIncident = await storage.getOpenIncident(userId);
+      const mode = (user.sharingMode as string) || "precise";
+      const hideLocation = (mode === "presence" || mode === "paused") && user.safetyState !== "concern";
+      res.json({
+        userName: user.name,
+        safetyState: user.safetyState,
+        safetyStateReason: user.safetyStateReason,
+        sharingMode: mode,
+        lastCheckinAt: lastCheckin?.createdAt || null,
+        hasOpenIncident: !!openIncident,
+        lastHeartbeatAt: user.lastHeartbeatAt || null,
+        lastHeartbeatLat: hideLocation ? null : (user.lastHeartbeatLat || null),
+        lastHeartbeatLng: hideLocation ? null : (user.lastHeartbeatLng || null),
+        batteryLevel: user.batteryLevel ?? null,
+        batteryCharging: user.batteryCharging ?? null,
+        networkType: user.networkType ?? null,
+      });
+    } catch (error) {
+      console.error("Error fetching guardian view preview:", error);
+      res.status(500).json({ error: "Failed to fetch guardian view" });
+    }
+  });
+
+  app.post("/api/contacts/:contactId/role", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { contactId } = req.params;
+      const { role } = req.body;
+      if (!["primary", "backup", "support"].includes(role)) {
+        return res.status(400).json({ error: "Invalid role" });
+      }
+      const contact = await storage.getContact(contactId);
+      if (!contact || contact.userId !== userId) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      const [updated] = await db.update(contacts).set({ circleRole: role }).where(eq(contacts.id, contactId)).returning();
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("Error updating contact role:", error);
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  app.post("/api/incidents/:incidentId/claim", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const { incidentId } = req.params;
+      const incident = await db.select().from(incidents).where(eq(incidents.id, incidentId)).limit(1);
+      if (!incident.length) return res.status(404).json({ error: "Incident not found" });
+      if (incident[0].status === "resolved") return res.status(400).json({ error: "Already resolved" });
+      if (incident[0].claimedByContactId) return res.status(400).json({ error: "Already claimed" });
+
+      const linkedContacts = await db.select().from(contacts).where(
+        and(eq(contacts.userId, incident[0].userId), eq(contacts.linkedUserId, userId), isNull(contacts.softDeletedAt))
+      );
+      if (!linkedContacts.length) return res.status(403).json({ error: "Not authorized" });
+
+      const [updated] = await db.update(incidents).set({
+        claimedByContactId: linkedContacts[0].id,
+        claimedAt: new Date(),
+      }).where(eq(incidents.id, incidentId)).returning();
+
+      const claimer = await storage.getUser(userId);
+      const otherWatchers = await storage.getContactsLinkedToUser(incident[0].userId);
+      for (const wc of otherWatchers) {
+        if (wc.linkedUserId && wc.linkedUserId !== userId) {
+          await sendPushNotification(wc.linkedUserId, {
+            title: "Being handled",
+            body: `${claimer?.name || "Someone"} is handling this now. No action needed from you.`,
+            url: "/watched",
+            tag: `claim-${incidentId}`,
+          });
+        }
+      }
+      const { emitToUser } = await import("./socket");
+      emitToUser(incident[0].userId, "incident:claimed", { incidentId, claimedBy: claimer?.name });
+      for (const wc of otherWatchers) {
+        if (wc.linkedUserId) emitToUser(wc.linkedUserId, "incident:claimed", { incidentId, claimedBy: claimer?.name });
+      }
+
+      console.log(`[CLAIM] Incident ${incidentId} claimed by ${claimer?.name} (${userId})`);
+      res.json({ success: true, incident: updated });
+    } catch (error) {
+      console.error("Error claiming incident:", error);
+      res.status(500).json({ error: "Failed to claim incident" });
+    }
+  });
+
+  app.post("/api/safety-drill", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const existingOpen = await storage.getOpenIncident(userId);
+      if (existingOpen) return res.status(400).json({ error: "Cannot run a drill while a real incident is open" });
+
+      const [drill] = await db.insert(incidents).values({
+        userId,
+        status: "open",
+        reason: "test",
+        isDrill: true,
+        startedAt: new Date(),
+      }).returning();
+
+      const watcherContacts = await storage.getContactsLinkedToUser(userId);
+      for (const wc of watcherContacts) {
+        if (wc.linkedUserId && wc.linkedUserId !== userId) {
+          await sendPushNotification(wc.linkedUserId, {
+            title: "Safety drill",
+            body: `${user.name} is running a safety check test. This is only a drill. No action needed.`,
+            url: "/watched",
+            tag: `drill-${drill.id}`,
+          });
+        }
+      }
+
+      setTimeout(async () => {
+        try {
+          const current = await db.select().from(incidents).where(eq(incidents.id, drill.id)).limit(1);
+          if (current.length && current[0].status === "open") {
+            await db.update(incidents).set({ status: "resolved", resolvedAt: new Date() }).where(eq(incidents.id, drill.id));
+            for (const wc of watcherContacts) {
+              if (wc.linkedUserId && wc.linkedUserId !== userId) {
+                await sendPushNotification(wc.linkedUserId, {
+                  title: "Drill complete",
+                  body: `${user.name}'s safety drill is complete. Everything is working.`,
+                  url: "/watched",
+                  tag: `drill-done-${drill.id}`,
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error("[DRILL] Auto-resolve error:", err);
+        }
+      }, 60000);
+
+      console.log(`[DRILL] Safety drill started by ${user.name} (${userId}), incidentId=${drill.id}`);
+      res.json({ success: true, drillId: drill.id });
+    } catch (error) {
+      console.error("Error starting safety drill:", error);
+      res.status(500).json({ error: "Failed to start drill" });
+    }
+  });
+
+  app.get("/api/heartbeat/recommended-interval", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const battery = user.batteryLevel ?? 100;
+      const charging = user.batteryCharging ?? false;
+      let intervalMs = 60000;
+      let reason = "normal";
+      if (battery < 10 && !charging) {
+        intervalMs = 300000;
+        reason = "critical_battery";
+      } else if (battery < 30 && !charging) {
+        intervalMs = 120000;
+        reason = "low_battery";
+      } else if (charging) {
+        intervalMs = 60000;
+        reason = "charging";
+      }
+      res.json({ intervalMs, reason });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get interval" });
+    }
+  });
+
   // Save contacts (supports both legacy 2-contact format and new array format)
   app.post("/api/contacts", async (req, res) => {
     try {
@@ -1191,6 +1436,7 @@ export async function registerRoutes(
           }
         }
 
+        const ownerUser = await storage.getUser(userId);
         const savedContacts = await storage.saveContactsList(userId, contactsList.map((c, i) => ({
           name: c.name.trim(),
           phone: normalizePhone(c.phone),
@@ -1203,9 +1449,29 @@ export async function registerRoutes(
           const linkedUser = await storage.getUserByPhone(normalizedContactPhone);
           if (linkedUser && linkedUser.id !== userId) {
             await storage.linkContactToUser(contact.id, linkedUser.id);
+            const roleLabel = contact.priority === 1 ? "Primary" : contact.priority === 2 ? "Backup" : "Support";
+            await sendPushNotification(linkedUser.id, {
+              title: "You're now a guardian",
+              body: `${ownerUser?.name || "Someone"} added you as their ${roleLabel} Guardian. If we can't reach them, we'll guide you. You won't need to figure anything out.`,
+              url: "/watched",
+              tag: `guardian-briefing-${contact.id}`,
+            });
+            console.log(`[GUARDIAN] Briefing sent to ${linkedUser.name} (${roleLabel}) for ${ownerUser?.name}`);
           } else {
             await storage.linkContactToUser(contact.id, null);
           }
+        }
+
+        if (!ownerUser?.setupConfirmedAt && savedContacts.length > 0) {
+          await db.update(users).set({ setupConfirmedAt: new Date() }).where(eq(users.id, userId));
+          const primaryContact = savedContacts[0];
+          await sendPushNotification(userId, {
+            title: "You're protected",
+            body: `${primaryContact.name} is now watching over you. You're all set.`,
+            url: "/",
+            tag: "setup-confirmed",
+          });
+          console.log(`[SETUP] Confirmation sent to ${ownerUser?.name}`);
         }
 
         const updatedContacts = await storage.getContacts(userId);

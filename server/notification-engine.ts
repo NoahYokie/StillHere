@@ -118,29 +118,58 @@ export async function notifySubjectConfirmation(
   }
 }
 
+function isUserInSleepHours(user: { sleepStart?: string; sleepEnd?: string; timezone?: string }): boolean {
+  const tz = user.timezone || "Australia/Melbourne";
+  const now = new Date();
+  const localTime = now.toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false });
+  const [h, m] = localTime.split(":").map(Number);
+  const currentMin = h * 60 + m;
+  const [sh, sm] = (user.sleepStart || "22:30").split(":").map(Number);
+  const [eh, em] = (user.sleepEnd || "07:00").split(":").map(Number);
+  const sleepStartMin = sh * 60 + sm;
+  const sleepEndMin = eh * 60 + em;
+  if (sleepStartMin > sleepEndMin) {
+    return currentMin >= sleepStartMin || currentMin < sleepEndMin;
+  }
+  return currentMin >= sleepStartMin && currentMin < sleepEndMin;
+}
+
 export async function notifyConcern(
   userId: string,
   userName: string,
   reason: "missed_checkin" | "sos" | "heartbeat_silence" | "crash_detection"
 ): Promise<void> {
+  const isEmergency = reason === "sos" || reason === "crash_detection";
+  const protectedUser = await storage.getUser(userId);
+  if (!isEmergency && protectedUser && isUserInSleepHours(protectedUser)) {
+    console.log(`[NOTIFY] Suppressed ${reason} concern for ${userName} (sleep hours active)`);
+    return;
+  }
+
   const watcherContacts = await storage.getContactsLinkedToUser(userId);
 
   let reasonText: string;
+  let title: string;
   switch (reason) {
     case "missed_checkin":
-      reasonText = `${userName} missed their check-in`;
+      title = "Can you check in?";
+      reasonText = `We haven't heard from ${userName}. Tap here to try reaching them.`;
       break;
     case "sos":
-      reasonText = `${userName} triggered an emergency alert`;
+      title = "Emergency alert";
+      reasonText = `${userName} needs help right now. Tap here to see what's happening.`;
       break;
     case "heartbeat_silence":
-      reasonText = `${userName} hasn't been reachable for several minutes`;
+      title = "Still trying to reach them";
+      reasonText = `We're still trying to reach ${userName}. No action needed yet.`;
       break;
     case "crash_detection":
-      reasonText = `A possible incident was detected for ${userName}`;
+      title = "Possible incident";
+      reasonText = `We detected something unusual for ${userName}. Tap here for details.`;
       break;
     default:
-      reasonText = `${userName} may need help`;
+      title = "Heads up";
+      reasonText = `${userName} may need your help. Tap here to see what you can do.`;
   }
 
   const notifiedIdentities = new Set<string>();
@@ -198,7 +227,7 @@ export async function notifyConcern(
     try {
       const result = await deliverNotification(
         contact.linkedUserId,
-        `Action needed`,
+        title,
         reasonText,
         `concern-${userId}`,
         "/watched",
