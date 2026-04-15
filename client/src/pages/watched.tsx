@@ -341,29 +341,6 @@ export default function WatchedPage() {
 
           <WeeklyReportPanel userId={user.userId} />
 
-          <div className="flex gap-2 mt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setLocation(`/report/${user.userId}`)}
-              data-testid={`button-report-${user.userId}`}
-            >
-              <FileText className="w-4 h-4 mr-1.5" />
-              Full Report
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setLocation(`/drive-report/${user.userId}`)}
-              data-testid={`button-drive-report-${user.userId}`}
-            >
-              <Car className="w-4 h-4 mr-1.5" />
-              Driving Report
-            </Button>
-          </div>
-
           {isExpanded && (
             <>
               <ReportPreferencePanel userId={user.userId} existingPref={userPref} />

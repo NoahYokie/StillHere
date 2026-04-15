@@ -157,7 +157,7 @@ export async function sendAllClearNotification(
   link: string
 ): Promise<SendSmsResult> {
   const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  const body = `Good news — ${userName} confirmed safe at ${timeLabel}. No action needed.\n\nView status: ${link}`;
+  const body = `Good news. ${userName} confirmed safe at ${timeLabel}. No action needed.\n\nView status: ${link}`;
   return sendSms(contactPhone, body);
 }
 

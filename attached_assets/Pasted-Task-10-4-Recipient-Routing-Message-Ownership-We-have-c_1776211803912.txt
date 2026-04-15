@@ -1,0 +1,205 @@
+Task 10.4 — Recipient Routing + Message Ownership
+
+We have council approval to proceed.
+
+This task is about ensuring the right message goes to the right person every time.
+
+Current problem:
+
+* sometimes the protected user receives a message meant for the emergency contact / watcher
+* this creates role confusion and breaks trust
+
+We need a dedicated routing layer.
+
+---
+
+# 🎯 OBJECTIVE
+
+Separate message delivery by recipient role so the system always knows:
+
+* who is the protected user
+* who is the watcher
+* who is the emergency contact
+* who holds more than one role
+
+And send exactly the right message once.
+
+---
+
+# CORE ARCHITECTURE
+
+## 1. Create explicit recipient roles
+
+Define and use these roles in the notification engine:
+
+* `ROLE_SUBJECT` → the protected user
+* `ROLE_WATCHER` → linked app watcher
+* `ROLE_EMERGENCY_CONTACT` → external emergency contact
+
+Every outbound message must know which role it is targeting.
+
+---
+
+## 2. Create a centralized dispatcher
+
+Refactor message sending into a dedicated routing layer, for example:
+
+* `notifyProtectedUser()`
+* `notifyWatchers()`
+* `notifyEmergencyContacts()`
+
+or a centralized `NotificationDispatcher` that internally separates those paths.
+
+The key rule:
+**individual features should not decide ad hoc who gets what.**
+
+---
+
+## 3. Recipient-level deduplication
+
+If the same real person appears in more than one role:
+
+* watcher + emergency contact
+* linked contact + app user
+
+Then send them the **highest-value version** of the message once.
+
+### Priority rule
+
+* watcher/app-user version takes priority over emergency-contact SMS version
+* do not send duplicate/repetitive messages to the same person for the same event unless explicitly justified
+
+Use recipient identity for deduplication:
+
+* `userId` where available
+* phone number normalization where needed
+
+---
+
+# MESSAGE OWNERSHIP RULES
+
+## A. Protected user (ROLE_SUBJECT)
+
+After resolution, they should receive a brief reassurance that confirms:
+
+* their action worked
+* the right people were notified
+
+Examples:
+
+* “You’re checked in. Your watchers have been notified you’re safe.”
+* “Got it — you’re checked in. We’ve let your contacts know.”
+* “Confirmed. We’ve notified your contacts that you’re safe.”
+
+The protected user should never receive the emergency-contact style “Good news — [Name] confirmed safe…” message about themselves.
+
+---
+
+## B. Watcher / emergency contact
+
+They should receive the outward-facing update:
+
+* “Good news — [Name] confirmed safe at [time]. No action needed.”
+
+If method context is shown in-app/timeline, that is fine, but the core notification should focus on the outcome.
+
+Examples for timeline/detail:
+
+* “Confirmed safe by phone call”
+* “Confirmed safe by SMS”
+* “Confirmed safe in app”
+* “Resolved automatically”
+
+---
+
+# ROUTING REQUIREMENTS
+
+## 1. Resolution paths
+
+For any successful resolution event:
+
+* protected user gets reassurance
+* watchers get update
+* emergency contacts get update
+* multi-role recipients get only one properly prioritized message
+
+## 2. Concern/failure paths
+
+For concern escalation:
+
+* protected user may get “still trying to reach you” style messages
+* watchers/emergency contacts get only the correct concern-side message
+* never send user-facing reassurance to contacts
+* never send contact-facing alarm copy to the protected user
+
+---
+
+# LOGGING REQUIREMENTS
+
+Every sent message must log:
+
+* event type
+* recipient role
+* recipient identity (safe redaction ok)
+* dedup result
+* channel used (push / SMS / in-app)
+* whether suppressed due to higher-priority role
+
+Example:
+
+* `Sent RECOVERY_SMS to +61… (Role: EMERGENCY_CONTACT)`
+* `Suppressed RECOVERY_SMS to +61… (duplicate of watcher push)`
+* `Sent SUBJECT_CONFIRMATION to user 123 (Role: SUBJECT)`
+
+---
+
+# SAFETY REPORT / WEEKLY SUMMARY PLACEMENT
+
+Also apply this UX change:
+
+## 1. Person-first access
+
+The weekly summary/report should live inside each watched person’s detail view, not as a generic/global report entry point.
+
+Example flow:
+
+* watcher opens Sarah
+* taps **“Weekly summary”**
+* sees Sarah’s report only
+
+## 2. Label
+
+Prefer:
+
+* **“Weekly summary”**
+
+Avoid:
+
+* “Safety Report” as the primary label in the person detail view
+
+The current state of the person remains primary.
+The summary is the deeper, one-tap layer.
+
+---
+
+# REQUIRED OUTPUT
+
+After completion, report back with:
+
+1. How recipient roles are now modeled
+2. What dispatcher/routing layer was added
+3. How multi-role deduplication works
+4. Exact protected-user confirmation text
+5. Exact watcher/emergency-contact confirmation text
+6. Proof that the protected user no longer receives the wrong outward-facing message
+7. How “Weekly summary” was moved into the watched-person detail flow
+
+---
+
+# IMPORTANT
+
+This is not just notification polish.
+
+It is message ownership.
+
+The app must never sound confused about who it is talking to.

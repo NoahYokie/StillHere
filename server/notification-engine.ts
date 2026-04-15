@@ -5,6 +5,8 @@ import { sendPushNotification } from "./push";
 import { sendSms, isSmsConfigured } from "./sms";
 import { storage } from "./storage";
 
+export type RecipientRole = "SUBJECT" | "WATCHER" | "EMERGENCY_CONTACT";
+
 const cooldowns = new Map<string, number>();
 const COOLDOWN_MS = 2 * 60 * 1000;
 
@@ -19,6 +21,26 @@ function isCoolingDown(key: string): boolean {
 
 function markSent(key: string): void {
   cooldowns.set(key, Date.now());
+}
+
+function logMessage(opts: {
+  event: string;
+  role: RecipientRole;
+  recipientId: string;
+  channel: "push" | "sms" | "push+sms" | "in-app";
+  dedup?: string;
+  suppressed?: boolean;
+  reason?: string;
+}) {
+  const masked = opts.recipientId.startsWith("+")
+    ? `***${opts.recipientId.slice(-4)}`
+    : opts.recipientId.substring(0, 8) + "...";
+
+  if (opts.suppressed) {
+    console.log(`[NOTIFY] Suppressed ${opts.event} to ${masked} (Role: ${opts.role}, reason: ${opts.dedup || opts.reason})`);
+  } else {
+    console.log(`[NOTIFY] Sent ${opts.event} to ${masked} (Role: ${opts.role}, channel: ${opts.channel})`);
+  }
 }
 
 async function getArrivalPrefEnabled(watcherId: string, watchedUserId: string): Promise<boolean> {
@@ -38,20 +60,61 @@ async function deliverNotification(
   tag: string,
   url?: string,
   smsFallback?: boolean
-): Promise<boolean> {
+): Promise<{ sent: boolean; channel: "push" | "sms" | "push+sms" }> {
   try {
     const pushResult = await sendPushNotification(userId, { title, body, tag, url });
+    let channel: "push" | "sms" | "push+sms" = "push";
 
     if (smsFallback && pushResult.sent === 0 && isSmsConfigured()) {
       const user = await storage.getUser(userId);
       if (user?.phone) {
         await sendSms(user.phone, `${title}\n${body}`);
+        channel = "sms";
       }
+    } else if (smsFallback && pushResult.sent > 0) {
+      channel = "push";
     }
-    return true;
+
+    return { sent: true, channel };
   } catch (err) {
     console.error(`[NOTIFY] Failed to deliver to ${userId}:`, err);
-    return false;
+    return { sent: false, channel: "push" };
+  }
+}
+
+export async function notifySubjectConfirmation(
+  userId: string,
+  method: string,
+  hadIncident: boolean
+): Promise<void> {
+  let body: string;
+  if (hadIncident) {
+    body = "You're checked in. Your watchers have been notified you're safe.";
+  } else if (method === "call") {
+    body = "Got it. You're checked in by phone. We've let your contacts know.";
+  } else if (method === "sms") {
+    body = "Got it. You're checked in by SMS. We've let your contacts know.";
+  } else {
+    body = "You're checked in. Your contacts know you're safe.";
+  }
+
+  try {
+    const result = await deliverNotification(
+      userId,
+      "Checked in",
+      body,
+      `subject-confirm-${Date.now()}`,
+      "/",
+      false
+    );
+    logMessage({
+      event: "SUBJECT_CONFIRMATION",
+      role: "SUBJECT",
+      recipientId: userId,
+      channel: result.channel,
+    });
+  } catch (err: any) {
+    console.error(`[NOTIFY] Subject confirmation failed for userId=${userId}:`, err?.message || err);
   }
 }
 
@@ -80,25 +143,60 @@ export async function notifyConcern(
       reasonText = `${userName} may need help`;
   }
 
+  const notifiedIdentities = new Set<string>();
+
   for (const contact of watcherContacts) {
     if (!contact.linkedUserId) {
-      console.log(`[NOTIFY] Concern skip: contact ${contact.name} not linked to an app user`);
+      logMessage({
+        event: "CONCERN",
+        role: "WATCHER",
+        recipientId: contact.name,
+        channel: "push",
+        suppressed: true,
+        reason: "not linked to app user",
+      });
       continue;
     }
 
     if (contact.linkedUserId === userId) {
-      console.log(`[NOTIFY] Concern skip: contact ${contact.name} is the user themselves`);
+      logMessage({
+        event: "CONCERN",
+        role: "SUBJECT",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        reason: "recipient is the subject themselves",
+      });
+      continue;
+    }
+
+    if (notifiedIdentities.has(contact.linkedUserId)) {
+      logMessage({
+        event: "CONCERN",
+        role: "WATCHER",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        dedup: "duplicate of already-sent watcher push",
+      });
       continue;
     }
 
     const key = getCooldownKey(contact.linkedUserId, "concern", userId);
     if (isCoolingDown(key)) {
-      console.log(`[NOTIFY] Concern cooldown: watcher=${contact.linkedUserId} for target=${userId} (skipping duplicate within ${COOLDOWN_MS / 1000}s)`);
+      logMessage({
+        event: "CONCERN",
+        role: "WATCHER",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        dedup: `cooldown active (${COOLDOWN_MS / 1000}s)`,
+      });
       continue;
     }
 
     try {
-      const sent = await deliverNotification(
+      const result = await deliverNotification(
         contact.linkedUserId,
         `Action needed`,
         reasonText,
@@ -106,7 +204,16 @@ export async function notifyConcern(
         "/watched",
         true
       );
-      if (sent) markSent(key);
+      if (result.sent) {
+        markSent(key);
+        notifiedIdentities.add(contact.linkedUserId);
+        logMessage({
+          event: "CONCERN",
+          role: "WATCHER",
+          recipientId: contact.linkedUserId,
+          channel: result.channel,
+        });
+      }
     } catch (err: any) {
       console.error(`[NOTIFY] Concern delivery failed for watcher=${contact.linkedUserId} target=${userId} reason=${reason}:`, err?.message || err);
     }
@@ -125,34 +232,69 @@ export async function notifyRecovery(
   const timeStr = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   let body: string;
   if (resolvedBy === "watcher") {
-    body = `${userName} is safe now — confirmed by ${resolverName || "a watcher"} at ${timeStr}.`;
+    body = `Good news. ${userName} is safe now, confirmed by ${resolverName || "a watcher"} at ${timeStr}. No action needed.`;
   } else if (method === "call") {
-    body = `Confirmed safe by phone call at ${timeStr} — ${userName} is OK.`;
+    body = `Good news. ${userName} confirmed safe by phone call at ${timeStr}. No action needed.`;
   } else if (method === "sms") {
-    body = `Confirmed safe by SMS at ${timeStr} — ${userName} is OK.`;
+    body = `Good news. ${userName} confirmed safe by SMS at ${timeStr}. No action needed.`;
   } else {
-    body = `Confirmed safe in app at ${timeStr} — ${userName} is OK.`;
+    body = `Good news. ${userName} confirmed safe in app at ${timeStr}. No action needed.`;
   }
+
+  const notifiedIdentities = new Set<string>();
 
   for (const contact of watcherContacts) {
     if (!contact.linkedUserId) {
-      console.log(`[NOTIFY] Recovery skip: contact ${contact.name} not linked to an app user`);
+      logMessage({
+        event: "RECOVERY",
+        role: "WATCHER",
+        recipientId: contact.name,
+        channel: "push",
+        suppressed: true,
+        reason: "not linked to app user",
+      });
       continue;
     }
 
     if (contact.linkedUserId === userId) {
-      console.log(`[NOTIFY] Recovery skip: contact ${contact.name} is the user themselves`);
+      logMessage({
+        event: "RECOVERY",
+        role: "SUBJECT",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        reason: "recipient is the subject (use SUBJECT_CONFIRMATION instead)",
+      });
+      continue;
+    }
+
+    if (notifiedIdentities.has(contact.linkedUserId)) {
+      logMessage({
+        event: "RECOVERY",
+        role: "WATCHER",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        dedup: "duplicate of already-sent watcher push",
+      });
       continue;
     }
 
     const key = getCooldownKey(contact.linkedUserId, "recovery", userId);
     if (isCoolingDown(key)) {
-      console.log(`[NOTIFY] Recovery cooldown: watcher=${contact.linkedUserId} for target=${userId} (skipping duplicate within ${COOLDOWN_MS / 1000}s)`);
+      logMessage({
+        event: "RECOVERY",
+        role: "WATCHER",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        dedup: `cooldown active (${COOLDOWN_MS / 1000}s)`,
+      });
       continue;
     }
 
     try {
-      const sent = await deliverNotification(
+      const result = await deliverNotification(
         contact.linkedUserId,
         "All clear",
         body,
@@ -160,7 +302,16 @@ export async function notifyRecovery(
         "/watched",
         true
       );
-      if (sent) markSent(key);
+      if (result.sent) {
+        markSent(key);
+        notifiedIdentities.add(contact.linkedUserId);
+        logMessage({
+          event: "RECOVERY",
+          role: "WATCHER",
+          recipientId: contact.linkedUserId,
+          channel: result.channel,
+        });
+      }
     } catch (err: any) {
       console.error(`[NOTIFY] Recovery delivery failed for watcher=${contact.linkedUserId} target=${userId}:`, err?.message || err);
     }
@@ -178,25 +329,52 @@ export async function notifyArrival(
     ? `${userName} arrived at ${placeName}`
     : `${userName} arrived safely`;
 
+  const notifiedIdentities = new Set<string>();
+
   for (const contact of watcherContacts) {
     if (!contact.linkedUserId) continue;
-
     if (contact.linkedUserId === userId) continue;
+
+    if (notifiedIdentities.has(contact.linkedUserId)) {
+      logMessage({
+        event: "ARRIVAL",
+        role: "WATCHER",
+        recipientId: contact.linkedUserId,
+        channel: "push",
+        suppressed: true,
+        dedup: "duplicate of already-sent watcher push",
+      });
+      continue;
+    }
 
     try {
       const prefEnabled = await getArrivalPrefEnabled(contact.linkedUserId, userId);
       if (!prefEnabled) {
-        console.log(`[NOTIFY] Arrival skip: watcher=${contact.linkedUserId} has arrival notifications disabled for ${userId}`);
+        logMessage({
+          event: "ARRIVAL",
+          role: "WATCHER",
+          recipientId: contact.linkedUserId,
+          channel: "push",
+          suppressed: true,
+          reason: "arrival notifications disabled",
+        });
         continue;
       }
 
       const key = getCooldownKey(contact.linkedUserId, "arrival", userId, placeName);
       if (isCoolingDown(key)) {
-        console.log(`[NOTIFY] Arrival cooldown: watcher=${contact.linkedUserId} for target=${userId} place=${placeName}`);
+        logMessage({
+          event: "ARRIVAL",
+          role: "WATCHER",
+          recipientId: contact.linkedUserId,
+          channel: "push",
+          suppressed: true,
+          dedup: `cooldown active`,
+        });
         continue;
       }
 
-      const sent = await deliverNotification(
+      const result = await deliverNotification(
         contact.linkedUserId,
         placeName ? `Arrived at ${placeName}` : "Arrived safely",
         body,
@@ -204,7 +382,16 @@ export async function notifyArrival(
         "/watched",
         false
       );
-      if (sent) markSent(key);
+      if (result.sent) {
+        markSent(key);
+        notifiedIdentities.add(contact.linkedUserId);
+        logMessage({
+          event: "ARRIVAL",
+          role: "WATCHER",
+          recipientId: contact.linkedUserId,
+          channel: result.channel,
+        });
+      }
     } catch (err: any) {
       console.error(`[NOTIFY] Arrival delivery failed for watcher=${contact.linkedUserId} target=${userId} place=${placeName}:`, err?.message || err);
     }

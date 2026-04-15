@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { processLocationContext, getUserContext, getRecentContextEvents } from "./context-processor";
-import { notifyConcern, notifyRecovery } from "./notification-engine";
+import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
 import { eq, and, lt, gte, desc } from "drizzle-orm";
@@ -141,16 +141,33 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     const contactsWithTokens = await storage.getContactTokensForUser(userId);
     console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contactsWithTokens=${contactsWithTokens.length}`);
 
+    const watcherLinkedUserIds = new Set(
+      (await storage.getContactsLinkedToUser(userId))
+        .filter(c => c.linkedUserId && c.linkedUserId !== userId)
+        .map(c => c.linkedUserId!)
+    );
+    const smsDedup = new Set<string>();
+
     if (contactsWithTokens.length === 0) {
       const allContacts = await storage.getContacts(userId);
       console.log(`[ALL-CLEAR] WARNING: No active tokens found. Total contacts=${allContacts.length}. Tokens may have been revoked early.`);
       for (const contact of allContacts) {
+        const normalizedPhone = normalizePhone(contact.phone);
+        if (smsDedup.has(normalizedPhone)) {
+          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate phone)`);
+          continue;
+        }
+        const isAlsoWatcher = contact.linkedUserId && watcherLinkedUserIds.has(contact.linkedUserId);
+        if (isAlsoWatcher) {
+          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate of watcher push)`);
+          continue;
+        }
         try {
-          const normalizedPhone = normalizePhone(contact.phone);
           const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, `${baseUrl}/`);
           smsSuccess++;
-          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
-          console.log(`[ALL-CLEAR] Sent (fallback) to ${contact.name} (***${contact.phone.slice(-4)}), msgId=${allClearResult.messageId}`);
+          smsDedup.add(normalizedPhone);
+          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, channel: sms)`);
+          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "EMERGENCY_CONTACT", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
         } catch (err: any) {
           smsFailed++;
           console.error(`[ALL-CLEAR] FAILED (fallback) to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
@@ -158,14 +175,23 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
       }
     } else {
       for (const { contact, token } of contactsWithTokens) {
+        const normalizedPhone = normalizePhone(contact.phone);
+        if (smsDedup.has(normalizedPhone)) {
+          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate phone)`);
+          continue;
+        }
+        const isAlsoWatcher = contact.linkedUserId && watcherLinkedUserIds.has(contact.linkedUserId);
+        if (isAlsoWatcher) {
+          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate of watcher push)`);
+          continue;
+        }
         try {
-          const normalizedPhone = normalizePhone(contact.phone);
           const link = `${baseUrl}/emergency/${token}`;
-          console.log(`[ALL-CLEAR] Sending to ${contact.name} (***${contact.phone.slice(-4)}), contactId=${contact.id}`);
           const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, link);
           smsSuccess++;
-          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
-          console.log(`[ALL-CLEAR] SUCCESS to ${contact.name}, msgId=${allClearResult.messageId}`);
+          smsDedup.add(normalizedPhone);
+          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, channel: sms)`);
+          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "EMERGENCY_CONTACT", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
         } catch (err: any) {
           smsFailed++;
           console.error(`[ALL-CLEAR] FAILED to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
@@ -184,6 +210,12 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     watcherNotified = true;
   } catch (err) {
     console.error(`[RESOLVE] notifyRecovery failed:`, err);
+  }
+
+  try {
+    await notifySubjectConfirmation(userId, method, hadIncident);
+  } catch (err) {
+    console.error(`[RESOLVE] Subject confirmation failed:`, err);
   }
 
   const timeStr = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
