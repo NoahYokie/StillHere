@@ -5,7 +5,7 @@ import { sendPushNotification } from "./push";
 import { sendSms, isSmsConfigured } from "./sms";
 import { storage } from "./storage";
 
-export type RecipientRole = "SUBJECT" | "WATCHER" | "EMERGENCY_CONTACT";
+export type RecipientRole = "SUBJECT" | "WATCHER";
 
 const cooldowns = new Map<string, number>();
 const COOLDOWN_MS = 2 * 60 * 1000;

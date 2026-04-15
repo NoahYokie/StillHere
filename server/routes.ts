@@ -141,11 +141,6 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     const contactsWithTokens = await storage.getContactTokensForUser(userId);
     console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contactsWithTokens=${contactsWithTokens.length}`);
 
-    const watcherLinkedUserIds = new Set(
-      (await storage.getContactsLinkedToUser(userId))
-        .filter(c => c.linkedUserId && c.linkedUserId !== userId)
-        .map(c => c.linkedUserId!)
-    );
     const smsDedup = new Set<string>();
 
     if (contactsWithTokens.length === 0) {
@@ -154,20 +149,15 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
       for (const contact of allContacts) {
         const normalizedPhone = normalizePhone(contact.phone);
         if (smsDedup.has(normalizedPhone)) {
-          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate phone)`);
-          continue;
-        }
-        const isAlsoWatcher = contact.linkedUserId && watcherLinkedUserIds.has(contact.linkedUserId);
-        if (isAlsoWatcher) {
-          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate of watcher push)`);
+          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, reason: duplicate phone)`);
           continue;
         }
         try {
           const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, `${baseUrl}/`);
           smsSuccess++;
           smsDedup.add(normalizedPhone);
-          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, channel: sms)`);
-          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "EMERGENCY_CONTACT", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
+          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms)`);
+          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
         } catch (err: any) {
           smsFailed++;
           console.error(`[ALL-CLEAR] FAILED (fallback) to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
@@ -177,12 +167,7 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
       for (const { contact, token } of contactsWithTokens) {
         const normalizedPhone = normalizePhone(contact.phone);
         if (smsDedup.has(normalizedPhone)) {
-          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate phone)`);
-          continue;
-        }
-        const isAlsoWatcher = contact.linkedUserId && watcherLinkedUserIds.has(contact.linkedUserId);
-        if (isAlsoWatcher) {
-          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, reason: duplicate of watcher push)`);
+          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, reason: duplicate phone)`);
           continue;
         }
         try {
@@ -190,8 +175,8 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
           const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, link);
           smsSuccess++;
           smsDedup.add(normalizedPhone);
-          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: EMERGENCY_CONTACT, channel: sms)`);
-          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "EMERGENCY_CONTACT", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
+          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms)`);
+          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
         } catch (err: any) {
           smsFailed++;
           console.error(`[ALL-CLEAR] FAILED to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
