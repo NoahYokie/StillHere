@@ -1349,7 +1349,12 @@ export async function registerRoutes(
       if (!user) return res.status(404).json({ error: "User not found" });
 
       const existingOpen = await storage.getOpenIncident(userId);
-      if (existingOpen) return res.status(400).json({ error: "Cannot run a drill while a real incident is open" });
+      if (existingOpen && !existingOpen.isDrill) {
+        return res.status(400).json({ error: "Your Safety Circle is currently responding to an active alert. Please wait until it's resolved before running a test." });
+      }
+      if (existingOpen && existingOpen.isDrill) {
+        await db.update(incidents).set({ status: "resolved", resolvedAt: new Date() }).where(eq(incidents.id, existingOpen.id));
+      }
 
       const [drill] = await db.insert(incidents).values({
         userId,
@@ -1416,9 +1421,9 @@ export async function registerRoutes(
 
       const drillId = req.params.drillId;
       const [drill] = await db.select().from(incidents).where(eq(incidents.id, drillId)).limit(1);
-      if (!drill || !drill.isDrill) return res.status(404).json({ error: "Drill not found" });
-      if (drill.status !== "open") return res.status(400).json({ error: "Drill already completed" });
-      if (drill.drillAcknowledgedByContactId) return res.status(400).json({ error: "Drill already acknowledged" });
+      if (!drill || !drill.isDrill) return res.status(404).json({ error: "This safety test is no longer available." });
+      if (drill.status !== "open") return res.status(400).json({ error: "This safety test has already finished." });
+      if (drill.drillAcknowledgedByContactId) return res.status(400).json({ error: "Someone has already confirmed for this test." });
 
       const contacts = await storage.getContacts(drill.userId);
       const watcherContact = contacts.find(c => c.linkedUserId === userId);

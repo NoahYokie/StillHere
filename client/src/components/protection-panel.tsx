@@ -249,15 +249,15 @@ export function SafetyDrillButton() {
     },
     onSuccess: () => {
       toast({
-        title: "Safety drill started",
-        description: "Your Safety Circle has been notified this is a test. The drill will end automatically in 60 seconds.",
+        title: "Safety test started",
+        description: "Your Safety Circle has been notified. They'll be asked to confirm they're ready. This test ends automatically in 60 seconds.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     },
     onError: (err: any) => {
       toast({
-        title: "Cannot start drill",
-        description: err.message || "Please resolve any active incidents first.",
+        title: "Unable to start test",
+        description: err.message || "Something went wrong. Please try again in a moment.",
         variant: "destructive",
       });
     },
