@@ -1,0 +1,195 @@
+⚙️ TASK 11.3 — INTEGRITY & TRUST LOCK (REPLIT — MUST EXECUTE)
+🎯 Objective
+
+Eliminate false transparency, upgrade privacy to real, and turn drills into emotional trust moments.
+
+This is a blocking integrity fix — not optional.
+
+🔴 PART 1 — AREA MODE (CRITICAL — MUST FIX)
+❗ Problem
+
+“Area Only” currently behaves like Precise.
+
+👉 This is a trust-breaking bug.
+
+✅ Required Fix: REAL NEIGHBORHOOD MODE
+1. Server-side obfuscation (MANDATORY)
+
+When:
+
+sharingMode === 'area'
+AND safety_state !== 'concern'
+
+👉 DO NOT send real lat/lng
+
+Instead:
+
+Apply coordinate approximation
+
+Option A (Claude — simpler, stable):
+Round lat/lng to ~2 decimal places
+(~1km accuracy)
+Option B (Gemini — smarter):
+Apply random offset within 1–2km radius
+Prevents reverse inference
+
+👉 Either is acceptable — but MUST be:
+
+consistent
+non-reversible
+NOT exposing real coordinates
+🗺️ Watcher UI
+
+Replace pin with:
+
+👉 “Neighborhood Bubble”
+
+Soft radius / polygon (NOT a pin)
+
+Label:
+
+“Dauda is sharing their general area (Newtown)”
+
+🚨 Emergency Override (IMPORTANT)
+
+If:
+
+safety_state === 'concern'
+
+👉 FULL precise location is automatically restored
+
+🔐 PART 2 — API REDACTION (SECURITY — MUST VERIFY)
+❗ Rule
+
+If user chooses privacy:
+
+👉 The API must NOT even contain coordinates
+
+Required Enforcement
+
+In:
+
+GET /api/watch/location
+
+If:
+
+sharingMode !== 'precise'
+AND safety_state !== 'concern'
+
+👉 DELETE:
+
+lat
+lng
+accuracy
+
+NOT hide — DELETE
+
+🧪 HARD TEST (MANDATORY)
+
+Owner must verify:
+
+Open watcher app
+Open DevTools → Network → API response
+Confirm:
+
+👉 NO lat/lng in JSON payload
+
+If present = FAIL ❌
+
+👁 PART 3 — “SEE MY GUARDIAN’S VIEW” (SYNC FIX)
+Problem
+
+User preview must match reality EXACTLY
+
+Required Fix
+
+When user taps:
+👉 “See my Guardian’s view”
+
+It MUST:
+
+Trigger fresh API call
+Use SAME endpoint as watcher
+Show EXACT redacted payload
+🧪 Verification
+
+Test all modes:
+
+Precise
+Area
+Presence
+Paused
+
+👉 Compare:
+User preview vs actual watcher
+
+Must match 1:1
+
+💙 PART 4 — SAFETY DRILL UPGRADE (WOW FEATURE)
+❗ Problem
+
+Current drill = mechanical
+
+We need emotional trust
+
+✅ Upgrade: “LIVE HANDSHAKE DRILL”
+1. Add watcher interaction
+
+Watcher receives:
+
+“Dauda is running a safety check test. Tap to confirm you’re ready.”
+
+👉 Button:
+“I’m ready” / “Got you”
+
+2. When watcher taps:
+
+User receives:
+
+“Guardian ready. Your Safety Circle is prepared.”
+
+3. Replace final messages
+To user:
+
+❌ “Drill complete”
+✅
+
+“Your Safety Circle is ready. If you ever need them, they’ll know exactly what to do.”
+
+To watcher:
+
+❌ “Drill complete”
+✅
+
+“You’re all set. If Dauda ever needs you, we’ll guide you—just like this.”
+
+🧠 PART 5 — FINAL RULE (NON-NEGOTIABLE)
+
+We do NOT ship:
+
+fake privacy ❌
+misleading UI ❌
+hidden real data ❌
+
+We ONLY ship:
+👉 truthful systems users can trust
+
+🧪 FINAL ACCEPTANCE CHECKLIST
+
+Replit must confirm:
+
+ Area mode hides real coordinates
+ API payload contains NO lat/lng in area/presence
+ Emergency unlock works
+ “See my view” matches watcher exactly
+ Drill includes watcher interaction
+ Emotional completion messages updated
+🏁 FINAL NOTE (IMPORTANT)
+
+We are no longer building features.
+
+We are building:
+👉 Trust Infrastructure
+
+If this layer breaks → user leaves immediately
+If this layer is strong → StillHere beats Life360

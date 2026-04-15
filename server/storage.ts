@@ -98,6 +98,16 @@ function getTimezoneOffsetMs(date: Date, tz: string): number {
   return new Date(tzStr).getTime() - new Date(utcStr).getTime();
 }
 
+function obfuscateCoord(value: number, seed: string): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  const offset = ((hash % 2000) - 1000) / 100000;
+  return Math.round((value + offset) * 100) / 100;
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -1191,6 +1201,7 @@ export class DatabaseStorage implements IStorage {
       const mode = (user.sharingMode as "precise" | "area" | "presence" | "paused") || "precise";
       const isConcern = user.safetyState === "concern";
       const hideLocation = (mode === "presence" || mode === "paused") && !isConcern;
+      const obfuscateLocation = mode === "area" && !isConcern;
       const isLearning = user.learningModeUntil ? new Date() < user.learningModeUntil : false;
 
       let claimedByName: string | null = null;
@@ -1223,12 +1234,12 @@ export class DatabaseStorage implements IStorage {
         safetyStateChangedAt: user.safetyStateChangedAt || null,
         sharingMode: mode,
         lastHeartbeatAt: user.lastHeartbeatAt || null,
-        lastHeartbeatLat: hideLocation ? null : (user.lastHeartbeatLat || null),
-        lastHeartbeatLng: hideLocation ? null : (user.lastHeartbeatLng || null),
-        lastHeartbeatAcc: hideLocation ? null : (user.lastHeartbeatAcc || null),
+        lastHeartbeatLat: hideLocation ? null : obfuscateLocation && user.lastHeartbeatLat ? obfuscateCoord(Number(user.lastHeartbeatLat), user.id + "lat") : (user.lastHeartbeatLat || null),
+        lastHeartbeatLng: hideLocation ? null : obfuscateLocation && user.lastHeartbeatLng ? obfuscateCoord(Number(user.lastHeartbeatLng), user.id + "lng") : (user.lastHeartbeatLng || null),
+        lastHeartbeatAcc: hideLocation ? null : obfuscateLocation ? null : (user.lastHeartbeatAcc || null),
         lastLocationAt: hideLocation ? null : lastLocationAt,
-        lastLocationLat: hideLocation ? null : lastLocationLat,
-        lastLocationLng: hideLocation ? null : lastLocationLng,
+        lastLocationLat: hideLocation ? null : obfuscateLocation && lastLocationLat ? obfuscateCoord(Number(lastLocationLat), user.id + "lat") : lastLocationLat,
+        lastLocationLng: hideLocation ? null : obfuscateLocation && lastLocationLng ? obfuscateCoord(Number(lastLocationLng), user.id + "lng") : lastLocationLng,
         batteryLevel: user.batteryLevel ?? null,
         batteryCharging: user.batteryCharging ?? null,
         networkType: user.networkType ?? null,

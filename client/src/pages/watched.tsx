@@ -61,6 +61,51 @@ function ClaimButton({ incidentId, userId }: { incidentId: string; userId: strin
   );
 }
 
+function DrillAcknowledgeButton({ drillId, userName, userId }: { drillId: string; userName: string; userId: string }) {
+  const { toast } = useToast();
+  const [acknowledged, setAcknowledged] = useState(false);
+  const ackMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/safety-drill/${drillId}/acknowledge`);
+      return res.json();
+    },
+    onSuccess: () => {
+      setAcknowledged(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      toast({ title: "You're ready", description: `${userName} has been notified that you've got their back.` });
+    },
+    onError: (err: any) => {
+      if (err.message?.includes("already acknowledged")) {
+        setAcknowledged(true);
+      }
+      toast({ title: "Could not confirm", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  if (acknowledged) {
+    return (
+      <div className="p-2 rounded bg-green-50 dark:bg-green-950/30 text-xs text-green-700 dark:text-green-300 text-center" data-testid={`text-drill-acked-${userId}`}>
+        <ShieldCheck className="w-4 h-4 inline mr-1" />
+        You're ready. {userName} knows you've got their back.
+      </div>
+    );
+  }
+
+  return (
+    <Button
+      variant="default"
+      size="sm"
+      className="w-full bg-blue-600 hover:bg-blue-700"
+      onClick={() => ackMutation.mutate()}
+      disabled={ackMutation.isPending}
+      data-testid={`button-drill-ack-${userId}`}
+    >
+      <ShieldCheck className="w-4 h-4 mr-1.5" />
+      {ackMutation.isPending ? "Confirming..." : "I'm ready — got you"}
+    </Button>
+  );
+}
+
 export default function WatchedPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -318,11 +363,21 @@ export default function WatchedPage() {
 
           <ConfidenceBadge device={device} />
 
+          {user.sharingMode === "area" && hasLoc && (
+            <div className="mb-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 text-xs text-blue-700 dark:text-blue-300 flex items-center gap-1.5" data-testid={`badge-area-mode-${user.userId}`}>
+              <MapPin className="w-3 h-3" />
+              {user.userName} is sharing their general area
+            </div>
+          )}
+
           {(insight.trustLevel === "worried" || user.safetyState === "concern") && (
             <>
               {user.incidentIsDrill && (
-                <div className="mb-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 text-xs text-blue-700 dark:text-blue-300 text-center" data-testid={`banner-drill-${user.userId}`}>
-                  This is a safety drill. No real emergency.
+                <div className="mb-2 space-y-2">
+                  <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/30 text-xs text-blue-700 dark:text-blue-300 text-center" data-testid={`banner-drill-${user.userId}`}>
+                    This is a safety drill. No real emergency.
+                  </div>
+                  {user.incidentId && <DrillAcknowledgeButton drillId={user.incidentId} userName={user.userName} userId={user.userId} />}
                 </div>
               )}
               {user.incidentClaimedBy ? (

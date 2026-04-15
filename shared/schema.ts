@@ -171,6 +171,8 @@ export const incidents = pgTable("incidents", {
   claimedByContactId: uuid("claimed_by_contact_id").references(() => contacts.id),
   claimedAt: timestamp("claimed_at"),
   isDrill: boolean("is_drill").notNull().default(false),
+  drillAcknowledgedAt: timestamp("drill_acknowledged_at"),
+  drillAcknowledgedByContactId: uuid("drill_acknowledged_by_contact_id").references(() => contacts.id),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),

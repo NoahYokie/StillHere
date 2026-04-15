@@ -1237,7 +1237,23 @@ export async function registerRoutes(
       const lastCheckin = await storage.getLastCheckin(userId);
       const openIncident = await storage.getOpenIncident(userId);
       const mode = (user.sharingMode as string) || "precise";
-      const hideLocation = (mode === "presence" || mode === "paused") && user.safetyState !== "concern";
+      const isConcern = user.safetyState === "concern";
+      const hideLocation = (mode === "presence" || mode === "paused") && !isConcern;
+      const obfuscateLocation = mode === "area" && !isConcern;
+
+      function obfuscateCoordPreview(value: number, seed: string): number {
+        let hash = 0;
+        for (let i = 0; i < seed.length; i++) {
+          hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+          hash |= 0;
+        }
+        const offset = ((hash % 2000) - 1000) / 100000;
+        return Math.round((value + offset) * 100) / 100;
+      }
+
+      const rawLat = user.lastHeartbeatLat ? Number(user.lastHeartbeatLat) : null;
+      const rawLng = user.lastHeartbeatLng ? Number(user.lastHeartbeatLng) : null;
+
       res.json({
         userName: user.name,
         safetyState: user.safetyState,
@@ -1246,8 +1262,8 @@ export async function registerRoutes(
         lastCheckinAt: lastCheckin?.createdAt || null,
         hasOpenIncident: !!openIncident,
         lastHeartbeatAt: user.lastHeartbeatAt || null,
-        lastHeartbeatLat: hideLocation ? null : (user.lastHeartbeatLat || null),
-        lastHeartbeatLng: hideLocation ? null : (user.lastHeartbeatLng || null),
+        lastHeartbeatLat: hideLocation ? null : obfuscateLocation && rawLat != null ? obfuscateCoordPreview(rawLat, userId + "lat") : (rawLat ?? null),
+        lastHeartbeatLng: hideLocation ? null : obfuscateLocation && rawLng != null ? obfuscateCoordPreview(rawLng, userId + "lng") : (rawLng ?? null),
         batteryLevel: user.batteryLevel ?? null,
         batteryCharging: user.batteryCharging ?? null,
         networkType: user.networkType ?? null,
@@ -1347,9 +1363,9 @@ export async function registerRoutes(
       for (const wc of watcherContacts) {
         if (wc.linkedUserId && wc.linkedUserId !== userId) {
           await sendPushNotification(wc.linkedUserId, {
-            title: "Safety drill",
-            body: `${user.name} is running a safety check test. This is only a drill. No action needed.`,
-            url: "/watched",
+            title: `${user.name} is testing their Safety Circle`,
+            body: `${user.name} wants to make sure you're ready. Tap to confirm you've got their back.`,
+            url: `/watched?drill=${drill.id}`,
             tag: `drill-${drill.id}`,
           });
         }
@@ -1360,16 +1376,25 @@ export async function registerRoutes(
           const current = await db.select().from(incidents).where(eq(incidents.id, drill.id)).limit(1);
           if (current.length && current[0].status === "open") {
             await db.update(incidents).set({ status: "resolved", resolvedAt: new Date() }).where(eq(incidents.id, drill.id));
+            const acknowledged = current[0].drillAcknowledgedByContactId != null;
             for (const wc of watcherContacts) {
               if (wc.linkedUserId && wc.linkedUserId !== userId) {
                 await sendPushNotification(wc.linkedUserId, {
-                  title: "Drill complete",
-                  body: `${user.name}'s safety drill is complete. Everything is working.`,
+                  title: "Safety Circle ready",
+                  body: `You're all set. If ${user.name} ever needs you, we'll guide you — just like this.`,
                   url: "/watched",
                   tag: `drill-done-${drill.id}`,
                 });
               }
             }
+            await sendPushNotification(userId, {
+              title: "Your Safety Circle is ready",
+              body: acknowledged
+                ? "Your Safety Circle is ready. If you ever need them, they'll know exactly what to do."
+                : "Your Safety Circle has been tested. If you ever need them, they'll know exactly what to do.",
+              url: "/",
+              tag: `drill-done-${drill.id}`,
+            });
           }
         } catch (err) {
           console.error("[DRILL] Auto-resolve error:", err);
@@ -1381,6 +1406,53 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error starting safety drill:", error);
       res.status(500).json({ error: "Failed to start drill" });
+    }
+  });
+
+  app.post("/api/safety-drill/:drillId/acknowledge", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+
+      const drillId = req.params.drillId;
+      const [drill] = await db.select().from(incidents).where(eq(incidents.id, drillId)).limit(1);
+      if (!drill || !drill.isDrill) return res.status(404).json({ error: "Drill not found" });
+      if (drill.status !== "open") return res.status(400).json({ error: "Drill already completed" });
+      if (drill.drillAcknowledgedByContactId) return res.status(400).json({ error: "Drill already acknowledged" });
+
+      const contacts = await storage.getContacts(drill.userId);
+      const watcherContact = contacts.find(c => c.linkedUserId === userId);
+      if (!watcherContact) return res.status(403).json({ error: "Not a linked watcher for this user" });
+
+      await db.update(incidents).set({
+        drillAcknowledgedAt: new Date(),
+        drillAcknowledgedByContactId: watcherContact.id,
+      }).where(eq(incidents.id, drillId));
+
+      const watcherUser = await storage.getUser(userId);
+      const watcherName = watcherUser?.name || watcherContact.name;
+
+      await sendPushNotification(drill.userId, {
+        title: "Guardian ready",
+        body: `${watcherName} confirmed they're ready. Your Safety Circle is prepared.`,
+        url: "/",
+        tag: `drill-ack-${drillId}`,
+      });
+
+      const io = (req as any).io;
+      if (io) {
+        io.to(`user:${drill.userId}`).emit("drill:acknowledged", {
+          drillId,
+          acknowledgedBy: watcherName,
+          acknowledgedAt: new Date().toISOString(),
+        });
+      }
+
+      console.log(`[DRILL] Acknowledged by ${watcherName} (${userId}) for drill ${drillId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error acknowledging drill:", error);
+      res.status(500).json({ error: "Failed to acknowledge drill" });
     }
   });
 
