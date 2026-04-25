@@ -34,7 +34,7 @@ function ClaimButton({ incidentId, userId }: { incidentId: string; userId: strin
   const { toast } = useToast();
   const claimMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/incidents/${incidentId}/claim`);
+      const res = await apiRequest("POST", `/api/incidents/${incidentId}/claim`, {});
       return res.json();
     },
     onSuccess: () => {
@@ -66,7 +66,7 @@ function DrillAcknowledgeButton({ drillId, userName, userId }: { drillId: string
   const [acknowledged, setAcknowledged] = useState(false);
   const ackMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/safety-drill/${drillId}/acknowledge`);
+      const res = await apiRequest("POST", `/api/safety-drill/${drillId}/acknowledge`, {});
       return res.json();
     },
     onSuccess: () => {

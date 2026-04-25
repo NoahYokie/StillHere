@@ -244,7 +244,7 @@ export function SafetyDrillButton() {
 
   const drillMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/safety-drill");
+      const res = await apiRequest("POST", "/api/safety-drill", {});
       return res.json();
     },
     onSuccess: () => {
