@@ -896,13 +896,13 @@ export class DatabaseStorage implements IStorage {
     if (!safetyTimer) {
       const [escalated] = await db.select().from(safetyTimers)
         .where(and(eq(safetyTimers.userId, user.id), eq(safetyTimers.status, "escalated")))
-        .orderBy(desc(safetyTimers.createdAt)).limit(1);
+        .orderBy(desc(safetyTimers.startedAt)).limit(1);
       if (escalated) safetyTimer = escalated;
     }
     if (!safeWalk) {
       const [escalated] = await db.select().from(safeWalks)
         .where(and(eq(safeWalks.userId, user.id), eq(safeWalks.status, "escalated")))
-        .orderBy(desc(safeWalks.createdAt)).limit(1);
+        .orderBy(desc(safeWalks.startedAt)).limit(1);
       if (escalated) safeWalk = escalated;
     }
     let tripTrail: TripPoint[] = [];

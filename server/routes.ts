@@ -52,7 +52,13 @@ const getUserId = (req: Request): string | null => {
 };
 
 const getBaseUrl = (): string => {
-  return process.env.BASE_URL || "https://stillhere.health";
+  if (process.env.BASE_URL) return process.env.BASE_URL;
+  const domains = process.env.REPLIT_DOMAINS;
+  if (domains) {
+    const firstDomain = domains.split(",")[0].trim();
+    return `https://${firstDomain}`;
+  }
+  return "https://stillhere.health";
 };
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {

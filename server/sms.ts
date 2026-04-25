@@ -116,7 +116,7 @@ export async function sendMissedCheckinAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Alert\n\nWe were unable to reach ${userName} after multiple attempts (push, SMS, and call).\n\nPlease check on them:\n${link}\n\nIf you cannot reach them, please contact local emergency services.`;
+  const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call — none received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you are unable to reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body);
 }
 
@@ -125,7 +125,7 @@ export async function sendSosAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `STILLHERE EMERGENCY ALERT\n\n${userName} has activated an emergency SOS.\n\nThis is an urgent request for help. Please respond immediately:\n${link}\n\nIf you cannot reach them, please contact local emergency services.\n\nYou are receiving this message because you are registered as an emergency contact on StillHere.`;
+  const body = `StillHere EMERGENCY\n\n${userName} has activated an emergency SOS and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
   return sendSms(contactPhone, body);
 }
 
@@ -133,7 +133,7 @@ export async function sendTestMessage(
   contactPhone: string,
   userName: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is a test message only. No action is needed.\n\nIn a real emergency, you would receive an alert with a link to view their status and location.`;
+  const body = `StillHere — Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is only a test. No action is needed.\n\nIn a real alert, you will receive a message with a secure link to view their status and location. For the fullest experience — live location, push alerts, and one-tap response — install the StillHere app.`;
   return sendSms(contactPhone, body);
 }
 
@@ -142,11 +142,11 @@ export async function sendReminderSms(
   link: string,
   smsCheckinEnabled: boolean = false
 ): Promise<SendSmsResult> {
-  let body = `StillHere Reminder\n\nYou have not completed your safety checkin yet.`;
+  let body = `StillHere — Check-in Reminder\n\nYou haven't completed your safety check-in yet.`;
   if (smsCheckinEnabled) {
-    body += `\n\nReply YES to confirm you are safe, or tap the link below:\n${link}`;
+    body += `\n\nReply YES to confirm you are safe, or open the app. If you don't have the app handy, you can also check in from this link:\n${link}`;
   } else {
-    body += `\n\nPlease open the app or tap the link below to check in:\n${link}`;
+    body += `\n\nPlease open the app to check in. If you don't have the app handy, you can also check in from this link:\n${link}`;
   }
   return sendSms(userPhone, body);
 }
@@ -157,7 +157,7 @@ export async function sendAllClearNotification(
   link: string
 ): Promise<SendSmsResult> {
   const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  const body = `Good news. ${userName} confirmed safe at ${timeLabel}. No action needed.\n\nView status: ${link}`;
+  const body = `StillHere — All Clear\n\n${userName} confirmed they are safe at ${timeLabel}. No action is needed.\n\nView their status in the StillHere app, or from any browser:\n${link}`;
   return sendSms(contactPhone, body);
 }
 
@@ -177,8 +177,8 @@ export async function sendEscalationAlert(
 ): Promise<SendSmsResult> {
   const reasonText = reason === "sos"
     ? "activated an emergency SOS"
-    : "could not be reached after multiple attempts";
-  const body = `StillHere Alert\n\n${userName} has ${reasonText} and their primary emergency contact has not responded.\n\nPlease check on them urgently:\n${link}\n\nIf you cannot reach them, please contact local emergency services.`;
+    : "has not responded to a safety check-in";
+  const body = `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body);
 }
 
@@ -194,7 +194,7 @@ export async function sendHandlingTimeoutAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Follow-Up\n\n${userName}'s safety alert is still active and requires attention.\n\nPlease confirm you have been able to reach them:\n${link}\n\nIf you cannot reach them, please contact local emergency services.`;
+  const body = `StillHere — Follow-Up\n\n${userName}'s safety alert is still active and needs your attention.\n\nPlease confirm whether you have been able to reach them. Open the StillHere app for one-tap response, or use this link from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body);
 }
 
