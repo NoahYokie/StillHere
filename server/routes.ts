@@ -3009,8 +3009,6 @@ export async function registerRoutes(
 
   app.get("/api/maps/config", async (req, res) => {
     try {
-      const userId = getUserId(req);
-      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       const key = process.env.GOOGLE_MAPS_API_KEY;
       if (!key) return res.status(500).json({ error: "Maps not configured" });
       res.json({ apiKey: key });

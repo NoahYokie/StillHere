@@ -466,7 +466,7 @@ export default function ContactPage() {
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Be the first to know — and the fastest to help — when {user.name} needs you.
+                  Be the first to know, and the fastest to help, when {user.name} needs you.
                 </p>
               </div>
             </div>
@@ -474,7 +474,7 @@ export default function ContactPage() {
             <ul className="space-y-2 mb-4 text-sm">
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong>Instant push alerts</strong> the moment something happens — no waiting on SMS</span>
+                <span><strong>Instant push alerts</strong> the moment something happens. No waiting on SMS</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
@@ -482,7 +482,7 @@ export default function ContactPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong>One-tap voice call</strong> and in-app chat — even if their phone has no signal for SMS</span>
+                <span><strong>One-tap voice call</strong> and in-app chat, even if their phone has no signal for SMS</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
@@ -497,7 +497,7 @@ export default function ContactPage() {
               data-testid="button-install-app"
             >
               <a href="/" target="_blank" rel="noopener noreferrer">
-                Install StillHere — free
+                Install StillHere (free)
               </a>
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-3">

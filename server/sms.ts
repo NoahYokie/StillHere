@@ -116,7 +116,7 @@ export async function sendMissedCheckinAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call — none received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you are unable to reach them, please contact your local emergency services.`;
+  const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call. None received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you are unable to reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body);
 }
 
@@ -133,7 +133,7 @@ export async function sendTestMessage(
   contactPhone: string,
   userName: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere — Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is only a test. No action is needed.\n\nIn a real alert, you will receive a message with a secure link to view their status and location. For the fullest experience — live location, push alerts, and one-tap response — install the StillHere app.`;
+  const body = `StillHere Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is only a test. No action is needed.\n\nIn a real alert, you will receive a message with a secure link to view their status and location. For the fullest experience (live location, push alerts, and one-tap response), install the StillHere app.`;
   return sendSms(contactPhone, body);
 }
 
@@ -142,7 +142,7 @@ export async function sendReminderSms(
   link: string,
   smsCheckinEnabled: boolean = false
 ): Promise<SendSmsResult> {
-  let body = `StillHere — Check-in Reminder\n\nYou haven't completed your safety check-in yet.`;
+  let body = `StillHere Check-in Reminder\n\nYou haven't completed your safety check-in yet.`;
   if (smsCheckinEnabled) {
     body += `\n\nReply YES to confirm you are safe, or open the app. If you don't have the app handy, you can also check in from this link:\n${link}`;
   } else {
@@ -157,7 +157,7 @@ export async function sendAllClearNotification(
   link: string
 ): Promise<SendSmsResult> {
   const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  const body = `StillHere — All Clear\n\n${userName} confirmed they are safe at ${timeLabel}. No action is needed.\n\nView their status in the StillHere app, or from any browser:\n${link}`;
+  const body = `StillHere All Clear\n\n${userName} confirmed they are safe at ${timeLabel}. No action is needed.\n\nView their status in the StillHere app, or from any browser:\n${link}`;
   return sendSms(contactPhone, body);
 }
 
@@ -194,7 +194,7 @@ export async function sendHandlingTimeoutAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere — Follow-Up\n\n${userName}'s safety alert is still active and needs your attention.\n\nPlease confirm whether you have been able to reach them. Open the StillHere app for one-tap response, or use this link from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
+  const body = `StillHere Follow-Up\n\n${userName}'s safety alert is still active and needs your attention.\n\nPlease confirm whether you have been able to reach them. Open the StillHere app for one-tap response, or use this link from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body);
 }
 

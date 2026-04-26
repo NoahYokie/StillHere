@@ -34,7 +34,7 @@ export async function sendEmergencyEmail(
             ? `<strong>${userName}</strong> has activated an emergency SOS on StillHere. This is an urgent request for help.`
             : `<strong>${userName}</strong> has not responded to a scheduled safety check-in on StillHere. We have already tried reaching them by app notification, SMS, and phone call.`}
         </p>
-        <p style="font-size: 16px; color: #111;">Please try to reach ${userName} as soon as possible. For the fullest experience — live location, push alerts, and one-tap response — open the StillHere app. If you don't have it installed, you can also view status and respond from any browser using the secure link below:</p>
+        <p style="font-size: 16px; color: #111;">Please try to reach ${userName} as soon as possible. For the fullest experience (live location, push alerts, and one-tap response), open the StillHere app. If you don't have it installed, you can also view status and respond from any browser using the secure link below:</p>
         <a href="${link}" style="display: inline-block; background: ${issos ? "#dc2626" : "#2563eb"}; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 16px;">View Status &amp; Respond</a>
         <p style="font-size: 14px; color: #666; margin-top: 24px;">If you are unable to reach ${userName}, please contact your local emergency services immediately.</p>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
