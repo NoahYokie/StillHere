@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield } from "lucide-react";
+import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield, Smartphone, Sparkles } from "lucide-react";
 import type { ContactPageData } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
@@ -144,11 +144,16 @@ export default function ContactPage() {
     <div className="min-h-screen bg-background pb-12">
       {/* Header */}
       <header className="bg-primary text-primary-foreground px-6 py-4">
-        <div className="max-w-md mx-auto">
-          <h1 className="text-xl font-semibold" data-testid="text-app-title">StillHere</h1>
-          <p className="text-sm opacity-90" data-testid="text-status-for">
-            Status for {user.name}
-          </p>
+        <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold" data-testid="text-app-title">StillHere</h1>
+            <p className="text-sm opacity-90" data-testid="text-status-for">
+              Status for {user.name}
+            </p>
+          </div>
+          <span className="text-[10px] uppercase tracking-wide bg-white/15 px-2 py-1 rounded font-medium whitespace-nowrap mt-1" data-testid="badge-no-login">
+            No login needed
+          </span>
         </div>
       </header>
 
@@ -402,19 +407,6 @@ export default function ContactPage() {
             </a>
           </Button>
 
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full justify-start gap-3"
-            asChild
-            data-testid="button-in-app-chat"
-          >
-            <a href={`/chat/${user.id}`}>
-              <MessageSquare className="h-5 w-5 text-primary" />
-              In-App Chat with {user.name}
-            </a>
-          </Button>
-
         </div>
 
         {/* Action Buttons */}
@@ -460,6 +452,59 @@ export default function ContactPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Get the App promo */}
+        <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/30" data-testid="card-get-app">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+                <Smartphone className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-base" data-testid="text-get-app-title">Get the StillHere app</h3>
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Be the first to know — and the fastest to help — when {user.name} needs you.
+                </p>
+              </div>
+            </div>
+
+            <ul className="space-y-2 mb-4 text-sm">
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong>Instant push alerts</strong> the moment something happens — no waiting on SMS</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong>Live location</strong> with directions and speed, not just a static pin</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong>One-tap voice call</strong> and in-app chat — even if their phone has no signal for SMS</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-primary mt-0.5">•</span>
+                <span><strong>"I've got this"</strong> button so other contacts know you're handling it</span>
+              </li>
+            </ul>
+
+            <Button
+              size="lg"
+              className="w-full"
+              asChild
+              data-testid="button-install-app"
+            >
+              <a href="/" target="_blank" rel="noopener noreferrer">
+                Install StillHere — free
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-3">
+              Free to install. You'll be added automatically as {user.name}'s contact when you sign in.
+            </p>
+          </CardContent>
+        </Card>
 
       </main>
 
