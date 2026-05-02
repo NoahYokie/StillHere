@@ -475,7 +475,21 @@ export default function ChatPage() {
     const expiresAt = new Date(locMeta.expiresAt);
     const { label: remainingLabel, expired } = formatRemaining(expiresAt);
     const stopped = !!locMeta.stopped || expired;
-    const mapsUrl = buildMapsUrl(locMeta.lat, locMeta.lng);
+    const hasCoords =
+      typeof locMeta.lat === "number" &&
+      typeof locMeta.lng === "number" &&
+      locMeta.lat >= -90 && locMeta.lat <= 90 &&
+      locMeta.lng >= -180 && locMeta.lng <= 180;
+    const directionsUrl = hasCoords
+      ? `https://www.google.com/maps/dir/?api=1&destination=${locMeta.lat.toFixed(6)},${locMeta.lng.toFixed(6)}`
+      : "";
+    const mapImgUrl = hasCoords
+      ? `/api/maps/static-map?lat=${locMeta.lat.toFixed(6)}&lng=${locMeta.lng.toFixed(6)}&w=640&h=220&zoom=15`
+      : "";
+    // The dedicated in-app live map view. For the sender, /live-location is their
+    // own broadcast view; for the recipient, /live-location/:senderId is the watcher view.
+    const inAppLiveUrl = isMine ? "/live-location" : `/live-location/${msg.senderId}`;
+    const openLiveMap = () => setLocation(inAppLiveUrl);
 
     return (
       <div
@@ -492,9 +506,7 @@ export default function ChatPage() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider">
-                    Live Location
-                  </span>
+                  <span className="text-[11px] font-semibold tracking-wide">Live location</span>
                   {!stopped && (
                     <span className="relative flex h-2 w-2" aria-label="Live">
                       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -502,8 +514,8 @@ export default function ChatPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-xs font-medium opacity-90 truncate">
-                  {stopped ? "Sharing ended" : remainingLabel}
+                <p className="text-xs font-medium opacity-90 truncate" data-testid={`text-loc-status-${msg.id}`}>
+                  {stopped ? "Sharing ended" : `Location sharing is active · ${remainingLabel}`}
                 </p>
               </div>
             </div>
@@ -511,53 +523,97 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {/* Mini map preview (clicking opens the in-app Live Map) */}
+        {hasCoords ? (
+          <button
+            type="button"
+            onClick={openLiveMap}
+            className="block w-full text-left group"
+            aria-label="Open live map"
+            data-testid={`button-loc-mini-map-${msg.id}`}
+          >
+            <div className="relative w-full h-[110px] bg-muted overflow-hidden">
+              <img
+                src={mapImgUrl}
+                alt="Map preview of last shared location"
+                loading="lazy"
+                className="w-full h-full object-cover transition-transform group-hover:scale-[1.02]"
+                onError={(e) => {
+                  // If Google Static Maps fails (quota, no key, etc), hide the image
+                  // so the card still looks clean rather than showing a broken-image icon.
+                  (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+                }}
+              />
+              {stopped && (
+                <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px] flex items-center justify-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-card/90 text-muted-foreground border border-border/60">
+                    Ended
+                  </span>
+                </div>
+              )}
+            </div>
+          </button>
+        ) : (
+          <div className="px-4 py-6 text-center text-xs text-muted-foreground" data-testid={`text-loc-no-location-${msg.id}`}>
+            No location available
+          </div>
+        )}
+
         {/* Body */}
         <div className="px-4 py-3 space-y-3">
-          <div className="flex items-start gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="text-xs text-muted-foreground leading-relaxed">
-              {isMine ? "You're sharing" : `${otherUserName} is sharing`} live location
-              {!stopped && ` for ${locMeta.durationMinutes} minutes`}.
-              {locMeta.accuracy ? ` Accurate to about ${Math.round(locMeta.accuracy)}m.` : ""}
+          {hasCoords && (
+            <div className="flex items-start gap-2">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="text-[11px] text-muted-foreground leading-relaxed">
+                Last shared location
+                {locMeta.accuracy ? ` · accurate to about ${Math.round(locMeta.accuracy)}m` : ""}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <Button
               size="sm"
               variant="default"
-              onClick={() => window.open(mapsUrl, "_blank", "noopener,noreferrer")}
+              onClick={openLiveMap}
+              disabled={!hasCoords}
               className="h-9 text-xs"
-              data-testid={`button-loc-open-maps-${msg.id}`}
+              data-testid={`button-loc-open-live-${msg.id}`}
             >
-              <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-              Open in Maps
+              <Navigation className="h-3.5 w-3.5 mr-1.5" />
+              Open Live Map
             </Button>
-            {isMine && !stopped ? (
+            {hasCoords ? (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => handleStopSharing(msg)}
+                onClick={() => window.open(directionsUrl, "_blank", "noopener,noreferrer")}
                 className="h-9 text-xs"
-                data-testid={`button-loc-stop-${msg.id}`}
+                data-testid={`button-loc-directions-${msg.id}`}
               >
-                <StopCircle className="h-3.5 w-3.5 mr-1.5" />
-                Stop sharing
+                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                Get directions
               </Button>
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setLocation("/watched")}
-                className="h-9 text-xs"
-                data-testid={`button-loc-view-live-${msg.id}`}
-                disabled={stopped}
-              >
-                <Navigation className="h-3.5 w-3.5 mr-1.5" />
-                {stopped ? "Ended" : "View live"}
+              <Button size="sm" variant="outline" disabled className="h-9 text-xs">
+                <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                Get directions
               </Button>
             )}
           </div>
+
+          {isMine && !stopped && hasCoords && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleStopSharing(msg)}
+              className="h-8 w-full text-[11px] text-muted-foreground hover:text-destructive"
+              data-testid={`button-loc-stop-${msg.id}`}
+            >
+              <StopCircle className="h-3.5 w-3.5 mr-1.5" />
+              Stop sharing
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -572,8 +628,10 @@ export default function ChatPage() {
 
     // === LIVE LOCATION CARD ===
     // Either via structured meta (new flow) OR backward-compat detection of the
-    // old "Sharing live location: https://..." text format.
-    if (meta?.kind === "live_location" && typeof meta.lat === "number" && typeof meta.lng === "number") {
+    // old "Sharing live location: https://..." text format. We render the card
+    // even when lat/lng are missing — the card itself shows "No location
+    // available" and disables the actions in that case.
+    if (meta?.kind === "live_location") {
       return renderLiveLocationCard(msg, meta as LiveLocationMeta);
     }
     if (kind === "system_info") {
@@ -894,58 +952,52 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Premium Quick Action Bar */}
-      <div className="border-t border-border/60 bg-card px-3 pt-3 pb-2">
-        <div className="max-w-lg mx-auto grid grid-cols-3 gap-2">
-          {/* Share Location */}
+      {/* Compact Quick Action Bar — pill-style icon+label, smaller and sharper */}
+      <div className="border-t border-border/60 bg-card px-3 pt-2 pb-1.5">
+        <div className="max-w-lg mx-auto flex items-center justify-center gap-2">
+          {/* Location */}
           <button
             type="button"
             onClick={handleShareLocation}
             disabled={sharingLocation}
-            className="group relative flex flex-col items-center justify-center gap-1 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 px-2 py-2.5 transition-all hover:border-primary/40 hover:shadow-sm hover:from-primary/15 hover:to-primary/10 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-primary/25 bg-primary/5 text-primary text-xs font-medium transition-all hover:bg-primary/10 hover:border-primary/40 active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed"
             data-testid="button-quick-location"
           >
-            <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center group-hover:bg-primary/25 transition-colors">
-              {sharingLocation ? (
-                <Loader2 className="h-4 w-4 text-primary animate-spin" />
-              ) : (
-                <MapPin className="h-4 w-4 text-primary" />
-              )}
-            </div>
-            <span className="text-[11px] font-semibold text-foreground leading-tight">
-              {sharingLocation ? "Sharing..." : "Share location"}
-            </span>
+            {sharingLocation ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MapPin className="h-3.5 w-3.5" />
+            )}
+            <span>{sharingLocation ? "Sharing…" : "Location"}</span>
           </button>
 
           {/* Call */}
           <button
             type="button"
             onClick={() => setLocation(`/call/${otherUserId}`)}
-            className="group relative flex flex-col items-center justify-center gap-1 rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 px-2 py-2.5 transition-all hover:border-emerald-500/45 hover:shadow-sm hover:from-emerald-500/15 hover:to-emerald-500/10 active:scale-[0.98]"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-emerald-500/25 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400 text-xs font-medium transition-all hover:bg-emerald-500/10 hover:border-emerald-500/45 active:scale-[0.97]"
             data-testid="button-quick-call"
           >
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/30 transition-colors">
-              <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <span className="text-[11px] font-semibold text-foreground leading-tight">Call</span>
+            <Phone className="h-3.5 w-3.5" />
+            <span>Call</span>
           </button>
 
           {/* SOS */}
           {sosConfirm ? (
-            <div className="flex gap-1">
+            <div className="inline-flex items-center gap-1">
               <button
                 type="button"
                 onClick={handleTriggerSos}
-                className="flex-1 flex flex-col items-center justify-center gap-0.5 rounded-xl bg-destructive text-destructive-foreground px-2 py-2.5 font-bold shadow-sm hover:shadow-md active:scale-[0.98] transition-all"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-destructive text-destructive-foreground text-xs font-semibold shadow-sm hover:shadow-md active:scale-[0.97] transition-all"
                 data-testid="button-quick-sos-confirm"
               >
-                <AlertOctagon className="h-4 w-4" />
-                <span className="text-[11px] uppercase tracking-wide">Send SOS</span>
+                <AlertOctagon className="h-3.5 w-3.5" />
+                <span className="uppercase tracking-wide">Send SOS</span>
               </button>
               <button
                 type="button"
                 onClick={() => setSosConfirm(false)}
-                className="px-3 rounded-xl border border-border bg-card text-muted-foreground hover-elevate"
+                className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-border bg-card text-muted-foreground hover:bg-muted transition-colors"
                 data-testid="button-quick-sos-cancel"
                 aria-label="Cancel SOS"
               >
@@ -956,19 +1008,17 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setSosConfirm(true)}
-              className="group relative flex flex-col items-center justify-center gap-1 rounded-xl border border-destructive/30 bg-gradient-to-br from-destructive/10 to-destructive/5 px-2 py-2.5 transition-all hover:border-destructive/50 hover:shadow-sm hover:from-destructive/15 hover:to-destructive/10 active:scale-[0.98]"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-destructive/30 bg-destructive/5 text-destructive text-xs font-semibold transition-all hover:bg-destructive/10 hover:border-destructive/50 active:scale-[0.97]"
               data-testid="button-quick-sos"
             >
-              <div className="w-8 h-8 rounded-full bg-destructive/15 flex items-center justify-center group-hover:bg-destructive/25 transition-colors">
-                <AlertOctagon className="h-4 w-4 text-destructive" />
-              </div>
-              <span className="text-[11px] font-semibold text-destructive leading-tight">SOS</span>
+              <AlertOctagon className="h-3.5 w-3.5" />
+              <span>SOS</span>
             </button>
           )}
         </div>
         {!otherIsOnline && (
           <p
-            className="text-[10px] text-muted-foreground text-center mt-2"
+            className="text-[10px] text-muted-foreground text-center mt-1.5"
             data-testid="text-offline-hint"
           >
             {otherUserName} is offline. Messages and shares will be delivered when they're back.

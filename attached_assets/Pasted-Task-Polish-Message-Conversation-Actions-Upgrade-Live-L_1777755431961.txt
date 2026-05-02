@@ -1,0 +1,156 @@
+Task — Polish Message Conversation Actions + Upgrade Live Location Card
+
+The Messages conversation screen is good, but the bottom action buttons feel too large and not professional enough.
+
+Goal:
+Make the action area sharper, more premium, and more useful without rebuilding chat.
+
+Keep StillHere original colours and brand style.
+
+---
+
+# 1. Compact action buttons
+
+Current buttons:
+- Share location
+- Call
+- SOS
+
+They are too large.
+
+Redesign them into a compact action row.
+
+## New style:
+- smaller pill or compact rounded buttons
+- icon + short label
+- equal width or natural width
+- subtle border
+- soft background
+- less height
+- more like quick actions, not large cards
+
+Suggested labels:
+- Location
+- Call
+- SOS
+
+SOS can remain red/destructive, but smaller and cleaner.
+
+Example layout:
+
+[ 📍 Location ]   [ 📞 Call ]   [ ⚠️ SOS ]
+
+Keep spacing clean.
+
+---
+
+# 2. Improve Live Location message card
+
+Current card says:
+- LIVE LOCATION
+- Sharing ended
+- “You’re sharing live location”
+- Open in Maps
+- Ended
+
+Keep the “Ended” state, but make the card smarter and more useful.
+
+## Add mini map preview
+
+When a location share exists, show a small mini map preview inside the card if lat/lng is available.
+
+Mini map should show:
+- user’s last shared location pin
+- soft map preview
+- compact height
+- rounded corners
+
+If map rendering is too heavy, use a static map-style preview or existing map component in compact mode.
+
+---
+
+# 3. Live Location card actions
+
+Inside the Live Location card, show two actions:
+
+## Primary action:
+Open Live Map
+
+Behavior:
+- Opens the live map inside StillHere
+- Use existing app route for live map/live location if available
+
+## Secondary action:
+Get directions
+
+Behavior:
+- Opens Google Maps directions to the last known/shared location using lat/lng
+- If lat/lng missing, hide or disable this button
+
+Keep:
+- Ended status if sharing has ended
+
+Do not remove the ended indicator.
+
+---
+
+# 4. Better copy
+
+If sharing is active:
+Title:
+Live location
+
+Subtitle:
+Location sharing is active
+
+If sharing ended:
+Title:
+Live location
+
+Subtitle:
+Sharing ended
+
+Below mini map:
+Last shared location
+
+Avoid:
+- “You’re sharing live location” after sharing has ended.
+
+---
+
+# 5. Behaviour rules
+
+- Clicking the mini map preview should open Open Live Map
+- Get directions opens Google Maps externally
+- If location is ended but last location exists, still show last shared location mini map
+- If no lat/lng exists, show text:
+  No location available
+
+---
+
+# 6. Keep existing functionality
+
+Do not break:
+- sending messages
+- existing live location share logic
+- call action
+- SOS action
+- message history
+- offline delivery text
+- relationship/auth checks
+
+This is UI polish + route/action wiring only.
+
+---
+
+# 7. Acceptance report
+
+Report back with:
+
+1. files changed
+2. how action buttons were resized/restyled
+3. how mini map preview works
+4. where Open Live Map routes
+5. how Get directions URL is generated
+6. what happens when lat/lng is missing
+7. confirmation existing message functions still work

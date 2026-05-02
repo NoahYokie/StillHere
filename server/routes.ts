@@ -3455,6 +3455,48 @@ export async function registerRoutes(
     }
   });
 
+  // Static map proxy — keeps the Google API key off the client and lets us
+  // serve a small map preview image inside the in-chat Live Location card.
+  app.get("/api/maps/static-map", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const lat = parseFloat(String(req.query.lat ?? ""));
+      const lng = parseFloat(String(req.query.lng ?? ""));
+      if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ error: "Valid lat and lng required" });
+      }
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      if (!key) return res.status(500).json({ error: "Maps not configured" });
+      const width = Math.min(Math.max(parseInt(String(req.query.w ?? "640"), 10) || 640, 100), 800);
+      const height = Math.min(Math.max(parseInt(String(req.query.h ?? "240"), 10) || 240, 80), 400);
+      const zoom = Math.min(Math.max(parseInt(String(req.query.zoom ?? "15"), 10) || 15, 1), 20);
+      const scale = 2; // retina-quality
+      const url =
+        `https://maps.googleapis.com/maps/api/staticmap` +
+        `?center=${lat},${lng}` +
+        `&zoom=${zoom}` +
+        `&size=${width}x${height}` +
+        `&scale=${scale}` +
+        `&maptype=roadmap` +
+        `&markers=color:0x4F8FF7%7C${lat},${lng}` +
+        `&key=${key}`;
+      const upstream = await fetch(url);
+      if (!upstream.ok) {
+        return res.status(502).json({ error: "Map provider error" });
+      }
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.setHeader("Content-Type", upstream.headers.get("content-type") || "image/png");
+      // Location data is sensitive — keep this in the user's browser only,
+      // never in shared/proxy caches.
+      res.setHeader("Cache-Control", "private, max-age=300");
+      res.send(buf);
+    } catch (err) {
+      console.error("Static map proxy error:", err);
+      res.status(500).json({ error: "Failed to load static map" });
+    }
+  });
+
   app.get("/api/maps/geocode", async (req, res) => {
     try {
       const userId = getUserId(req);
