@@ -156,7 +156,7 @@ export interface IStorage {
   
   // Location Sessions
   getActiveLocationSession(userId: string): Promise<LocationSession | undefined>;
-  createLocationSession(userId: string, type: LocationSessionType, incidentId?: string): Promise<LocationSession>;
+  createLocationSession(userId: string, type: LocationSessionType, incidentId?: string, initialLocation?: { lat: number; lng: number; accuracy?: number | null }): Promise<LocationSession>;
   updateLocationSession(id: string, lat: number, lng: number, accuracy: number): Promise<LocationSession>;
   endLocationSession(id: string): Promise<void>;
   
@@ -802,14 +802,20 @@ export class DatabaseStorage implements IStorage {
   async createLocationSession(
     userId: string,
     type: LocationSessionType,
-    incidentId?: string
+    incidentId?: string,
+    initialLocation?: { lat: number; lng: number; accuracy?: number | null }
   ): Promise<LocationSession> {
+    const now = new Date();
     const [session] = await db.insert(locationSessions).values({
       userId,
       incidentId: incidentId || null,
       type,
       active: true,
-      expiresAt: addHours(new Date(), 1),
+      expiresAt: addHours(now, 1),
+      lastLat: initialLocation?.lat ?? null,
+      lastLng: initialLocation?.lng ?? null,
+      lastAccuracy: initialLocation?.accuracy ?? null,
+      lastTimestamp: initialLocation ? now : null,
     }).returning();
     return session;
   }

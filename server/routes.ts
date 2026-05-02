@@ -1000,17 +1000,37 @@ export async function registerRoutes(
         return res.json({ success: true, incident: existingIncident, alreadyActive: true });
       }
       
+      // Capture moment-of-SOS location from request body if provided
+      const sosLat = typeof req.body?.lat === "number" && isFinite(req.body.lat) ? req.body.lat : null;
+      const sosLng = typeof req.body?.lng === "number" && isFinite(req.body.lng) ? req.body.lng : null;
+      const sosAccuracy = typeof req.body?.accuracy === "number" && isFinite(req.body.accuracy) ? req.body.accuracy : null;
+      const hasLocation = sosLat !== null && sosLng !== null;
+
       // Create SOS incident and set safety state to concern
       let incident = await storage.createIncident(userId, "sos");
       await storage.updateSafetyState(userId, "concern", "SOS triggered");
-      
+
+      // Snapshot moment-of-SOS location to user record so the emergency page has it immediately
+      if (hasLocation) {
+        await db.update(users).set({
+          lastLat: sosLat,
+          lastLng: sosLng,
+          lastLocationAt: new Date(),
+        }).where(eq(users.id, userId));
+      }
+
       // Get contacts sorted by priority
       const contacts = await storage.getContacts(userId);
       const settings = await storage.getSettings(userId);
-      
-      // Create location session if allowed
+
+      // Create location session if allowed, seeded with the moment-of-SOS coordinates
       if (settings?.locationMode === "emergency_only" || settings?.locationMode === "both") {
-        await storage.createLocationSession(userId, "emergency", incident.id);
+        await storage.createLocationSession(
+          userId,
+          "emergency",
+          incident.id,
+          hasLocation ? { lat: sosLat!, lng: sosLng!, accuracy: sosAccuracy } : undefined,
+        );
       }
       
       // Generate fresh tokens for this emergency
