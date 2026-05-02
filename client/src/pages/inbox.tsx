@@ -201,7 +201,12 @@ export default function InboxPage() {
               return (
                 <Card
                   key={convo.partnerId}
-                  className={`cursor-pointer transition-colors hover-elevate ${
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open conversation with ${convo.partnerName}${
+                    isAlert ? ", emergency alert" : convo.unreadCount > 0 ? `, ${convo.unreadCount} unread` : ""
+                  }`}
+                  className={`cursor-pointer transition-colors hover-elevate focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                     isAlert
                       ? "border-destructive/40 bg-destructive/5"
                       : convo.unreadCount > 0
@@ -209,6 +214,12 @@ export default function InboxPage() {
                         : "border-border/60"
                   }`}
                   onClick={() => setLocation(`/chat/${convo.partnerId}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setLocation(`/chat/${convo.partnerId}`);
+                    }
+                  }}
                   data-testid={`conversation-${convo.partnerId}`}
                 >
                   <CardContent className="py-3 px-4">

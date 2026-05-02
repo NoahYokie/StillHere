@@ -345,7 +345,7 @@ export default function ChatPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setLocation(`/watched/${otherUserId}`)}
+                    onClick={() => setLocation("/watched")}
                     className="h-9 text-xs"
                     data-testid={`button-alert-location-${msg.id}`}
                   >
@@ -502,7 +502,9 @@ export default function ChatPage() {
                         setLocalMessages((prev) => prev.filter((m) => m.id !== msg.id));
                         handleSend(content);
                       }}
-                      className="flex items-center gap-1 text-[10px] text-red-300 hover:text-red-200"
+                      className={`flex items-center gap-1 text-[10px] underline-offset-2 hover:underline ${
+                        isMine ? "text-primary-foreground/90" : "text-destructive"
+                      }`}
                       data-testid={`button-retry-${msg.id}`}
                     >
                       <RotateCcw className="w-3 h-3" /> Tap to retry

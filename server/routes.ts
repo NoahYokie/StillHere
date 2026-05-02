@@ -2506,6 +2506,100 @@ export async function registerRoutes(
     }
   });
 
+  // Throttle the alert/system endpoints separately from regular chat
+  // (10 SOS broadcasts per 5 min, 60 system messages per 5 min — generous
+  // for legit safety use, restrictive enough to prevent spam abuse).
+  const sosLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many SOS attempts. Please wait before trying again." },
+  });
+  const systemMessageLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many safety messages. Please wait before sending more." },
+  });
+
+  // Per-user dedupe window for SOS broadcasts: a single user cannot fire a
+  // fresh SOS more than once every 60 seconds. Repeated taps within the
+  // window return the most recent broadcast result without re-spamming the
+  // entire Safety Circle.
+  const SOS_DEDUPE_MS = 60 * 1000;
+  const recentSosByUser = new Map<string, { at: number; sentCount: number }>();
+
+  // Broadcast a system_alert message to every member of the user's Safety Circle.
+  // Used by the in-chat "Trigger SOS" quick action — also triggers the standard
+  // SOS incident pipeline if one is not already open. MUST be registered before
+  // POST /api/messages/:userId so Express does not match "sos" as a userId param.
+  app.post("/api/messages/sos", sosLimiter, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+
+      // Dedupe: if this user fired an SOS within the last 60s, do not re-broadcast.
+      const recent = recentSosByUser.get(userId);
+      if (recent && Date.now() - recent.at < SOS_DEDUPE_MS) {
+        return res.json({
+          success: true,
+          sentCount: recent.sentCount,
+          deduped: true,
+          retryAfterMs: SOS_DEDUPE_MS - (Date.now() - recent.at),
+        });
+      }
+
+      const user = await storage.getUser(userId);
+      const userName = user?.name || "Someone";
+
+      // Broadcast a system_alert to every linked Safety Circle member
+      const contacts = await storage.getContacts(userId);
+      const linked = contacts.filter((c) => c.linkedUserId);
+      const alertContent = `${userName} triggered an SOS. They need help right now.`;
+      const meta = { kind: "sos", triggeredAt: new Date().toISOString() };
+
+      const { emitToUser } = await import("./socket");
+      const created: any[] = [];
+      for (const contact of linked) {
+        try {
+          const msg = await storage.saveMessage(userId, contact.linkedUserId!, alertContent, {
+            messageType: "system_alert",
+            meta,
+          });
+          emitToUser(contact.linkedUserId!, "message:new", { ...msg, senderName: userName });
+          emitToUser(userId, "message:sent", msg);
+          created.push(msg);
+        } catch (err: any) {
+          console.error(`[SOS-MSG] Failed for contact ${contact.id}:`, err?.message || err);
+        }
+      }
+
+      recentSosByUser.set(userId, { at: Date.now(), sentCount: created.length });
+
+      // Trigger the standard SOS incident flow (idempotent — will no-op if already open).
+      // Wrapped so any failure here cannot lose the broadcast result.
+      try {
+        const existingIncident = await storage.getOpenIncident(userId);
+        if (!existingIncident) {
+          await storage.createIncident(userId, "sos");
+          await storage.updateSafetyState(userId, "concern", "SOS triggered from messages");
+          notifyConcern(userId, userName, "sos").catch(() => {});
+        }
+      } catch (err: any) {
+        console.error("[SOS-MSG] Incident creation failed:", err?.message || err);
+      }
+
+      res.json({ success: true, sentCount: created.length });
+    } catch (error) {
+      console.error("Error broadcasting SOS message:", error);
+      res.status(500).json({ error: "Failed to broadcast SOS" });
+    }
+  });
+
   app.post("/api/messages/:userId", async (req, res) => {
     try {
       const currentUserId = getUserId(req);
@@ -2549,64 +2643,11 @@ export async function registerRoutes(
     }
   });
 
-  // Broadcast a system_alert message to every member of the user's Safety Circle.
-  // Used by the in-chat "Trigger SOS" quick action — also triggers the standard
-  // SOS incident pipeline if one is not already open.
-  app.post("/api/messages/sos", async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
-      }
-      const user = await storage.getUser(userId);
-      const userName = user?.name || "Someone";
-
-      // Broadcast a system_alert to every linked Safety Circle member
-      const contacts = await storage.getContacts(userId);
-      const linked = contacts.filter((c) => c.linkedUserId);
-      const alertContent = `${userName} triggered an SOS. They need help right now.`;
-      const meta = { kind: "sos", triggeredAt: new Date().toISOString() };
-
-      const { emitToUser } = await import("./socket");
-      const created: any[] = [];
-      for (const contact of linked) {
-        try {
-          const msg = await storage.saveMessage(userId, contact.linkedUserId!, alertContent, {
-            messageType: "system_alert",
-            meta,
-          });
-          emitToUser(contact.linkedUserId!, "message:new", { ...msg, senderName: userName });
-          emitToUser(userId, "message:sent", msg);
-          created.push(msg);
-        } catch (err: any) {
-          console.error(`[SOS-MSG] Failed for contact ${contact.id}:`, err?.message || err);
-        }
-      }
-
-      // Also trigger the standard SOS incident flow (idempotent — will no-op if already open)
-      try {
-        const existingIncident = await storage.getOpenIncident(userId);
-        if (!existingIncident) {
-          await storage.createIncident(userId, "sos");
-          await storage.updateSafetyState(userId, "concern", "SOS triggered from messages");
-          notifyConcern(userId, userName, "sos").catch(() => {});
-        }
-      } catch (err: any) {
-        console.error("[SOS-MSG] Incident creation failed:", err?.message || err);
-      }
-
-      res.json({ success: true, sentCount: created.length });
-    } catch (error) {
-      console.error("Error broadcasting SOS message:", error);
-      res.status(500).json({ error: "Failed to broadcast SOS" });
-    }
-  });
-
   // Post a system_safe or system_info message into a conversation.
   // Either party in the Safety Circle relationship may post these.
   // system_alert may NOT be created via this endpoint — those only come from the
   // SOS pipeline above so they cannot be spoofed by chat actions.
-  app.post("/api/messages/:userId/system", async (req, res) => {
+  app.post("/api/messages/:userId/system", systemMessageLimiter, async (req, res) => {
     try {
       const currentUserId = getUserId(req);
       if (!currentUserId) {
