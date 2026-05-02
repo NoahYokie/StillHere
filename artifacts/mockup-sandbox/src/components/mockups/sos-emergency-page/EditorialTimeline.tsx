@@ -109,7 +109,7 @@ export function EditorialTimeline() {
               <div className="rounded-xl overflow-hidden shadow-sm border border-[#EBE7DF] bg-white">
                 <div className="aspect-[4/3] bg-[#EBE7DF] relative">
                   <img
-                    src={\`https://staticmap.openstreetmap.de/staticmap.php?center=\${mockData.location.lat},\${mockData.location.lng}&zoom=15&size=600x400&markers=\${mockData.location.lat},\${mockData.location.lng},red-pushpin\`}
+                    src={`https://staticmap.openstreetmap.de/staticmap.php?center=${mockData.location.lat},${mockData.location.lng}&zoom=15&size=600x400&markers=${mockData.location.lat},${mockData.location.lng},red-pushpin`}
                     alt="Map showing Dauda's location"
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -122,7 +122,7 @@ export function EditorialTimeline() {
                     Accuracy: {mockData.location.accuracy}
                   </div>
                   <Button variant="outline" size="sm" className="font-ui h-8 text-xs border-[#D6D2C9] text-[#2C2A25] bg-white hover:bg-[#FDFBF7]" asChild>
-                    <a href={\`https://www.google.com/maps/dir/?api=1&destination=\${mockData.location.lat},\${mockData.location.lng}\`} target="_blank" rel="noopener noreferrer">
+                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${mockData.location.lat},${mockData.location.lng}`} target="_blank" rel="noopener noreferrer">
                       <Navigation className="h-3 w-3 mr-2" />
                       Get Directions
                     </a>
@@ -156,7 +156,7 @@ export function EditorialTimeline() {
               className="flex-1 h-12 bg-white border-[#D6D2C9] text-[#2C2A25] hover:bg-[#FDFBF7] shadow-sm rounded-xl font-medium"
               asChild
             >
-              <a href={\`tel:\${mockData.user.phone}\`}>
+              <a href={`tel:${mockData.user.phone}`}>
                 <Phone className="h-4 w-4 mr-2 text-[#6B665A]" />
                 Call
               </a>
@@ -166,7 +166,7 @@ export function EditorialTimeline() {
               className="flex-1 h-12 bg-white border-[#D6D2C9] text-[#2C2A25] hover:bg-[#FDFBF7] shadow-sm rounded-xl font-medium"
               asChild
             >
-              <a href={\`sms:\${mockData.user.phone}\`}>
+              <a href={`sms:${mockData.user.phone}`}>
                 <MessageSquare className="h-4 w-4 mr-2 text-[#6B665A]" />
                 Message
               </a>
