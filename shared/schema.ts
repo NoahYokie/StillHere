@@ -17,6 +17,8 @@ export const safetyStateEnum = pgEnum("safety_state", ["active", "quiet", "conce
 export const sharingModeEnum = pgEnum("sharing_mode", ["precise", "area", "presence", "paused"]);
 export const circleRoleEnum = pgEnum("circle_role", ["primary", "backup", "support"]);
 export const messageTypeEnum = pgEnum("message_type", ["user", "system_alert", "system_safe", "system_info"]);
+export const familyRoleEnum = pgEnum("family_role", ["admin", "adult", "teen", "child"]);
+export const familyMemberStatusEnum = pgEnum("family_member_status", ["active", "invited", "paused", "removed"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -815,6 +817,86 @@ export const insertAppRatingSchema = createInsertSchema(appRatings).omit({ id: t
 export const insertSafetyTimerSchema = createInsertSchema(safetyTimers).omit({ id: true, startedAt: true });
 export const insertSafeWalkSchema = createInsertSchema(safeWalks).omit({ id: true, startedAt: true });
 export const insertTripPointSchema = createInsertSchema(tripPoints).omit({ id: true, recordedAt: true });
+
+// ===== Family Mode =====
+// Family Mode is a *safety* group, NOT parental control / app-usage tracking.
+export const families = pgTable("families", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  adminUserId: uuid("admin_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("families_admin_user_id_idx").on(table.adminUserId),
+]);
+
+export const familyMembers = pgTable("family_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  // For pending invites userId is null until the invitee accepts (we resolve by phone)
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  invitePhone: text("invite_phone"),
+  inviteName: text("invite_name"),
+  role: familyRoleEnum("role").notNull().default("adult"),
+  status: familyMemberStatusEnum("status").notNull().default("invited"),
+  sharingMode: sharingModeEnum("sharing_mode").notNull().default("precise"),
+  parentalConsentRequired: boolean("parental_consent_required").notNull().default(false),
+  parentalConsentGranted: boolean("parental_consent_granted").notNull().default(false),
+  invitedBy: uuid("invited_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("family_members_family_id_idx").on(table.familyId),
+  index("family_members_user_id_idx").on(table.userId),
+  index("family_members_invite_phone_idx").on(table.invitePhone),
+]);
+
+export const familiesRelations = relations(families, ({ one, many }) => ({
+  admin: one(users, { fields: [families.adminUserId], references: [users.id] }),
+  members: many(familyMembers),
+}));
+
+export const familyMembersRelations = relations(familyMembers, ({ one }) => ({
+  family: one(families, { fields: [familyMembers.familyId], references: [families.id] }),
+  user: one(users, { fields: [familyMembers.userId], references: [users.id] }),
+}));
+
+export const insertFamilySchema = createInsertSchema(families).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFamilyMemberSchema = createInsertSchema(familyMembers).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type Family = typeof families.$inferSelect;
+export type InsertFamily = z.infer<typeof insertFamilySchema>;
+export type FamilyMember = typeof familyMembers.$inferSelect;
+export type InsertFamilyMember = z.infer<typeof insertFamilyMemberSchema>;
+export type FamilyRole = "admin" | "adult" | "teen" | "child";
+export type FamilyMemberStatus = "active" | "invited" | "paused" | "removed";
+
+// Hydrated row for the Family page
+export interface FamilyMemberView {
+  id: string;
+  userId: string | null;
+  name: string;
+  phone: string | null;
+  role: FamilyRole;
+  status: FamilyMemberStatus;
+  sharingMode: "precise" | "area" | "presence" | "paused";
+  parentalConsentRequired: boolean;
+  parentalConsentGranted: boolean;
+  isAdmin: boolean;
+  // Safety + presence (best-effort, may be null for pending invites)
+  safetyState: "active" | "quiet" | "concern" | null;
+  lastSeenAt: Date | null;
+  lastLat: number | null;
+  lastLng: number | null;
+  lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
+  hasActiveIncident: boolean;
+}
+
+export interface FamilyOverview {
+  family: Family | null;
+  isAdmin: boolean;
+  members: FamilyMemberView[];
+}
 
 // Types
 export type User = typeof users.$inferSelect;

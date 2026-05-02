@@ -7,7 +7,7 @@ import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./noti
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
 import { eq, and, lt, gte, desc, isNull, sql } from "drizzle-orm";
-import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts } from "@shared/schema";
+import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, type FamilyRole } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -5981,6 +5981,163 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in safety-state tick:", error);
       res.status(500).json({ error: "Safety state tick failed" });
+    }
+  });
+
+  // ============================================================
+  // Family Mode (safety group — NOT parental control / surveillance)
+  // ============================================================
+  app.get("/api/family", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      res.json(overview);
+    } catch (e) {
+      console.error("[family] get failed", e);
+      res.status(500).json({ error: "Failed to load family" });
+    }
+  });
+
+  app.post("/api/family", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const name = (req.body?.name || "").toString().trim();
+      if (!name) return res.status(400).json({ error: "Family name is required" });
+      // Prevent duplicate family per admin
+      const existing = await storage.getFamilyForUser(userId);
+      if (existing.family) return res.status(409).json({ error: "You already belong to a family" });
+      const family = await storage.createFamily(userId, name);
+      res.json({ family });
+    } catch (e) {
+      console.error("[family] create failed", e);
+      res.status(500).json({ error: "Failed to create family" });
+    }
+  });
+
+  app.post("/api/family/invite", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "Create a family first" });
+      if (!overview.isAdmin) return res.status(403).json({ error: "Only the family admin can invite" });
+
+      const name = (req.body?.name || "").toString().trim();
+      const phoneRaw = (req.body?.phone || "").toString().trim();
+      const role = (req.body?.role || "adult") as FamilyRole;
+      const parentalConsentRequired = !!req.body?.parentalConsentRequired;
+      if (!name || !phoneRaw) return res.status(400).json({ error: "Name and phone are required" });
+      if (!["admin", "adult", "teen", "child"].includes(role)) return res.status(400).json({ error: "Invalid role" });
+
+      const phone = normalizePhone(phoneRaw);
+      const member = await storage.inviteFamilyMember({
+        familyId: overview.family.id,
+        invitedBy: userId,
+        name,
+        phone,
+        role,
+        // teen/child auto-require parental consent regardless of caller flag
+        parentalConsentRequired: parentalConsentRequired || role === "child" || role === "teen",
+      });
+      res.json({ member });
+    } catch (e) {
+      console.error("[family] invite failed", e);
+      res.status(500).json({ error: "Failed to invite member" });
+    }
+  });
+
+  app.patch("/api/family/member/:memberId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const memberId = req.params.memberId;
+      const member = await storage.getFamilyMember(memberId);
+      if (!member) return res.status(404).json({ error: "Member not found" });
+
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family || overview.family.id !== member.familyId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const isSelf = member.userId === userId;
+      const isAdmin = overview.isAdmin;
+      const updates: any = {};
+
+      // Sharing mode: members can change their own, admin can change for under-16
+      if (req.body?.sharingMode) {
+        const m = req.body.sharingMode;
+        if (!["precise", "area", "presence", "paused"].includes(m)) {
+          return res.status(400).json({ error: "Invalid sharing mode" });
+        }
+        const isMinor = member.role === "teen" || member.role === "child";
+        if (isSelf || (isAdmin && isMinor)) {
+          updates.sharingMode = m;
+        } else {
+          return res.status(403).json({ error: "Only the member can change their sharing mode" });
+        }
+      }
+
+      // Admin-only fields
+      if (req.body?.role !== undefined) {
+        if (!isAdmin) return res.status(403).json({ error: "Admin only" });
+        if (!["admin", "adult", "teen", "child"].includes(req.body.role)) {
+          return res.status(400).json({ error: "Invalid role" });
+        }
+        updates.role = req.body.role;
+      }
+      if (req.body?.status !== undefined) {
+        if (!isAdmin) return res.status(403).json({ error: "Admin only" });
+        if (!["active", "invited", "paused", "removed"].includes(req.body.status)) {
+          return res.status(400).json({ error: "Invalid status" });
+        }
+        updates.status = req.body.status;
+      }
+      if (req.body?.parentalConsentGranted !== undefined) {
+        if (!isAdmin) return res.status(403).json({ error: "Admin only" });
+        updates.parentalConsentGranted = !!req.body.parentalConsentGranted;
+      }
+      if (req.body?.parentalConsentRequired !== undefined) {
+        if (!isAdmin) return res.status(403).json({ error: "Admin only" });
+        updates.parentalConsentRequired = !!req.body.parentalConsentRequired;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const updated = await storage.updateFamilyMember(memberId, updates);
+      res.json({ member: updated });
+    } catch (e) {
+      console.error("[family] update failed", e);
+      res.status(500).json({ error: "Failed to update member" });
+    }
+  });
+
+  app.delete("/api/family/member/:memberId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const memberId = req.params.memberId;
+      const member = await storage.getFamilyMember(memberId);
+      if (!member) return res.status(404).json({ error: "Member not found" });
+
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family || overview.family.id !== member.familyId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const isSelf = member.userId === userId;
+      // Members may leave; only admin may remove others
+      if (!isSelf && !overview.isAdmin) {
+        return res.status(403).json({ error: "Only admin can remove other members" });
+      }
+      await storage.removeFamilyMember(memberId);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("[family] remove failed", e);
+      res.status(500).json({ error: "Failed to remove member" });
     }
   });
 

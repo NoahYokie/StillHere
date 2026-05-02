@@ -66,6 +66,14 @@ import {
   type SafetyTimer,
   type SafeWalk,
   type TripPoint,
+  families,
+  familyMembers,
+  type Family,
+  type FamilyMember,
+  type FamilyMemberView,
+  type FamilyOverview,
+  type FamilyRole,
+  type FamilyMemberStatus,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -2011,6 +2019,184 @@ export class DatabaseStorage implements IStorage {
         eq(tripPoints.tripType, tripType)
       ))
       .orderBy(tripPoints.recordedAt);
+  }
+
+  // ===== Family Mode =====
+  // Returns the family the user belongs to (as admin or member) plus a hydrated
+  // member list with safety state. Pending invites for *this* user (matched by
+  // phone) are also auto-attached to their userId on read.
+  async getFamilyForUser(userId: string): Promise<FamilyOverview> {
+    const me = await this.getUser(userId);
+    if (!me) return { family: null, isAdmin: false, members: [] };
+
+    // Auto-link any pending invites that match my phone (so users see their
+    // family appear after they sign up).
+    if (me.phone) {
+      await db.update(familyMembers)
+        .set({ userId: me.id, status: "active", updatedAt: new Date() })
+        .where(and(
+          eq(familyMembers.invitePhone, me.phone),
+          isNull(familyMembers.userId),
+        ));
+    }
+
+    // Find a family I admin OR a family I'm a member of
+    const [adminedFam] = await db.select().from(families)
+      .where(eq(families.adminUserId, userId)).limit(1);
+
+    let family: Family | null = adminedFam ?? null;
+    if (!family) {
+      const [memberRow] = await db.select().from(familyMembers)
+        .where(and(
+          eq(familyMembers.userId, userId),
+          ne(familyMembers.status, "removed"),
+        )).limit(1);
+      if (memberRow) {
+        const [fam] = await db.select().from(families)
+          .where(eq(families.id, memberRow.familyId)).limit(1);
+        family = fam ?? null;
+      }
+    }
+
+    if (!family) return { family: null, isAdmin: false, members: [] };
+
+    const isAdmin = family.adminUserId === userId;
+    const rows = await db.select().from(familyMembers)
+      .where(and(
+        eq(familyMembers.familyId, family.id),
+        ne(familyMembers.status, "removed"),
+      ));
+
+    // Always include the admin as an implicit "active" member view
+    const memberViews: FamilyMemberView[] = [];
+    const adminUser = await this.getUser(family.adminUserId);
+    if (adminUser) {
+      memberViews.push({
+        id: `admin:${adminUser.id}`,
+        userId: adminUser.id,
+        name: adminUser.name || "Admin",
+        phone: adminUser.phone || null,
+        role: "admin",
+        status: "active",
+        sharingMode: (adminUser as any).sharingMode || "precise",
+        parentalConsentRequired: false,
+        parentalConsentGranted: true,
+        isAdmin: true,
+        safetyState: ((adminUser as any).safetyState as any) || null,
+        lastSeenAt: (adminUser as any).lastHeartbeatAt || null,
+        lastLat: (adminUser as any).lastHeartbeatLat ?? null,
+        lastLng: (adminUser as any).lastHeartbeatLng ?? null,
+        lastActivity: (adminUser as any).lastActivity ?? null,
+        hasActiveIncident: false,
+      });
+    }
+
+    for (const row of rows) {
+      let name = row.inviteName || "Pending invite";
+      let phone = row.invitePhone || null;
+      let safetyState: any = null;
+      let lastSeenAt: Date | null = null;
+      let lastLat: number | null = null;
+      let lastLng: number | null = null;
+      let lastActivity: any = null;
+      let resolvedSharingMode: any = row.sharingMode;
+
+      if (row.userId) {
+        const u = await this.getUser(row.userId);
+        if (u) {
+          name = u.name || name;
+          phone = u.phone || phone;
+          safetyState = (u as any).safetyState || null;
+          lastSeenAt = (u as any).lastHeartbeatAt || null;
+          lastLat = (u as any).lastHeartbeatLat ?? null;
+          lastLng = (u as any).lastHeartbeatLng ?? null;
+          lastActivity = (u as any).lastActivity ?? null;
+          // Each member's *own* user-level sharing mode wins for redaction;
+          // the family member row's sharingMode is the family-scoped preference.
+          resolvedSharingMode = row.sharingMode;
+        }
+      }
+
+      memberViews.push({
+        id: row.id,
+        userId: row.userId,
+        name,
+        phone,
+        role: row.role as FamilyRole,
+        status: row.status as FamilyMemberStatus,
+        sharingMode: resolvedSharingMode,
+        parentalConsentRequired: row.parentalConsentRequired,
+        parentalConsentGranted: row.parentalConsentGranted,
+        isAdmin: false,
+        safetyState,
+        lastSeenAt,
+        lastLat,
+        lastLng,
+        lastActivity,
+        hasActiveIncident: false,
+      });
+    }
+
+    return { family, isAdmin, members: memberViews };
+  }
+
+  async createFamily(adminUserId: string, name: string): Promise<Family> {
+    const [fam] = await db.insert(families).values({
+      adminUserId,
+      name: name.trim() || "My Family",
+    }).returning();
+    return fam;
+  }
+
+  async inviteFamilyMember(params: {
+    familyId: string;
+    invitedBy: string;
+    name: string;
+    phone: string;
+    role: FamilyRole;
+    parentalConsentRequired: boolean;
+  }): Promise<FamilyMember> {
+    // If a user already exists for this phone, attach immediately as active
+    const existing = await this.getUserByPhone(params.phone);
+    const [row] = await db.insert(familyMembers).values({
+      familyId: params.familyId,
+      userId: existing?.id || null,
+      invitePhone: params.phone,
+      inviteName: params.name,
+      role: params.role,
+      status: existing ? "active" : "invited",
+      sharingMode: "precise",
+      parentalConsentRequired: params.parentalConsentRequired,
+      parentalConsentGranted: !params.parentalConsentRequired,
+      invitedBy: params.invitedBy,
+    }).returning();
+    return row;
+  }
+
+  async getFamilyMember(memberId: string): Promise<FamilyMember | undefined> {
+    const [row] = await db.select().from(familyMembers).where(eq(familyMembers.id, memberId));
+    return row;
+  }
+
+  async updateFamilyMember(memberId: string, updates: Partial<{
+    role: FamilyRole;
+    status: FamilyMemberStatus;
+    sharingMode: "precise" | "area" | "presence" | "paused";
+    parentalConsentGranted: boolean;
+    parentalConsentRequired: boolean;
+  }>): Promise<FamilyMember> {
+    const [row] = await db.update(familyMembers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(familyMembers.id, memberId))
+      .returning();
+    if (!row) throw new Error("Family member not found");
+    return row;
+  }
+
+  async removeFamilyMember(memberId: string): Promise<void> {
+    await db.update(familyMembers)
+      .set({ status: "removed", updatedAt: new Date() })
+      .where(eq(familyMembers.id, memberId));
   }
 }
 

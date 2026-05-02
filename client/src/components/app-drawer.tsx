@@ -15,6 +15,7 @@ import {
   Home,
   MessageCircle,
   Users,
+  Heart,
   Shield,
   MapPin,
   Bookmark,
@@ -49,6 +50,7 @@ const sections: NavSection[] = [
       { label: "Messages", icon: MessageCircle, route: "/inbox", testid: "drawer-link-messages" },
       { label: "Guardians", icon: Users, route: "/watched", testid: "drawer-link-guardians" },
       { label: "Safety Circle", icon: Shield, route: "/safety-circle", testid: "drawer-link-safety-circle" },
+      { label: "Family", icon: Heart, route: "/family", testid: "drawer-link-family" },
     ],
   },
   {
