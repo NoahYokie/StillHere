@@ -249,12 +249,24 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
 
   if (user.hasOpenIncident) {
     const reason = user.incidentReason === "sos" ? "SOS" : "Missed check-in";
+    let subtext = user.lastHeartbeatAt
+      ? `Last heard from ${friendlyTimeAgo(user.lastHeartbeatAt)}`
+      : "Trying to reach them now";
+    if (user.wellnessCallStatus === "help") {
+      subtext = "We called them. They pressed Need Help.";
+    } else if (user.wellnessCallStatus === "no_response") {
+      subtext = `We called them ${friendlyTimeAgo(user.wellnessCallAt)}. No answer yet.`;
+    } else if (user.reminderStage === "calling") {
+      subtext = `We're calling them now${user.wellnessCallAt ? ` (${friendlyTimeAgo(user.wellnessCallAt)})` : ""}`;
+    } else if (user.reminderStage === "sms") {
+      subtext = "Sent them an SMS reminder. Waiting for reply.";
+    } else if (user.reminderStage === "push") {
+      subtext = "Sent them a push reminder. Waiting for reply.";
+    }
     return {
       trustLevel: "worried",
       headline: `${reason} alert active`,
-      subtext: user.lastHeartbeatAt
-        ? `Last heard from ${friendlyTimeAgo(user.lastHeartbeatAt)}`
-        : "Trying to reach them now",
+      subtext,
       connection: { status: connectionStatus, label: connectionLabel },
       location: { status: locationStatus, label: locationLabel },
       recoveryMessage: null,
@@ -268,10 +280,16 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
   }
 
   if (user.safetyState === "concern") {
+    let subtext = "Trying to reach them now";
+    if (user.wellnessCallStatus === "no_response") {
+      subtext = `We called them ${friendlyTimeAgo(user.wellnessCallAt)}. No answer yet.`;
+    } else if (user.reminderStage === "calling") {
+      subtext = "We're calling them now";
+    }
     return {
       trustLevel: "worried",
       headline: `We haven't heard from ${user.userName.split(" ")[0]} for ${heartbeatAge ?? "?"} minutes`,
-      subtext: "Trying to reach them now",
+      subtext,
       connection: { status: connectionStatus, label: connectionLabel },
       location: { status: locationStatus, label: locationLabel },
       recoveryMessage: null,
@@ -325,11 +343,17 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
     };
   }
 
+  const checkinMethodLabel =
+    user.lastCheckinMethod === "auto" ? " via phone call"
+    : user.lastCheckinMethod === "sms" ? " via SMS"
+    : user.lastCheckinMethod === "watch" ? " via watch"
+    : "";
+
   return {
     trustLevel: "safe",
     headline: recoveryMessage || "Everything looks good",
     subtext: user.lastCheckinAt
-      ? `Last check-in ${friendlyTimeAgo(user.lastCheckinAt)}`
+      ? `Last check-in ${friendlyTimeAgo(user.lastCheckinAt)}${checkinMethodLabel}`
       : connectionStatus === "connected"
         ? "Phone is online"
         : "No check-ins yet",

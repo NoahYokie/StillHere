@@ -745,6 +745,20 @@ export class DatabaseStorage implements IStorage {
     return incident || undefined;
   }
 
+  async getLatestRealOpenIncident(userId: string): Promise<Incident | undefined> {
+    const [incident] = await db
+      .select()
+      .from(incidents)
+      .where(and(
+        eq(incidents.userId, userId),
+        eq(incidents.status, "open"),
+        eq(incidents.isDrill, false),
+      ))
+      .orderBy(desc(incidents.startedAt))
+      .limit(1);
+    return incident || undefined;
+  }
+
   async getIncidentsNeedingEscalation(): Promise<Incident[]> {
     const now = new Date();
     // Get incidents where:
@@ -1252,15 +1266,31 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      const recentWindowMs = 60 * 60 * 1000;
-      const recentSince = new Date(Date.now() - recentWindowMs);
-      const [recentIncident] = await db.select().from(incidents)
-        .where(and(eq(incidents.userId, user.id), gte(incidents.startedAt, recentSince)))
-        .orderBy(desc(incidents.startedAt))
-        .limit(1);
-      const wellnessCallStatus = (recentIncident?.wellnessCallStatus as
-        "placed" | "safe" | "help" | "no_response" | null) || null;
-      const wellnessCallAt = recentIncident?.callSentAt || null;
+      // Prefer the open real (non-drill) incident's wellness call info. Fall
+      // back to the most recent incident with a wellnessCallStatus set within
+      // the last 6 hours so a "Confirmed safe by call" badge stays visible
+      // for a meaningful window after resolution.
+      let wellnessCallStatus: "placed" | "safe" | "help" | "no_response" | null = null;
+      let wellnessCallAt: Date | null = null;
+      if (openIncident && !openIncident.isDrill && openIncident.wellnessCallStatus) {
+        wellnessCallStatus = openIncident.wellnessCallStatus as any;
+        wellnessCallAt = openIncident.callSentAt || null;
+      } else {
+        const recentWindowMs = 6 * 60 * 60 * 1000;
+        const recentSince = new Date(Date.now() - recentWindowMs);
+        const [recentIncident] = await db.select().from(incidents)
+          .where(and(
+            eq(incidents.userId, user.id),
+            eq(incidents.isDrill, false),
+            gte(incidents.startedAt, recentSince),
+          ))
+          .orderBy(desc(incidents.startedAt))
+          .limit(1);
+        if (recentIncident?.wellnessCallStatus) {
+          wellnessCallStatus = recentIncident.wellnessCallStatus as any;
+          wellnessCallAt = recentIncident.callSentAt || null;
+        }
+      }
       let reminderStage: "none" | "push" | "sms" | "calling" | null = null;
       if (openIncident) {
         const step = openIncident.lastEscalationStep;

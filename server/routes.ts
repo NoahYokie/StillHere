@@ -4767,7 +4767,15 @@ export async function registerRoutes(
       const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
 
       if (digits === "1" && user) {
-        const openIncidentForUser = await storage.getOpenIncident(user.id);
+        // Use the latest real (non-drill) open incident. If wellnessCallStatus
+        // already terminal (e.g. duplicate webhook delivery), short-circuit.
+        const openIncidentForUser = await storage.getLatestRealOpenIncident(user.id);
+        if (openIncidentForUser?.wellnessCallStatus === "safe" || openIncidentForUser?.wellnessCallStatus === "help") {
+          console.log(`[WELLNESS CALL] Press 1 received but incident ${openIncidentForUser.id} already terminal (${openIncidentForUser.wellnessCallStatus}). Ignoring duplicate.`);
+          const twimlDup = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Google.en-US-Neural2-F">Thank you. You are already checked in. Goodbye.</Say><Hangup/></Response>`;
+          return res.type("text/xml").send(twimlDup);
+        }
         if (openIncidentForUser) {
           await storage.updateIncident(openIncidentForUser.id, { wellnessCallStatus: "safe" });
         }
@@ -4779,11 +4787,22 @@ export async function registerRoutes(
       }
 
       if (digits === "2" && user) {
-        console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} pressed 2 — SOS triggered via phone call`);
+        console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} pressed 2. SOS triggered via phone call.`);
 
-        // Reuse existing open incident if there is one (e.g. the missed_checkin
-        // that triggered this call). Otherwise create a fresh SOS incident.
-        let incident = await storage.getOpenIncident(user.id);
+        // Reuse the latest real (non-drill) open incident if one exists.
+        // Never mutate a drill incident into a real SOS. If the only open
+        // incident is a drill, create a fresh SOS incident alongside it.
+        let incident = await storage.getLatestRealOpenIncident(user.id);
+
+        // Idempotency: if this incident already records wellnessCallStatus
+        // "help" (duplicate Twilio webhook delivery), skip the fan-out.
+        if (incident?.wellnessCallStatus === "help") {
+          console.log(`[WELLNESS CALL] Press 2 received but incident ${incident.id} already marked help. Ignoring duplicate.`);
+          const twimlDup = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Google.en-US-Neural2-F">We hear you. Help is on the way. Goodbye.</Say><Hangup/></Response>`;
+          return res.type("text/xml").send(twimlDup);
+        }
+
         if (incident) {
           await storage.updateIncident(incident.id, {
             reason: "sos",
@@ -4793,7 +4812,7 @@ export async function registerRoutes(
           incident = await storage.createIncident(user.id, "sos");
           await storage.updateIncident(incident.id, { wellnessCallStatus: "help" });
         }
-        await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call — needs help");
+        await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call. Needs help.");
 
         // Fan out to ALL contacts in parallel (SMS + push) — the user audibly
         // confirmed they need help, so we don't wait for sequential escalation.
@@ -4854,15 +4873,16 @@ export async function registerRoutes(
         console.log(`[WELLNESS CALL] SOS notified ${notifiedIds.length}/${sortedSos.length} contacts for ${user.name}`);
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">We hear you. Your safety circle is being alerted right now. Stay on the line if you can — someone will reach you very soon.</Say><Pause length="2"/><Say voice="Google.en-US-Neural2-F">If you can call emergency services yourself, please do. You are not alone.</Say><Pause length="3"/><Hangup/></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">We hear you. Your safety circle is being alerted right now. Stay on the line if you can. Someone will reach you very soon.</Say><Pause length="2"/><Say voice="Google.en-US-Neural2-F">If you can call emergency services yourself, please do. You are not alone.</Say><Pause length="3"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
       if (user) {
-        // Caller didn't press 1 or 2 — record the no-response on the open
+        // Caller didn't press 1 or 2. Record the no-response on the open real
         // incident so the watcher dashboard can show "called, no answer".
-        const noResponseIncident = await storage.getOpenIncident(user.id);
-        if (noResponseIncident) {
+        // Never mutate drill incidents from the wellness flow.
+        const noResponseIncident = await storage.getLatestRealOpenIncident(user.id);
+        if (noResponseIncident && noResponseIncident.wellnessCallStatus !== "safe" && noResponseIncident.wellnessCallStatus !== "help") {
           await storage.updateIncident(noResponseIncident.id, { wellnessCallStatus: "no_response" });
           try {
             const watcherContacts = await storage.getContactsLinkedToUser(user.id);

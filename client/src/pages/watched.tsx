@@ -20,6 +20,7 @@ import {
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getSocket } from "@/lib/socket";
 import { getViewerTimezone, formatDualTime, formatTimeForViewer, shouldShowDualTime } from "@/lib/timezone";
 import { useToast } from "@/hooks/use-toast";
 import { getWatcherInsight, getDeviceInfo, getEtaInfo, ConnectionBadge, LocationBadge, BatteryBadge, ConfidenceBadge, EtaBadge, TrustIndicator } from "@/components/watcher-status";
@@ -28,6 +29,42 @@ import { Hand } from "lucide-react";
 
 interface RemovedContact extends Contact {
   ownerName: string;
+}
+
+function WellnessCallBadge({ user }: { user: WatchedUser }) {
+  if (user.wellnessCallStatus === "help") {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-50 dark:bg-red-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
+        <Phone className="w-3.5 h-3.5 text-red-500" />
+        <span className="text-xs text-red-600 dark:text-red-400">Pressed Need Help on call</span>
+      </div>
+    );
+  }
+  if (user.wellnessCallStatus === "no_response" && user.hasOpenIncident) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
+        <Phone className="w-3.5 h-3.5 text-amber-600" />
+        <span className="text-xs text-amber-700 dark:text-amber-400">Called {user.wellnessCallAt ? formatDistanceToNow(new Date(user.wellnessCallAt), { addSuffix: true }) : ""} . No answer</span>
+      </div>
+    );
+  }
+  if (user.reminderStage === "calling" && user.hasOpenIncident) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
+        <Phone className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+        <span className="text-xs text-blue-700 dark:text-blue-400">Calling them now</span>
+      </div>
+    );
+  }
+  if (user.wellnessCallStatus === "safe") {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+        <span className="text-xs text-green-700 dark:text-green-400">Confirmed safe by call</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function ClaimButton({ incidentId, userId }: { incidentId: string; userId: string }) {
@@ -119,6 +156,21 @@ export default function WatchedPage() {
     queryKey: ["/api/watched-users"],
     refetchInterval: 15000,
   });
+
+  useEffect(() => {
+    const socket = getSocket();
+    const handleInvalidate = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+    };
+    socket.on("watched-users:invalidate", handleInvalidate);
+    socket.on("concern:resolved", handleInvalidate);
+    socket.on("incident:claimed", handleInvalidate);
+    return () => {
+      socket.off("watched-users:invalidate", handleInvalidate);
+      socket.off("concern:resolved", handleInvalidate);
+      socket.off("incident:claimed", handleInvalidate);
+    };
+  }, []);
 
   const { data: reportPrefs } = useQuery<ReportPreference[]>({
     queryKey: ["/api/reports/preferences"],
@@ -374,6 +426,7 @@ export default function WatchedPage() {
             <LocationBadge status={insight.location.status} label={insight.location.label} />
             <BatteryBadge device={device} />
             {eta && <EtaBadge eta={eta} />}
+            <WellnessCallBadge user={user} />
           </div>
 
           <ConfidenceBadge device={device} />
