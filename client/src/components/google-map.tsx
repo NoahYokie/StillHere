@@ -36,11 +36,13 @@ interface MapPerson {
   lng: number;
   activity?: string | null;
   speed?: number | null;
+  heading?: number | null;
   lastUpdated?: string;
   isMe?: boolean;
   accuracy?: number | null;
   safetyState?: string | null;
   hasSafetyEvent?: boolean;
+  groupedNames?: string[];
 }
 
 interface GeofenceCircle {
@@ -136,29 +138,172 @@ function getSafetyLabel(person: MapPerson): string | null {
   return null;
 }
 
+function getActivityGlyphSvg(activity: string | null | undefined, color: string): string {
+  switch (activity) {
+    case "driving":
+      return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11h.5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H19v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H8v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-1h-.5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1H5zm2.2 0h9.6l-1-3H8.2l-1 3zM7 14a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm10 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>`;
+    case "cycling":
+      return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true"><circle cx="5.5" cy="17.5" r="3.5" fill="none" stroke="${color}" stroke-width="1.6"/><circle cx="18.5" cy="17.5" r="3.5" fill="none" stroke="${color}" stroke-width="1.6"/><path d="M15 4a1 1 0 1 1 .001 2.001A1 1 0 0 1 15 4zm-3.5 4l2 2.5-3 3 2 2v3h-2v-2l-3-3 4-4-1.5-2H7V6h3l1.5 2z"/></svg>`;
+    case "running":
+      return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true" class="gmap-walk"><path d="M13.5 5.5a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6zM10 22l1.6-7-2.4-2 .9-4.8c.2-1 1.1-1.7 2-1.5l3.4.6c.4.1.8.4 1 .8l1.5 3 2.6.5-.4 1.9-3.6-.7-1.3-2.6-.7 3.5 2.4 2L16.4 22h-2l-.9-4.4-2.2-2.1L10 22H8z"/></svg>`;
+    case "walking":
+      return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true" class="gmap-walk"><path d="M13 4a1.8 1.8 0 1 1 0-3.6A1.8 1.8 0 0 1 13 4zm-2.6 18l1.4-6.5-2.2-2 .8-4.6c.2-1.1 1.2-1.8 2.2-1.6l3.2.6c.4.1.7.4.9.7l1.5 3 2.6.6-.4 1.9-3.5-.7-1.4-2.7-.7 3.5 2.3 2L15.6 22h-2l-1-4.6-2-1.9L9.4 22H7.4z"/></svg>`;
+    default:
+      return "";
+  }
+}
+
 function createPersonMarker(person: MapPerson): HTMLElement {
   const color = getSafetyColor(person);
   const safetyLabel = getSafetyLabel(person);
-  const size = person.isMe ? 44 : 38;
-  const innerSize = person.isMe ? 36 : 30;
-  const initial = person.isMe ? "" : (person.name?.charAt(0)?.toUpperCase() || "?");
+  const activity = person.activity || "stationary";
+  const isMoving = activity !== "stationary" && activity !== null;
   const shouldPulse = person.safetyState === "concern" || person.hasSafetyEvent;
-  const container = document.createElement("div");
-  container.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transition:transform 0.3s ease";
+  const isGroup = !!(person.groupedNames && person.groupedNames.length > 1);
 
-  const labelBorderColor = person.safetyState === "concern" ? "#fca5a5" : person.safetyState === "quiet" ? "#fcd34d" : "#e5e7eb";
-  const labelBgColor = person.safetyState === "concern" ? "#fef2f2" : person.safetyState === "quiet" ? "#fffbeb" : "white";
+  const displayName = isGroup
+    ? person.groupedNames!.length <= 2
+      ? person.groupedNames!.map(firstName).join(" + ")
+      : `${firstName(person.groupedNames![0])} + ${person.groupedNames!.length - 1}`
+    : person.isMe
+    ? "You"
+    : firstName(person.name);
+
+  const container = document.createElement("div");
+  container.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;transition:transform 0.25s ease";
+
+  // Subtle bob for movers, none for stationary (battery + visual calm)
+  const bobAnim = isMoving ? "animation:gmap-bob 2.4s ease-in-out infinite;" : "";
+
+  // Pill background by safety
+  const pillBg = person.safetyState === "concern"
+    ? "rgba(254, 242, 242, 0.97)"
+    : person.safetyState === "quiet"
+    ? "rgba(255, 251, 235, 0.97)"
+    : person.isMe
+    ? "rgba(239, 246, 255, 0.97)"
+    : "rgba(255, 255, 255, 0.97)";
+  const pillBorder = person.safetyState === "concern"
+    ? "#fca5a5"
+    : person.safetyState === "quiet"
+    ? "#fcd34d"
+    : person.isMe
+    ? "#bfdbfe"
+    : "#e5e7eb";
+  const pillText = person.safetyState === "concern"
+    ? "#991b1b"
+    : person.safetyState === "quiet"
+    ? "#92400e"
+    : "#0f172a";
+
+  // Glyph (activity icon) — cars rotate with heading, others sit still
+  const glyphSvg = isMoving ? getActivityGlyphSvg(activity, color) : "";
+  const headingDeg = activity === "driving" && typeof person.heading === "number"
+    ? Math.round(person.heading) - 90  // car SVG faces "right" (east), so subtract 90 to align north=0
+    : 0;
+  const glyphRotate = activity === "driving" ? `transform:rotate(${headingDeg}deg);transition:transform 0.6s ease;` : "";
+
+  // Pin tail (the little anchor under the pill)
+  const tailHtml = `<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${pillBorder};margin-top:-1px"><div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid ${pillBg};margin:-6px 0 0 -4px"></div></div>`;
+
+  // Concern halo
+  const halo = shouldPulse
+    ? `<div style="position:absolute;inset:-6px;border-radius:9999px;border:2px solid ${color};opacity:0.55;animation:gmap-pulse 1.6s ease-out infinite;pointer-events:none"></div>`
+    : "";
+
+  // Status dot
+  const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${color};box-shadow:0 0 0 1.5px white"></span>`;
+
+  // Glyph cell — bigger if it's a group (carpool look)
+  const glyphCell = glyphSvg
+    ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;${glyphRotate}">${glyphSvg}</span>`
+    : statusDot;
 
   container.innerHTML = `
-    <div style="position:relative;width:${size}px;height:${size}px">
-      <div style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.25;animation:gmap-pulse 2s ease-out infinite"></div>
-      <div style="position:absolute;top:4px;left:4px;width:${innerSize}px;height:${innerSize}px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-size:${person.isMe ? 12 : 14}px;font-weight:700">${person.isMe ? "●" : escapeHtml(initial)}</div>
-      ${shouldPulse ? `<div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid ${color};opacity:0.6;animation:gmap-pulse 1.5s ease-out infinite"></div>` : ""}
+    <div style="position:relative;display:inline-flex;align-items:center;gap:6px;background:${pillBg};color:${pillText};border:1px solid ${pillBorder};border-radius:9999px;padding:4px 10px 4px 8px;box-shadow:0 4px 14px rgba(15,23,42,0.18),0 1px 2px rgba(15,23,42,0.08);backdrop-filter:blur(6px);max-width:200px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:600;line-height:1;white-space:nowrap;${bobAnim}">
+      ${halo}
+      ${glyphCell}
+      <span style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(displayName)}</span>
+      ${safetyLabel ? `<span style="display:inline-flex;align-items:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:${color};background:rgba(255,255,255,0.6);padding:2px 5px;border-radius:9999px;border:1px solid ${pillBorder}">${escapeHtml(safetyLabel)}</span>` : ""}
     </div>
-    ${!person.isMe ? `<div style="background:${labelBgColor};border-radius:12px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.2);border:1px solid ${labelBorderColor};max-width:100px;overflow:hidden;text-overflow:ellipsis">${safetyLabel ? `<span style="color:${color};margin-right:2px">●</span>` : ""}${escapeHtml(person.name)}</div>` : ""}
+    ${tailHtml}
   `;
   ensurePulseStyle();
   return container;
+}
+
+function firstName(name: string): string {
+  if (!name) return "?";
+  const trimmed = name.trim();
+  const space = trimmed.indexOf(" ");
+  return space === -1 ? trimmed : trimmed.slice(0, space);
+}
+
+function clusterPeople(input: MapPerson[]): MapPerson[] {
+  // Group people who are within ~50m AND moving with the same activity (e.g. carpool).
+  const GROUP_RADIUS_METERS = 50;
+  const result: MapPerson[] = [];
+  const used = new Set<number>();
+
+  function meters(a: MapPerson, b: MapPerson): number {
+    const R = 6371000;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  for (let i = 0; i < input.length; i++) {
+    if (used.has(i)) continue;
+    const seed = input[i];
+    used.add(i);
+
+    const isMover = seed.activity && seed.activity !== "stationary" && !seed.isMe;
+    if (!isMover) {
+      result.push(seed);
+      continue;
+    }
+
+    const cluster: MapPerson[] = [seed];
+    for (let j = i + 1; j < input.length; j++) {
+      if (used.has(j)) continue;
+      const cand = input[j];
+      if (cand.isMe) continue;
+      if (cand.activity !== seed.activity) continue;
+      if (meters(seed, cand) > GROUP_RADIUS_METERS) continue;
+      cluster.push(cand);
+      used.add(j);
+    }
+
+    if (cluster.length === 1) {
+      result.push(seed);
+    } else {
+      // Merge into one virtual person at the centroid
+      const lat = cluster.reduce((s, p) => s + p.lat, 0) / cluster.length;
+      const lng = cluster.reduce((s, p) => s + p.lng, 0) / cluster.length;
+      const fastest = cluster.reduce((m, p) => ((p.speed ?? 0) > (m.speed ?? 0) ? p : m), cluster[0]);
+      const worstState = cluster.find(p => p.safetyState === "concern")
+        ?? cluster.find(p => p.hasSafetyEvent)
+        ?? cluster.find(p => p.safetyState === "quiet")
+        ?? cluster[0];
+      result.push({
+        id: "group:" + cluster.map(p => p.id).sort().join("+"),
+        name: cluster.map(p => p.name).join(", "),
+        lat,
+        lng,
+        activity: seed.activity,
+        speed: fastest.speed,
+        heading: fastest.heading,
+        lastUpdated: cluster.map(p => p.lastUpdated).filter(Boolean).sort().pop(),
+        safetyState: worstState.safetyState,
+        hasSafetyEvent: cluster.some(p => p.hasSafetyEvent),
+        groupedNames: cluster.map(p => p.name),
+      });
+    }
+  }
+  return result;
 }
 
 function createLabelMarker(letter: string, color: string): HTMLElement {
@@ -197,7 +342,12 @@ function ensurePulseStyle() {
   if (!document.getElementById("gmap-pulse-style")) {
     const style = document.createElement("style");
     style.id = "gmap-pulse-style";
-    style.textContent = "@keyframes gmap-pulse{0%{transform:scale(0.8);opacity:0.4}100%{transform:scale(1.6);opacity:0}}";
+    style.textContent = `
+      @keyframes gmap-pulse{0%{transform:scale(0.8);opacity:0.4}100%{transform:scale(1.6);opacity:0}}
+      @keyframes gmap-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+      @keyframes gmap-walk{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-1px) rotate(2deg)}}
+      .gmap-walk{transform-origin:50% 80%;animation:gmap-walk 0.55s ease-in-out infinite}
+    `;
     document.head.appendChild(style);
   }
 }
@@ -466,7 +616,8 @@ export default function GoogleMapComponent({
       markersRef.current.forEach(m => m.map = null);
       markersRef.current = [];
 
-      const currentIds = new Set(people.map(p => p.id));
+      const renderPeople = clusterPeople(people);
+      const currentIds = new Set(renderPeople.map(p => p.id));
       peopleMarkersRef.current.forEach((marker, id) => {
         if (!currentIds.has(id)) {
           marker.map = null;
@@ -477,7 +628,7 @@ export default function GoogleMapComponent({
         }
       });
 
-      people.forEach(person => {
+      renderPeople.forEach(person => {
         const existing = peopleMarkersRef.current.get(person.id);
         const prevPos = peoplePositionsRef.current.get(person.id);
         const newPos = { lat: person.lat, lng: person.lng };
@@ -690,7 +841,7 @@ export default function GoogleMapComponent({
       routePolylineRef.current = polyline;
 
       const bounds = new google.maps.LatLngBounds();
-      decodedPath.forEach(p => bounds.extend(p));
+      decodedPath.forEach((p: google.maps.LatLngLiteral) => bounds.extend(p));
       map.fitBounds(bounds, 40);
     } catch {}
   }, [routePolyline]);

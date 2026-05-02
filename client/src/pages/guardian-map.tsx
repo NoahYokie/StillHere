@@ -30,6 +30,7 @@ type MapPerson = {
   lng: number;
   activity?: string | null;
   speed?: number | null;
+  heading?: number | null;
   lastUpdated?: string;
   isMe?: boolean;
   safetyState?: string | null;
@@ -41,6 +42,7 @@ type LiveSnapshot = Record<string, {
   lng: number;
   activity?: string | null;
   speed?: number | null;
+  heading?: number | null;
   timestamp: string;
 }>;
 
@@ -146,6 +148,7 @@ export default function GuardianMapPage() {
           lng: data.lng,
           activity: data.activity,
           speed: data.speed,
+          heading: data.heading,
           timestamp: data.timestamp || new Date().toISOString(),
         },
       }));
@@ -173,6 +176,7 @@ export default function GuardianMapPage() {
 
       const activity = live?.activity ?? w.lastActivity ?? "stationary";
       const speed = live?.speed ?? w.lastSpeed ?? null;
+      const heading = live?.heading ?? null;
       const lastUpdated =
         live?.timestamp ??
         (w.lastLocationAt ? new Date(w.lastLocationAt).toISOString() : undefined) ??
@@ -185,6 +189,7 @@ export default function GuardianMapPage() {
         lng,
         activity,
         speed,
+        heading,
         lastUpdated,
         safetyState: w.safetyState,
         hasSafetyEvent: w.hasOpenIncident || w.safetyState === "concern",
