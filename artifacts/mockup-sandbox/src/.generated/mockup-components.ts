@@ -4,5 +4,6 @@ export const modules: ModuleMap = {
   "./components/mockups/sos-emergency-page/CalmHero.tsx": () => import("../components/mockups/sos-emergency-page/CalmHero.tsx"),
   "./components/mockups/sos-emergency-page/EditorialTimeline.tsx": () => import("../components/mockups/sos-emergency-page/EditorialTimeline.tsx"),
   "./components/mockups/sos-emergency-page/MapForward.tsx": () => import("../components/mockups/sos-emergency-page/MapForward.tsx"),
+  "./components/mockups/sos-emergency-page/StatusCard.tsx": () => import("../components/mockups/sos-emergency-page/StatusCard.tsx"),
   "./components/mockups/sos-emergency-page/TriageFirst.tsx": () => import("../components/mockups/sos-emergency-page/TriageFirst.tsx")
 };
