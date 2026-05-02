@@ -665,8 +665,12 @@ export class DatabaseStorage implements IStorage {
       and(eq(contactTokens.token, token), eq(contactTokens.revoked, false))
     );
     if (!tokenRecord) return undefined;
-    
-    
+
+    // Enforce expiry: a leaked token must not grant indefinite access to
+    // emergency portal data and actions.
+    if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) < new Date()) {
+      return undefined;
+    }
 
     const contact = await this.getContact(tokenRecord.contactId);
     if (!contact) return undefined;
@@ -686,11 +690,14 @@ export class DatabaseStorage implements IStorage {
     for (let i = 0; i < 10; i++) {
       token += chars[bytes[i] % chars.length];
     }
+    // Tokens expire after 30 days. Watchers can always be re-issued a fresh
+    // token by the user; meanwhile a leaked link auto-disarms.
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const [result] = await db.insert(contactTokens).values({
       contactId,
       token,
       revoked: false,
-      expiresAt: null,
+      expiresAt,
     }).returning();
     return result;
   }
@@ -2115,9 +2122,24 @@ export class DatabaseStorage implements IStorage {
           lastLat = (u as any).lastHeartbeatLat ?? null;
           lastLng = (u as any).lastHeartbeatLng ?? null;
           lastActivity = (u as any).lastActivity ?? null;
-          // Each member's *own* user-level sharing mode wins for redaction;
-          // the family member row's sharingMode is the family-scoped preference.
           resolvedSharingMode = row.sharingMode;
+
+          // Redact location based on the family-scoped sharing mode so the
+          // /api/family overview honors the same privacy contract the rest
+          // of the app advertises.
+          //  - paused / presence: never expose lat/lng
+          //  - area: deterministic ~1 km offset (neighborhood-level)
+          //  - precise: full precision
+          if (resolvedSharingMode === "paused" || resolvedSharingMode === "presence") {
+            lastLat = null;
+            lastLng = null;
+          } else if (resolvedSharingMode === "area" && lastLat != null && lastLng != null) {
+            const seed = (row.userId || "").charCodeAt(0) || 1;
+            const offsetLat = (((seed * 37) % 100) / 10000) - 0.005; // ~ +/-555 m
+            const offsetLng = (((seed * 53) % 100) / 10000) - 0.005;
+            lastLat = lastLat + offsetLat;
+            lastLng = lastLng + offsetLng;
+          }
         }
       }
 

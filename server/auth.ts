@@ -24,7 +24,16 @@ function generateOtp(): string {
 }
 
 function hashOtp(code: string, phone: string): string {
-  const secret = process.env.SESSION_SECRET || "dev-fallback-secret";
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET is required in production");
+    }
+    // Dev-only fallback - never used in production due to fail-fast above.
+    return createHmac("sha256", "dev-only-do-not-use-in-prod")
+      .update(`${phone}:${code}`)
+      .digest("hex");
+  }
   return createHmac("sha256", secret).update(`${phone}:${code}`).digest("hex");
 }
 

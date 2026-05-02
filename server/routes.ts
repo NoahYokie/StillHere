@@ -2029,7 +2029,7 @@ export async function registerRoutes(
   });
 
   // Contact takes responsibility
-  app.post("/api/emergency/:token/handle", async (req, res) => {
+  app.post("/api/emergency/:token/handle", emergencyLimiter, async (req, res) => {
     try {
       const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
@@ -2061,7 +2061,7 @@ export async function registerRoutes(
   });
 
   // Contact escalates (manual escalation - "I can't help")
-  app.post("/api/emergency/:token/escalate", async (req, res) => {
+  app.post("/api/emergency/:token/escalate", emergencyLimiter, async (req, res) => {
     try {
       const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
