@@ -115,36 +115,49 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-            <Heart className="h-8 w-8 text-primary-foreground" />
+      <Card className="w-full max-w-md shadow-md shadow-primary/5 border-border/60">
+        <CardHeader className="text-center pt-8 pb-2">
+          <div className="relative mx-auto mb-5">
+            <div className="absolute inset-0 rounded-full bg-primary/15 blur-xl" aria-hidden="true" />
+            <div className="relative w-16 h-16 bg-primary rounded-full flex items-center justify-center ring-4 ring-primary/10">
+              <Heart className="h-8 w-8 text-primary-foreground" />
+            </div>
           </div>
-          <CardTitle className="text-2xl" data-testid="text-login-title">StillHere</CardTitle>
-          <CardDescription>Sign in to stay connected.</CardDescription>
+          <CardTitle className="text-2xl font-semibold tracking-tight" data-testid="text-login-title">
+            StillHere
+          </CardTitle>
+          <CardDescription className="text-base mt-1.5" data-testid="text-login-subtitle">
+            {showPhoneLogin ? "Your safety starts here" : "Fast, secure access"}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6 pb-8">
           {!showPhoneLogin ? (
-            <div className="space-y-4">
+            <div className="space-y-5">
               {supportsPasskey && (
-                <Button
-                  className="w-full h-14 text-base"
-                  size="lg"
-                  onClick={() => passkeyLoginMutation.mutate()}
-                  disabled={passkeyLoginMutation.isPending}
-                  data-testid="button-passkey-login"
-                >
-                  <Fingerprint className="h-5 w-5 mr-2" />
-                  {passkeyLoginMutation.isPending ? "Authenticating..." : "Sign in with biometrics"}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    className="w-full h-14 text-base font-semibold rounded-xl shadow-sm shadow-primary/20 active:scale-[0.99] transition-transform"
+                    size="lg"
+                    onClick={() => passkeyLoginMutation.mutate()}
+                    disabled={passkeyLoginMutation.isPending}
+                    data-testid="button-passkey-login"
+                    aria-label="Unlock with Face ID or fingerprint"
+                  >
+                    <Fingerprint className="h-5 w-5 mr-2" />
+                    {passkeyLoginMutation.isPending ? "Authenticating..." : "Unlock with Face ID / Fingerprint"}
+                  </Button>
+                  <p className="text-xs text-center text-muted-foreground px-4">
+                    Quick and secure. Only you can access your account.
+                  </p>
+                </div>
               )}
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+                  <span className="w-full border-t border-border/60" />
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
+                <div className="relative flex justify-center text-xs uppercase tracking-wider">
+                  <span className="bg-card px-3 text-muted-foreground">
                     {supportsPasskey ? "or" : "sign in with"}
                   </span>
                 </div>
@@ -152,26 +165,21 @@ export default function LoginPage() {
 
               <Button
                 variant="outline"
-                className="w-full h-12"
+                className="w-full h-12 rounded-xl font-medium"
                 size="lg"
                 onClick={() => setShowPhoneLogin(true)}
                 data-testid="button-phone-login"
+                aria-label="Use phone number to sign in instead"
               >
                 <Smartphone className="h-5 w-5 mr-2" />
-                Use mobile number
+                Use phone number instead
               </Button>
-
-              {supportsPasskey && (
-                <p className="text-xs text-center text-muted-foreground">
-                  Face ID, Touch ID, fingerprint, or screen lock
-                </p>
-              )}
             </div>
           ) : (
             <div>
-              <form onSubmit={handlePhoneSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Mobile number</Label>
+              <form onSubmit={handlePhoneSubmit} className="space-y-5">
+                <div className="space-y-2.5">
+                  <Label htmlFor="phone" className="text-sm font-medium">Your mobile number</Label>
                   <Input
                     id="phone"
                     type="tel"
@@ -180,10 +188,11 @@ export default function LoginPage() {
                     onChange={(e) => setPhone(e.target.value)}
                     autoComplete="tel"
                     autoFocus
+                    className="h-12 rounded-xl text-base focus-visible:ring-primary"
                     data-testid="input-phone"
                   />
-                  <p className="text-sm text-muted-foreground">
-                    We'll send a one time code. No passwords needed.
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    We'll send a secure code to verify it's you. No passwords needed.
                   </p>
                 </div>
                 {sendError && (
@@ -195,7 +204,7 @@ export default function LoginPage() {
                 )}
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full h-14 text-base font-semibold rounded-xl shadow-sm shadow-primary/20 active:scale-[0.99] transition-transform"
                   size="lg"
                   disabled={!phone.trim() || sendCodeMutation.isPending || cooldownSeconds > 0}
                   data-testid="button-send-code"
@@ -204,31 +213,33 @@ export default function LoginPage() {
                     ? "Sending..."
                     : cooldownSeconds > 0
                       ? `Wait ${cooldownSeconds}s`
-                      : "Send secure code"}
+                      : "Continue securely"}
                 </Button>
               </form>
-              <div className="mt-4 text-center">
+              <div className="mt-5 text-center">
                 <button
                   onClick={() => setShowPhoneLogin(false)}
                   className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                   data-testid="button-back-to-options"
                 >
                   <ArrowLeft className="h-4 w-4" />
-                  Back to sign-in options
+                  Back to sign in options
                 </button>
               </div>
             </div>
           )}
 
-          <div className="mt-6 flex flex-col items-center gap-3">
-            <button
-              onClick={() => setLocation("/")}
-              className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-              data-testid="link-back"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
+          <div className="mt-7 flex flex-col items-center gap-3">
+            {!showPhoneLogin && (
+              <button
+                onClick={() => setLocation("/")}
+                className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                data-testid="link-back"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+            )}
             <button
               onClick={() => setLocation("/help")}
               className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
@@ -238,10 +249,22 @@ export default function LoginPage() {
               Need help?
             </button>
           </div>
-          <div className="mt-6 p-3 bg-muted/50 rounded-md">
-            <p className="text-xs text-muted-foreground text-center" data-testid="text-security-notice">
-              The only messages you'll receive from StillHere are checkin reminders and alerts you've set up yourself.
-            </p>
+
+          <div className="mt-7 p-4 bg-muted/50 rounded-xl border border-border/40">
+            {showPhoneLogin ? (
+              <p className="text-xs text-muted-foreground text-center leading-relaxed" data-testid="text-security-notice">
+                We only contact you for check ins and alerts you control. Never spam.
+              </p>
+            ) : (
+              <div className="text-center space-y-1">
+                <p className="text-xs font-semibold text-foreground" data-testid="text-privacy-title">
+                  Your privacy comes first
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed" data-testid="text-privacy-body">
+                  We never share your data. Alerts only go to people you choose.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
