@@ -287,8 +287,21 @@ export default function FamilyPage() {
   }, [messages.length]);
 
   // ---- Map data ----
+  // My device location, used as a fallback so the map always shows something
+  // (like Life360) even before any family member has shared live location.
+  const [myDeviceLoc, setMyDeviceLoc] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const watch = navigator.geolocation.watchPosition(
+      (pos) => setMyDeviceLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 15_000 },
+    );
+    return () => navigator.geolocation.clearWatch(watch);
+  }, []);
+
   const mapPeople: MapPerson[] = useMemo(() => {
-    return members
+    const fromMembers = members
       .filter((m) => m.lastLat != null && m.lastLng != null && m.status === "active")
       .map((m) => ({
         id: m.id,
@@ -299,7 +312,22 @@ export default function FamilyPage() {
         activity: (m.lastActivity as any) || "stationary",
         isMe: m.userId === myUserId,
       }));
-  }, [members, myUserId]);
+    // If I have no server-side location yet, drop a "You" pin from the live
+    // device GPS so the map opens with at least my own dot, like 360.
+    const meAlreadyOnMap = fromMembers.some(p => p.isMe);
+    if (!meAlreadyOnMap && myDeviceLoc && myMember) {
+      fromMembers.push({
+        id: myMember.id,
+        name: `${myMember.name} (You)`,
+        lat: myDeviceLoc.lat,
+        lng: myDeviceLoc.lng,
+        safetyState: "active" as any,
+        activity: "stationary" as any,
+        isMe: true,
+      });
+    }
+    return fromMembers;
+  }, [members, myUserId, myDeviceLoc, myMember]);
 
   // ---- Family Places ----
   const { data: placesData } = useQuery<{ places: FamilyPlace[] }>({
@@ -666,32 +694,29 @@ export default function FamilyPage() {
         </div>
       )}
 
-      {/* MAP - hero of the page */}
+      {/* MAP - hero of the page. Always rendered (Life360-style) so the user
+          sees their own dot the moment they open Family, even before anyone
+          has started Watch Me. */}
       <div className="relative" style={{ height: "55vh", minHeight: 320 }}>
-        {(mapPeople.length > 0 || placeGeofences.length > 0) ? (
-          <GoogleMap
-            center={mapCenter}
-            people={mapPeople}
-            geofences={placeGeofences}
-            smartCamera={true}
-            darkMode={false}
-            focusPersonId={focusedMemberId}
-            onPersonTap={(id) => {
-              // Marker-cluster taps emit synthetic ids like "group:abc..." which
-              // aren't real member ids - ignore those and leave the cluster
-              // expansion to the user zooming in manually.
-              if (id.startsWith("group:")) return;
-              setFocusedMemberId(id);
-            }}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
-            <div className="text-center px-6">
-              <MapPin className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
-                No live locations yet. Tap <strong>Watch Me</strong> to start sharing.
-              </p>
-            </div>
+        <GoogleMap
+          center={mapCenter}
+          people={mapPeople}
+          geofences={placeGeofences}
+          smartCamera={true}
+          darkMode={false}
+          focusPersonId={focusedMemberId}
+          onPersonTap={(id) => {
+            // Marker-cluster taps emit synthetic ids like "group:abc..." which
+            // aren't real member ids - ignore those and leave the cluster
+            // expansion to the user zooming in manually.
+            if (id.startsWith("group:")) return;
+            setFocusedMemberId(id);
+          }}
+        />
+        {mapPeople.length === 0 && placeGeofences.length === 0 && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-card/95 backdrop-blur border border-border rounded-full px-3 py-1.5 shadow-sm text-xs text-muted-foreground flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5" />
+            Tap <strong className="text-foreground">Watch Me</strong> to share live location
           </div>
         )}
 
@@ -917,14 +942,17 @@ export default function FamilyPage() {
             </AlertDialog>
           )}
 
-          {/* Admin-only: close the entire family */}
+          {/* Admin-only: close the entire family. Compact text link, not a
+              giant red bar - this is a rare, scary action, not a primary CTA. */}
           {isAdmin && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" className="w-full mt-3 text-destructive border-destructive/30 hover:bg-destructive/10"
-                  data-testid="button-close-family">
-                  <Trash2 className="w-4 h-4 mr-2" /> Close this family
-                </Button>
+                <button
+                  className="mt-4 mx-auto block text-xs text-muted-foreground hover:text-destructive underline-offset-2 hover:underline transition"
+                  data-testid="button-close-family"
+                >
+                  Delete family
+                </button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
