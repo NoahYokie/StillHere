@@ -2083,10 +2083,35 @@ export class DatabaseStorage implements IStorage {
         ne(familyMembers.status, "removed"),
       ));
 
+    // Apply the same sharing-mode redaction as for regular members so the
+    // admin's own location respects their `paused`/`presence`/`area` choice.
+    const redactLocation = (
+      mode: string | null | undefined,
+      seedId: string,
+      lat: number | null,
+      lng: number | null,
+    ): { lat: number | null; lng: number | null } => {
+      if (mode === "paused" || mode === "presence") return { lat: null, lng: null };
+      if (mode === "area" && lat != null && lng != null) {
+        const seed = (seedId || "").charCodeAt(0) || 1;
+        const offsetLat = (((seed * 37) % 100) / 10000) - 0.005;
+        const offsetLng = (((seed * 53) % 100) / 10000) - 0.005;
+        return { lat: lat + offsetLat, lng: lng + offsetLng };
+      }
+      return { lat, lng };
+    };
+
     // Always include the admin as an implicit "active" member view
     const memberViews: FamilyMemberView[] = [];
     const adminUser = await this.getUser(family.adminUserId);
     if (adminUser) {
+      const adminMode = (adminUser as any).sharingMode || "precise";
+      const adminLoc = redactLocation(
+        adminMode,
+        adminUser.id,
+        (adminUser as any).lastHeartbeatLat ?? null,
+        (adminUser as any).lastHeartbeatLng ?? null,
+      );
       memberViews.push({
         id: `admin:${adminUser.id}`,
         userId: adminUser.id,
@@ -2094,16 +2119,17 @@ export class DatabaseStorage implements IStorage {
         phone: adminUser.phone || null,
         role: "admin",
         status: "active",
-        sharingMode: (adminUser as any).sharingMode || "precise",
+        sharingMode: adminMode,
         parentalConsentRequired: false,
         parentalConsentGranted: true,
         isAdmin: true,
         safetyState: ((adminUser as any).safetyState as any) || null,
         lastSeenAt: (adminUser as any).lastHeartbeatAt || null,
-        lastLat: (adminUser as any).lastHeartbeatLat ?? null,
-        lastLng: (adminUser as any).lastHeartbeatLng ?? null,
+        lastLat: adminLoc.lat,
+        lastLng: adminLoc.lng,
         lastActivity: (adminUser as any).lastActivity ?? null,
         hasActiveIncident: false,
+        timezone: (adminUser as any).timezone || null,
       });
     }
 
@@ -2115,6 +2141,7 @@ export class DatabaseStorage implements IStorage {
       let lastLat: number | null = null;
       let lastLng: number | null = null;
       let lastActivity: any = null;
+      let timezone: string | null = null;
       let resolvedSharingMode: any = row.sharingMode;
 
       if (row.userId) {
@@ -2127,24 +2154,13 @@ export class DatabaseStorage implements IStorage {
           lastLat = (u as any).lastHeartbeatLat ?? null;
           lastLng = (u as any).lastHeartbeatLng ?? null;
           lastActivity = (u as any).lastActivity ?? null;
+          timezone = (u as any).timezone || null;
           resolvedSharingMode = row.sharingMode;
 
-          // Redact location based on the family-scoped sharing mode so the
-          // /api/family overview honors the same privacy contract the rest
-          // of the app advertises.
-          //  - paused / presence: never expose lat/lng
-          //  - area: deterministic ~1 km offset (neighborhood-level)
-          //  - precise: full precision
-          if (resolvedSharingMode === "paused" || resolvedSharingMode === "presence") {
-            lastLat = null;
-            lastLng = null;
-          } else if (resolvedSharingMode === "area" && lastLat != null && lastLng != null) {
-            const seed = (row.userId || "").charCodeAt(0) || 1;
-            const offsetLat = (((seed * 37) % 100) / 10000) - 0.005; // ~ +/-555 m
-            const offsetLng = (((seed * 53) % 100) / 10000) - 0.005;
-            lastLat = lastLat + offsetLat;
-            lastLng = lastLng + offsetLng;
-          }
+          // Honor the family-scoped sharing mode for this member's location.
+          const memberLoc = redactLocation(resolvedSharingMode, row.userId || "", lastLat, lastLng);
+          lastLat = memberLoc.lat;
+          lastLng = memberLoc.lng;
         }
       }
 
@@ -2165,6 +2181,7 @@ export class DatabaseStorage implements IStorage {
         lastLng,
         lastActivity,
         hasActiveIncident: false,
+        timezone,
       });
     }
 

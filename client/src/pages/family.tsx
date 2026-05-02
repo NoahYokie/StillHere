@@ -289,16 +289,43 @@ export default function FamilyPage() {
   // ---- Map data ----
   // My device location, used as a fallback so the map always shows something
   // (like Life360) even before any family member has shared live location.
-  const [myDeviceLoc, setMyDeviceLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [myDeviceLoc, setMyDeviceLoc] = useState<{ lat: number; lng: number; acc?: number } | null>(null);
+  // While the family page is open, push the device GPS + IANA timezone to the
+  // server every ~60s so OTHER family members see a fresh pin for me on their
+  // map and the server can render times in my local zone.
+  const lastSentRef = useRef(0);
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    // Only stream device GPS once the user actually has a family — no need to
+    // prompt for location on the empty "Create your family" landing state.
+    if (!family || !navigator.geolocation) return;
+    const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; } })();
+    const sendHeartbeat = (lat: number, lng: number, acc?: number) => {
+      const now = Date.now();
+      if (now - lastSentRef.current < 45_000) return; // throttle to ~45s
+      lastSentRef.current = now;
+      apiRequest("POST", "/api/heartbeat", {
+        lat, lng,
+        acc: typeof acc === "number" ? Math.round(acc) : undefined,
+        tz,
+      }).catch(() => { /* fire-and-forget; UI fallback already covers gaps */ });
+    };
     const watch = navigator.geolocation.watchPosition(
-      (pos) => setMyDeviceLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        setMyDeviceLoc({ lat, lng, acc: accuracy });
+        sendHeartbeat(lat, lng, accuracy);
+      },
       () => {},
       { enableHighAccuracy: false, maximumAge: 60_000, timeout: 15_000 },
     );
+    // Also poke immediately so the first pin shows up fast.
+    navigator.geolocation.getCurrentPosition(
+      (pos) => sendHeartbeat(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+      () => {},
+      { maximumAge: 60_000, timeout: 10_000 },
+    );
     return () => navigator.geolocation.clearWatch(watch);
-  }, []);
+  }, [family?.id]);
 
   const mapPeople: MapPerson[] = useMemo(() => {
     const fromMembers = members
@@ -869,7 +896,7 @@ export default function FamilyPage() {
                         {ROLE_LABEL[m.role] || m.role}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
                       <span className={`text-xs ${tone.tone}`}>{tone.label}</span>
                       {m.lastSeenAt && m.status === "active" && (
@@ -877,6 +904,27 @@ export default function FamilyPage() {
                           · {formatDistanceToNow(new Date(m.lastSeenAt), { addSuffix: true })}
                         </span>
                       )}
+                      {(() => {
+                        if (isMe || !m.timezone) return null;
+                        let myTz: string | undefined;
+                        try { myTz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
+                        if (myTz && myTz === m.timezone) return null;
+                        let localTime = "";
+                        try {
+                          localTime = new Intl.DateTimeFormat(undefined, {
+                            hour: "numeric", minute: "2-digit", timeZone: m.timezone,
+                          }).format(new Date());
+                        } catch { return null; }
+                        return (
+                          <span
+                            className="text-xs text-muted-foreground"
+                            data-testid={`text-member-localtime-${m.id}`}
+                            title={m.timezone}
+                          >
+                            · {localTime} their time
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                   {(isMe || isAdmin) && !isMemberAdmin && (

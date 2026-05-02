@@ -955,6 +955,9 @@ export interface FamilyMemberView {
   lastLng: number | null;
   lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
   hasActiveIncident: boolean;
+  // IANA timezone (e.g. "America/New_York") so the family UI can show each
+  // member's local clock when they're in a different time zone.
+  timezone: string | null;
 }
 
 export interface FamilyOverview {
