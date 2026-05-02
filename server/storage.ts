@@ -69,6 +69,7 @@ import {
   families,
   familyMembers,
   familyMessages,
+  familyPlaces,
   type Family,
   type FamilyMember,
   type FamilyMemberView,
@@ -76,6 +77,7 @@ import {
   type FamilyRole,
   type FamilyMemberStatus,
   type FamilyMessage,
+  type FamilyPlace,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -2277,6 +2279,31 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select({ userId: familyMembers.userId }).from(familyMembers)
       .where(and(eq(familyMembers.familyId, familyId), eq(familyMembers.status, "active")));
     return rows.map(r => r.userId).filter((u): u is string => !!u);
+  }
+
+  // ---- Family Places (Home / School / Work) ----
+  async getFamilyPlaces(familyId: string): Promise<FamilyPlace[]> {
+    return db.select().from(familyPlaces)
+      .where(eq(familyPlaces.familyId, familyId))
+      .orderBy(familyPlaces.createdAt);
+  }
+
+  async createFamilyPlace(params: {
+    familyId: string;
+    name: string;
+    icon: string;
+    lat: number;
+    lng: number;
+    radiusMeters: number;
+    createdByUserId: string;
+  }): Promise<FamilyPlace> {
+    const [row] = await db.insert(familyPlaces).values(params).returning();
+    return row;
+  }
+
+  async deleteFamilyPlace(placeId: string, familyId: string): Promise<void> {
+    await db.delete(familyPlaces)
+      .where(and(eq(familyPlaces.id, placeId), eq(familyPlaces.familyId, familyId)));
   }
 }
 

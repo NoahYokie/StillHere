@@ -876,11 +876,30 @@ export const familyMessages = pgTable("family_messages", {
   index("family_messages_created_at_idx").on(table.createdAt),
 ]);
 
+// Saved Places for the family (Home, School, Work, etc.) - shared across the family.
+// Used to render named markers on the family map and to detect arrivals/departures.
+export const familyPlaces = pgTable("family_places", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  icon: text("icon").notNull().default("pin"), // 'home' | 'school' | 'work' | 'gym' | 'park' | 'pin'
+  lat: doublePrecision("lat").notNull(),
+  lng: doublePrecision("lng").notNull(),
+  radiusMeters: integer("radius_meters").notNull().default(150),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("family_places_family_id_idx").on(table.familyId),
+]);
+
 export const insertFamilySchema = createInsertSchema(families).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFamilyMemberSchema = createInsertSchema(familyMembers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFamilyMessageSchema = createInsertSchema(familyMessages).omit({ id: true, createdAt: true });
+export const insertFamilyPlaceSchema = createInsertSchema(familyPlaces).omit({ id: true, createdAt: true });
 export type FamilyMessage = typeof familyMessages.$inferSelect;
 export type InsertFamilyMessage = z.infer<typeof insertFamilyMessageSchema>;
+export type FamilyPlace = typeof familyPlaces.$inferSelect;
+export type InsertFamilyPlace = z.infer<typeof insertFamilyPlaceSchema>;
 
 export type Family = typeof families.$inferSelect;
 export type InsertFamily = z.infer<typeof insertFamilySchema>;
