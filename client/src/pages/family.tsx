@@ -587,7 +587,7 @@ export default function FamilyPage() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-card/90 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/home")} data-testid="button-back">
+        <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="flex-1 min-w-0">
