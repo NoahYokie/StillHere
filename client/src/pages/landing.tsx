@@ -42,7 +42,7 @@ function PhoneScreen({ stage }: { stage: Stage }) {
           <div className="bg-white rounded-xl px-3 py-2 border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[7px] md:text-[9px] text-gray-400 uppercase tracking-wider">Next check-in</p>
+                <p className="text-[7px] md:text-[9px] text-gray-400 uppercase tracking-wider">Next check in</p>
                 <p className="text-[10px] md:text-[12px] font-semibold text-gray-700">Today at 10:00 PM</p>
               </div>
               <Clock className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-400" />
@@ -112,13 +112,13 @@ function PhoneScreen({ stage }: { stage: Stage }) {
       <div className="flex-1 flex flex-col bg-slate-50">
         <div className="bg-amber-500 text-white px-3.5 md:px-5 pt-5 md:pt-7 pb-2 md:pb-3 flex items-center gap-1.5">
           <AlertTriangle className="h-3 md:h-4 w-3 md:w-4" />
-          <span className="text-[11px] md:text-sm font-semibold">Missed check-in</span>
+          <span className="text-[11px] md:text-sm font-semibold">Missed check in</span>
         </div>
         <div className="flex-1 px-3 md:px-5 py-3 md:py-5 flex flex-col gap-2.5">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 md:p-3 animate-[slideDown_0.5s_ease-out]">
             <p className="text-[10px] md:text-xs font-semibold text-amber-800 mb-0.5">We're trying to reach you</p>
             <p className="text-[8px] md:text-[10px] text-amber-700 leading-relaxed">
-              Your scheduled check-in was due at 9:00 AM. We're reminding you before alerting your Safety Circle.
+              Your scheduled check in was due at 9:00 AM. We're reminding you before alerting your Safety Circle.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -257,7 +257,7 @@ function WatchScreen({ stage }: { stage: Stage }) {
 }
 
 function StageDots({ stage }: { stage: Stage }) {
-  const labels = ["Daily check-in", "Safety Circle", "Missed check-in", "Safety Record"];
+  const labels = ["Daily check in", "Safety Circle", "Missed check in", "Safety Record"];
   return (
     <div className="flex items-center justify-center gap-1 mt-2" data-testid="animation-stage-indicator">
       {[0, 1, 2, 3].map((i) => (
@@ -387,7 +387,7 @@ export default function LandingPage() {
                   onClick={() => setLocation("/login")}
                   data-testid="button-get-started"
                 >
-                  Start your 14-day free trial
+                  Start your 14 day free trial
                 </Button>
                 <Button
                   size="lg"
@@ -408,7 +408,7 @@ export default function LandingPage() {
               </div>
 
               <div className="mt-5 md:mt-6 flex flex-wrap items-center justify-center md:justify-start gap-x-5 gap-y-1.5 text-white/85 text-[12px] md:text-sm">
-                {["14-day free trial", "No credit card required", "Cancel anytime"].map((t) => (
+                {["14 day free trial", "No credit card required", "Cancel anytime"].map((t) => (
                   <div key={t} className="flex items-center gap-1.5">
                     <Check className="h-3.5 w-3.5 text-emerald-300" />
                     <span>{t}</span>
@@ -438,7 +438,7 @@ export default function LandingPage() {
                 <FloatingCard
                   icon={Bell}
                   title="Smart reminders"
-                  body="If you miss a check-in, we try notification, SMS, and call. One step at a time."
+                  body="If you miss a check in, we try notification, SMS, and call. One step at a time."
                   color="bg-primary"
                   className="-left-[230px] top-4"
                 />
@@ -511,10 +511,10 @@ export default function LandingPage() {
           {/* Mobile vertical */}
           <div className="space-y-6 md:hidden">
             {[
-              { num: 1, title: "Daily check-in", desc: "Tap I'M OK, reply YES by SMS, or confirm by phone call.", icon: Hand, color: "bg-primary" },
-              { num: 2, title: "Missed check-in detected", desc: "First, we notify you in the app.", icon: Bell, color: "bg-primary" },
+              { num: 1, title: "Daily check in", desc: "Tap I'M OK, reply YES by SMS, or confirm by phone call.", icon: Hand, color: "bg-primary" },
+              { num: 2, title: "Missed check in detected", desc: "First, we notify you in the app.", icon: Bell, color: "bg-primary" },
               { num: 3, title: "SMS fallback", desc: "If you don't respond, we text you. Reply YES to check in.", icon: MessageCircle, color: "bg-primary" },
-              { num: 4, title: "Phone call check-in", desc: "Still no response? We call you. Press 1 to confirm you're okay.", icon: Phone, color: "bg-primary" },
+              { num: 4, title: "Phone call check in", desc: "Still no response? We call you. Press 1 to confirm you're okay.", icon: Phone, color: "bg-primary" },
               { num: 5, title: "Safety Circle alerted", desc: "If we still can't reach you, your guardians are notified with clear next steps.", icon: Users, color: "bg-accent" },
             ].map((s, i, arr) => (
               <div key={s.num} className="flex gap-4">
@@ -536,10 +536,10 @@ export default function LandingPage() {
           {/* Desktop horizontal */}
           <div className="hidden md:grid md:grid-cols-5 gap-4">
             {[
-              { num: 1, title: "Daily check-in", desc: "Tap I'M OK, reply YES by SMS, or confirm by phone call.", icon: Hand, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
-              { num: 2, title: "Missed check-in detected", desc: "First, we notify you in the app.", icon: Bell, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
+              { num: 1, title: "Daily check in", desc: "Tap I'M OK, reply YES by SMS, or confirm by phone call.", icon: Hand, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
+              { num: 2, title: "Missed check in detected", desc: "First, we notify you in the app.", icon: Bell, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
               { num: 3, title: "SMS fallback", desc: "If you don't respond, we text you. Reply YES to check in.", icon: MessageCircle, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
-              { num: 4, title: "Phone call check-in", desc: "Still no response? We call you. Press 1 to confirm you're okay.", icon: Phone, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
+              { num: 4, title: "Phone call check in", desc: "Still no response? We call you. Press 1 to confirm you're okay.", icon: Phone, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
               { num: 5, title: "Safety Circle alerted", desc: "If we still can't reach you, your guardians are notified with clear next steps.", icon: Users, color: "bg-accent text-white", ring: "bg-accent/15 text-accent" },
             ].map((s, i, arr) => (
               <div key={s.num} className="relative">
@@ -570,7 +570,7 @@ export default function LandingPage() {
           <div className="text-center mb-12 md:mb-14">
             <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">More than a map. More than a panic button.</h2>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              StillHere combines check-ins, reminders, calls, location, and trusted people into one safety loop.
+              StillHere combines check ins, reminders, calls, location, and trusted people into one safety loop.
             </p>
           </div>
 
@@ -639,9 +639,9 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { icon: Hand, title: "One-tap check-in", body: "Confirm you're okay in seconds.", color: "bg-primary/10 text-primary" },
-              { icon: MessageCircle, title: "SMS check-in", body: "Reply YES to check in without opening the app.", color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" },
-              { icon: Phone, title: "Phone call check-in", body: "Press 1 during a call to confirm you're safe.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
+              { icon: Hand, title: "One tap check in", body: "Confirm you're okay in seconds.", color: "bg-primary/10 text-primary" },
+              { icon: MessageCircle, title: "SMS check in", body: "Reply YES to check in without opening the app.", color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" },
+              { icon: Phone, title: "Phone call check in", body: "Press 1 during a call to confirm you're safe.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
               { icon: Users, title: "Safety Circle", body: "Choose the people who should be alerted.", color: "bg-rose-100 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400" },
               { icon: Bell, title: "Smart escalation", body: "Notification, SMS, call, then Safety Circle alert.", color: "bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400" },
               { icon: MapPin, title: "Live location", body: "Share your real-time location when needed.", color: "bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400" },
@@ -681,7 +681,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
             {[
               { icon: Activity, title: "Fall detection", body: "If a fall is detected and you don't respond, StillHere can start an emergency flow.", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-500" },
-              { icon: Hand, title: "Wrist check-in", body: "Check in from your watch without reaching for your phone.", color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-500" },
+              { icon: Hand, title: "Wrist check in", body: "Check in from your watch without reaching for your phone.", color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-500" },
               { icon: AlertTriangle, title: "SOS", body: "Trigger help quickly from your wrist.", color: "bg-red-100 dark:bg-red-900/30 text-red-500" },
               { icon: Heart, title: "Heart and health context", body: "Health signals can help your Safety Circle understand what's happening.", color: "bg-rose-100 dark:bg-rose-900/30 text-rose-500" },
             ].map((f) => (
@@ -701,9 +701,9 @@ export default function LandingPage() {
                 <Smartphone className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold mb-1 text-sm md:text-base">Phone-only? You're still covered.</h3>
+                <h3 className="font-semibold mb-1 text-sm md:text-base">Phone only? You're still covered.</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  The full check-in safety loop works without a smartwatch. Wearable features add an extra layer when you have one.
+                  The full check in safety loop works without a smartwatch. Wearable features add an extra layer when you have one.
                 </p>
               </div>
             </div>
@@ -756,13 +756,13 @@ export default function LandingPage() {
             </div>
             <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">StillHere keeps watch even when your phone goes quiet</h2>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              If your phone dies, loses signal, or you miss a check-in, StillHere follows your safety plan from the server.
+              If your phone dies, loses signal, or you miss a check in, StillHere follows your safety plan from the server.
             </p>
           </div>
 
           <div className="md:grid md:grid-cols-3 md:gap-5 space-y-4 md:space-y-0">
             {[
-              { icon: Server, title: "Server-side monitoring", body: "Your check-in schedule is watched from the cloud.", color: "bg-primary/10 text-primary" },
+              { icon: Server, title: "Server side monitoring", body: "Your check in schedule is watched from the cloud.", color: "bg-primary/10 text-primary" },
               { icon: Smartphone, title: "Phone off? We still act.", body: "If you don't check in, StillHere starts the reminder flow automatically.", color: "bg-amber-100 dark:bg-amber-900/30 text-amber-500" },
               { icon: MessageCircle, title: "SMS alerts, not just apps", body: "Your Safety Circle can be reached by text when it matters.", color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500" },
             ].map((c) => (
@@ -794,7 +794,7 @@ export default function LandingPage() {
             <div className="space-y-2.5">
               {[
                 "Your name and safety status",
-                "Last check-in time",
+                "Last check in time",
                 "Location if sharing allows it",
                 "What StillHere already tried",
                 "Clear next steps",
@@ -820,7 +820,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="pt-4 space-y-3 text-sm">
-              <p className="font-semibold">Dauda missed a scheduled check-in.</p>
+              <p className="font-semibold">Dauda missed a scheduled check in.</p>
               <p className="text-muted-foreground">We tried app reminder, SMS, and phone call.</p>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="h-4 w-4 flex-shrink-0" />
@@ -895,7 +895,7 @@ export default function LandingPage() {
                 <span className="text-muted-foreground text-sm">/month</span>
               </div>
               <ul className="space-y-2.5 text-sm text-left mb-6">
-                {["All core features", "Unlimited check-ins", "Smart reminders and alerts", "Safety Circle notifications", "Cancel anytime"].map((f) => (
+                {["All core features", "Unlimited check ins", "Smart reminders and alerts", "Safety Circle notifications", "Cancel anytime"].map((f) => (
                   <li key={f} className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-accent flex-shrink-0" />
                     <span>{f}</span>
@@ -908,7 +908,7 @@ export default function LandingPage() {
                 onClick={() => setLocation("/login")}
                 data-testid="button-plan-monthly"
               >
-                Start 14-day free trial
+                Start 14 day free trial
               </Button>
             </div>
 
@@ -935,13 +935,13 @@ export default function LandingPage() {
                 onClick={() => setLocation("/login")}
                 data-testid="button-plan-yearly"
               >
-                Start 14-day free trial
+                Start 14 day free trial
               </Button>
             </div>
           </div>
 
           <p className="text-center text-xs md:text-sm text-muted-foreground mt-6">
-            14-day free trial. No credit card required.
+            14 day free trial. No credit card required.
           </p>
         </div>
       </section>
@@ -963,7 +963,7 @@ export default function LandingPage() {
             onClick={() => setLocation("/login")}
             data-testid="button-get-started-bottom"
           >
-            Start your 14-day free trial
+            Start your 14 day free trial
           </Button>
           <p className="text-white/70 text-sm mt-5">No credit card required. Cancel anytime.</p>
         </div>
@@ -975,7 +975,7 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Heart className="h-4 w-4 text-primary fill-primary/20" />
-              <span className="hidden md:inline">StillHere. A safety check-in app.</span>
+              <span className="hidden md:inline">StillHere. A safety check in app.</span>
               <span className="md:hidden">StillHere</span>
             </div>
             <div className="flex flex-wrap justify-center gap-4 md:gap-6">
@@ -996,7 +996,7 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:block mt-6 px-4 py-3 bg-muted/50 rounded-md text-xs text-muted-foreground text-center">
             <Shield className="h-3.5 w-3.5 inline mr-1" />
-            The only messages you'll receive from StillHere are check-in reminders and alerts you've set up yourself.
+            The only messages you'll receive from StillHere are check in reminders and alerts you've set up yourself.
           </div>
         </div>
       </footer>
