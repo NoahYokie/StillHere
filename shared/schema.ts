@@ -956,6 +956,8 @@ export interface WatchedUser {
   lastLocationAt: Date | null;
   lastLocationLat: number | null;
   lastLocationLng: number | null;
+  lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
+  lastSpeed: number | null;
   batteryLevel: number | null;
   batteryCharging: boolean | null;
   networkType: string | null;

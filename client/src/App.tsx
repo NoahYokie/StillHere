@@ -29,6 +29,7 @@ import SetupPermissionsPage from "@/pages/setup-permissions";
 import TrustPage from "@/pages/trust";
 import TourPage from "@/pages/tour";
 import WatchedPage from "@/pages/watched";
+import GuardianMapPage from "@/pages/guardian-map";
 import ChatPage from "@/pages/chat";
 import CallPage from "@/pages/call";
 import ReportPage from "@/pages/report";
@@ -132,6 +133,13 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <WatchedPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/watched/map">
+        <RequireAuth>
+          <RequireSetup>
+            <GuardianMapPage />
           </RequireSetup>
         </RequireAuth>
       </Route>

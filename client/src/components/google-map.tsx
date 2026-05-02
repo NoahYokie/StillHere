@@ -88,6 +88,8 @@ interface GoogleMapProps {
   isLocating?: boolean;
   focusPersonId?: string | null;
   smartCamera?: boolean;
+  tilt?: number;
+  heading?: number;
 }
 
 const activityColors: Record<string, string> = {
@@ -339,6 +341,8 @@ export default function GoogleMapComponent({
   isLocating = false,
   focusPersonId,
   smartCamera = false,
+  tilt,
+  heading,
 }: GoogleMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
@@ -399,6 +403,8 @@ export default function GoogleMapComponent({
       zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_CENTER },
       gestureHandling: "greedy",
       mapId: MAP_ID,
+      tilt: typeof tilt === "number" ? tilt : undefined,
+      heading: typeof heading === "number" ? heading : undefined,
     });
 
     mapInstanceRef.current = map;

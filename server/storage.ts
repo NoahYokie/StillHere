@@ -1208,6 +1208,8 @@ export class DatabaseStorage implements IStorage {
       let lastLocationAt: Date | null = null;
       let lastLocationLat: number | null = null;
       let lastLocationLng: number | null = null;
+      let lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null = null;
+      let lastSpeed: number | null = null;
       const activeSession = await db.select().from(locationSessions).where(
         and(eq(locationSessions.userId, user.id), eq(locationSessions.active, true))
       ).limit(1);
@@ -1215,6 +1217,20 @@ export class DatabaseStorage implements IStorage {
         lastLocationAt = activeSession[0].updatedAt;
         lastLocationLat = activeSession[0].lastLat;
         lastLocationLng = activeSession[0].lastLng;
+      }
+      const liveShare = await db.select().from(liveLocationShares).where(
+        and(eq(liveLocationShares.userId, user.id), eq(liveLocationShares.active, true))
+      ).limit(1);
+      if (liveShare.length > 0) {
+        lastActivity = (liveShare[0].lastActivity as any) || null;
+        lastSpeed = liveShare[0].lastSpeed ?? null;
+        if (liveShare[0].lastLat != null && liveShare[0].lastLng != null) {
+          if (!lastLocationLat || (liveShare[0].lastUpdatedAt && lastLocationAt && liveShare[0].lastUpdatedAt > lastLocationAt)) {
+            lastLocationAt = liveShare[0].lastUpdatedAt;
+            lastLocationLat = liveShare[0].lastLat;
+            lastLocationLng = liveShare[0].lastLng;
+          }
+        }
       }
 
       const activeWalk = await this.getActiveSafeWalk(user.id);
@@ -1261,6 +1277,8 @@ export class DatabaseStorage implements IStorage {
         lastLocationAt: hideLocation ? null : lastLocationAt,
         lastLocationLat: hideLocation ? null : obfuscateLocation && lastLocationLat ? obfuscateCoord(Number(lastLocationLat), user.id + "lat") : lastLocationLat,
         lastLocationLng: hideLocation ? null : obfuscateLocation && lastLocationLng ? obfuscateCoord(Number(lastLocationLng), user.id + "lng") : lastLocationLng,
+        lastActivity: hideLocation ? null : lastActivity,
+        lastSpeed: hideLocation ? null : lastSpeed,
         batteryLevel: user.batteryLevel ?? null,
         batteryCharging: user.batteryCharging ?? null,
         networkType: user.networkType ?? null,

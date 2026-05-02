@@ -183,12 +183,24 @@ export default function WatchedPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Watcher Dashboard</h1>
             <p className="text-sm text-muted-foreground">
               {watchedUsers ? `Monitoring ${watchedUsers.length} ${watchedUsers.length === 1 ? "person" : "people"}` : "Loading..."}
             </p>
           </div>
+          {watchedUsers && watchedUsers.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/watched/map")}
+              className="gap-2"
+              data-testid="button-open-guardian-map"
+            >
+              <MapPin className="w-4 h-4" />
+              Map
+            </Button>
+          )}
         </div>
 
         {isLoading && (
