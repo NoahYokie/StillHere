@@ -59,6 +59,7 @@ Key architectural features include:
 - **Pinpoint Location Precision:** All lat/lng columns use PostgreSQL `doublePrecision` for sub-millimeter precision.
 - **Guardian Map (Multi-Watched Live View):** Single-screen map showing all monitored users with color-coded markers, activity icons, and smart camera focusing.
 - **Safety Circle WOW Redesign:** Premium five-screen Safety Circle experience with detailed management, guardian view, and drill features, including backend additions for multi-watcher acknowledgments and guardian readiness checks.
+- **Landing Page Redesign (Public Marketing Site):** Premium public landing at `/` with hero ("When you can't check in, StillHere checks on you."), animated phone+watch mockups cycling through 4 screens each (home/circle/missed/record and ok/heart/sos/fall), 5-step "How StillHere works" loop, positioning, use cases, 12-feature grid, smartwatch, privacy, server monitoring, what-contacts-see, weekly Safety Record, simple pricing ($7.99/mo or $59.99/yr with "Best value" badge, no fake savings), and final CTA. Original primary/accent/destructive brand colors preserved. No fake ratings or testimonials.
 
 ### External Dependencies
 - **Location Services:** Google Maps Platform (Places API New, Routes API)
