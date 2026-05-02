@@ -36,6 +36,8 @@ import {
   isTwilioConfigured,
   getTurnCredentials,
   sendSms,
+  verifyTwilioSignature,
+  escapeXml,
 } from "./sms";
 import {
   isPushConfigured,
@@ -728,7 +730,16 @@ export async function registerRoutes(
       
       const { name } = req.body;
       
-      if (!name || name.trim() === "") {
+      if (!name || typeof name !== "string" || name.trim() === "") {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      
+      const cleanName = name
+        .replace(/[\x00-\x1F\x7F]/g, "")
+        .trim()
+        .slice(0, 80);
+      
+      if (cleanName === "") {
         return res.status(400).json({ error: "Name is required" });
       }
       
@@ -736,7 +747,7 @@ export async function registerRoutes(
       const { eq } = await import("drizzle-orm");
       const [updatedUser] = await db
         .update(users)
-        .set({ name: name.trim() })
+        .set({ name: cleanName })
         .where(eq(users.id, userId))
         .returning();
       
@@ -775,13 +786,13 @@ export async function registerRoutes(
       if (user?.safetyState === "quiet") {
         const openIncident = await storage.getOpenIncident(userId);
         if (openIncident) {
-          console.log(`[HEARTBEAT] User ${user.name} resumed with open incident — routing through resolveCheckin`);
+          console.log(`[HEARTBEAT] User ${userId} resumed with open incident — routing through resolveCheckin`);
           await resolveCheckin(userId, "app");
         } else {
           await storage.updateSafetyState(userId, "active", "Heartbeat resumed");
-          console.log(`[HEARTBEAT] Safety state restored for ${user.name}: quiet → active (no incident)`);
+          console.log(`[HEARTBEAT] Safety state restored for ${userId}: quiet → active (no incident)`);
           notifyRecovery(userId, user.name, "user", undefined, "heartbeat").catch((err) => {
-            console.error(`[HEARTBEAT] notifyRecovery failed for ${user.name}:`, err?.message || err);
+            console.error(`[HEARTBEAT] notifyRecovery failed for ${userId}:`, err?.message || err);
           });
         }
       }
@@ -2946,7 +2957,7 @@ export async function registerRoutes(
   // ============================================
   // SMS CHECK-IN WEBHOOK (Twilio incoming)
   // ============================================
-  app.post("/api/sms/incoming", async (req, res) => {
+  app.post("/api/sms/incoming", verifyTwilioSignature, async (req, res) => {
     try {
       const from = req.body?.From || req.body?.from;
       const body = (req.body?.Body || req.body?.body || "").trim().toLowerCase();
@@ -2977,9 +2988,9 @@ export async function registerRoutes(
         
         console.log(`[SMS-CHECKIN] Checkin recorded for user ***${normalized.slice(-4)}`);
         
-        let replyMsg = `StillHere Confirmation\n\nHi ${user.name}, your safety checkin has been recorded successfully.`;
+        let replyMsg = `StillHere Confirmation\n\nHi ${escapeXml(user.name)}, your safety checkin has been recorded successfully.`;
         if (result.hadIncident && hasContacts) {
-          replyMsg += `\n\nYour emergency contact${contacts.length > 1 ? "s" : ""} (${contactNames}) ${contacts.length > 1 ? "have" : "has"} been notified that you are safe. The alert has been resolved.`;
+          replyMsg += `\n\nYour emergency contact${contacts.length > 1 ? "s" : ""} (${escapeXml(contactNames)}) ${contacts.length > 1 ? "have" : "has"} been notified that you are safe. The alert has been resolved.`;
         } else if (result.hadIncident) {
           replyMsg += `\n\nThe alert has been resolved.`;
         }
@@ -3029,6 +3040,8 @@ export async function registerRoutes(
 
   app.get("/api/maps/config", async (req, res) => {
     try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       const key = process.env.GOOGLE_MAPS_API_KEY;
       if (!key) return res.status(500).json({ error: "Maps not configured" });
       res.json({ apiKey: key });
@@ -3754,6 +3767,22 @@ export async function registerRoutes(
 
   app.post("/api/satellite/webhook", async (req, res) => {
     try {
+      const expectedSecret = process.env.SATELLITE_WEBHOOK_SECRET;
+      if (!expectedSecret) {
+        console.error("[SATELLITE] SATELLITE_WEBHOOK_SECRET not configured, rejecting webhook");
+        return res.status(503).json({ error: "Webhook not configured" });
+      }
+      const providedSecret = req.headers["x-satellite-secret"];
+      const providedStr = typeof providedSecret === "string" ? providedSecret : "";
+      const expectedBuf = Buffer.from(expectedSecret);
+      const providedBuf = Buffer.from(providedStr);
+      const { timingSafeEqual } = await import("crypto");
+      const secretsMatch = providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+      if (!secretsMatch) {
+        console.warn("[SATELLITE] Invalid or missing webhook secret");
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       const { deviceId, action, lat, lng } = req.body;
       if (!deviceId || !action) {
         return res.status(400).json({ error: "deviceId and action required" });
@@ -3784,7 +3813,7 @@ export async function registerRoutes(
           }
           await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
         }
-        console.log(`[SATELLITE] Checkin from device ${deviceId} for user ${user.name}`);
+        console.log(`[SATELLITE] Checkin from device ${deviceId} for user ${user.id}`);
         res.json({ ok: true, action: "checkin_recorded" });
       } else if (action === "sos") {
         const existing = await storage.getOpenIncident(user.id);
@@ -3815,7 +3844,7 @@ export async function registerRoutes(
         if (lat != null && lng != null) {
           await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
         }
-        console.log(`[SATELLITE] SOS from device ${deviceId} for user ${user.name}`);
+        console.log(`[SATELLITE] SOS from device ${deviceId} for user ${user.id}`);
         res.json({ ok: true, action: "sos_triggered" });
       } else {
         res.status(400).json({ error: "Unknown action. Use 'checkin' or 'sos'" });
@@ -4577,7 +4606,7 @@ export async function registerRoutes(
   }
 
   // ===== AUTOMATED WELLNESS CHECK CALL =====
-  app.post("/api/wellness-call/respond", async (req, res) => {
+  app.post("/api/wellness-call/respond", verifyTwilioSignature, async (req, res) => {
     try {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -4596,7 +4625,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/wellness-call/gather", async (req, res) => {
+  app.post("/api/wellness-call/gather", verifyTwilioSignature, async (req, res) => {
     try {
       const digits = req.body.Digits;
       const calledNumber = req.body.To;
@@ -4606,14 +4635,14 @@ export async function registerRoutes(
 
       if (digits === "1" && user) {
         const result = await resolveCheckin(user.id, "call");
-        console.log(`[WELLNESS CALL] User ${user.name} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
+        console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You are now checked in and your emergency contacts have been notified that you are safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
       if (digits === "2" && user) {
-        console.log(`[WELLNESS CALL] User ${user.name} pressed 2 — SOS triggered via phone call`);
+        console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} pressed 2 — SOS triggered via phone call`);
         const incident = await storage.createIncident(user.id, "sos");
         await storage.updateSafetyState(user.id, "concern", "SOS triggered via phone call");
 

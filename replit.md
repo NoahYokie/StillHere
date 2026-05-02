@@ -35,7 +35,7 @@ Key architectural features include:
 - **Context Layer:** Server-side processor detects dwell and trip starts/ends from location updates, storing events and displaying a "context line" on watcher cards.
 - **SMS Check-in:** Users can check in or trigger an SOS via SMS replies to a Twilio webhook.
 - **Permissions & Onboarding Optimization:** Pre-permission education screens and a permission health dashboard.
-- **Security:** Comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free logs, and bank-level security hardening.
+- **Security:** Comprehensive measures including HTTP headers, global API rate limiting, robust input validation, PII-free logs, and bank-level security hardening. All Twilio inbound webhooks (`/api/sms/incoming`, `/api/wellness-call/respond`, `/api/wellness-call/gather`) verify the `X-Twilio-Signature` header against `TWILIO_AUTH_TOKEN`. Satellite device webhook (`/api/satellite/webhook`) requires `x-satellite-secret` matching `SATELLITE_WEBHOOK_SECRET`. Cron endpoints (`/api/cron/tick`, `/api/safety-state/tick`) require `x-cron-secret` matching `SESSION_SECRET`. Google Maps API key endpoint (`/api/maps/config`) requires authentication. User-supplied names are XML-escaped and length-capped (80 chars) before use in TwiML responses. PII (phone numbers, names) is masked or replaced with user IDs in server logs.
 - **PWA Support:** Full Progressive Web App capabilities for offline use and installability.
 - **Wearable API:** Dedicated API for companion watch apps for quick check-ins and status updates.
 - **Apple Watch Companion App:** SwiftUI app for one-tap check-in, SOS, 2-phase fall detection, and continuous heart rate monitoring via HealthKit.

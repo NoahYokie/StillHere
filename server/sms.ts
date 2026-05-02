@@ -1,6 +1,49 @@
 import twilio from "twilio";
+import type { Request, Response, NextFunction } from "express";
 
 let client: twilio.Twilio | null = null;
+
+export function escapeXml(unsafe: string | null | undefined): string {
+  if (!unsafe) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+}
+
+export function verifyTwilioSignature(req: Request, res: Response, next: NextFunction): void {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    console.error("[TWILIO-WEBHOOK] TWILIO_AUTH_TOKEN not configured, rejecting webhook");
+    res.status(403).type("text/xml").send("<Response></Response>");
+    return;
+  }
+
+  const signature = req.headers["x-twilio-signature"] as string | undefined;
+  if (!signature) {
+    console.warn(`[TWILIO-WEBHOOK] Missing X-Twilio-Signature on ${req.path}`);
+    res.status(403).type("text/xml").send("<Response></Response>");
+    return;
+  }
+
+  const proto = req.protocol || (req.headers["x-forwarded-proto"] as string)?.split(",")[0].trim();
+  const host = req.get("host") || (req.headers["x-forwarded-host"] as string)?.split(",")[0].trim();
+  const url = `${proto}://${host}${req.originalUrl}`;
+  const params = (req.body && typeof req.body === "object") ? req.body : {};
+
+  const isValid = twilio.validateRequest(authToken, signature, url, params);
+  if (!isValid) {
+    console.warn(`[TWILIO-WEBHOOK] Invalid signature on ${req.path}`);
+    res.status(403).type("text/xml").send("<Response></Response>");
+    return;
+  }
+
+  next();
+}
+
 let alphaSender: string | null = null;
 let fromPhone: string | null = null;
 let messagingServiceSid: string | null = null;

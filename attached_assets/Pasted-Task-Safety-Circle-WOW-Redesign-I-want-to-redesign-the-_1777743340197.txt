@@ -1,0 +1,469 @@
+Task — Safety Circle WOW Redesign
+
+I want to redesign the Safety Circle page so it feels like a real protection system, not a settings/contact page.
+
+Current problem:
+The page works, but it feels too basic. It shows guardians and buttons, but it does not create a strong emotional feeling of:
+- “these people are ready”
+- “the system knows what to do”
+- “I am protected”
+
+Goal:
+Turn Safety Circle into one of StillHere’s strongest trust-building screens.
+
+---
+
+# 🎯 OBJECTIVE
+
+Build a premium Safety Circle experience with:
+
+1. readiness hero
+2. guardian cards
+3. how-it-works escalation flow
+4. upgraded safety drill
+5. drill results
+6. guardian view preview access
+
+The page should feel:
+- calm
+- protective
+- premium
+- human
+- simple
+- not like a settings page
+
+---
+
+# PART 1 — MAIN SAFETY CIRCLE PAGE
+
+Route:
+- keep existing /safety-circle
+
+## Page header
+Use a clean mobile-style header:
+
+- back arrow
+- title: Safety Circle
+
+---
+
+## Hero section
+
+At the top, add a strong visual hero.
+
+### Visual:
+- glowing green shield/check icon
+- subtle circular pulse/ring
+- white/off-white background
+- generous spacing
+
+### Text:
+Main title:
+- Your Safety Circle is Ready
+
+Subtitle:
+- Sharing with 1 Guardian
+or dynamic:
+- Sharing with {count} Guardians
+
+If no guardians:
+- Set up your Safety Circle
+- Add someone you trust so StillHere knows who to contact.
+
+---
+
+# PART 2 — PRIMARY GUARDIAN CARD
+
+Below the hero, show the primary guardian as a large card.
+
+## Card content:
+- avatar or initials
+- name
+- role badge: PRIMARY
+- readiness status:
+  - Ready to respond
+  - Idle
+  - Needs attention
+- last active if available:
+  - Last active: 2h ago
+
+## Visual style:
+- rounded card
+- soft border
+- subtle shadow
+- clean spacing
+- green dot for ready
+- amber dot for idle
+- red dot for needs attention
+
+If no guardian:
+show an empty state card:
+- No guardian added yet
+- button: Add Guardian
+
+---
+
+## Manage Guardians button
+
+Below the primary card:
+
+Button:
+- Manage Guardians
+
+This should navigate to the existing settings/contact management area if one exists.
+
+If a dedicated manage page exists, use that.
+
+---
+
+# PART 3 — HOW IT WORKS FLOW
+
+Add a section titled:
+
+- How it works
+
+Use a vertical stepper with 3 clear steps.
+
+## Step 1
+Title:
+- {PrimaryName} is notified instantly
+or if no guardian:
+- Your Primary Guardian is notified instantly
+
+Subtext:
+- We send an alert to your guardian.
+
+## Step 2
+Title:
+- SMS is sent if no response
+
+Subtext:
+- We send a text message as a backup.
+
+## Step 3
+Title:
+- Call is triggered if needed
+
+Subtext:
+- We call your guardian if there’s still no response.
+
+Important:
+Use calm wording. Do not make it sound scary.
+
+---
+
+# PART 4 — ACTION CARDS
+
+Add two large action cards.
+
+## Action 1 — See Guardian View
+
+Title:
+- See my Guardian’s view
+
+Subtext:
+- See exactly what your guardian sees
+
+Icon:
+- eye
+
+Behavior:
+- open existing GuardianViewPreview flow
+- this should use the real filtered watcher payload, not mock data
+
+---
+
+## Action 2 — Run Safety Drill
+
+Title:
+- Run Safety Drill
+
+Subtext:
+- Test your response team
+
+Icon:
+- shield/check or beaker
+
+Behavior:
+- navigate to or open the upgraded safety drill flow
+
+---
+
+# PART 5 — REASSURANCE CARD
+
+At the bottom of the Safety Circle page, show a small calm info card.
+
+Text:
+- Your Safety Circle is contacted only if:
+
+Checklist:
+- You miss a check-in
+- You trigger SOS
+
+Optional third item if true:
+- A safety timer or Safe Walk needs attention
+
+Keep this short.
+
+---
+
+# PART 6 — MANAGE GUARDIANS SCREEN / SECTION
+
+If there is already a guardian/contact management page, update its display style.
+
+If not, create or adapt a clean manage view.
+
+## Header:
+- Manage Guardians
+
+Top helper text:
+- Your guardians are the people we contact if you miss a check-in or need help.
+
+## Guardian cards:
+Each guardian should show:
+- avatar / initials
+- name
+- role badge:
+  - PRIMARY
+  - BACKUP
+  - SUPPORT
+- readiness:
+  - Ready to respond
+  - Idle
+  - Needs attention
+- last active if available
+- chevron to edit/details
+
+## Add button:
+Top right or bottom:
+- + Add
+
+## Info card:
+- Guardians are notified in the order shown above.
+
+---
+
+# PART 7 — GUARDIAN VIEW SCREEN / PREVIEW
+
+Upgrade the “See my Guardian’s view” experience.
+
+## Header:
+- Guardian’s View
+
+## Main text:
+- This is what your guardian sees
+
+## Show:
+- map preview or status card depending on sharing mode
+- current status
+- last check-in
+- next check-in
+- battery if available
+- sharing/privacy explanation
+
+Examples:
+- Your status: All good
+- Last check-in: Today, 8:25 PM
+- Next check-in: Today, 10:10 PM
+- Battery: 78%
+
+## Privacy note:
+Use the correct wording based on sharing mode.
+
+For precise:
+- They can see your precise location while sharing is on.
+
+For area:
+- They can see your general area, not your exact location.
+
+For presence:
+- They can see your safety status, not your location.
+
+For paused:
+- They cannot see your location while sharing is paused.
+
+Important:
+This must reflect real current sharing mode and real API redaction behavior.
+
+---
+
+# PART 8 — SAFETY DRILL FLOW
+
+Upgrade the current safety drill so it feels like a readiness experience, not a technical test.
+
+## Screen / modal title:
+- Run Safety Drill
+
+## Main text:
+- Let’s test your Safety Circle
+- We’ll send a test alert to your guardians. This is just a drill.
+
+## Show 3 drill steps:
+1. Alert sent
+   - Your guardians will get a test notification.
+2. They respond
+   - They tap to confirm they’re ready to help.
+3. You’re all set
+   - We’ll show you the results when everyone responds.
+
+## Primary button:
+- Start Drill
+
+## Safety note:
+- This drill won’t contact emergency services.
+
+---
+
+# PART 9 — WATCHER DRILL INTERACTION
+
+When a drill is started, guardians should receive a test notification or in-app drill card.
+
+## Guardian notification:
+Title:
+- Safety drill
+
+Body:
+- {Name} is running a safety check test. Tap to confirm you’re ready.
+
+## Guardian action:
+Button:
+- I’m ready — got you
+
+When tapped:
+- record response
+- update drill results
+- notify protected user if relevant
+
+---
+
+# PART 10 — DRILL RESULTS SCREEN
+
+After drill completion, show a results screen/modal.
+
+## Header:
+- Drill Results
+
+## Hero:
+- green check
+- title: All set!
+
+## Subtitle:
+- Your Safety Circle responded. You’re protected.
+
+## Guardian response cards:
+For each guardian:
+- avatar/initials
+- name
+- role badge
+- response state:
+  - green check if responded
+  - waiting state if not yet responded
+- response time if available:
+  - Responded in 28 sec
+
+## Buttons:
+Primary:
+- Done
+
+Secondary:
+- Run another drill
+
+## Completion message to user:
+- Your Safety Circle is ready. If you ever need them, they’ll know exactly what to do.
+
+## Completion message to guardian:
+- You’re all set. If {Name} ever needs you, we’ll guide you — just like this.
+
+---
+
+# PART 11 — VISUAL STYLE
+
+Use the same design language as the new home screen:
+
+- white / off-white background
+- soft cards
+- rounded corners
+- subtle shadows
+- calm green as primary
+- blue for informational states
+- amber for idle
+- red only for true concern
+- generous spacing
+- mobile-first max-width container
+
+Do not make it look like an admin dashboard.
+
+It should feel like:
+- Apple Health
+- premium care app
+- calm safety companion
+
+---
+
+# PART 12 — DATA + FALLBACK BEHAVIOR
+
+Use real existing data wherever possible.
+
+If data is unavailable:
+- use initials instead of avatar
+- show Ready only if supported by current watcher health
+- otherwise use neutral status:
+  - Guardian added
+  - Status unavailable
+
+Do not fake data that does not exist.
+
+If last active is unavailable:
+- hide it or show:
+  - Readiness not checked yet
+
+---
+
+# PART 13 — KEEP EXISTING FUNCTIONALITY
+
+Do not break:
+
+- guardian/contact management
+- Safety Circle drill endpoint
+- drill response flow
+- GuardianViewPreview
+- sharing mode privacy redaction
+- presence-only / area-only behavior
+- SOS escalation
+- watcher notifications
+- route protection/auth
+
+This is a UI/UX upgrade plus drill result polish, not a backend rewrite unless needed.
+
+---
+
+# PART 14 — ACCEPTANCE CRITERIA
+
+After completion, report back with:
+
+1. files changed
+2. new Safety Circle page structure
+3. how guardian cards work
+4. how readiness status is calculated or displayed
+5. how the How It Works flow is built
+6. how Guardian View preview works
+7. how Safety Drill flow works
+8. how guardian responses are captured
+9. how Drill Results display
+10. confirmation existing privacy modes still work
+11. confirmation existing guardian/contact functionality still works
+12. any limitations or follow-up recommendations
+
+---
+
+# IMPORTANT
+
+Safety Circle is not a contacts page.
+
+It is the page that should make the user feel:
+
+- “These people are ready.”
+- “StillHere knows what to do.”
+- “If something happens, I won’t be alone.”
+
+Build it to that emotional standard.
