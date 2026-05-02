@@ -174,6 +174,7 @@ export const incidents = pgTable("incidents", {
   drillAcknowledgedAt: timestamp("drill_acknowledged_at"),
   drillAcknowledgedByContactId: uuid("drill_acknowledged_by_contact_id").references(() => contacts.id),
   drillResponses: text("drill_responses").notNull().default("[]"),
+  wellnessCallStatus: text("wellness_call_status"),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),
@@ -936,7 +937,11 @@ export interface WatchedUser {
   userName: string;
   userTimezone: string;
   lastCheckinAt: Date | null;
+  lastCheckinMethod: string | null;
   nextCheckinDue: Date;
+  wellnessCallStatus: "placed" | "safe" | "help" | "no_response" | null;
+  wellnessCallAt: Date | null;
+  reminderStage: "none" | "push" | "sms" | "calling" | null;
   hasOpenIncident: boolean;
   incidentReason: string | null;
   incidentId: string | null;

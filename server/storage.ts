@@ -1252,12 +1252,34 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
+      const recentWindowMs = 60 * 60 * 1000;
+      const recentSince = new Date(Date.now() - recentWindowMs);
+      const [recentIncident] = await db.select().from(incidents)
+        .where(and(eq(incidents.userId, user.id), gte(incidents.startedAt, recentSince)))
+        .orderBy(desc(incidents.startedAt))
+        .limit(1);
+      const wellnessCallStatus = (recentIncident?.wellnessCallStatus as
+        "placed" | "safe" | "help" | "no_response" | null) || null;
+      const wellnessCallAt = recentIncident?.callSentAt || null;
+      let reminderStage: "none" | "push" | "sms" | "calling" | null = null;
+      if (openIncident) {
+        const step = openIncident.lastEscalationStep;
+        reminderStage = step === "call" ? "calling"
+          : step === "sms" ? "sms"
+          : step === "push" ? "push"
+          : "none";
+      }
+
       result.push({
         userId: user.id,
         userName: user.name,
         userTimezone: user.timezone || "Australia/Melbourne",
         lastCheckinAt: lastCheckin?.createdAt || null,
+        lastCheckinMethod: lastCheckin?.method || null,
         nextCheckinDue,
+        wellnessCallStatus,
+        wellnessCallAt,
+        reminderStage,
         hasOpenIncident: !!openIncident,
         incidentReason: openIncident?.reason || null,
         incidentId: openIncident?.id || null,

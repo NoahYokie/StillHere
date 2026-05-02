@@ -4767,52 +4767,119 @@ export async function registerRoutes(
       const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
 
       if (digits === "1" && user) {
+        const openIncidentForUser = await storage.getOpenIncident(user.id);
+        if (openIncidentForUser) {
+          await storage.updateIncident(openIncidentForUser.id, { wellnessCallStatus: "safe" });
+        }
         const result = await resolveCheckin(user.id, "call");
         console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You are now checked in and your emergency contacts have been notified that you are safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You are now checked in and your safety circle has been notified that you are safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
       if (digits === "2" && user) {
         console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} pressed 2 — SOS triggered via phone call`);
-        const incident = await storage.createIncident(user.id, "sos");
-        await storage.updateSafetyState(user.id, "concern", "SOS triggered via phone call");
 
+        // Reuse existing open incident if there is one (e.g. the missed_checkin
+        // that triggered this call). Otherwise create a fresh SOS incident.
+        let incident = await storage.getOpenIncident(user.id);
+        if (incident) {
+          await storage.updateIncident(incident.id, {
+            reason: "sos",
+            wellnessCallStatus: "help",
+          });
+        } else {
+          incident = await storage.createIncident(user.id, "sos");
+          await storage.updateIncident(incident.id, { wellnessCallStatus: "help" });
+        }
+        await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call — needs help");
+
+        // Fan out to ALL contacts in parallel (SMS + push) — the user audibly
+        // confirmed they need help, so we don't wait for sequential escalation.
         const sosCont = await storage.getContacts(user.id);
         const sortedSos = [...sosCont].sort((a, b) => a.priority - b.priority);
         const sosTokens = await storage.regenerateTokensForUser(user.id);
         const sosBaseUrl = getBaseUrl();
-        const sosFirst = sortedSos[0];
-        if (sosFirst) {
-          const tok = sosTokens.find(t => t.contact.id === sosFirst.id);
-          if (tok) {
-            const link = `${sosBaseUrl}/emergency/${tok.token}`;
-            await notifyContact(sosFirst, user.name, link, "sos", sendSosAlert).catch(err => {
-              console.error(`[WELLNESS CALL] SOS contact alert failed:`, err);
-            });
+        const notifiedIds: string[] = [];
+
+        await Promise.all(sortedSos.map(async (contact) => {
+          const tok = sosTokens.find(t => t.contact.id === contact.id);
+          if (!tok) return;
+          const link = `${sosBaseUrl}/emergency/${tok.token}`;
+          try {
+            await notifyContact(contact, user.name, link, "sos", sendSosAlert);
+            notifiedIds.push(contact.id);
+          } catch (err: any) {
+            console.error(`[WELLNESS CALL] SOS notify failed for contact ${contact.id}:`, err?.message || err);
           }
-        }
-        await storage.updateIncident(incident.id, {
-          escalationLevel: 1,
-          lastEscalationStep: "contact_1",
-          notifiedContactIds: JSON.stringify(sosFirst ? [sosFirst.id] : []),
-          lastContactNotifiedAt: new Date(),
-          contact1NotifiedAt: new Date(),
-          nextActionAt: addMinutes(new Date(), 20),
+        }));
+
+        const now = new Date();
+        const existingTimeline: any[] = (() => {
+          try { return JSON.parse(incident.escalationTimeline || "[]"); } catch { return []; }
+        })();
+        existingTimeline.push({
+          type: "wellness_call_help",
+          time: now.toISOString(),
+          detail: `User pressed 2 on wellness call — notified ${notifiedIds.length} contact(s)`,
         });
-        notifyConcern(user.id, user.name, "sos").catch(() => {});
+        await storage.updateIncident(incident.id, {
+          escalationLevel: Math.max(incident.escalationLevel || 0, 1),
+          lastEscalationStep: "wellness_call_help",
+          notifiedContactIds: JSON.stringify(notifiedIds),
+          lastContactNotifiedAt: now,
+          contact1NotifiedAt: incident.contact1NotifiedAt || now,
+          nextActionAt: addMinutes(now, 5),
+          escalationTimeline: JSON.stringify(existingTimeline),
+        });
+
+        // Push to all linked watcher accounts in-app
+        await notifyConcern(user.id, user.name, "sos").catch((err) => {
+          console.error(`[WELLNESS CALL] notifyConcern failed:`, err?.message || err);
+        });
+
+        // Real-time socket broadcast so watcher dashboards refresh instantly
+        try {
+          const watcherContacts = await storage.getContactsLinkedToUser(user.id);
+          for (const c of watcherContacts) {
+            if (c.linkedUserId) {
+              emitToUser(c.linkedUserId, "watched-users:invalidate", { userId: user.id });
+            }
+          }
+        } catch (err: any) {
+          console.error(`[WELLNESS CALL] Socket broadcast failed:`, err?.message || err);
+        }
+
+        console.log(`[WELLNESS CALL] SOS notified ${notifiedIds.length}/${sortedSos.length} contacts for ${user.name}`);
+
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">We hear you. Help is on the way. Your emergency contacts are being notified right now. Stay on the line if you can.</Say><Pause length="2"/><Say voice="Google.en-US-Neural2-F">Someone will reach out to you very soon. You are not alone.</Say><Pause length="3"/><Hangup/></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">We hear you. Your safety circle is being alerted right now. Stay on the line if you can — someone will reach you very soon.</Say><Pause length="2"/><Say voice="Google.en-US-Neural2-F">If you can call emergency services yourself, please do. You are not alone.</Say><Pause length="3"/><Hangup/></Response>`;
         return res.type("text/xml").send(twiml);
       }
 
+      if (user) {
+        // Caller didn't press 1 or 2 — record the no-response on the open
+        // incident so the watcher dashboard can show "called, no answer".
+        const noResponseIncident = await storage.getOpenIncident(user.id);
+        if (noResponseIncident) {
+          await storage.updateIncident(noResponseIncident.id, { wellnessCallStatus: "no_response" });
+          try {
+            const watcherContacts = await storage.getContactsLinkedToUser(user.id);
+            for (const c of watcherContacts) {
+              if (c.linkedUserId) {
+                emitToUser(c.linkedUserId, "watched-users:invalidate", { userId: user.id });
+              }
+            }
+          } catch {}
+        }
+      }
       if (!user && normalizedPhone) {
         console.error(`[WELLNESS CALL] No user found for phone ${normalizedPhone.slice(-4)}`);
       }
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">We didn't receive a valid response. Your emergency contacts will be notified shortly. Goodbye.</Say><Hangup/></Response>`;
+<Response><Say voice="Google.en-US-Neural2-F">We didn't receive a valid response. Your safety circle will be notified shortly. Goodbye.</Say><Hangup/></Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call gather:", error);
