@@ -2032,12 +2032,16 @@ export class DatabaseStorage implements IStorage {
     // Auto-link any pending invites that match my phone (so users see their
     // family appear after they sign up).
     if (me.phone) {
-      await db.update(familyMembers)
+      const linked = await db.update(familyMembers)
         .set({ userId: me.id, status: "active", updatedAt: new Date() })
         .where(and(
           eq(familyMembers.invitePhone, me.phone),
           isNull(familyMembers.userId),
-        ));
+        ))
+        .returning({ id: familyMembers.id });
+      if (linked.length > 0) {
+        console.log(`[INVITE] Linked existing user to family (user:${me.id.slice(0, 8)}, ${linked.length} invite${linked.length === 1 ? "" : "s"})`);
+      }
     }
 
     // Find a family I admin OR a family I'm a member of

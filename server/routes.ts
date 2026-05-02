@@ -6043,33 +6043,51 @@ export async function registerRoutes(
       });
 
       // Send the SMS invite (best-effort — does not block the API response).
-      // Existing-user invites get an in-app deep link; new invites get the
-      // signup URL.
+      // Dedupe by phone within a 5-minute window so repeat clicks don't spam.
+      const maskedPhone = `***${phone.slice(-4)}`;
+      let deduped = false;
       try {
-        const inviter = await storage.getUser(userId);
-        const inviterName = inviter?.name || "Someone you trust";
-        const familyName = overview.family.name || "their family";
-        const baseUrl = getBaseUrl();
-        const existingUser = await storage.getUserByPhone(phone);
-        const link = existingUser ? `${baseUrl}/family` : `${baseUrl}/login`;
-        const body = existingUser
-          ? `${inviterName} added you to "${familyName}" on StillHere — a safety group, not tracking. Open the app to see your family: ${link}`
-          : `${inviterName} invited you to join their family on StillHere — a safety check-in app. Get the app and sign in with this number to join "${familyName}": ${link}`;
-        if (isTwilioConfigured()) {
-          sendSms(phone, body).catch((err) =>
-            console.warn("[family] invite SMS failed:", err?.message || err),
-          );
+        const last = familyInviteSmsCache.get(phone) || 0;
+        if (Date.now() - last < FAMILY_INVITE_SMS_WINDOW_MS) {
+          deduped = true;
+          console.log(`[INVITE] SMS skipped (deduped) ${maskedPhone}`);
+        } else {
+          const inviter = await storage.getUser(userId);
+          const inviterName = inviter?.name || "Someone you trust";
+          const baseUrl = getBaseUrl();
+          const existingUser = await storage.getUserByPhone(phone);
+          const body = existingUser
+            ? `${inviterName} added you to their StillHere Family.\nOpen the app to view and accept.`
+            : `${inviterName} added you to their StillHere Family for safety.\nJoin here: ${baseUrl}\nYou'll be able to share safety updates and stay connected.`;
+          if (isTwilioConfigured()) {
+            familyInviteSmsCache.set(phone, Date.now());
+            sendSms(phone, body)
+              .then((r) => {
+                if (r.success) console.log(`[INVITE] SMS sent to ${maskedPhone}`);
+                else console.warn(`[INVITE] SMS send failed ${maskedPhone}: ${r.error}`);
+              })
+              .catch((err) =>
+                console.warn(`[INVITE] SMS send threw ${maskedPhone}:`, err?.message || "unknown"),
+              );
+          } else {
+            console.warn(`[INVITE] SMS skipped (Twilio not configured) ${maskedPhone}`);
+          }
         }
       } catch (smsErr: any) {
-        console.warn("[family] invite SMS prep failed:", smsErr?.message || "unknown");
+        console.warn("[INVITE] SMS prep failed:", smsErr?.message || "unknown");
       }
 
-      res.json({ member });
+      res.json({ member, deduped });
     } catch (e) {
       console.error("[family] invite failed", e);
       res.status(500).json({ error: "Failed to invite member" });
     }
   });
+
+  // 5-minute SMS dedupe cache for family invites — prevents spam from
+  // repeat-click and re-invite flows. Keyed by normalized phone.
+  const familyInviteSmsCache = new Map<string, number>();
+  const FAMILY_INVITE_SMS_WINDOW_MS = 5 * 60 * 1000;
 
   // "Watch over me while I'm here" — starts a real live-location session
   // (continuous GPS share for a chosen duration) and tells every family member

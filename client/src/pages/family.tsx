@@ -571,9 +571,15 @@ export default function FamilyPage() {
                         <p className={`text-xs ${safety.tone} font-medium`} data-testid={`text-member-status-${m.id}`}>
                           {safety.label}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {humanLastSeen(m.lastSeenAt)} · {SHARING_LABEL[m.sharingMode] || m.sharingMode}
-                        </p>
+                        {m.status === "invited" ? (
+                          <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-member-invited-hint-${m.id}`}>
+                            Waiting for them to join
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {humanLastSeen(m.lastSeenAt)} · {SHARING_LABEL[m.sharingMode] || m.sharingMode}
+                          </p>
+                        )}
                       </div>
                     </div>
 
