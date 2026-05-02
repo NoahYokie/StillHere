@@ -2263,6 +2263,163 @@ export async function registerRoutes(
   // WATCHER & MESSAGING ROUTES
   // ============================================
 
+  // Throttle the alert/system endpoints separately from regular chat
+  // (10 SOS broadcasts per 5 min, 60 system messages per 5 min — generous
+  // for legit safety use, restrictive enough to prevent spam abuse).
+  // Defined here so all messaging routes below can reference them.
+  const sosLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many SOS attempts. Please wait before trying again." },
+  });
+  const systemMessageLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many safety messages. Please wait before sending more." },
+  });
+
+  // Per-user dedupe window for SOS broadcasts: a single user cannot fire a
+  // fresh SOS more than once every 60 seconds.
+  const SOS_DEDUPE_MS = 60 * 1000;
+  const recentSosByUser = new Map<string, { at: number; sentCount: number }>();
+
+  // Presence: returns whether the target user is online (active socket OR
+  // recent heartbeat within last 2 min) plus a last-seen timestamp.
+  // Used by the chat header to show "Active now" / "Last seen 5m ago".
+  app.get("/api/users/:userId/presence", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const targetUserId = req.params.userId;
+      // Auth: must share a Safety Circle relationship
+      if (currentUserId !== targetUserId) {
+        const myContacts = await storage.getContacts(currentUserId);
+        const theirContacts = await storage.getContacts(targetUserId);
+        const hasRelationship =
+          myContacts.some((c) => c.linkedUserId === targetUserId) ||
+          theirContacts.some((c) => c.linkedUserId === currentUserId);
+        if (!hasRelationship) return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const { isUserOnline } = await import("./socket");
+      const target = await storage.getUser(targetUserId);
+      if (!target) return res.status(404).json({ error: "User not found" });
+
+      const socketOnline = isUserOnline(targetUserId);
+      const lastHeartbeat = target.lastHeartbeatAt ? new Date(target.lastHeartbeatAt) : null;
+      const heartbeatRecent = lastHeartbeat ? Date.now() - lastHeartbeat.getTime() < 2 * 60 * 1000 : false;
+
+      res.json({
+        online: socketOnline || heartbeatRecent,
+        lastSeenAt: lastHeartbeat ? lastHeartbeat.toISOString() : null,
+      });
+    } catch (error) {
+      console.error("Error getting presence:", error);
+      res.status(500).json({ error: "Failed to get presence" });
+    }
+  });
+
+  // Atomic "Share live location with this person" action: starts a real live
+  // location session for the requested duration AND posts a structured system
+  // message into the conversation so the recipient sees a beautiful card with
+  // live status + Open-in-Maps + countdown — not a raw URL.
+  app.post("/api/messages/:userId/share-location", systemMessageLimiter, async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const receiverId = req.params.userId;
+      const { lat, lng, accuracy, durationMinutes } = req.body || {};
+
+      // Sharing location with yourself is meaningless and would be confusing,
+      // so reject it cleanly rather than letting a self-row through.
+      if (receiverId === currentUserId) {
+        return res.status(400).json({ error: "Cannot share location with yourself" });
+      }
+      if (typeof lat !== "number" || typeof lng !== "number" || isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ error: "lat and lng are required and must be numbers" });
+      }
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ error: "lat/lng out of range" });
+      }
+      const duration = Math.min(Math.max(parseInt(durationMinutes ?? 30, 10) || 30, 5), 240);
+
+      const myContacts = await storage.getContacts(currentUserId);
+      const theirContacts = await storage.getContacts(receiverId);
+      const hasRelationship =
+        myContacts.some((c) => c.linkedUserId === receiverId) ||
+        theirContacts.some((c) => c.linkedUserId === currentUserId);
+      if (!hasRelationship) {
+        return res.status(403).json({ error: "Not authorized to share location with this user" });
+      }
+
+      // Reuse the existing live-location infrastructure so the recipient can
+      // open the standard /watched live view and see real updates.
+      const expiresAt = new Date(Date.now() + duration * 60 * 1000);
+      let share: any = null;
+      let liveSessionFailed = false;
+      try {
+        share = await storage.startLiveLocationShare(currentUserId, expiresAt);
+        // Seed the share with the current location so the watcher sees a pin immediately
+        await storage.updateLiveLocation(
+          share.id,
+          currentUserId,
+          lat,
+          lng,
+          typeof accuracy === "number" ? accuracy : null,
+          null,
+          null,
+          null,
+        );
+      } catch (err: any) {
+        console.error("[SHARE-LOC] live-location session creation failed:", err?.message || err);
+        liveSessionFailed = true;
+        // Continue — we still post a message card with the snapshot location,
+        // but mark it as stopped + fallback so the UI doesn't pretend it's live.
+      }
+
+      const sender = await storage.getUser(currentUserId);
+      const senderName = sender?.name || "Someone";
+      // If the live session failed, mark the card as stopped/fallback so the
+      // recipient sees a static location snapshot, not a fake pulsing "Live" badge.
+      const meta: Record<string, any> = {
+        kind: "live_location" as const,
+        lat,
+        lng,
+        accuracy: typeof accuracy === "number" ? accuracy : null,
+        shareId: share?.id || null,
+        expiresAt: liveSessionFailed ? new Date(0).toISOString() : expiresAt.toISOString(),
+        durationMinutes: duration,
+        ...(liveSessionFailed ? { stopped: true, fallback: true } : {}),
+      };
+
+      const msg = await storage.saveMessage(
+        currentUserId,
+        receiverId,
+        liveSessionFailed
+          ? `${senderName} shared a snapshot of their location.`
+          : `${senderName} is sharing their live location for ${duration} minutes.`,
+        { messageType: "system_info", meta },
+      );
+
+      const { emitToUser } = await import("./socket");
+      emitToUser(receiverId, "message:new", { ...msg, senderName });
+      emitToUser(currentUserId, "message:sent", msg);
+
+      res.json(msg);
+    } catch (error) {
+      console.error("Error sharing live location in chat:", error);
+      res.status(500).json({ error: "Failed to share live location" });
+    }
+  });
+
   app.get("/api/users/:userId/profile", async (req, res) => {
     try {
       const currentUserId = getUserId(req);
@@ -2505,31 +2662,6 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch messages" });
     }
   });
-
-  // Throttle the alert/system endpoints separately from regular chat
-  // (10 SOS broadcasts per 5 min, 60 system messages per 5 min — generous
-  // for legit safety use, restrictive enough to prevent spam abuse).
-  const sosLimiter = rateLimit({
-    windowMs: 5 * 60 * 1000,
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many SOS attempts. Please wait before trying again." },
-  });
-  const systemMessageLimiter = rateLimit({
-    windowMs: 5 * 60 * 1000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many safety messages. Please wait before sending more." },
-  });
-
-  // Per-user dedupe window for SOS broadcasts: a single user cannot fire a
-  // fresh SOS more than once every 60 seconds. Repeated taps within the
-  // window return the most recent broadcast result without re-spamming the
-  // entire Safety Circle.
-  const SOS_DEDUPE_MS = 60 * 1000;
-  const recentSosByUser = new Map<string, { at: number; sentCount: number }>();
 
   // Broadcast a system_alert message to every member of the user's Safety Circle.
   // Used by the in-chat "Trigger SOS" quick action — also triggers the standard
