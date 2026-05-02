@@ -893,15 +893,24 @@ export class DatabaseStorage implements IStorage {
 
     let safetyTimer = await this.getActiveSafetyTimer(user.id);
     let safeWalk = await this.getActiveSafeWalk(user.id);
+    const recencyCutoff = new Date(Date.now() - 60 * 60 * 1000);
     if (!safetyTimer) {
       const [escalated] = await db.select().from(safetyTimers)
-        .where(and(eq(safetyTimers.userId, user.id), eq(safetyTimers.status, "escalated")))
+        .where(and(
+          eq(safetyTimers.userId, user.id),
+          eq(safetyTimers.status, "escalated"),
+          gte(safetyTimers.startedAt, recencyCutoff),
+        ))
         .orderBy(desc(safetyTimers.startedAt)).limit(1);
       if (escalated) safetyTimer = escalated;
     }
     if (!safeWalk) {
       const [escalated] = await db.select().from(safeWalks)
-        .where(and(eq(safeWalks.userId, user.id), eq(safeWalks.status, "escalated")))
+        .where(and(
+          eq(safeWalks.userId, user.id),
+          eq(safeWalks.status, "escalated"),
+          gte(safeWalks.startedAt, recencyCutoff),
+        ))
         .orderBy(desc(safeWalks.startedAt)).limit(1);
       if (escalated) safeWalk = escalated;
     }
