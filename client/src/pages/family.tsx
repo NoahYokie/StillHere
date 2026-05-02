@@ -24,6 +24,7 @@ import {
   ShieldCheck, Activity, AlertTriangle, Eye, LogOut, Trash2, Users,
   Sparkles, Battery, Car, Settings as SettingsIcon, Crown,
   Home as HomeIcon, GraduationCap, Briefcase, Dumbbell, Trees, Plus, Navigation,
+  Phone, Clock, CheckCircle2, X,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -31,7 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import GoogleMap, { type MapPerson } from "@/components/google-map";
-import type { FamilyOverview, FamilyMemberView, FamilyMessage, FamilyPlace } from "@shared/schema";
+import type { FamilyOverview, FamilyMemberView, FamilyMessage, FamilyPlace, FamilyPlaceSchedule } from "@shared/schema";
 
 const PLACE_ICONS: Record<string, any> = {
   home: HomeIcon, school: GraduationCap, work: Briefcase, gym: Dumbbell, park: Trees, pin: MapPin,

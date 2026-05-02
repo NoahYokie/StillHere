@@ -6054,8 +6054,94 @@ export async function registerRoutes(
         console.error("[CRON] Safe Walk check failed:", err);
       }
 
+      // ---- Family Place Schedule evaluator ----
+      // For every active schedule whose window has now passed (+ grace) on a
+      // scheduled day, check whether the assigned member is currently inside
+      // the place's radius. If not (and we haven't already alerted today),
+      // post a system message into the family chat.
+      let placeScheduleAlerts = 0;
+      try {
+        const schedules = await storage.getAllActiveFamilyPlaceSchedules();
+        if (schedules.length > 0) {
+          const nowLocal = new Date();
+          const today = nowLocal.getDay(); // 0..6
+          const nowMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
+          const todayStr = nowLocal.toISOString().slice(0, 10);
+
+          // Cache per-family lookups so we don't re-fetch the same family N times.
+          const placesCache = new Map<string, Awaited<ReturnType<typeof storage.getFamilyPlaces>>>();
+          const overviewCache = new Map<string, Awaited<ReturnType<typeof storage.getFamilyForUser>>>();
+
+          for (const s of schedules) {
+            try {
+              if (s.lastAlertedDate === todayStr) continue;
+              const days = s.daysOfWeek.split(",").map(d => parseInt(d, 10));
+              if (!days.includes(today)) continue;
+              // Only fire once the window has fully ended + grace
+              const dueAt = s.expectedEndMinutes + (s.graceMinutes || 0);
+              if (nowMinutes < dueAt) continue;
+
+              let places = placesCache.get(s.familyId);
+              if (!places) {
+                places = await storage.getFamilyPlaces(s.familyId);
+                placesCache.set(s.familyId, places);
+              }
+              const place = places.find(p => p.id === s.placeId);
+              if (!place) continue;
+
+              // We need member info + their last-known position. Easiest path:
+              // pull overview via any active member (the schedule was created by
+              // an admin so the family is real). Cache it.
+              let overview = overviewCache.get(s.familyId);
+              if (!overview) {
+                // findFirst userId in the family for the lookup
+                const recipients = await storage.getActiveFamilyUserIds(s.familyId);
+                if (recipients.length === 0) continue;
+                overview = await storage.getFamilyForUser(recipients[0]);
+                overviewCache.set(s.familyId, overview);
+              }
+              if (!overview?.family) continue;
+
+              const member = overview.members.find(m => m.id === s.memberId);
+              if (!member) continue;
+              if (member.lastLat == null || member.lastLng == null) {
+                // Treat unknown location as a miss - it's literally what the
+                // parent wanted to know about ("we have no idea where she is")
+              } else {
+                const dist = haversineDistance(member.lastLat, member.lastLng, place.lat, place.lng);
+                if (dist <= place.radiusMeters) continue; // She's there - silent
+              }
+
+              const body = member.lastLat == null
+                ? `${member.name} hasn't checked in yet for ${place.name} today. Last seen position is unknown.`
+                : `${member.name} doesn't appear to be at ${place.name} (expected by now).`;
+
+              if (member.userId) {
+                broadcastToFamily(member.userId, body, "system",
+                  { kind: "place_missed", place: place.name, scheduleId: s.id }
+                ).catch(() => {});
+              } else {
+                // Member without a linked user account - notify directly via the
+                // admin/sender channel by calling broadcast on the schedule creator.
+                if (s.createdByUserId) {
+                  broadcastToFamily(s.createdByUserId, body, "system",
+                    { kind: "place_missed", place: place.name, scheduleId: s.id }
+                  ).catch(() => {});
+                }
+              }
+              await storage.markScheduleAlerted(s.id, todayStr);
+              placeScheduleAlerts++;
+            } catch (e) {
+              console.error("[CRON] schedule eval failed for", s.id, e);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[CRON] Family place schedule check failed:", err);
+      }
+
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);
@@ -6624,6 +6710,84 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[family] place delete failed", e);
       res.status(500).json({ error: "Failed to delete place" });
+    }
+  });
+
+  // ---- Family Place Schedules (per-member expectations like "Sarah at School Mon-Fri 8:30-15:30") ----
+  app.get("/api/family/place-schedules", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.json({ schedules: [] });
+      const schedules = await storage.getFamilyPlaceSchedules(overview.family.id);
+      res.json({ schedules });
+    } catch (e) {
+      console.error("[family] place-schedules get failed", e);
+      res.status(500).json({ error: "Failed to load schedules" });
+    }
+  });
+
+  app.post("/api/family/places/:placeId/schedules", systemMessageLimiter, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "Create a family first" });
+      if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can set place schedules" });
+
+      const placeId = req.params.placeId;
+      const places = await storage.getFamilyPlaces(overview.family.id);
+      const place = places.find(p => p.id === placeId);
+      if (!place) return res.status(404).json({ error: "Place not found" });
+
+      const memberId = (req.body?.memberId || "").toString();
+      const member = overview.members.find(m => m.id === memberId);
+      if (!member) return res.status(400).json({ error: "Member not in this family" });
+
+      // Days like "1,2,3,4,5" - keep only 0..6
+      const rawDays = (req.body?.daysOfWeek || "").toString();
+      const cleanDays = rawDays.split(",")
+        .map((d: string) => parseInt(d.trim(), 10))
+        .filter((n: number) => Number.isInteger(n) && n >= 0 && n <= 6);
+      if (cleanDays.length === 0) return res.status(400).json({ error: "Pick at least one day" });
+
+      const startMin = Math.max(0, Math.min(1439, parseInt(req.body?.expectedStartMinutes, 10)));
+      const endMin = Math.max(0, Math.min(1439, parseInt(req.body?.expectedEndMinutes, 10)));
+      if (!Number.isFinite(startMin) || !Number.isFinite(endMin) || endMin <= startMin) {
+        return res.status(400).json({ error: "End time must be after start time" });
+      }
+      const grace = Math.max(0, Math.min(120, parseInt(req.body?.graceMinutes, 10) || 15));
+
+      const schedule = await storage.createFamilyPlaceSchedule({
+        familyId: overview.family.id,
+        placeId,
+        memberId,
+        daysOfWeek: cleanDays.join(","),
+        expectedStartMinutes: startMin,
+        expectedEndMinutes: endMin,
+        graceMinutes: grace,
+        createdByUserId: userId,
+      });
+      res.json({ schedule });
+    } catch (e) {
+      console.error("[family] place-schedule create failed", e);
+      res.status(500).json({ error: "Failed to save schedule" });
+    }
+  });
+
+  app.delete("/api/family/place-schedules/:scheduleId", systemMessageLimiter, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "No family" });
+      if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can remove schedules" });
+      await storage.deleteFamilyPlaceSchedule(req.params.scheduleId, overview.family.id);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("[family] place-schedule delete failed", e);
+      res.status(500).json({ error: "Failed to remove schedule" });
     }
   });
 

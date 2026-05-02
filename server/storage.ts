@@ -70,6 +70,7 @@ import {
   familyMembers,
   familyMessages,
   familyPlaces,
+  familyPlaceSchedules,
   type Family,
   type FamilyMember,
   type FamilyMemberView,
@@ -2304,6 +2305,44 @@ export class DatabaseStorage implements IStorage {
   async deleteFamilyPlace(placeId: string, familyId: string): Promise<void> {
     await db.delete(familyPlaces)
       .where(and(eq(familyPlaces.id, placeId), eq(familyPlaces.familyId, familyId)));
+  }
+
+  // ---- Family Place Schedules (per-member expectations like "Sarah at School Mon-Fri 8:30-15:30") ----
+  async getFamilyPlaceSchedules(familyId: string) {
+    return db.select().from(familyPlaceSchedules)
+      .where(eq(familyPlaceSchedules.familyId, familyId))
+      .orderBy(familyPlaceSchedules.createdAt);
+  }
+
+  async createFamilyPlaceSchedule(params: {
+    familyId: string;
+    placeId: string;
+    memberId: string;
+    daysOfWeek: string;
+    expectedStartMinutes: number;
+    expectedEndMinutes: number;
+    graceMinutes: number;
+    createdByUserId: string;
+  }) {
+    const [row] = await db.insert(familyPlaceSchedules).values(params).returning();
+    return row;
+  }
+
+  async deleteFamilyPlaceSchedule(scheduleId: string, familyId: string): Promise<void> {
+    await db.delete(familyPlaceSchedules)
+      .where(and(eq(familyPlaceSchedules.id, scheduleId), eq(familyPlaceSchedules.familyId, familyId)));
+  }
+
+  async markScheduleAlerted(scheduleId: string, dateStr: string): Promise<void> {
+    await db.update(familyPlaceSchedules)
+      .set({ lastAlertedDate: dateStr })
+      .where(eq(familyPlaceSchedules.id, scheduleId));
+  }
+
+  // Returns every active schedule across every family (used by the cron evaluator)
+  async getAllActiveFamilyPlaceSchedules() {
+    return db.select().from(familyPlaceSchedules)
+      .where(eq(familyPlaceSchedules.active, true));
   }
 }
 

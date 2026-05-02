@@ -892,14 +892,42 @@ export const familyPlaces = pgTable("family_places", {
   index("family_places_family_id_idx").on(table.familyId),
 ]);
 
+// Per-member expectations for a saved place. Example: "Sarah at School,
+// Mon-Fri, 08:30-15:30". If she isn't inside the place's radius by the end
+// of the window (+ grace), the family chat gets a one-time alert that day.
+export const familyPlaceSchedules = pgTable("family_place_schedules", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  placeId: uuid("place_id").notNull().references(() => familyPlaces.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => familyMembers.id, { onDelete: "cascade" }),
+  // Days of week as CSV: "1,2,3,4,5" where 0=Sun..6=Sat
+  daysOfWeek: text("days_of_week").notNull(),
+  // Local-time window expressed as minutes from midnight (0..1439)
+  expectedStartMinutes: integer("expected_start_minutes").notNull(),
+  expectedEndMinutes: integer("expected_end_minutes").notNull(),
+  graceMinutes: integer("grace_minutes").notNull().default(15),
+  active: boolean("active").notNull().default(true),
+  // YYYY-MM-DD of last day the family was alerted, prevents repeat pings
+  lastAlertedDate: text("last_alerted_date"),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("family_place_schedules_family_id_idx").on(table.familyId),
+  index("family_place_schedules_place_id_idx").on(table.placeId),
+  index("family_place_schedules_member_id_idx").on(table.memberId),
+]);
+
 export const insertFamilySchema = createInsertSchema(families).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFamilyMemberSchema = createInsertSchema(familyMembers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFamilyMessageSchema = createInsertSchema(familyMessages).omit({ id: true, createdAt: true });
 export const insertFamilyPlaceSchema = createInsertSchema(familyPlaces).omit({ id: true, createdAt: true });
+export const insertFamilyPlaceScheduleSchema = createInsertSchema(familyPlaceSchedules).omit({ id: true, createdAt: true, lastAlertedDate: true });
 export type FamilyMessage = typeof familyMessages.$inferSelect;
 export type InsertFamilyMessage = z.infer<typeof insertFamilyMessageSchema>;
 export type FamilyPlace = typeof familyPlaces.$inferSelect;
 export type InsertFamilyPlace = z.infer<typeof insertFamilyPlaceSchema>;
+export type FamilyPlaceSchedule = typeof familyPlaceSchedules.$inferSelect;
+export type InsertFamilyPlaceSchedule = z.infer<typeof insertFamilyPlaceScheduleSchema>;
 
 export type Family = typeof families.$inferSelect;
 export type InsertFamily = z.infer<typeof insertFamilySchema>;

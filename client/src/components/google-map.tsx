@@ -779,6 +779,15 @@ export default function GoogleMapComponent({
     }
   }, [center.lat, center.lng, points, people, focusPersonId, isLocating, smartCamera]);
 
+  // When a parent component changes focusPersonId (e.g. user taps a member chip
+  // outside the map), clear the "user has interacted" flag so smartCamera will
+  // actually re-zoom onto the new focus instead of staying frozen.
+  useEffect(() => {
+    if (focusPersonId === undefined) return;
+    userInteractedRef.current = false;
+    setShowRecenter(false);
+  }, [focusPersonId]);
+
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
