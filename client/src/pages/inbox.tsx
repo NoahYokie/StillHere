@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Shield, Users, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { ArrowLeft, MessageCircle, Users, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { queryClient } from "@/lib/queryClient";
@@ -149,9 +149,9 @@ export default function InboxPage() {
           </Button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
+              <MessageCircle className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
               <h1 className="text-xl font-semibold tracking-tight" data-testid="text-page-title">
-                Circle Messages
+                Messages
               </h1>
             </div>
             {activeAlerts > 0 ? (
@@ -183,10 +183,10 @@ export default function InboxPage() {
                 <Users className="w-7 h-7 text-primary" />
               </div>
               <h3 className="font-semibold text-lg mb-2" data-testid="text-empty-state">
-                Your Safety Circle
+                No messages yet
               </h3>
               <p className="text-muted-foreground text-sm leading-relaxed max-w-xs mx-auto">
-                Everyone who matters, in one place. Safety alerts and messages from your circle will appear here.
+                Messages and safety alerts from your contacts will appear here.
               </p>
             </CardContent>
           </Card>

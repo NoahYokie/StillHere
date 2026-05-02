@@ -10,7 +10,7 @@ import {
   CheckCheck,
   Check,
   RotateCcw,
-  Shield,
+  User as UserIcon,
   AlertTriangle,
   CheckCircle2,
   Info,
@@ -437,18 +437,16 @@ export default function ChatPage() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-          <Shield className="h-4 w-4 text-primary" />
+          <UserIcon className="h-4 w-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold truncate" data-testid="text-chat-user-name">
             {otherUserName}
           </h2>
-          {isOtherTyping ? (
+          {isOtherTyping && (
             <p className="text-xs text-primary animate-pulse" data-testid="text-typing-indicator">
               typing...
             </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">Safety Circle</p>
           )}
         </div>
         <Button
