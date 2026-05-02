@@ -500,7 +500,7 @@ export default function FamilyPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-10 bg-card/80 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/home")} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-lg font-bold">Family</h1>
