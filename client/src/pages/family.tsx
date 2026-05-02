@@ -47,6 +47,23 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "Admin", adult: "Adult", teen: "Teen", child: "Child",
 };
 
+// Day-of-week labels (0 = Sunday) used in schedule UI
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function formatDays(csv: string): string {
+  const days = csv.split(",").map(d => parseInt(d, 10)).filter(n => Number.isInteger(n)).sort();
+  if (days.length === 7) return "Every day";
+  if (days.length === 5 && days.join(",") === "1,2,3,4,5") return "Mon–Fri";
+  if (days.length === 2 && days.join(",") === "0,6") return "Weekends";
+  return days.map(d => DAY_LABELS[d]).join(", ");
+}
+
+function formatMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 function initials(name: string): string {
   return (
     name.split(/\s+/).filter(Boolean).slice(0, 2)
@@ -350,12 +367,116 @@ export default function FamilyPage() {
     }
   }
 
-  // Center on the first person with a location, fall back to first place, then neutral.
+  // Tap a member chip (or marker) to zoom in on just them.
+  // null = "Show everyone" - smartCamera will fit all to bounds.
+  const [focusedMemberId, setFocusedMemberId] = useState<string | null>(null);
+
+  // Drop the focus if the focused member loses their location or leaves the family.
+  useEffect(() => {
+    if (!focusedMemberId) return;
+    const stillThere = mapPeople.some(p => p.id === focusedMemberId);
+    if (!stillThere) setFocusedMemberId(null);
+  }, [mapPeople, focusedMemberId]);
+
+  // Center on the focused member if any, else first person, else first place.
   const mapCenter = useMemo(() => {
+    if (focusedMemberId) {
+      const f = mapPeople.find(p => p.id === focusedMemberId);
+      if (f) return { lat: f.lat, lng: f.lng };
+    }
     if (mapPeople.length > 0) return { lat: mapPeople[0].lat, lng: mapPeople[0].lng };
     if (places.length > 0) return { lat: places[0].lat, lng: places[0].lng };
     return { lat: 0, lng: 0 };
-  }, [mapPeople, places]);
+  }, [mapPeople, places, focusedMemberId]);
+
+  // ---- Per-member place schedules (parent assigns "Sarah at School Mon-Fri") ----
+  const { data: schedulesData } = useQuery<{ schedules: FamilyPlaceSchedule[] }>({
+    queryKey: ["/api/family/place-schedules"],
+    enabled: !!family,
+  });
+  const schedules = schedulesData?.schedules ?? [];
+
+  const [scheduleDialog, setScheduleDialog] = useState<{ placeId: string; placeName: string } | null>(null);
+  const [newSchedule, setNewSchedule] = useState({
+    memberId: "",
+    days: [1, 2, 3, 4, 5] as number[], // weekdays default
+    startHour: 8, startMin: 30,
+    endHour: 15, endMin: 30,
+    grace: 15,
+  });
+
+  const addScheduleMutation = useMutation({
+    mutationFn: async () => {
+      if (!scheduleDialog) throw new Error("No place selected");
+      return apiRequest("POST", `/api/family/places/${scheduleDialog.placeId}/schedules`, {
+        memberId: newSchedule.memberId,
+        daysOfWeek: newSchedule.days.join(","),
+        expectedStartMinutes: newSchedule.startHour * 60 + newSchedule.startMin,
+        expectedEndMinutes: newSchedule.endHour * 60 + newSchedule.endMin,
+        graceMinutes: newSchedule.grace,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family/place-schedules"] });
+      toast({ title: "Schedule saved", description: "We'll alert the family if they're not there in time." });
+      setScheduleDialog(null);
+      setNewSchedule({ memberId: "", days: [1, 2, 3, 4, 5], startHour: 8, startMin: 30, endHour: 15, endMin: 30, grace: 15 });
+    },
+    onError: (e: any) => toast({ title: "Couldn't save schedule", description: e?.message, variant: "destructive" }),
+  });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) =>
+      // pass {} so apiRequest attaches the Content-Type:application/json
+      // header that the global guard requires on all non-GET /api routes
+      apiRequest("DELETE", `/api/family/place-schedules/${scheduleId}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family/place-schedules"] });
+      toast({ title: "Schedule removed" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't remove schedule", description: e?.message, variant: "destructive" }),
+  });
+
+  // ---- Panic quick replies ----
+  // When someone presses Panic, every other family member sees their message
+  // with three one-tap reply pills so the response is fast.
+  const [repliedPanicIds, setRepliedPanicIds] = useState<Set<string>>(new Set());
+  function sendPanicReply(panicMsgId: string, body: string) {
+    setRepliedPanicIds(prev => new Set(prev).add(panicMsgId));
+    sendMessageMutation.mutate(body, {
+      onError: () => {
+        setRepliedPanicIds(prev => {
+          const next = new Set(prev);
+          next.delete(panicMsgId);
+          return next;
+        });
+        toast({ title: "Couldn't send reply", variant: "destructive" });
+      },
+    });
+  }
+
+  // Toast every TRULY inbound panic. Driven by the socket payload (not by
+  // polling the messages list), so multiple back-to-back panics each toast
+  // exactly once and historical panics on first load are ignored.
+  const toastedPanicIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!family) return;
+    const sock = getSocket();
+    const onPanic = (payload: any) => {
+      if (!payload || payload.kind !== "panic") return;
+      if (!payload.id || payload.senderId === myUserId) return;
+      if (toastedPanicIdsRef.current.has(payload.id)) return;
+      toastedPanicIdsRef.current.add(payload.id);
+      toast({
+        title: `${payload.senderName || "Family member"} pressed Panic`,
+        description: "Open chat to reply.",
+        variant: "destructive",
+      });
+    };
+    sock.on("family:message:new", onPanic);
+    return () => { sock.off("family:message:new", onPanic); };
+  }, [family?.id, myUserId]);
 
   // Pass family places to the map as geofence circles for visual context.
   const placeGeofences = useMemo(
@@ -503,6 +624,48 @@ export default function FamilyPage() {
         )}
       </header>
 
+      {/* Member chip rail - tap to zoom on a member, "All" to see everyone */}
+      {mapPeople.length > 0 && (
+        <div className="px-3 pt-2 pb-1 overflow-x-auto" data-testid="member-chip-rail">
+          <div className="flex items-center gap-2 min-w-min">
+            <button
+              onClick={() => setFocusedMemberId(null)}
+              className={`shrink-0 h-8 px-3 rounded-full text-xs font-medium border transition ${
+                focusedMemberId === null
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card border-border text-foreground hover:bg-muted"
+              }`}
+              data-testid="chip-show-all"
+            >
+              <Users className="w-3.5 h-3.5 inline mr-1 -mt-0.5" /> Show all
+            </button>
+            {mapPeople.map((p) => {
+              const m = members.find(x => x.id === p.id);
+              const tone = m ? safetyTone(m) : null;
+              const active = focusedMemberId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setFocusedMemberId(p.id)}
+                  className={`shrink-0 h-8 pl-1.5 pr-3 rounded-full text-xs font-medium border flex items-center gap-1.5 transition ${
+                    active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card border-border text-foreground hover:bg-muted"
+                  }`}
+                  data-testid={`chip-member-${p.id}`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold ${
+                    active ? "bg-primary-foreground/20" : "bg-primary/10 text-primary"
+                  }`}>{initials(p.name)}</span>
+                  <span className="truncate max-w-[110px]">{p.name}</span>
+                  {tone && !active && <span className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* MAP - hero of the page */}
       <div className="relative" style={{ height: "55vh", minHeight: 320 }}>
         {(mapPeople.length > 0 || placeGeofences.length > 0) ? (
@@ -512,6 +675,14 @@ export default function FamilyPage() {
             geofences={placeGeofences}
             smartCamera={true}
             darkMode={false}
+            focusPersonId={focusedMemberId}
+            onPersonTap={(id) => {
+              // Marker-cluster taps emit synthetic ids like "group:abc..." which
+              // aren't real member ids - ignore those and leave the cluster
+              // expansion to the user zooming in manually.
+              if (id.startsWith("group:")) return;
+              setFocusedMemberId(id);
+            }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
@@ -792,8 +963,10 @@ export default function FamilyPage() {
               const isSystem = m.kind === "pulse" || m.kind === "panic" || m.kind === "system";
               if (isSystem) {
                 const isPanic = m.kind === "panic";
+                const showQuickReply = isPanic && m.senderId !== myUserId && !repliedPanicIds.has(m.id);
+                const senderFirst = (m.senderName || "Family member").split(/\s+/)[0];
                 return (
-                  <div key={m.id} className="flex justify-center" data-testid={`message-${m.id}`}>
+                  <div key={m.id} className="flex flex-col items-center gap-1.5" data-testid={`message-${m.id}`}>
                     <div className={`text-xs px-3 py-1.5 rounded-full max-w-[85%] text-center ${
                       isPanic
                         ? "bg-destructive/10 text-destructive border border-destructive/20"
@@ -806,6 +979,36 @@ export default function FamilyPage() {
                         {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}
                       </span>
                     </div>
+                    {showQuickReply && (
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-[90%]" data-testid={`panic-quick-reply-${m.id}`}>
+                        <button
+                          onClick={() => sendPanicReply(m.id, `${senderFirst}, are you OK?`)}
+                          className="text-[11px] font-medium h-7 px-2.5 rounded-full bg-card border border-destructive/30 text-destructive hover:bg-destructive/10 transition flex items-center gap-1"
+                          data-testid={`button-panic-reply-ok-${m.id}`}
+                        >
+                          <AlertTriangle className="w-3 h-3" /> Are you OK?
+                        </button>
+                        <button
+                          onClick={() => sendPanicReply(m.id, `I'm coming to help.`)}
+                          className="text-[11px] font-medium h-7 px-2.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition flex items-center gap-1"
+                          data-testid={`button-panic-reply-coming-${m.id}`}
+                        >
+                          <Navigation className="w-3 h-3" /> I'm coming
+                        </button>
+                        <button
+                          onClick={() => sendPanicReply(m.id, `Calling you now.`)}
+                          className="text-[11px] font-medium h-7 px-2.5 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center gap-1"
+                          data-testid={`button-panic-reply-call-${m.id}`}
+                        >
+                          <Phone className="w-3 h-3" /> Call me
+                        </button>
+                      </div>
+                    )}
+                    {isPanic && repliedPanicIds.has(m.id) && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Replied
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -873,39 +1076,215 @@ export default function FamilyPage() {
 
           {places.map((p) => {
             const Icon = PLACE_ICONS[p.icon] || MapPin;
+            const placeSchedules = schedules.filter(s => s.placeId === p.id);
             return (
               <Card key={p.id} data-testid={`card-place-${p.id}`}>
-                <CardContent className="p-3 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <Icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Within {p.radiusMeters}m
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Icon className="w-5 h-5 text-primary" />
                     </div>
-                  </div>
-                  <Button
-                    size="sm" variant="outline"
-                    onClick={() => handleOnMyWay(p)}
-                    data-testid={`button-on-my-way-${p.id}`}
-                  >
-                    <Navigation className="w-3.5 h-3.5 mr-1" /> On my way
-                  </Button>
-                  {isAdmin && (
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Within {p.radiusMeters}m
+                      </div>
+                    </div>
                     <Button
-                      size="icon" variant="ghost" className="text-muted-foreground"
-                      onClick={() => deletePlaceMutation.mutate(p.id)}
-                      disabled={deletePlaceMutation.isPending}
-                      data-testid={`button-delete-place-${p.id}`}
+                      size="sm" variant="outline"
+                      onClick={() => handleOnMyWay(p)}
+                      data-testid={`button-on-my-way-${p.id}`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Navigation className="w-3.5 h-3.5 mr-1" /> On my way
                     </Button>
+                    {isAdmin && (
+                      <Button
+                        size="icon" variant="ghost" className="text-muted-foreground"
+                        onClick={() => deletePlaceMutation.mutate(p.id)}
+                        disabled={deletePlaceMutation.isPending}
+                        data-testid={`button-delete-place-${p.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Per-member schedules: "Sarah · Mon-Fri · 8:30-15:30" */}
+                  {(placeSchedules.length > 0 || isAdmin) && (
+                    <div className="pt-2 border-t border-border space-y-1.5">
+                      {placeSchedules.length === 0 && isAdmin && (
+                        <p className="text-[11px] text-muted-foreground">
+                          No expected times yet. Add one and we'll alert the family if they're not here.
+                        </p>
+                      )}
+                      {placeSchedules.map((s) => {
+                        const member = members.find(mm => mm.id === s.memberId);
+                        return (
+                          <div key={s.id} className="flex items-center gap-2 text-xs bg-muted/50 rounded-md px-2 py-1.5"
+                            data-testid={`schedule-${s.id}`}>
+                            <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">
+                                {member?.name || "Member"} · {formatDays(s.daysOfWeek)}
+                              </div>
+                              <div className="text-muted-foreground">
+                                {formatMinutes(s.expectedStartMinutes)} – {formatMinutes(s.expectedEndMinutes)}
+                                {s.graceMinutes > 0 && ` · ${s.graceMinutes}m grace`}
+                              </div>
+                            </div>
+                            {isAdmin && (
+                              <button
+                                onClick={() => deleteScheduleMutation.mutate(s.id)}
+                                disabled={deleteScheduleMutation.isPending}
+                                className="text-muted-foreground hover:text-destructive shrink-0"
+                                data-testid={`button-delete-schedule-${s.id}`}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {isAdmin && (
+                        <Button
+                          size="sm" variant="ghost"
+                          className="w-full h-7 text-xs text-primary hover:bg-primary/10"
+                          onClick={() => {
+                            const firstMember = members.find(
+                              mm => mm.status === "active" && !mm.id.startsWith("admin:"),
+                            );
+                            setNewSchedule(prev => ({ ...prev, memberId: firstMember?.id || "" }));
+                            setScheduleDialog({ placeId: p.id, placeName: p.name });
+                          }}
+                          data-testid={`button-add-schedule-${p.id}`}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Expect a member here
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </CardContent>
               </Card>
             );
           })}
+
+          {/* Schedule dialog - "Sarah at School Mon-Fri 8:30-15:30" */}
+          <Dialog open={!!scheduleDialog} onOpenChange={(o) => !o && setScheduleDialog(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Expect someone at {scheduleDialog?.placeName}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>Who?</Label>
+                  <Select
+                    value={newSchedule.memberId}
+                    onValueChange={(v) => setNewSchedule({ ...newSchedule, memberId: v })}
+                  >
+                    <SelectTrigger data-testid="select-schedule-member">
+                      <SelectValue placeholder="Pick a family member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members
+                        // Only real DB rows have UUID ids - synthetic admin
+                        // rows ("admin:<userId>") can't be referenced by FK
+                        .filter(mm => mm.status === "active" && !mm.id.startsWith("admin:"))
+                        .map((mm) => (
+                        <SelectItem key={mm.id} value={mm.id}>
+                          {mm.name} ({ROLE_LABEL[mm.role] || mm.role})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Days</Label>
+                  <div className="flex gap-1 mt-1.5">
+                    {DAY_LABELS.map((d, idx) => {
+                      const active = newSchedule.days.includes(idx);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setNewSchedule(prev => ({
+                            ...prev,
+                            days: active ? prev.days.filter(x => x !== idx) : [...prev.days, idx].sort(),
+                          }))}
+                          className={`flex-1 h-9 rounded-md text-xs font-medium border transition ${
+                            active
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-card border-border text-muted-foreground hover:bg-muted"
+                          }`}
+                          data-testid={`button-schedule-day-${idx}`}
+                        >
+                          {d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Arrives by</Label>
+                    <Input
+                      type="time"
+                      value={`${String(newSchedule.startHour).padStart(2,"0")}:${String(newSchedule.startMin).padStart(2,"0")}`}
+                      onChange={(e) => {
+                        const [h, m] = e.target.value.split(":").map(Number);
+                        setNewSchedule({ ...newSchedule, startHour: h || 0, startMin: m || 0 });
+                      }}
+                      data-testid="input-schedule-start"
+                    />
+                  </div>
+                  <div>
+                    <Label>Leaves by</Label>
+                    <Input
+                      type="time"
+                      value={`${String(newSchedule.endHour).padStart(2,"0")}:${String(newSchedule.endMin).padStart(2,"0")}`}
+                      onChange={(e) => {
+                        const [h, m] = e.target.value.split(":").map(Number);
+                        setNewSchedule({ ...newSchedule, endHour: h || 0, endMin: m || 0 });
+                      }}
+                      data-testid="input-schedule-end"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Grace period</Label>
+                  <Select
+                    value={String(newSchedule.grace)}
+                    onValueChange={(v) => setNewSchedule({ ...newSchedule, grace: parseInt(v) })}
+                  >
+                    <SelectTrigger data-testid="select-schedule-grace"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">No grace</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  We'll quietly check that they're inside this place on each scheduled day.
+                  If they're not there by the end of the window (plus grace), the family chat gets a one-time alert.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => addScheduleMutation.mutate()}
+                  disabled={!newSchedule.memberId || newSchedule.days.length === 0 || addScheduleMutation.isPending}
+                  data-testid="button-save-schedule"
+                >
+                  {addScheduleMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Save expectation
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={showAddPlace} onOpenChange={setShowAddPlace}>
             <DialogTrigger asChild>

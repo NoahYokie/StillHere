@@ -6066,7 +6066,9 @@ export async function registerRoutes(
           const nowLocal = new Date();
           const today = nowLocal.getDay(); // 0..6
           const nowMinutes = nowLocal.getHours() * 60 + nowLocal.getMinutes();
-          const todayStr = nowLocal.toISOString().slice(0, 10);
+          // Use the LOCAL calendar date (not UTC) for the dedupe key, so we
+          // don't accidentally suppress or duplicate alerts around midnight.
+          const todayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
 
           // Cache per-family lookups so we don't re-fetch the same family N times.
           const placesCache = new Map<string, Awaited<ReturnType<typeof storage.getFamilyPlaces>>>();
@@ -6077,8 +6079,11 @@ export async function registerRoutes(
               if (s.lastAlertedDate === todayStr) continue;
               const days = s.daysOfWeek.split(",").map(d => parseInt(d, 10));
               if (!days.includes(today)) continue;
-              // Only fire once the window has fully ended + grace
-              const dueAt = s.expectedEndMinutes + (s.graceMinutes || 0);
+              // Only fire once the window has fully ended + grace.
+              // Clamp to 23:59 so a late-evening window with a long grace
+              // (e.g. 23:30 + 60min = 24:30) still fires before midnight rolls
+              // the day over, instead of being skipped forever.
+              const dueAt = Math.min(1439, s.expectedEndMinutes + (s.graceMinutes || 0));
               if (nowMinutes < dueAt) continue;
 
               let places = placesCache.get(s.familyId);
@@ -6742,6 +6747,12 @@ export async function registerRoutes(
       if (!place) return res.status(404).json({ error: "Place not found" });
 
       const memberId = (req.body?.memberId || "").toString();
+      // Reject synthetic admin rows (id like "admin:<userId>") - they aren't
+      // real `family_members` UUIDs and would crash the FK insert.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(memberId)) {
+        return res.status(400).json({ error: "Pick a real family member" });
+      }
       const member = overview.members.find(m => m.id === memberId);
       if (!member) return res.status(400).json({ error: "Member not in this family" });
 
@@ -6776,7 +6787,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/family/place-schedules/:scheduleId", systemMessageLimiter, async (req, res) => {
+  app.delete("/api/family/place-schedules/:scheduleId", async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
