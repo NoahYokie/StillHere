@@ -18,6 +18,7 @@ interface Guardian {
   linked: boolean;
   readiness: Readiness;
   lastActiveAt: string | null;
+  lastActiveSource?: "heartbeat" | "drill" | null;
 }
 
 interface CircleReadiness {
@@ -69,6 +70,9 @@ export default function SafetyCirclePage() {
   });
   const primary = sorted[0];
   const totalCount = data?.totalCount ?? guardians.length;
+  const linkedCount = guardians.filter((g) => g.linked).length;
+  const readyCount = data?.readyCount ?? 0;
+  const allReady = linkedCount > 0 && readyCount === linkedCount;
 
   return (
     <div className="min-h-screen bg-background">
@@ -105,11 +109,13 @@ export default function SafetyCirclePage() {
           </div>
           {totalCount > 0 ? (
             <>
-              <h2 className="text-2xl font-bold text-green-700 dark:text-green-500 tracking-tight" data-testid="text-hero-title">
-                Your Safety Circle is Ready
+              <h2 className={`text-2xl font-bold tracking-tight ${allReady ? "text-green-700 dark:text-green-500" : "text-foreground"}`} data-testid="text-hero-title">
+                {allReady ? "Your Safety Circle is Ready" : "Your Safety Circle"}
               </h2>
               <p className="text-sm text-muted-foreground mt-1.5" data-testid="text-hero-subtitle">
-                Sharing with {totalCount} {totalCount === 1 ? "Guardian" : "Guardians"}
+                {linkedCount > 0
+                  ? `${readyCount} of ${linkedCount} ready · ${totalCount} ${totalCount === 1 ? "Guardian" : "Guardians"}`
+                  : `Sharing with ${totalCount} ${totalCount === 1 ? "Guardian" : "Guardians"}`}
               </p>
             </>
           ) : (

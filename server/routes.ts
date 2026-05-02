@@ -1610,19 +1610,51 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       const contactList = await storage.getContacts(userId);
       const now = Date.now();
+
+      // Pull recent drill acks (last 30 days) so we can credit guardians who confirmed
+      // a drill even if they haven't sent a heartbeat. Drill acks are the strongest
+      // signal that a guardian is reachable and responsive.
+      const drillCutoff = new Date(now - 30 * 24 * 60 * 60 * 1000);
+      const recentDrills = await db
+        .select({ drillResponses: incidents.drillResponses })
+        .from(incidents)
+        .where(and(eq(incidents.userId, userId), eq(incidents.isDrill, true), gte(incidents.startedAt, drillCutoff)));
+      const lastAckByContact = new Map<string, number>();
+      for (const d of recentDrills) {
+        try {
+          const responses = JSON.parse(d.drillResponses || "[]");
+          if (Array.isArray(responses)) {
+            for (const r of responses) {
+              if (r && typeof r === "object" && typeof r.contactId === "string" && typeof r.respondedAt === "string") {
+                const t = Date.parse(r.respondedAt);
+                if (!isNaN(t)) {
+                  const prev = lastAckByContact.get(r.contactId) || 0;
+                  if (t > prev) lastAckByContact.set(r.contactId, t);
+                }
+              }
+            }
+          }
+        } catch { /* ignore malformed JSON */ }
+      }
+
       const guardians = await Promise.all(contactList.map(async (c) => {
         let lastActiveAt: string | null = null;
         let readiness: "ready" | "idle" | "needs_attention" | "unknown" = "unknown";
+        let lastActiveSource: "heartbeat" | "drill" | null = null;
+
         if (c.linkedUserId) {
           const linkedUser = await storage.getUser(c.linkedUserId);
-          if (linkedUser?.lastHeartbeatAt) {
-            lastActiveAt = new Date(linkedUser.lastHeartbeatAt).toISOString();
-            const ageMs = now - new Date(linkedUser.lastHeartbeatAt).getTime();
+          const heartbeatMs = linkedUser?.lastHeartbeatAt ? new Date(linkedUser.lastHeartbeatAt).getTime() : 0;
+          const drillAckMs = lastAckByContact.get(c.id) || 0;
+          const mostRecent = Math.max(heartbeatMs, drillAckMs);
+
+          if (mostRecent > 0) {
+            lastActiveAt = new Date(mostRecent).toISOString();
+            lastActiveSource = drillAckMs >= heartbeatMs ? "drill" : "heartbeat";
+            const ageMs = now - mostRecent;
             if (ageMs < 24 * 60 * 60 * 1000) readiness = "ready";
             else if (ageMs < 7 * 24 * 60 * 60 * 1000) readiness = "idle";
             else readiness = "needs_attention";
-          } else {
-            readiness = "unknown";
           }
         }
         return {
@@ -1633,6 +1665,7 @@ export async function registerRoutes(
           linked: !!c.linkedUserId,
           readiness,
           lastActiveAt,
+          lastActiveSource,
         };
       }));
       const ready = guardians.filter(g => g.readiness === "ready").length;

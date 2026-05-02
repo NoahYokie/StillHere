@@ -15,6 +15,7 @@ interface Guardian {
   linked: boolean;
   readiness: Readiness;
   lastActiveAt: string | null;
+  lastActiveSource?: "heartbeat" | "drill" | null;
 }
 
 interface CircleReadiness {
@@ -63,6 +64,8 @@ export default function SafetyCircleManagePage() {
     const order: Record<string, number> = { primary: 0, backup: 1, support: 2 };
     return (order[a.role] ?? 9) - (order[b.role] ?? 9);
   });
+  const linkedCount = guardians.filter((g) => g.linked).length;
+  const readyCount = data?.readyCount ?? 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -89,6 +92,14 @@ export default function SafetyCircleManagePage() {
         <p className="text-xs text-center text-muted-foreground px-4 mb-2" data-testid="text-helper">
           Your guardians are the people we contact if you miss a check-in or need help.
         </p>
+        {linkedCount > 0 && (
+          <div className="flex justify-center mb-2" data-testid="badge-readiness-summary">
+            <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${readyCount === linkedCount ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${readyCount === linkedCount ? "bg-green-500" : "bg-amber-500"}`} />
+              {readyCount} of {linkedCount} ready
+            </span>
+          </div>
+        )}
 
         {isLoading ? (
           <Card className="rounded-2xl"><CardContent className="p-4 text-center text-sm text-muted-foreground">Loading...</CardContent></Card>
@@ -133,12 +144,19 @@ export default function SafetyCircleManagePage() {
                     {g.lastActiveAt ? (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
-                        <span>Last active {formatDistanceToNow(new Date(g.lastActiveAt), { addSuffix: true })}</span>
+                        <span data-testid={`text-last-active-${g.id}`}>
+                          {g.lastActiveSource === "drill" ? "Confirmed drill" : "Last active"} {formatDistanceToNow(new Date(g.lastActiveAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                    ) : g.linked ? (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground/70">
+                        <Clock className="h-3 w-3" />
+                        <span>Run a drill to confirm readiness</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground/70">
                         <Clock className="h-3 w-3" />
-                        <span>Readiness not checked yet</span>
+                        <span>Hasn't joined StillHere yet</span>
                       </div>
                     )}
                   </div>
