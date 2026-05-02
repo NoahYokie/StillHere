@@ -16,6 +16,7 @@ export const reportFrequencyEnum = pgEnum("report_frequency", ["daily", "weekly"
 export const safetyStateEnum = pgEnum("safety_state", ["active", "quiet", "concern"]);
 export const sharingModeEnum = pgEnum("sharing_mode", ["precise", "area", "presence", "paused"]);
 export const circleRoleEnum = pgEnum("circle_role", ["primary", "backup", "support"]);
+export const messageTypeEnum = pgEnum("message_type", ["user", "system_alert", "system_safe", "system_info"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -270,6 +271,8 @@ export const locationSessionsRelations = relations(locationSessions, ({ one }) =
 }));
 
 // Messages table
+// Conversations exist only between a user and members of their Safety Circle
+// (watchers / emergency contacts). Authorization is enforced at the route layer.
 export const messages = pgTable("messages", {
   id: uuid("id").defaultRandom().primaryKey(),
   senderId: uuid("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -278,6 +281,11 @@ export const messages = pgTable("messages", {
   read: boolean("read").notNull().default(false),
   encrypted: boolean("encrypted").notNull().default(false),
   iv: text("iv"),
+  // Message kind: regular user chat, or a system-generated safety event
+  // (alert / safe / info). System messages render as full-width cards in the UI.
+  messageType: messageTypeEnum("message_type").notNull().default("user"),
+  // Optional structured payload for system messages (e.g. incidentId, lat/lng)
+  meta: text("meta"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("messages_sender_receiver_idx").on(table.senderId, table.receiverId),

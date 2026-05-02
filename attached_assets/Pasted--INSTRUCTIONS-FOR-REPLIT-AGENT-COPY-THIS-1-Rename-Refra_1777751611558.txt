@@ -1,0 +1,120 @@
+🧠 INSTRUCTIONS FOR REPLIT AGENT (COPY THIS)
+✅ 1. Rename + Reframe Messaging System
+
+Goal: Convert generic chat into a safety-focused system
+
+Instructions:
+
+Rename page title from "Messages" → "Safety Circle"
+Update empty state:
+Instead of "All caught up"
+Use: "Your safety circle. Everyone who matters, in one place."
+Update conversation preview logic:
+Show:
+Contact name
+Last message preview
+Timestamp
+Alert indicator (if emergency)
+
+Add visual states:
+
+🔴 Emergency = red dot + bold text
+🟡 Missed check-in = yellow/orange dot
+🟢 Safe = normal
+🚨 2. Add “System Messages” (CRITICAL FEATURE)
+
+Goal: Differentiate safety events from normal chat
+
+Instructions:
+Create a new message type:
+
+type MessageType = "user" | "system_alert" | "system_safe" | "system_info";
+Render logic:
+🔴 Emergency Alert (system_alert)
+Full-width card
+Red background (light)
+Content example:
+"🚨 Dauda triggered SOS"
+"No response after check-in attempts"
+
+Add action buttons:
+
+Call user
+View location
+Mark safe
+🟢 Safe Confirmation (system_safe)
+Green card
+Message:
+"✅ Dauda is safe"
+"Responded to check-in"
+⚪ Info (system_info)
+Neutral card
+Example:
+"Missed check-in detected"
+"Reminder sent"
+💬 3. Clean Chat UI (Keep it SIMPLE)
+
+Goal: Don’t overdesign chat — focus on clarity
+
+Instructions:
+
+Standard message bubbles:
+User = right side (blue)
+Others = left side (grey)
+Add:
+Read receipts (optional later)
+Timestamp (small, subtle)
+
+Remove:
+
+Overly complex UI
+Fancy animations
+⚡ 4. Add Quick Action Bar (Game changer)
+
+Goal: Make messaging useful in emergencies
+
+At bottom of chat screen, add:
+
+Buttons:
+
+📍 Share Location
+📞 Call
+⚠️ Trigger SOS
+
+Behavior:
+
+SOS button:
+→ instantly sends system_alert message to all contacts
+👥 5. Safety Circle Structure (Backend logic)
+
+Goal: Align messaging with your actual product
+
+Instructions:
+
+Messages should only exist between:
+
+User
+Watchers
+Emergency contacts
+Update schema:
+conversation_type: "safety_circle"
+participants: [userId, contactId]
+Message flow:
+Check-in failed →
+→ system sends system_info
+No response →
+→ system sends system_alert
+User responds →
+→ system sends system_safe
+⚠️ IMPORTANT RULES
+DO NOT build a generic chat system
+DO NOT add unnecessary features (stickers, etc.)
+PRIORITIZE:
+clarity
+urgency
+action
+🎯 FINAL RESULT SHOULD FEEL LIKE:
+
+👉 “This is where I monitor someone’s safety”
+NOT
+👉 “This is where I text friends”

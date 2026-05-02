@@ -177,11 +177,11 @@ export interface IStorage {
   deletePushSubscriptionForUser(userId: string, endpoint: string): Promise<void>;
 
   // Messages
-  saveMessage(senderId: string, receiverId: string, content: string): Promise<Message>;
+  saveMessage(senderId: string, receiverId: string, content: string, options?: { messageType?: "user" | "system_alert" | "system_safe" | "system_info"; meta?: Record<string, any> }): Promise<Message>;
   getMessages(userId1: string, userId2: string, limit?: number): Promise<Message[]>;
   markMessagesRead(senderId: string, receiverId: string): Promise<void>;
   getUnreadCount(userId: string): Promise<number>;
-  getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[]>;
+  getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }[]>;
 
   // Calls
   getCall(id: string): Promise<Call | undefined>;
@@ -1067,7 +1067,12 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  async saveMessage(senderId: string, receiverId: string, content: string): Promise<Message> {
+  async saveMessage(
+    senderId: string,
+    receiverId: string,
+    content: string,
+    options?: { messageType?: "user" | "system_alert" | "system_safe" | "system_info"; meta?: Record<string, any> },
+  ): Promise<Message> {
     const [msg] = await db.insert(messages).values({
       senderId,
       receiverId,
@@ -1075,6 +1080,8 @@ export class DatabaseStorage implements IStorage {
       read: false,
       encrypted: false,
       iv: null,
+      messageType: options?.messageType ?? "user",
+      meta: options?.meta ? JSON.stringify(options.meta) : null,
     }).returning();
     return msg;
   }
@@ -1107,12 +1114,12 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[]> {
+  async getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }[]> {
     const allMessages = await db.select().from(messages).where(
       or(eq(messages.senderId, userId), eq(messages.receiverId, userId))
     ).orderBy(desc(messages.createdAt));
 
-    const partnerMap = new Map<string, { lastMessage: string; lastMessageAt: Date; unreadCount: number }>();
+    const partnerMap = new Map<string, { lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }>();
 
     for (const msg of allMessages) {
       const partnerId = msg.senderId === userId ? msg.receiverId : msg.senderId;
@@ -1122,6 +1129,7 @@ export class DatabaseStorage implements IStorage {
           lastMessage: preview,
           lastMessageAt: msg.createdAt,
           unreadCount: 0,
+          lastMessageType: (msg.messageType ?? "user") as "user" | "system_alert" | "system_safe" | "system_info",
         });
       }
       if (msg.receiverId === userId && !msg.read) {
@@ -1130,7 +1138,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const conversations: { partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number }[] = [];
+    const conversations: { partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }[] = [];
     for (const [partnerId, data] of Array.from(partnerMap)) {
       const partner = await this.getUser(partnerId);
       conversations.push({
@@ -1139,6 +1147,7 @@ export class DatabaseStorage implements IStorage {
         lastMessage: data.lastMessage,
         lastMessageAt: data.lastMessageAt,
         unreadCount: data.unreadCount,
+        lastMessageType: data.lastMessageType,
       });
     }
 

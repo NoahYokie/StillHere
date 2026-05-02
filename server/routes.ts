@@ -2549,6 +2549,105 @@ export async function registerRoutes(
     }
   });
 
+  // Broadcast a system_alert message to every member of the user's Safety Circle.
+  // Used by the in-chat "Trigger SOS" quick action — also triggers the standard
+  // SOS incident pipeline if one is not already open.
+  app.post("/api/messages/sos", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const user = await storage.getUser(userId);
+      const userName = user?.name || "Someone";
+
+      // Broadcast a system_alert to every linked Safety Circle member
+      const contacts = await storage.getContacts(userId);
+      const linked = contacts.filter((c) => c.linkedUserId);
+      const alertContent = `${userName} triggered an SOS. They need help right now.`;
+      const meta = { kind: "sos", triggeredAt: new Date().toISOString() };
+
+      const { emitToUser } = await import("./socket");
+      const created: any[] = [];
+      for (const contact of linked) {
+        try {
+          const msg = await storage.saveMessage(userId, contact.linkedUserId!, alertContent, {
+            messageType: "system_alert",
+            meta,
+          });
+          emitToUser(contact.linkedUserId!, "message:new", { ...msg, senderName: userName });
+          emitToUser(userId, "message:sent", msg);
+          created.push(msg);
+        } catch (err: any) {
+          console.error(`[SOS-MSG] Failed for contact ${contact.id}:`, err?.message || err);
+        }
+      }
+
+      // Also trigger the standard SOS incident flow (idempotent — will no-op if already open)
+      try {
+        const existingIncident = await storage.getOpenIncident(userId);
+        if (!existingIncident) {
+          await storage.createIncident(userId, "sos");
+          await storage.updateSafetyState(userId, "concern", "SOS triggered from messages");
+          notifyConcern(userId, userName, "sos").catch(() => {});
+        }
+      } catch (err: any) {
+        console.error("[SOS-MSG] Incident creation failed:", err?.message || err);
+      }
+
+      res.json({ success: true, sentCount: created.length });
+    } catch (error) {
+      console.error("Error broadcasting SOS message:", error);
+      res.status(500).json({ error: "Failed to broadcast SOS" });
+    }
+  });
+
+  // Post a system_safe or system_info message into a conversation.
+  // Either party in the Safety Circle relationship may post these.
+  // system_alert may NOT be created via this endpoint — those only come from the
+  // SOS pipeline above so they cannot be spoofed by chat actions.
+  app.post("/api/messages/:userId/system", async (req, res) => {
+    try {
+      const currentUserId = getUserId(req);
+      if (!currentUserId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const receiverId = req.params.userId;
+      const { type, content, meta } = req.body || {};
+
+      if (type !== "system_safe" && type !== "system_info") {
+        return res.status(400).json({ error: "Invalid system message type" });
+      }
+      if (!content || typeof content !== "string" || !content.trim() || content.length > 500) {
+        return res.status(400).json({ error: "Invalid content" });
+      }
+
+      const myContacts = await storage.getContacts(currentUserId);
+      const theirContacts = await storage.getContacts(receiverId);
+      const hasRelationship =
+        myContacts.some((c) => c.linkedUserId === receiverId) ||
+        theirContacts.some((c) => c.linkedUserId === currentUserId);
+      if (!hasRelationship) {
+        return res.status(403).json({ error: "Not authorized to message this user" });
+      }
+
+      const msg = await storage.saveMessage(currentUserId, receiverId, content.trim(), {
+        messageType: type,
+        meta: meta && typeof meta === "object" ? meta : undefined,
+      });
+
+      const { emitToUser } = await import("./socket");
+      const sender = await storage.getUser(currentUserId);
+      emitToUser(receiverId, "message:new", { ...msg, senderName: sender?.name || "Someone" });
+      emitToUser(currentUserId, "message:sent", msg);
+
+      res.json(msg);
+    } catch (error) {
+      console.error("Error posting system message:", error);
+      res.status(500).json({ error: "Failed to post system message" });
+    }
+  });
+
   app.post("/api/messages/:userId/read", async (req, res) => {
     try {
       const currentUserId = getUserId(req);
