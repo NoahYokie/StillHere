@@ -329,3 +329,33 @@ id = "rLJac3cuhoOuWFTajKoB9"
 uri = "file://Council_Report_Task1_LocationRefactor.md"
 type = "text"
 title = "Council Report: Task 1 — Location Refactor Complete"
+
+[[outputs]]
+id = "hk4TFkwy5YdNz1CZxGy_Q"
+uri = "file://attached_assets/screenshots/6d1419bd-9d4b-4189-9865-b97fdd563ba4-00-11sz52b33amu0_kirk_replit_dev_mockup_preview_sos-emergency-page_CalmHero.png"
+type = "image"
+title = "1. Calm Hero — one big map, one clear action"
+
+[[outputs]]
+id = "RAn0idLWqLFuQHBirzRVl"
+uri = "file://attached_assets/screenshots/6d1419bd-9d4b-4189-9865-b97fdd563ba4-00-11sz52b33amu0_kirk_replit_dev_mockup_preview_sos-emergency-page_TriageFirst.png"
+type = "image"
+title = "2. Triage First — pinned action bar at the top"
+
+[[outputs]]
+id = "1iWsWueF8N7WzOL5DGLsR"
+uri = "file://attached_assets/screenshots/6d1419bd-9d4b-4189-9865-b97fdd563ba4-00-11sz52b33amu0_kirk_replit_dev_mockup_preview_sos-emergency-page_EditorialTimeline.png"
+type = "image"
+title = "3. Editorial Timeline — calm narrative of what happened"
+
+[[outputs]]
+id = "CqWgqZg_bEuJJs1zEFwM6"
+uri = "file://attached_assets/screenshots/6d1419bd-9d4b-4189-9865-b97fdd563ba4-00-11sz52b33amu0_kirk_replit_dev_mockup_preview_sos-emergency-page_MapForward.png"
+type = "image"
+title = "4. Map Forward — full-screen map with bottom sheet"
+
+[[outputs]]
+id = "aDHEJQcjCW0MR0ktT_7Kk"
+uri = "file://attached_assets/screenshots/6d1419bd-9d4b-4189-9865-b97fdd563ba4-00-11sz52b33amu0_kirk_replit_dev_mockup_preview_sos-emergency-page_StatusCard.png"
+type = "image"
+title = "5. Status Card — modular tiles, dashboard feel"
