@@ -82,7 +82,7 @@ function SafetyHealthCard() {
       partial: false,
       denied: health.notifications === "denied",
       unknown: health.notifications === "unknown",
-      description: notifOk ? "Enabled" : health.notifications === "denied" ? "Blocked — update in phone Settings" : "Not enabled",
+      description: notifOk ? "Enabled" : health.notifications === "denied" ? "Blocked  -  update in phone Settings" : "Not enabled",
       fix: async () => { setFixing(true); await requestNotificationPermission(); health.refresh(); setFixing(false); },
     },
     {
@@ -459,7 +459,7 @@ export default function SettingsPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 py-4 space-y-3">
-        {/* Emergency Contacts — Always visible, compact */}
+        {/* Emergency Contacts  -  Always visible, compact */}
         <Card>
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center justify-between mb-3">

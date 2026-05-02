@@ -642,7 +642,7 @@ export default function ChatPage() {
     // === LIVE LOCATION CARD ===
     // Either via structured meta (new flow) OR backward-compat detection of the
     // old "Sharing live location: https://..." text format. We render the card
-    // even when lat/lng are missing — the card itself shows "No location
+    // even when lat/lng are missing  -  the card itself shows "No location
     // available" and disables the actions in that case.
     if (meta?.kind === "live_location") {
       return renderLiveLocationCard(msg, meta as LiveLocationMeta);
@@ -835,7 +835,7 @@ export default function ChatPage() {
     );
   }
 
-  // Group expander state — track which collapsed groups have been expanded
+  // Group expander state  -  track which collapsed groups have been expanded
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   function presenceLabel(): string {
@@ -965,7 +965,7 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Active-share banner — always visible while a live-location session is
+      {/* Active-share banner  -  always visible while a live-location session is
           actually running on the server, so users can stop sharing even when no
           card in this thread is in the "active" state. */}
       {isCurrentlySharing && (
@@ -993,7 +993,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Compact Quick Action Bar — pill-style icon+label, smaller and sharper */}
+      {/* Compact Quick Action Bar  -  pill-style icon+label, smaller and sharper */}
       <div className="border-t border-border/60 bg-card px-3 pt-2 pb-1.5">
         <div className="max-w-lg mx-auto flex items-center justify-center gap-2">
           {/* Location */}

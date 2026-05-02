@@ -362,7 +362,7 @@ export async function registerRoutes(
     }
   });
   
-  // Verify OTP code — rate limited to prevent brute force
+  // Verify OTP code  -  rate limited to prevent brute force
   const verifyAttempts = new Map<string, { count: number; resetAt: number }>();
   const MAX_VERIFY_ATTEMPTS = 5;
   const VERIFY_WINDOW_MS = 10 * 60 * 1000;
@@ -786,7 +786,7 @@ export async function registerRoutes(
       if (user?.safetyState === "quiet") {
         const openIncident = await storage.getOpenIncident(userId);
         if (openIncident) {
-          console.log(`[HEARTBEAT] User ${userId} resumed with open incident — routing through resolveCheckin`);
+          console.log(`[HEARTBEAT] User ${userId} resumed with open incident  -  routing through resolveCheckin`);
           await resolveCheckin(userId, "app");
         } else {
           await storage.updateSafetyState(userId, "active", "Heartbeat resumed");
@@ -890,10 +890,10 @@ export async function registerRoutes(
           type: "state_change",
           time: user.safetyStateChangedAt.toISOString(),
           detail: user.safetyState === "concern"
-            ? "Concern triggered — no heartbeat received"
+            ? "Concern triggered  -  no heartbeat received"
             : user.safetyState === "quiet"
-              ? "Went quiet — waiting for response"
-              : `Status: ${user.safetyState} — ${user.safetyStateReason || ""}`,
+              ? "Went quiet  -  waiting for response"
+              : `Status: ${user.safetyState}  -  ${user.safetyStateReason || ""}`,
         });
       }
 
@@ -973,12 +973,12 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (user && (user.safetyState === "concern" || user.safetyState === "quiet")) {
-        console.log(`[CHECKIN] User ${user.name} checked in while safetyState=${user.safetyState} — routing through resolveCheckin`);
+        console.log(`[CHECKIN] User ${user.name} checked in while safetyState=${user.safetyState}  -  routing through resolveCheckin`);
         await resolveCheckin(userId, "app", { skipCreateCheckin: true });
       } else {
         const openIncident = await storage.getOpenIncident(userId);
         if (openIncident) {
-          console.log(`[CHECKIN] User ${user?.name} checked in with open incident (state=${user?.safetyState}) — routing through resolveCheckin`);
+          console.log(`[CHECKIN] User ${user?.name} checked in with open incident (state=${user?.safetyState})  -  routing through resolveCheckin`);
           await resolveCheckin(userId, "app", { skipCreateCheckin: true });
         }
       }
@@ -1423,7 +1423,7 @@ export async function registerRoutes(
               if (wc.linkedUserId && wc.linkedUserId !== userId) {
                 await sendPushNotification(wc.linkedUserId, {
                   title: "Safety Circle ready",
-                  body: `You're all set. If ${user.name} ever needs you, we'll guide you — just like this.`,
+                  body: `You're all set. If ${user.name} ever needs you, we'll guide you  -  just like this.`,
                   url: "/watched",
                   tag: `drill-done-${drill.id}`,
                 });
@@ -2264,7 +2264,7 @@ export async function registerRoutes(
   // ============================================
 
   // Throttle the alert/system endpoints separately from regular chat
-  // (10 SOS broadcasts per 5 min, 60 system messages per 5 min — generous
+  // (10 SOS broadcasts per 5 min, 60 system messages per 5 min  -  generous
   // for legit safety use, restrictive enough to prevent spam abuse).
   // Defined here so all messaging routes below can reference them.
   const sosLimiter = rateLimit({
@@ -2328,7 +2328,7 @@ export async function registerRoutes(
   // Atomic "Share live location with this person" action: starts a real live
   // location session for the requested duration AND posts a structured system
   // message into the conversation so the recipient sees a beautiful card with
-  // live status + Open-in-Maps + countdown — not a raw URL.
+  // live status + Open-in-Maps + countdown  -  not a raw URL.
   app.post("/api/messages/:userId/share-location", systemMessageLimiter, async (req, res) => {
     try {
       const currentUserId = getUserId(req);
@@ -2381,7 +2381,7 @@ export async function registerRoutes(
       } catch (err: any) {
         console.error("[SHARE-LOC] live-location session creation failed:", err?.message || err);
         liveSessionFailed = true;
-        // Continue — we still post a message card with the snapshot location,
+        // Continue  -  we still post a message card with the snapshot location,
         // but mark it as stopped + fallback so the UI doesn't pretend it's live.
       }
 
@@ -2664,7 +2664,7 @@ export async function registerRoutes(
   });
 
   // Broadcast a system_alert message to every member of the user's Safety Circle.
-  // Used by the in-chat "Trigger SOS" quick action — also triggers the standard
+  // Used by the in-chat "Trigger SOS" quick action  -  also triggers the standard
   // SOS incident pipeline if one is not already open. MUST be registered before
   // POST /api/messages/:userId so Express does not match "sos" as a userId param.
   app.post("/api/messages/sos", sosLimiter, async (req, res) => {
@@ -2712,7 +2712,7 @@ export async function registerRoutes(
 
       recentSosByUser.set(userId, { at: Date.now(), sentCount: created.length });
 
-      // Trigger the standard SOS incident flow (idempotent — will no-op if already open).
+      // Trigger the standard SOS incident flow (idempotent  -  will no-op if already open).
       // Wrapped so any failure here cannot lose the broadcast result.
       try {
         const existingIncident = await storage.getOpenIncident(userId);
@@ -2777,7 +2777,7 @@ export async function registerRoutes(
 
   // Post a system_safe or system_info message into a conversation.
   // Either party in the Safety Circle relationship may post these.
-  // system_alert may NOT be created via this endpoint — those only come from the
+  // system_alert may NOT be created via this endpoint  -  those only come from the
   // SOS pipeline above so they cannot be spoofed by chat actions.
   app.post("/api/messages/:userId/system", systemMessageLimiter, async (req, res) => {
     try {
@@ -3455,7 +3455,7 @@ export async function registerRoutes(
     }
   });
 
-  // Static map proxy — keeps the Google API key off the client and lets us
+  // Static map proxy  -  keeps the Google API key off the client and lets us
   // serve a small map preview image inside the in-chat Live Location card.
   app.get("/api/maps/static-map", async (req, res) => {
     try {
@@ -3487,7 +3487,7 @@ export async function registerRoutes(
       }
       const buf = Buffer.from(await upstream.arrayBuffer());
       res.setHeader("Content-Type", upstream.headers.get("content-type") || "image/png");
-      // Location data is sensitive — keep this in the user's browser only,
+      // Location data is sensitive  -  keep this in the user's browser only,
       // never in shared/proxy caches.
       res.setHeader("Cache-Control", "private, max-age=300");
       res.send(buf);
@@ -4456,11 +4456,11 @@ export async function registerRoutes(
       if (totalIncidents === 0) {
         summaryTone = "good";
         summary =
-          "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up — this is exactly what peace of mind looks like.";
+          "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up  -  this is exactly what peace of mind looks like.";
       } else if (totalIncidents <= 2 && unresolvedIncidents.length === 0 && slowResolutions.length === 0) {
         summaryTone = "mixed";
         summary =
-          "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay. The system worked exactly as it should — catching the small things so nothing gets missed.";
+          "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay. The system worked exactly as it should  -  catching the small things so nothing gets missed.";
       } else {
         summaryTone = "concern";
         if (unresolvedIncidents.length > 0) {
@@ -5128,7 +5128,7 @@ export async function registerRoutes(
         }
         await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call. Needs help.");
 
-        // Fan out to ALL contacts in parallel (SMS + push) — the user audibly
+        // Fan out to ALL contacts in parallel (SMS + push)  -  the user audibly
         // confirmed they need help, so we don't wait for sequential escalation.
         const sosCont = await storage.getContacts(user.id);
         const sortedSos = [...sosCont].sort((a, b) => a.priority - b.priority);
@@ -5155,7 +5155,7 @@ export async function registerRoutes(
         existingTimeline.push({
           type: "wellness_call_help",
           time: now.toISOString(),
-          detail: `User pressed 2 on wellness call — notified ${notifiedIds.length} contact(s)`,
+          detail: `User pressed 2 on wellness call  -  notified ${notifiedIds.length} contact(s)`,
         });
         await storage.updateIncident(incident.id, {
           escalationLevel: Math.max(incident.escalationLevel || 0, 1),
@@ -5254,7 +5254,7 @@ export async function registerRoutes(
         if (isDueForAlert) {
           const existingOpenIncident = await storage.getOpenIncident(user.id);
           if (existingOpenIncident) {
-            console.log(`[ALERT] Skipping checkin alert for ${user.name} — open incident already exists (${existingOpenIncident.reason})`);
+            console.log(`[ALERT] Skipping checkin alert for ${user.name}  -  open incident already exists (${existingOpenIncident.reason})`);
             continue;
           }
 
@@ -5385,15 +5385,15 @@ export async function registerRoutes(
         if (incident.status !== "open") continue;
 
         if (step === "push") {
-          console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress — step: push→sms", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
+          console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress  -  step: push→sms", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
           const checkInLink = `${baseUrl}/`;
           if (user.phone) {
             await sendReminderSms(user.phone, checkInLink, !!userSettings?.smsCheckinEnabled);
-            existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user — still trying to reach them" });
+            existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user  -  still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: SMS sent to ${user.name} (***${user.phone.slice(-4)})`);
           } else {
             await sendReminderPush(user.id, user.name);
-            existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent (no phone) — still trying to reach them" });
+            existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent (no phone)  -  still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: Push sent to ${user.name} (no phone for SMS)`);
           }
           await storage.updateIncident(incident.id, {
@@ -5407,7 +5407,7 @@ export async function registerRoutes(
         }
 
         if (step === "sms") {
-          console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress — step: sms→call", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
+          console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress  -  step: sms→call", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
           const autoWellnessCallFlag = !!(userSettings as any)?.autoWellnessCall;
           const twilioReady = isTwilioConfigured();
           const hasPhone = !!user.phone;
@@ -5460,14 +5460,14 @@ export async function registerRoutes(
             } catch (err: any) {
               const callError = err?.message || "unknown error";
               existingTimeline.push({ type: "call_failed", time: timeStr, detail: `Wellness call failed: ${callError}` });
-              console.error(`[ESCALATION] Wellness call FAILED for ${user.name}: ${callError} — falling through to contacts`);
+              console.error(`[ESCALATION] Wellness call FAILED for ${user.name}: ${callError}  -  falling through to contacts`);
             }
           } else {
             const reasons = [];
             if (!autoWellnessCallFlag) reasons.push("autoWellnessCall disabled");
             if (!twilioReady) reasons.push("Twilio not configured");
             if (!hasPhone) reasons.push("no phone number");
-            console.log(`[ESCALATION] Skipping call for ${user.name}: ${reasons.join(", ")} — advancing to contacts`);
+            console.log(`[ESCALATION] Skipping call for ${user.name}: ${reasons.join(", ")}  -  advancing to contacts`);
           }
 
           const firstContact = sortedContacts[0];
@@ -5478,7 +5478,7 @@ export async function registerRoutes(
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted — emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted  -  emergency contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -5506,7 +5506,7 @@ export async function registerRoutes(
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted — emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted  -  emergency contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -5837,7 +5837,7 @@ export async function registerRoutes(
           await storage.updateSafeWalk(w.id, { status: "overdue" });
           const u = await storage.getUser(w.userId);
           if (!u) continue;
-          console.log(`[CRON] Safe Walk now overdue for ${u.name} — 10 min grace period started`);
+          console.log(`[CRON] Safe Walk now overdue for ${u.name}  -  10 min grace period started`);
 
           const destInfo = w.destinationName ? ` to ${w.destinationName}` : "";
 
@@ -5858,7 +5858,7 @@ export async function registerRoutes(
                 console.error(`[SAFE-WALK] Push notification failed for ${u.name}:`, err?.message || err);
               }
             }
-            console.log(`[CRON] Sent push notification to ${u.name} — safe walk overdue`);
+            console.log(`[CRON] Sent push notification to ${u.name}  -  safe walk overdue`);
           } catch (err: any) {
             console.error(`[SAFE-WALK] Push notification batch failed for ${u.name}:`, err?.message || err);
           }
@@ -5868,7 +5868,7 @@ export async function registerRoutes(
               await sendSms(u.phone,
                 `StillHere: You haven't arrived${destInfo} yet. Are you OK? Open the app to confirm you're safe, or reply YES to this message.`
               );
-              console.log(`[CRON] Sent SMS to ${u.name} — safe walk overdue`);
+              console.log(`[CRON] Sent SMS to ${u.name}  -  safe walk overdue`);
             } catch (err: any) {
               console.error(`[SAFE-WALK] Overdue SMS to ${u.name} failed:`, err?.message || err);
             }
@@ -5889,7 +5889,7 @@ export async function registerRoutes(
             if (!user) continue;
 
             const incident = await storage.createIncident(walk.userId, "sos");
-            await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue — not responding");
+            await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue  -  not responding");
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
@@ -5985,7 +5985,7 @@ export async function registerRoutes(
   });
 
   // ============================================================
-  // Family Mode (safety group — NOT parental control / surveillance)
+  // Family Mode (safety group  -  NOT parental control / surveillance)
   // ============================================================
   app.get("/api/family", async (req, res) => {
     try {
@@ -6042,7 +6042,7 @@ export async function registerRoutes(
         parentalConsentRequired: parentalConsentRequired || role === "child" || role === "teen",
       });
 
-      // Send the SMS invite (best-effort — does not block the API response).
+      // Send the SMS invite (best-effort  -  does not block the API response).
       // Dedupe by phone within a 5-minute window so repeat clicks don't spam.
       const maskedPhone = `***${phone.slice(-4)}`;
       let deduped = false;
@@ -6084,12 +6084,12 @@ export async function registerRoutes(
     }
   });
 
-  // 5-minute SMS dedupe cache for family invites — prevents spam from
+  // 5-minute SMS dedupe cache for family invites  -  prevents spam from
   // repeat-click and re-invite flows. Keyed by normalized phone.
   const familyInviteSmsCache = new Map<string, number>();
   const FAMILY_INVITE_SMS_WINDOW_MS = 5 * 60 * 1000;
 
-  // "Watch over me while I'm here" — starts a real live-location session
+  // "Watch over me while I'm here"  -  starts a real live-location session
   // (continuous GPS share for a chosen duration) and tells every family member
   // the user is asking to be watched. The client then pumps GPS updates via
   // the existing /api/live-location/update endpoint for the duration.

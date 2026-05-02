@@ -18,7 +18,7 @@ const steps: { key: Step; icon: typeof MapPin; title: string; description: strin
     title: "Location access",
     description: "For StillHere to check on you in the background, your phone needs to allow location access at all times.",
     detail: "This helps your trusted contacts know where you are if you miss a check-in or trigger an SOS. Your location is only shared with people you choose.",
-    buttonLabel: "I understand — continue",
+    buttonLabel: "I understand  -  continue",
   },
   {
     key: "notifications",
@@ -26,7 +26,7 @@ const steps: { key: Step; icon: typeof MapPin; title: string; description: strin
     title: "Notifications",
     description: "Notifications let StillHere remind you before escalating to your contacts.",
     detail: "They also let your trusted contacts get updates when you confirm you are safe. Without notifications, you might miss important reminders.",
-    buttonLabel: "I understand — continue",
+    buttonLabel: "I understand  -  continue",
   },
   {
     key: "motion",
@@ -34,7 +34,7 @@ const steps: { key: Step; icon: typeof MapPin; title: string; description: strin
     title: "Motion detection",
     description: "Motion access helps StillHere detect falls and possible driving incidents more reliably.",
     detail: "This powers fall detection and shake-to-SOS. If your phone detects a sudden impact, StillHere can start a countdown and alert your contacts if you don't respond.",
-    buttonLabel: "I understand — continue",
+    buttonLabel: "I understand  -  continue",
   },
 ];
 

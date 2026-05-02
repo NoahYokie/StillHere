@@ -141,7 +141,7 @@ function DrillAcknowledgeButton({ drillId, userName, userId }: { drillId: string
       data-testid={`button-drill-ack-${userId}`}
     >
       <ShieldCheck className="w-4 h-4 mr-1.5" />
-      {ackMutation.isPending ? "Confirming..." : "I'm ready — got you"}
+      {ackMutation.isPending ? "Confirming..." : "I'm ready  -  got you"}
     </Button>
   );
 }

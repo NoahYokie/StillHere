@@ -168,7 +168,7 @@ export default function FamilyPage() {
     onError: () => toast({ title: "Could not remove member", variant: "destructive" }),
   });
 
-  // "Watch over me while I'm here" — starts a real continuous live-location
+  // "Watch over me while I'm here"  -  starts a real continuous live-location
   // session for a chosen duration and notifies every family member.
   const [isStartingWatch, setIsStartingWatch] = useState(false);
   const [watchDuration, setWatchDuration] = useState<number>(30);
@@ -443,7 +443,7 @@ export default function FamilyPage() {
                     {sharingMembers.length} sharing
                   </span>
                 </div>
-                {/* "Watch over me while I'm here" — starts a live session */}
+                {/* "Watch over me while I'm here"  -  starts a live session */}
                 {isWatchActive ? (
                   <div className="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/30 p-3" data-testid="status-watch-active">
                     <div className="flex items-center gap-2 mb-2">

@@ -196,7 +196,7 @@ function createPersonMarker(person: MapPerson): HTMLElement {
     ? "#92400e"
     : "#0f172a";
 
-  // Glyph (activity icon) — cars rotate with heading, others sit still
+  // Glyph (activity icon)  -  cars rotate with heading, others sit still
   const glyphSvg = isMoving ? getActivityGlyphSvg(activity, color) : "";
   const headingDeg = activity === "driving" && typeof person.heading === "number"
     ? Math.round(person.heading) - 90  // car SVG faces "right" (east), so subtract 90 to align north=0
@@ -214,7 +214,7 @@ function createPersonMarker(person: MapPerson): HTMLElement {
   // Status dot
   const statusDot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${color};box-shadow:0 0 0 1.5px white"></span>`;
 
-  // Glyph cell — bigger if it's a group (carpool look)
+  // Glyph cell  -  bigger if it's a group (carpool look)
   const glyphCell = glyphSvg
     ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;${glyphRotate}">${glyphSvg}</span>`
     : statusDot;
