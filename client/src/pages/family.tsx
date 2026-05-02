@@ -23,6 +23,7 @@ import {
   ArrowLeft, Heart, MapPin, MessageCircle, UserPlus, Loader2, Send,
   ShieldCheck, Activity, AlertTriangle, Eye, LogOut, Trash2, Users,
   Sparkles, Battery, Car, Settings as SettingsIcon, Crown,
+  Home as HomeIcon, GraduationCap, Briefcase, Dumbbell, Trees, Plus, Navigation,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -30,7 +31,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import GoogleMap, { type MapPerson } from "@/components/google-map";
-import type { FamilyOverview, FamilyMemberView, FamilyMessage } from "@shared/schema";
+import type { FamilyOverview, FamilyMemberView, FamilyMessage, FamilyPlace } from "@shared/schema";
+
+const PLACE_ICONS: Record<string, any> = {
+  home: HomeIcon, school: GraduationCap, work: Briefcase, gym: Dumbbell, park: Trees, pin: MapPin,
+};
+const PLACE_LABELS: { value: string; label: string }[] = [
+  { value: "home", label: "Home" }, { value: "school", label: "School" },
+  { value: "work", label: "Work" }, { value: "gym", label: "Gym" },
+  { value: "park", label: "Park" }, { value: "pin", label: "Other" },
+];
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin", adult: "Adult", teen: "Teen", child: "Child",
@@ -273,11 +283,86 @@ export default function FamilyPage() {
       }));
   }, [members, myUserId]);
 
-  // Center on the first person with a location, fall back to a neutral point.
+  // ---- Family Places ----
+  const { data: placesData } = useQuery<{ places: FamilyPlace[] }>({
+    queryKey: ["/api/family/places"],
+    enabled: !!family,
+  });
+  const places = placesData?.places ?? [];
+
+  const [showAddPlace, setShowAddPlace] = useState(false);
+  const [newPlace, setNewPlace] = useState({ name: "", icon: "home", radius: 150 });
+
+  const addPlaceMutation = useMutation({
+    mutationFn: async () => {
+      const pos = await getCurrentPos();
+      if (!pos) throw new Error("Allow location to save a place at your current spot.");
+      return apiRequest("POST", "/api/family/places", {
+        name: newPlace.name, icon: newPlace.icon,
+        lat: pos.coords.latitude, lng: pos.coords.longitude,
+        radiusMeters: newPlace.radius,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family/places"] });
+      toast({ title: "Place saved", description: "Family will be notified when anyone arrives or leaves." });
+      setShowAddPlace(false);
+      setNewPlace({ name: "", icon: "home", radius: 150 });
+    },
+    onError: (e: any) => toast({ title: "Couldn't save place", description: e?.message, variant: "destructive" }),
+  });
+
+  const deletePlaceMutation = useMutation({
+    mutationFn: async (placeId: string) => apiRequest("DELETE", `/api/family/places/${placeId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family/places"] });
+      toast({ title: "Place removed" });
+    },
+  });
+
+  // "On my way" - starts watch-me + posts a system message in chat with destination.
+  async function handleOnMyWay(place: FamilyPlace) {
+    try {
+      // Post to chat (fire-and-forget, non-blocking)
+      apiRequest("POST", "/api/family/messages", {
+        body: `On my way to ${place.name}.`,
+      }).then(() => queryClient.invalidateQueries({ queryKey: ["/api/family/messages"] }));
+
+      // Start watch-me if not already active
+      if (!isWatchActive) {
+        const pos = await getCurrentPos();
+        if (pos) {
+          await apiRequest("POST", "/api/family/watch-me/start", {
+            lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy,
+            durationMinutes: 60,
+          });
+          const { startLiveTracking } = await import("@/lib/live-location");
+          startLiveTracking({
+            onExpired: () => queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] }),
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
+        }
+      }
+      toast({ title: `On the way to ${place.name}`, description: "Family is watching your location." });
+    } catch (e: any) {
+      toast({ title: "Could not share", description: e?.message, variant: "destructive" });
+    }
+  }
+
+  // Center on the first person with a location, fall back to first place, then neutral.
   const mapCenter = useMemo(() => {
     if (mapPeople.length > 0) return { lat: mapPeople[0].lat, lng: mapPeople[0].lng };
+    if (places.length > 0) return { lat: places[0].lat, lng: places[0].lng };
     return { lat: 0, lng: 0 };
-  }, [mapPeople]);
+  }, [mapPeople, places]);
+
+  // Pass family places to the map as geofence circles for visual context.
+  const placeGeofences = useMemo(
+    () => places.map((p) => ({
+      id: p.id, name: p.name, lat: p.lat, lng: p.lng, radiusMeters: p.radiusMeters,
+    })),
+    [places],
+  );
 
   // ============ RENDER ============
   if (isLoading) {
@@ -419,10 +504,11 @@ export default function FamilyPage() {
 
       {/* MAP - hero of the page */}
       <div className="relative" style={{ height: "55vh", minHeight: 320 }}>
-        {mapPeople.length > 0 ? (
+        {(mapPeople.length > 0 || placeGeofences.length > 0) ? (
           <GoogleMap
             center={mapCenter}
             people={mapPeople}
+            geofences={placeGeofences}
             smartCamera={true}
             darkMode={false}
           />
@@ -538,15 +624,18 @@ export default function FamilyPage() {
 
       {/* TABS BELOW MAP */}
       <Tabs defaultValue="members" className="flex-1 flex flex-col">
-        <TabsList className="mx-4 mt-3 grid grid-cols-3">
+        <TabsList className="mx-4 mt-3 grid grid-cols-4">
           <TabsTrigger value="members" data-testid="tab-members">
-            <Users className="w-4 h-4 mr-1" /> Members
+            <Users className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Members</span>
           </TabsTrigger>
           <TabsTrigger value="chat" data-testid="tab-chat">
-            <MessageCircle className="w-4 h-4 mr-1" /> Chat
+            <MessageCircle className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Chat</span>
+          </TabsTrigger>
+          <TabsTrigger value="places" data-testid="tab-places">
+            <MapPin className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Places</span>
           </TabsTrigger>
           <TabsTrigger value="safety" data-testid="tab-safety">
-            <Sparkles className="w-4 h-4 mr-1" /> Safety
+            <Sparkles className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Safety</span>
           </TabsTrigger>
         </TabsList>
 
@@ -760,6 +849,126 @@ export default function FamilyPage() {
               <Send className="w-4 h-4" />
             </Button>
           </div>
+        </TabsContent>
+
+        {/* PLACES TAB */}
+        <TabsContent value="places" className="flex-1 px-4 py-3 space-y-2">
+          <Card className="bg-primary/5 border-primary/20">
+            <CardContent className="p-3 flex items-start gap-2">
+              <Navigation className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+              <div className="text-xs text-muted-foreground">
+                Saved places like Home, School, or Work. Family chat shows
+                <strong className="text-foreground"> "Sarah arrived at School" </strong>
+                automatically when anyone enters or leaves. Each place has a circle on the map.
+              </div>
+            </CardContent>
+          </Card>
+
+          {places.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No places yet. Add Home first - it's the most useful one.
+            </p>
+          )}
+
+          {places.map((p) => {
+            const Icon = PLACE_ICONS[p.icon] || MapPin;
+            return (
+              <Card key={p.id} data-testid={`card-place-${p.id}`}>
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{p.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Within {p.radiusMeters}m
+                    </div>
+                  </div>
+                  <Button
+                    size="sm" variant="outline"
+                    onClick={() => handleOnMyWay(p)}
+                    data-testid={`button-on-my-way-${p.id}`}
+                  >
+                    <Navigation className="w-3.5 h-3.5 mr-1" /> On my way
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="icon" variant="ghost" className="text-muted-foreground"
+                      onClick={() => deletePlaceMutation.mutate(p.id)}
+                      disabled={deletePlaceMutation.isPending}
+                      data-testid={`button-delete-place-${p.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          <Dialog open={showAddPlace} onOpenChange={setShowAddPlace}>
+            <DialogTrigger asChild>
+              <Button className="w-full mt-2" data-testid="button-add-place">
+                <Plus className="w-4 h-4 mr-2" /> Add this spot as a place
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Save your current location</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="place-name">What's it called?</Label>
+                  <Input
+                    id="place-name" value={newPlace.name}
+                    onChange={(e) => setNewPlace({ ...newPlace, name: e.target.value })}
+                    placeholder="Home" maxLength={60}
+                    data-testid="input-place-name"
+                  />
+                </div>
+                <div>
+                  <Label>Type</Label>
+                  <Select value={newPlace.icon}
+                    onValueChange={(v) => setNewPlace({ ...newPlace, icon: v })}>
+                    <SelectTrigger data-testid="select-place-icon"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PLACE_LABELS.map((l) => (
+                        <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Detection radius</Label>
+                  <Select
+                    value={String(newPlace.radius)}
+                    onValueChange={(v) => setNewPlace({ ...newPlace, radius: parseInt(v) })}
+                  >
+                    <SelectTrigger data-testid="select-place-radius"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="100">Tight (100m)</SelectItem>
+                      <SelectItem value="150">Standard (150m)</SelectItem>
+                      <SelectItem value="300">Wide (300m)</SelectItem>
+                      <SelectItem value="500">Very wide (500m)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Make sure you're physically at this spot - it uses your phone's current GPS.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => addPlaceMutation.mutate()}
+                  disabled={!newPlace.name.trim() || addPlaceMutation.isPending}
+                  data-testid="button-add-place-confirm"
+                >
+                  {addPlaceMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Save place
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* SAFETY TAB - features + privacy reassurance */}

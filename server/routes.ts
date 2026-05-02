@@ -1021,6 +1021,22 @@ export async function registerRoutes(
       let incident = await storage.createIncident(userId, "sos");
       await storage.updateSafetyState(userId, "concern", "SOS triggered");
 
+      // Auto-post into family chat with push fan-out (best-effort, never blocks SOS).
+      // Done early so family is paged even if downstream contact escalation hits errors.
+      const sosUser = await storage.getUser(userId);
+      broadcastToFamily(
+        userId,
+        `${sosUser?.name || "A family member"} triggered SOS. Please check on them right now.`,
+        "panic",
+        hasLocation ? { lat: sosLat, lng: sosLng, kind: "sos" } : { kind: "sos" },
+        {
+          title: `SOS - ${sosUser?.name || "Family member"}`,
+          body: "SOS triggered. Tap to open the family map.",
+          url: "/family",
+          tag: "family-sos",
+        },
+      ).catch(() => {});
+
       // Snapshot moment-of-SOS location to user record so the emergency page has it immediately
       if (hasLocation) {
         await db.update(users).set({
@@ -2989,6 +3005,21 @@ export async function registerRoutes(
       notifyConcern(userId, user.name, "crash_detection").catch((err) => {
         console.error(`[CRASH] notifyConcern failed for ${user.name}:`, err?.message || err);
       });
+      // Auto-post into family chat with push fan-out
+      broadcastToFamily(
+        userId,
+        speedKmh
+          ? `Possible crash detected for ${user.name} (around ${Math.round(speedKmh)} km/h). Please check on them.`
+          : `Possible crash detected for ${user.name}. Please check on them.`,
+        "panic",
+        lat != null && lng != null ? { lat, lng, kind: "crash" } : { kind: "crash" },
+        {
+          title: `Possible crash - ${user.name}`,
+          body: "A possible vehicle crash was detected. Tap to open the family map.",
+          url: "/family",
+          tag: "family-crash",
+        },
+      ).catch(() => {});
 
       await storage.revokeAllTokensForUser(userId);
       const contactsRaw = await storage.getContacts(userId);
@@ -3846,6 +3877,9 @@ export async function registerRoutes(
   });
 
   const geofenceState = new Map<string, Map<string, boolean>>();
+  // Expose to module-scope helpers (e.g. purgePlaceFromGeofenceState) without
+  // making it global.
+  geofenceStateRef = geofenceState;
 
   app.post("/api/geofences/check", async (req, res) => {
     try {
@@ -3874,19 +3908,15 @@ export async function registerRoutes(
       }
       const userState = geofenceState.get(userId)!;
       
-      const newDepartures = results.filter(r => {
-        const wasInside = userState.get(r.id);
-        const transitioned = wasInside === true && !r.inside;
-        userState.set(r.id, r.inside);
-        return transitioned;
-      });
-      
+      const newDepartures: typeof results = [];
+      const newArrivals: typeof results = [];
       for (const r of results) {
-        if (!userState.has(r.id)) {
-          userState.set(r.id, r.inside);
-        }
+        const wasInside = userState.get(r.id);
+        if (wasInside === true && !r.inside) newDepartures.push(r);
+        if (wasInside === false && r.inside) newArrivals.push(r);
+        userState.set(r.id, r.inside);
       }
-      
+
       if (newDepartures.length > 0) {
         const user = await storage.getUser(userId);
         const allContacts = await storage.getContacts(userId);
@@ -3902,8 +3932,45 @@ export async function registerRoutes(
           }
         }
       }
-      
-      res.json({ zones: results, newDepartures: newDepartures.map(d => d.name) });
+
+      // ---- Family Saved Places: detect arrivals/departures and post to family chat ----
+      const overview = await storage.getFamilyForUser(userId);
+      const placeArrivals: { name: string; icon: string }[] = [];
+      const placeDepartures: { name: string; icon: string }[] = [];
+      if (overview.family) {
+        const places = await storage.getFamilyPlaces(overview.family.id);
+        for (const p of places) {
+          const key = `place:${p.id}`;
+          const dist = haversineDistance(lat, lng, p.lat, p.lng);
+          const inside = dist <= p.radiusMeters;
+          const wasInside = userState.get(key);
+          if (wasInside === true && !inside) placeDepartures.push({ name: p.name, icon: p.icon });
+          if (wasInside === false && inside) placeArrivals.push({ name: p.name, icon: p.icon });
+          userState.set(key, inside);
+        }
+        // Hoist family + sender lookups so multiple arrivals/departures don't N+1.
+        if (placeArrivals.length > 0 || placeDepartures.length > 0) {
+          const user = await storage.getUser(userId);
+          const userName = user?.name || "Family member";
+          const recipients = await storage.getActiveFamilyUserIds(overview.family.id);
+          const prefetched = { familyId: overview.family.id, senderName: userName, recipients };
+          for (const a of placeArrivals) {
+            broadcastToFamily(userId, `${userName} arrived at ${a.name}.`, "system",
+              { kind: "place_arrival", place: a.name }, undefined, prefetched).catch(() => {});
+          }
+          for (const d of placeDepartures) {
+            broadcastToFamily(userId, `${userName} left ${d.name}.`, "system",
+              { kind: "place_departure", place: d.name }, undefined, prefetched).catch(() => {});
+          }
+        }
+      }
+
+      res.json({
+        zones: results,
+        newDepartures: newDepartures.map(d => d.name),
+        placeArrivals: placeArrivals.map(p => p.name),
+        placeDepartures: placeDepartures.map(p => p.name),
+      });
     } catch (error) {
       console.error("Error checking geofences:", error);
       res.status(500).json({ error: "Failed" });
@@ -6466,6 +6533,67 @@ export async function registerRoutes(
     }
   });
 
+  // ---- Family Saved Places (Home / School / Work) ----
+  app.get("/api/family/places", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.json({ places: [] });
+      const places = await storage.getFamilyPlaces(overview.family.id);
+      res.json({ places });
+    } catch (e) {
+      console.error("[family] places get failed", e);
+      res.status(500).json({ error: "Failed to load places" });
+    }
+  });
+
+  app.post("/api/family/places", systemMessageLimiter, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "Create a family first" });
+
+      const name = (req.body?.name || "").toString().trim().slice(0, 60);
+      const icon = ["home", "school", "work", "gym", "park", "pin"].includes(req.body?.icon)
+        ? req.body.icon : "pin";
+      const lat = Number(req.body?.lat);
+      const lng = Number(req.body?.lng);
+      const radiusMeters = Math.max(50, Math.min(2000, Number(req.body?.radiusMeters) || 150));
+      if (!name) return res.status(400).json({ error: "Name is required" });
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: "lat/lng required" });
+      }
+      const place = await storage.createFamilyPlace({
+        familyId: overview.family.id, name, icon, lat, lng, radiusMeters,
+        createdByUserId: userId,
+      });
+      res.json({ place });
+    } catch (e) {
+      console.error("[family] place create failed", e);
+      res.status(500).json({ error: "Failed to create place" });
+    }
+  });
+
+  app.delete("/api/family/places/:placeId", systemMessageLimiter, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "No family" });
+      // Only admin can delete shared places (kept simple, mirrors close-family rule)
+      if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can delete places" });
+      await storage.deleteFamilyPlace(req.params.placeId, overview.family.id);
+      // Drop transient transition state so the in-memory map can't grow unbounded
+      purgePlaceFromGeofenceState(req.params.placeId);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("[family] place delete failed", e);
+      res.status(500).json({ error: "Failed to delete place" });
+    }
+  });
+
   app.delete("/api/family/member/:memberId", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -6494,6 +6622,70 @@ export async function registerRoutes(
 
   return httpServer;
 }
+
+// Best-effort: post a system message into the user's family chat (if they're in one)
+// and fan out a push notification + socket event. Always swallows errors so it can
+// never break the primary safety flow that called it.
+// Optional `prefetched` lets hot paths (geofence/check) avoid N+1 by passing in
+// already-loaded familyId / senderName / recipients.
+async function broadcastToFamily(
+  userId: string,
+  body: string,
+  kind: "system" | "panic" | "pulse",
+  meta?: Record<string, any>,
+  push?: { title: string; body: string; url?: string; tag?: string },
+  prefetched?: { familyId: string; senderName: string; recipients: string[] },
+): Promise<void> {
+  try {
+    let familyId: string;
+    let senderName: string;
+    let recipients: string[];
+    if (prefetched) {
+      ({ familyId, senderName, recipients } = prefetched);
+    } else {
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return;
+      familyId = overview.family.id;
+      const me = await storage.getUser(userId);
+      senderName = me?.name || "Family member";
+      recipients = await storage.getActiveFamilyUserIds(familyId);
+    }
+    const msg = await storage.saveFamilyMessage({
+      familyId, senderId: userId, body, kind, meta,
+    });
+    const payload = { ...msg, senderName };
+    for (const uid of recipients) {
+      try { emitToUser(uid, "family:message:new", payload); } catch {}
+    }
+    if (push && recipients.length > 0) {
+      // Push fan-out runs concurrently (don't await each in series).
+      await Promise.allSettled(recipients.map((uid) =>
+        sendPushNotification(uid, {
+          title: push.title,
+          body: push.body,
+          url: push.url || "/family",
+          tag: push.tag || "family-broadcast",
+        }),
+      ));
+    }
+  } catch (err) {
+    console.error("[family] broadcastToFamily failed", err);
+  }
+}
+
+// Walks the in-memory geofence transition state and removes any entry for the
+// given place ID across every user. Called when a place is deleted to prevent
+// the state map from growing unbounded.
+function purgePlaceFromGeofenceState(placeId: string): void {
+  const key = `place:${placeId}`;
+  for (const userMap of geofenceStateRef.values()) {
+    userMap.delete(key);
+  }
+}
+
+// Set during registerRoutes() so the place-delete handler and helper can purge
+// stale entries without leaking across server boots.
+let geofenceStateRef: Map<string, Map<string, boolean>> = new Map();
 
 function formatReportTime(date: Date): string {
   const now = new Date();
