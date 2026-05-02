@@ -37,7 +37,8 @@ import {
   PauseCircle,
   PlayCircle,
   Lock,
-  Send,
+  Eye,
+  StopCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -167,15 +168,31 @@ export default function FamilyPage() {
     onError: () => toast({ title: "Could not remove member", variant: "destructive" }),
   });
 
-  // One-tap "Check in with family" — geolocates and pushes the user's location
-  // to every active family member.
-  const [isSharing, setIsSharing] = useState(false);
-  async function handleShareWithFamily() {
+  // "Watch over me while I'm here" — starts a real continuous live-location
+  // session for a chosen duration and notifies every family member.
+  const [isStartingWatch, setIsStartingWatch] = useState(false);
+  const [watchDuration, setWatchDuration] = useState<number>(30);
+
+  // Poll active live-location status so we can show Stop watching when active.
+  const { data: liveStatus } = useQuery<{ active: boolean; share: any }>({
+    queryKey: ["/api/live-location/status"],
+    refetchInterval: 15_000,
+  });
+  const isWatchActive = !!liveStatus?.active;
+  const watchExpiresAt = liveStatus?.share?.expiresAt
+    ? new Date(liveStatus.share.expiresAt)
+    : null;
+
+  async function handleStartWatch() {
     if (!navigator.geolocation) {
-      toast({ title: "Location unavailable", description: "Your device doesn't support GPS.", variant: "destructive" });
+      toast({
+        title: "Location unavailable",
+        description: "Your device doesn't support GPS.",
+        variant: "destructive",
+      });
       return;
     }
-    setIsSharing(true);
+    setIsStartingWatch(true);
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -184,21 +201,47 @@ export default function FamilyPage() {
           maximumAge: 30_000,
         }),
       );
-      await apiRequest("POST", "/api/family/share-location", {
+      await apiRequest("POST", "/api/family/watch-me/start", {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         accuracy: pos.coords.accuracy,
+        durationMinutes: watchDuration,
       });
-      toast({ title: "Checked in", description: "Your family can see your location now." });
+      // Kick off the continuous GPS pump so the family map keeps updating.
+      const { startLiveTracking } = await import("@/lib/live-location");
+      startLiveTracking({
+        onExpired: () => {
+          toast({ title: "Watch session ended", description: "Live location sharing stopped." });
+          queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
+        },
+      });
+      toast({
+        title: "Family is watching",
+        description: `Live location is shared for ${watchDuration} minutes.`,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/family"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
     } catch (err: any) {
       toast({
-        title: "Could not check in",
+        title: "Could not start",
         description: err?.code === 1 ? "Location permission denied." : "Try again in a moment.",
         variant: "destructive",
       });
     } finally {
-      setIsSharing(false);
+      setIsStartingWatch(false);
+    }
+  }
+
+  async function handleStopWatch() {
+    try {
+      const { stopLiveTracking } = await import("@/lib/live-location");
+      await stopLiveTracking();
+      await apiRequest("POST", "/api/family/watch-me/stop");
+      toast({ title: "Stopped sharing", description: "Family no longer sees your live location." });
+      queryClient.invalidateQueries({ queryKey: ["/api/family"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
+    } catch {
+      toast({ title: "Could not stop", variant: "destructive" });
     }
   }
 
@@ -400,21 +443,70 @@ export default function FamilyPage() {
                     {sharingMembers.length} sharing
                   </span>
                 </div>
-                {/* One-tap "Check in with family" — shares current location */}
-                <Button
-                  onClick={handleShareWithFamily}
-                  disabled={isSharing}
-                  size="sm"
-                  className="w-full mb-3 h-9"
-                  data-testid="button-checkin-family"
-                >
-                  {isSharing ? (
-                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4 mr-1.5" />
-                  )}
-                  Check in with family
-                </Button>
+                {/* "Watch over me while I'm here" — starts a live session */}
+                {isWatchActive ? (
+                  <div className="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/30 p-3" data-testid="status-watch-active">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      </span>
+                      <p className="text-xs font-medium text-emerald-900 dark:text-emerald-200">
+                        Family is watching you live
+                        {watchExpiresAt && (
+                          <> · ends {formatDistanceToNow(watchExpiresAt, { addSuffix: true })}</>
+                        )}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={handleStopWatch}
+                      size="sm"
+                      variant="outline"
+                      className="w-full h-9"
+                      data-testid="button-stop-watch"
+                    >
+                      <StopCircle className="h-4 w-4 mr-1.5" />
+                      Stop sharing
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mb-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Headed somewhere? Ask the family to watch over you while you're there.
+                    </p>
+                    <div className="flex gap-1.5">
+                      {[15, 30, 60].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setWatchDuration(m)}
+                          className={`flex-1 text-xs h-7 rounded-md border transition-colors ${
+                            watchDuration === m
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background border-border hover:bg-muted"
+                          }`}
+                          data-testid={`button-duration-${m}`}
+                        >
+                          {m >= 60 ? `${m / 60} hr` : `${m} min`}
+                        </button>
+                      ))}
+                    </div>
+                    <Button
+                      onClick={handleStartWatch}
+                      disabled={isStartingWatch}
+                      size="sm"
+                      className="w-full h-9"
+                      data-testid="button-watch-over-me"
+                    >
+                      {isStartingWatch ? (
+                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                      ) : (
+                        <Eye className="h-4 w-4 mr-1.5" />
+                      )}
+                      Watch over me while I'm here
+                    </Button>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {sharingMembers.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-3">

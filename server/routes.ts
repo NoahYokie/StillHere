@@ -6071,14 +6071,52 @@ export async function registerRoutes(
     }
   });
 
-  // One-tap "Check in with family" — shares the user's current location with
-  // every active family member. Updates heartbeat (so the family map sees the
-  // pin instantly) and posts a system_info message to each linked member.
+  // "Watch over me while I'm here" — starts a real live-location session
+  // (continuous GPS share for a chosen duration) and tells every family member
+  // the user is asking to be watched. The client then pumps GPS updates via
+  // the existing /api/live-location/update endpoint for the duration.
   // Per-user cooldown prevents flooding family inboxes / SMS bills.
   const familyShareCooldown = new Map<string, number>();
   const FAMILY_SHARE_COOLDOWN_MS = 15_000;
 
-  app.post("/api/family/share-location", async (req, res) => {
+  app.post("/api/family/watch-me/stop", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      await storage.stopLiveLocationShare(userId);
+      const overview = await storage.getFamilyForUser(userId);
+      const me = await storage.getUser(userId);
+      const myName = me?.name || "A family member";
+      if (overview.family) {
+        const recipients = overview.members.filter(
+          (m) => m.userId && m.userId !== userId && m.status === "active",
+        );
+        for (const r of recipients) {
+          try {
+            const msg = await storage.saveMessage(
+              userId,
+              r.userId!,
+              `${myName} stopped sharing live location with the family.`,
+              { messageType: "system_info", meta: { kind: "family_watch_stop" } },
+            );
+            emitToUser(r.userId!, "message:new", { message: msg, fromUserId: userId });
+          } catch {}
+        }
+      }
+      res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[family] watch-me stop failed:", e?.message || "unknown");
+      res.status(500).json({ error: "Failed to stop" });
+    }
+  });
+
+  // Backwards-compat alias kept for the previous button wiring.
+  app.post("/api/family/share-location", async (req, res, next) => {
+    (req as any).url = "/api/family/watch-me/start";
+    next();
+  });
+
+  app.post("/api/family/watch-me/start", async (req, res) => {
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
@@ -6087,6 +6125,11 @@ export async function registerRoutes(
       const lng = Number(req.body?.lng);
       const accuracyRaw = req.body?.accuracy;
       const accuracy = accuracyRaw != null ? Number(accuracyRaw) : undefined;
+      const durationRaw = req.body?.durationMinutes;
+      const durationMinutes =
+        durationRaw === null || durationRaw === undefined
+          ? 30
+          : Number(durationRaw);
       if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
         return res.status(400).json({ error: "lat must be between -90 and 90" });
       }
@@ -6096,29 +6139,37 @@ export async function registerRoutes(
       if (accuracy !== undefined && (!Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100_000)) {
         return res.status(400).json({ error: "accuracy out of range" });
       }
+      if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 480) {
+        return res.status(400).json({ error: "durationMinutes must be between 5 and 480" });
+      }
 
       const lastAt = familyShareCooldown.get(userId) || 0;
       const now = Date.now();
       if (now - lastAt < FAMILY_SHARE_COOLDOWN_MS) {
         const retryAfter = Math.ceil((FAMILY_SHARE_COOLDOWN_MS - (now - lastAt)) / 1000);
-        return res.status(429).json({ error: "Please wait a moment before checking in again", retryAfter });
+        return res.status(429).json({ error: "Please wait a moment before starting again", retryAfter });
       }
       familyShareCooldown.set(userId, now);
 
       const overview = await storage.getFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
 
-      // 1) Update heartbeat so map pin refreshes.
+      // 1) Update heartbeat so map pin refreshes immediately.
       await storage.recordHeartbeat(userId, lat, lng, accuracy);
 
-      // 2) Record a check-in too (so it appears in safety history).
+      // 2) Start a real live-location session for the chosen duration. The
+      //    client will pump GPS updates via /api/live-location/update.
+      const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+      const share = await storage.startLiveLocationShare(userId, expiresAt);
+
+      // 3) Record a check-in too (so it appears in safety history).
       try {
         await storage.createCheckin(userId, "button", { lat, lng });
       } catch (err: any) {
-        console.warn("[family] share-location createCheckin failed:", err?.message || "unknown");
+        console.warn("[family] watch-me createCheckin failed:", err?.message || "unknown");
       }
 
-      // 3) Notify every other linked active member: persist a system_info
+      // 4) Notify every other linked active member: persist a system_info
       //    message and emit a socket event for instant in-app delivery.
       const me = await storage.getUser(userId);
       const myName = me?.name || "A family member";
@@ -6126,30 +6177,51 @@ export async function registerRoutes(
       const recipients = overview.members.filter(
         (m) => m.userId && m.userId !== userId && m.status === "active",
       );
+      const durationLabel =
+        durationMinutes >= 60
+          ? `${Math.round(durationMinutes / 60)} hr`
+          : `${durationMinutes} min`;
       for (const r of recipients) {
         try {
           const msg = await storage.saveMessage(
             userId,
             r.userId!,
-            `${myName} checked in with the family.`,
+            `${myName} asked the family to watch over them for ${durationLabel}.`,
             {
               messageType: "system_info",
-              meta: { kind: "family_checkin", lat, lng, accuracy, mapsUrl, sharedAt: new Date().toISOString() },
+              meta: {
+                kind: "family_watch_start",
+                lat,
+                lng,
+                accuracy,
+                mapsUrl,
+                durationMinutes,
+                expiresAt: expiresAt.toISOString(),
+                sharedAt: new Date().toISOString(),
+              },
             },
           );
           emitToUser(r.userId!, "message:new", { message: msg, fromUserId: userId });
         } catch (err: any) {
           console.warn(
-            `[family] share-location notify failed for user:${r.userId?.slice(0, 8)}:`,
+            `[family] watch-me notify failed for user:${r.userId?.slice(0, 8)}:`,
             err?.message || "unknown",
           );
         }
       }
 
-      res.json({ ok: true, notified: recipients.length, lat, lng });
+      res.json({
+        ok: true,
+        notified: recipients.length,
+        lat,
+        lng,
+        durationMinutes,
+        expiresAt: expiresAt.toISOString(),
+        shareId: share.id,
+      });
     } catch (e: any) {
-      console.error("[family] share-location failed:", e?.message || "unknown");
-      res.status(500).json({ error: "Failed to share location" });
+      console.error("[family] watch-me start failed:", e?.message || "unknown");
+      res.status(500).json({ error: "Failed to start watch session" });
     }
   });
 
