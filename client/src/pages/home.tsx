@@ -16,17 +16,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, MapPin, Check, AlertTriangle, Clock, LogOut, Phone, Users, UserCheck, AlertCircle, Bell, Activity, Eye, MessageCircle, Car, Smartphone, Satellite, RadioTower, Timer, Navigation, Bookmark, FileText } from "lucide-react";
+import { Check, AlertTriangle, Clock, Phone, UserCheck, AlertCircle, Bell, Activity, Car, Smartphone, Timer, Navigation, ShieldCheck } from "lucide-react";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
 import { ConcernTimelinePanel } from "@/components/concern-resolution";
 import { PermissionRecoveryCard } from "@/components/permission-recovery";
-import { createFallDetector, isDeviceMotionSupported, requestMotionPermission } from "@/lib/fall-detection";
+import { createFallDetector, isDeviceMotionSupported } from "@/lib/fall-detection";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
-import { ProtectionPanel, GuardianViewPreview, SafetyDrillButton, LearningModeCard } from "@/components/protection-panel";
+import { AppDrawer } from "@/components/app-drawer";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -532,66 +532,26 @@ export default function Home() {
     },
   });
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/auth/logout");
-    },
-    onSuccess: async () => {
-      queryClient.clear();
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      window.location.href = "/login";
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Could not log out. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
+  const formatNextCheckinTime = (date: Date) => format(new Date(date), "h:mm a");
 
-  const handleLocationToggle = () => {
-    if (!locationEnabled) {
-      getOneShotPosition().then((pos) => {
-        if (pos) {
-          setLocationEnabled(true);
-          toast({
-            title: "Location on",
-            description: "Location sharing is on for emergencies.",
-          });
-        } else {
-          toast({
-            title: "Location access denied",
-            description: "Please enable location in your browser settings.",
-            variant: "destructive",
-          });
-        }
-      });
-    } else {
-      setLocationEnabled(false);
-      toast({
-        title: "Location off",
-      });
-    }
-  };
-
-  const formatNextCheckin = (date: Date) => {
+  const formatNextCheckinMeta = (date: Date) => {
     const d = new Date(date);
     const now = new Date();
-    
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrowStart = new Date(todayStart);
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const dayAfterTomorrowStart = new Date(todayStart);
     dayAfterTomorrowStart.setDate(dayAfterTomorrowStart.getDate() + 2);
 
-    if (d < tomorrowStart) {
-      return format(d, "h:mm a 'today'");
-    } else if (d < dayAfterTomorrowStart) {
-      return format(d, "h:mm a 'tomorrow'");
-    } else {
-      return format(d, "EEEE 'at' h:mm a");
-    }
+    let dayLabel = "";
+    if (d < tomorrowStart) dayLabel = "Today";
+    else if (d < dayAfterTomorrowStart) dayLabel = "Tomorrow";
+    else dayLabel = format(d, "EEEE");
+
+    const tzRaw = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const tzCity = tzRaw.split("/").pop()?.replace(/_/g, " ") || "";
+
+    return tzCity ? `${dayLabel} \u00B7 ${tzCity}` : dayLabel;
   };
 
   if (isLoading) {
@@ -607,95 +567,39 @@ export default function Home() {
 
   const isPaused = status?.settings?.pauseUntil && new Date(status.settings.pauseUntil) > new Date();
   const hasOpenIncident = hasActiveIncident;
+  const guardianCount = status?.contacts?.length || 0;
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-primary text-primary-foreground px-6 py-4">
-        <div className="max-w-md mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold" data-testid="text-app-title">StillHere</h1>
-            <p className="text-sm opacity-90" data-testid="text-welcome">
-              Welcome, {status?.user?.name || "User"}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground relative"
-              onClick={() => setLocation("/inbox")}
-              data-testid="button-inbox"
-            >
-              <MessageCircle className="h-5 w-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 leading-none" data-testid="badge-unread-count">
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground"
-              onClick={() => setLocation("/watched")}
-              data-testid="button-watched"
-            >
-              <Eye className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground relative"
-              onClick={() => setLocation("/live-location")}
-              data-testid="button-live-location"
-            >
-              <RadioTower className="h-5 w-5" />
-              {localStorage.getItem("liveLocationActive") === "true" && (
-                <span className="absolute top-1 right-1 h-2.5 w-2.5 bg-green-400 rounded-full animate-pulse" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground"
-              onClick={() => setLocation("/saved-places")}
-              data-testid="button-saved-places"
-            >
-              <Bookmark className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground"
-              onClick={() => setLocation("/satellite")}
-              data-testid="button-satellite"
-            >
-              <Satellite className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground"
-              onClick={() => setLocation("/settings")}
-              data-testid="button-settings"
-            >
-              <Settings className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-primary-foreground"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-              data-testid="button-logout"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
+      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
+        <div className="max-w-md mx-auto px-2 h-14 flex items-center justify-between">
+          <AppDrawer
+            userName={status?.user?.name}
+            onSosTap={() => setShowSosConfirm(true)}
+          />
+          <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">
+            StillHere
+          </h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            onClick={() => setLocation("/inbox")}
+            data-testid="button-notifications"
+            aria-label="Notifications"
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span
+                className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"
+                data-testid="badge-unread-count"
+              />
+            )}
+          </Button>
         </div>
       </header>
 
-      <main className="max-w-md mx-auto px-6 py-8 space-y-8">
+      <main className="max-w-md mx-auto px-6 pt-6 pb-12 space-y-7">
         <PushNotificationBanner />
         <PermissionRecoveryCard />
 
@@ -722,64 +626,78 @@ export default function Home() {
           <ConcernTimelinePanel userId={status.user.id} isWatcher={false} />
         )}
 
-        <ProtectionPanel />
+        <div className="text-center pt-1">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/40 mb-3">
+            <ShieldCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
+          </div>
+          <p className="text-base font-semibold text-foreground" data-testid="text-protected-status">
+            {guardianCount > 0 ? "You're Protected" : "Set up your Safety Circle"}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1" data-testid="text-guardian-count">
+            {guardianCount > 0
+              ? `Sharing with ${guardianCount} Guardian${guardianCount === 1 ? "" : "s"}`
+              : "Add an emergency contact to get started"}
+          </p>
+        </div>
 
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <div className="flex items-center justify-center gap-2 text-muted-foreground mb-2">
-              <Clock className="h-4 w-4" />
-              <span className="text-sm">Next checkin</span>
-            </div>
-            <p className="text-lg font-medium" data-testid="text-next-checkin">
-              {status?.nextCheckinDue
-                ? formatNextCheckin(status.nextCheckinDue)
-                : "No schedule set"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1" data-testid="text-timezone">
-              {(Intl.DateTimeFormat().resolvedOptions().timeZone || "").replace(/_/g, " ") || "Unknown timezone"}
-            </p>
-            {isPaused && (
-              <p className="text-sm text-muted-foreground mt-2">
-                Alerts paused until {format(new Date(status.settings.pauseUntil!), "h:mm a")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="text-center">
+        <div className="text-center pt-1">
           <button
             onClick={() => checkinMutation.mutate()}
             disabled={checkinMutation.isPending}
-            className="w-36 h-36 rounded-full font-semibold text-xl transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center mx-auto bg-green-500 dark:bg-green-600 text-white shadow-md"
+            className="w-44 h-44 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-600 text-white shadow-[0_12px_36px_-12px_rgba(34,197,94,0.55)] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 active:scale-[0.97] flex flex-col items-center justify-center mx-auto"
             data-testid="button-im-ok"
           >
-            <Check className="h-10 w-10 mb-1.5" />
-            <span>I'm OK</span>
+            <Check className="h-12 w-12 mb-1.5" strokeWidth={3} />
+            <span className="text-2xl font-bold tracking-wide">I'M OK</span>
           </button>
-          <p className="text-sm text-muted-foreground mt-4">
-            Tap "I'm OK" anytime
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            This lets your family know you're okay.
+          <p className="text-sm text-muted-foreground mt-5 max-w-xs mx-auto leading-relaxed">
+            Tap anytime to let your guardian know you're okay
           </p>
         </div>
 
         {showQuote && (
-          <Card className="border-accent/30" data-testid="card-quote">
+          <Card className="border-accent/30 rounded-2xl" data-testid="card-quote">
             <CardContent className="pt-6 text-center">
               <p className="text-base italic text-foreground leading-relaxed" data-testid="text-quote">
                 &ldquo;{getQuoteOfTheDay()}&rdquo;
               </p>
-              <p className="text-xs text-muted-foreground mt-3">
-                Quote of the day
-              </p>
+              <p className="text-xs text-muted-foreground mt-3">Quote of the day</p>
             </CardContent>
           </Card>
         )}
 
-        <div className="grid grid-cols-3 gap-3">
+        <Card className="rounded-2xl shadow-sm" data-testid="card-next-checkin">
+          <CardContent className="px-5 py-4 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Next check-in
+              </p>
+              <p className="text-lg font-semibold text-foreground mt-1" data-testid="text-next-checkin">
+                {status?.nextCheckinDue
+                  ? formatNextCheckinTime(status.nextCheckinDue)
+                  : "Not scheduled"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-next-checkin-meta">
+                {status?.nextCheckinDue
+                  ? formatNextCheckinMeta(status.nextCheckinDue)
+                  : "Set a schedule in Settings"}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 ml-3">
+              <Clock className="h-5 w-5 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {isPaused && (
+          <p className="text-center text-xs text-muted-foreground -mt-3" data-testid="text-paused">
+            Alerts paused until {format(new Date(status!.settings.pauseUntil!), "h:mm a")}
+          </p>
+        )}
+
+        <div className="grid grid-cols-4 gap-3">
           <button
-            className="flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl bg-orange-50 dark:bg-orange-950/30 transition-all duration-150 active:scale-95 active:bg-orange-100 dark:active:bg-orange-950/50"
+            className="flex flex-col items-center text-center gap-2 py-3 px-1 rounded-2xl bg-orange-50 dark:bg-orange-950/30 transition-all duration-150 active:scale-95 active:bg-orange-100 dark:active:bg-orange-950/50"
             onClick={() => setLocation("/safety-timer")}
             data-testid="card-safety-timer"
           >
@@ -789,17 +707,17 @@ export default function Home() {
             <span className="font-medium text-xs text-foreground">Timer</span>
           </button>
           <button
-            className="flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl bg-teal-50 dark:bg-teal-950/30 transition-all duration-150 active:scale-95 active:bg-teal-100 dark:active:bg-teal-950/50"
+            className="flex flex-col items-center text-center gap-2 py-3 px-1 rounded-2xl bg-green-50 dark:bg-green-950/30 transition-all duration-150 active:scale-95 active:bg-green-100 dark:active:bg-green-950/50"
             onClick={() => setLocation("/safe-walk")}
             data-testid="card-safe-walk"
           >
-            <div className="w-11 h-11 rounded-2xl bg-teal-500 flex items-center justify-center">
+            <div className="w-11 h-11 rounded-2xl bg-green-500 flex items-center justify-center">
               <Navigation className="h-5 w-5 text-white" />
             </div>
             <span className="font-medium text-xs text-foreground">Safe Walk</span>
           </button>
           <button
-            className={`flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl transition-all duration-150 active:scale-95 ${driveActive ? "bg-blue-100 dark:bg-blue-950/50 active:bg-blue-200" : "bg-blue-50 dark:bg-blue-950/30 active:bg-blue-100 dark:active:bg-blue-950/50"}`}
+            className={`flex flex-col items-center text-center gap-2 py-3 px-1 rounded-2xl transition-all duration-150 active:scale-95 ${driveActive ? "bg-blue-100 dark:bg-blue-950/50 active:bg-blue-200" : "bg-blue-50 dark:bg-blue-950/30 active:bg-blue-100 dark:active:bg-blue-950/50"}`}
             onClick={() => setLocation("/drive")}
             data-testid="card-drive"
           >
@@ -809,74 +727,42 @@ export default function Home() {
             <span className="font-medium text-xs text-foreground">{driveActive ? "Driving" : "Drive"}</span>
           </button>
           <button
-            className="flex flex-col items-center text-center gap-2 py-3 px-2 rounded-2xl transition-all duration-150 active:scale-95 bg-indigo-50 dark:bg-indigo-950/30 active:bg-indigo-100 dark:active:bg-indigo-950/50"
-            onClick={() => setLocation("/weekly-report")}
-            data-testid="card-weekly-report"
-          >
-            <div className="w-11 h-11 rounded-2xl bg-indigo-500 flex items-center justify-center">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
-            <span className="font-medium text-xs text-foreground">Report</span>
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          <GuardianViewPreview />
-          <SafetyDrillButton />
-        </div>
-
-        <div className="space-y-3">
-          <button
-            className="w-full py-4 text-base font-semibold rounded-2xl bg-red-500 dark:bg-red-600 text-white transition-all duration-150 active:scale-[0.98] active:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+            className="flex flex-col items-center text-center gap-2 py-3 px-1 rounded-2xl bg-red-50 dark:bg-red-950/30 transition-all duration-150 active:scale-95 active:bg-red-100 dark:active:bg-red-950/50"
             onClick={() => setShowSosConfirm(true)}
             disabled={sosMutation.isPending}
-            data-testid="button-sos"
+            data-testid="card-sos"
           >
-            <AlertTriangle className="h-5 w-5" />
-            <span>I Need Help</span>
+            <div className="w-11 h-11 rounded-2xl bg-red-500 flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5 text-white" />
+            </div>
+            <span className="font-medium text-xs text-foreground">SOS</span>
           </button>
-            {(status?.settings as any)?.discreetSos && (
-              <div className="mt-4">
-                <button
-                  className="w-full relative overflow-hidden rounded-lg border-2 border-destructive/30 py-3 px-4 text-sm font-medium text-destructive select-none touch-none"
-                  onTouchStart={(e) => { e.preventDefault(); startLongPress(); }}
-                  onTouchEnd={cancelLongPress}
-                  onTouchCancel={cancelLongPress}
-                  onMouseDown={startLongPress}
-                  onMouseUp={cancelLongPress}
-                  onMouseLeave={cancelLongPress}
-                  onContextMenu={(e) => e.preventDefault()}
-                  data-testid="button-discreet-sos"
-                >
-                  <div
-                    className="absolute inset-0 bg-destructive/20 transition-none"
-                    style={{ width: `${longPressProgress * 100}%` }}
-                  />
-                  <span className="relative flex items-center justify-center gap-2">
-                    <Smartphone className="h-4 w-4" />
-                    {longPressProgress > 0
-                      ? `Hold ${Math.ceil((1 - longPressProgress) * 3)}s...`
-                      : "Hold 3 seconds for discreet SOS"}
-                  </span>
-                </button>
-              </div>
-            )}
         </div>
 
-        <div className="flex items-center justify-center gap-2 text-sm">
-          <MapPin className={`h-4 w-4 ${locationEnabled ? "text-accent" : "text-destructive"}`} />
-          <span className="text-muted-foreground">
-            Share my Location {locationEnabled ? "ON" : "OFF"}
-          </span>
-          <span className="text-muted-foreground">|</span>
+        {(status?.settings as any)?.discreetSos && (
           <button
-            onClick={handleLocationToggle}
-            className="text-primary underline hover:no-underline"
-            data-testid="button-location-toggle"
+            className="w-full relative overflow-hidden rounded-xl border border-destructive/30 py-2.5 px-4 text-xs font-medium text-destructive/80 select-none touch-none"
+            onTouchStart={(e) => { e.preventDefault(); startLongPress(); }}
+            onTouchEnd={cancelLongPress}
+            onTouchCancel={cancelLongPress}
+            onMouseDown={startLongPress}
+            onMouseUp={cancelLongPress}
+            onMouseLeave={cancelLongPress}
+            onContextMenu={(e) => e.preventDefault()}
+            data-testid="button-discreet-sos"
           >
-            {locationEnabled ? "Turn off" : "Enable Location"}
+            <div
+              className="absolute inset-0 bg-destructive/15 transition-none"
+              style={{ width: `${longPressProgress * 100}%` }}
+            />
+            <span className="relative flex items-center justify-center gap-2">
+              <Smartphone className="h-3.5 w-3.5" />
+              {longPressProgress > 0
+                ? `Hold ${Math.ceil((1 - longPressProgress) * 3)}s...`
+                : "Hold 3 seconds for discreet SOS"}
+            </span>
           </button>
-        </div>
+        )}
       </main>
 
       <AlertDialog open={showSosConfirm} onOpenChange={setShowSosConfirm}>
