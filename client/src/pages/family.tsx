@@ -37,6 +37,7 @@ import {
   PauseCircle,
   PlayCircle,
   Lock,
+  Send,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -165,6 +166,41 @@ export default function FamilyPage() {
     },
     onError: () => toast({ title: "Could not remove member", variant: "destructive" }),
   });
+
+  // One-tap "Check in with family" — geolocates and pushes the user's location
+  // to every active family member.
+  const [isSharing, setIsSharing] = useState(false);
+  async function handleShareWithFamily() {
+    if (!navigator.geolocation) {
+      toast({ title: "Location unavailable", description: "Your device doesn't support GPS.", variant: "destructive" });
+      return;
+    }
+    setIsSharing(true);
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10_000,
+          maximumAge: 30_000,
+        }),
+      );
+      await apiRequest("POST", "/api/family/share-location", {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+      });
+      toast({ title: "Checked in", description: "Your family can see your location now." });
+      queryClient.invalidateQueries({ queryKey: ["/api/family"] });
+    } catch (err: any) {
+      toast({
+        title: "Could not check in",
+        description: err?.code === 1 ? "Location permission denied." : "Try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  }
 
   // ---- Form state ----
   const [showCreate, setShowCreate] = useState(false);
@@ -364,6 +400,21 @@ export default function FamilyPage() {
                     {sharingMembers.length} sharing
                   </span>
                 </div>
+                {/* One-tap "Check in with family" — shares current location */}
+                <Button
+                  onClick={handleShareWithFamily}
+                  disabled={isSharing}
+                  size="sm"
+                  className="w-full mb-3 h-9"
+                  data-testid="button-checkin-family"
+                >
+                  {isSharing ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-1.5" />
+                  )}
+                  Check in with family
+                </Button>
                 <div className="flex flex-wrap gap-2">
                   {sharingMembers.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-3">

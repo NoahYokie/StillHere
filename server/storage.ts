@@ -2156,8 +2156,21 @@ export class DatabaseStorage implements IStorage {
     role: FamilyRole;
     parentalConsentRequired: boolean;
   }): Promise<FamilyMember> {
-    // If a user already exists for this phone, attach immediately as active
+    // Dedupe: if this phone (or its linked user) is already a non-removed
+    // member of this family, return the existing row instead of inserting a
+    // duplicate. Prevents repeat-click SMS spam and duplicate cards.
     const existing = await this.getUserByPhone(params.phone);
+    const dupes = await db.select().from(familyMembers).where(
+      and(
+        eq(familyMembers.familyId, params.familyId),
+        ne(familyMembers.status, "removed"),
+      ),
+    );
+    const existingDup = dupes.find(
+      (m) => m.invitePhone === params.phone || (existing && m.userId === existing.id),
+    );
+    if (existingDup) return existingDup;
+
     const [row] = await db.insert(familyMembers).values({
       familyId: params.familyId,
       userId: existing?.id || null,
