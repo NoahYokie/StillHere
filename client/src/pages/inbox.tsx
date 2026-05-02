@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MessageCircle, Users, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { ArrowLeft, MessageCircle, Users, AlertTriangle, CheckCircle2, Info, MapPin } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { queryClient } from "@/lib/queryClient";
@@ -21,7 +21,26 @@ interface Conversation {
   lastMessageType: LastMessageType;
 }
 
-function StatusDot({ type }: { type: LastMessageType }) {
+function isLiveLocationPreview(raw: string | null | undefined): boolean {
+  const text = raw || "";
+  return (
+    /Sharing live location\b/i.test(text) ||
+    /\bis sharing their live location\b/i.test(text) ||
+    /\bshared a snapshot of their location\b/i.test(text) ||
+    /maps\?q=-?\d+\.?\d*,-?\d+\.?\d*/i.test(text)
+  );
+}
+
+function StatusDot({ type, isLiveLoc }: { type: LastMessageType; isLiveLoc?: boolean }) {
+  if (isLiveLoc) {
+    return (
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-full bg-primary ring-2 ring-primary/20"
+        aria-label="Live location share"
+        data-testid="dot-location"
+      />
+    );
+  }
   if (type === "system_alert") {
     return (
       <span
@@ -196,8 +215,13 @@ export default function InboxPage() {
           <div className="space-y-2">
             {conversations.map((convo) => {
               const isTyping = typingUsers.has(convo.partnerId);
-              const isAlert = convo.lastMessageType === "system_alert";
-              const label = statusLabel(convo.lastMessageType);
+              const isLiveLoc = isLiveLocationPreview(convo.lastMessage);
+              // A live-location share is informational, not a safety alert,
+              // even though the underlying messageType is system_info. We
+              // re-classify it locally so the row doesn't masquerade as an
+              // emergency badge.
+              const isAlert = !isLiveLoc && convo.lastMessageType === "system_alert";
+              const label = isLiveLoc ? "Location" : statusLabel(convo.lastMessageType);
               return (
                 <Card
                   key={convo.partnerId}
@@ -238,7 +262,7 @@ export default function InboxPage() {
                           {convo.partnerName.charAt(0).toUpperCase()}
                         </div>
                         <span className="absolute -bottom-0.5 -right-0.5 bg-card rounded-full p-0.5">
-                          <StatusDot type={convo.lastMessageType} />
+                          <StatusDot type={convo.lastMessageType} isLiveLoc={isLiveLoc} />
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -282,27 +306,27 @@ export default function InboxPage() {
                                   className={`inline-flex items-center gap-1 mr-1.5 text-[10px] font-bold uppercase tracking-wider ${
                                     isAlert
                                       ? "text-destructive"
-                                      : convo.lastMessageType === "system_safe"
-                                        ? "text-emerald-600 dark:text-emerald-400"
-                                        : "text-amber-600 dark:text-amber-400"
+                                      : isLiveLoc
+                                        ? "text-primary"
+                                        : convo.lastMessageType === "system_safe"
+                                          ? "text-emerald-600 dark:text-emerald-400"
+                                          : "text-amber-600 dark:text-amber-400"
                                   }`}
                                 >
-                                  {convo.lastMessageType === "system_alert" && <AlertTriangle className="w-3 h-3" />}
-                                  {convo.lastMessageType === "system_safe" && <CheckCircle2 className="w-3 h-3" />}
-                                  {convo.lastMessageType === "system_info" && <Info className="w-3 h-3" />}
+                                  {isLiveLoc ? (
+                                    <MapPin className="w-3 h-3" />
+                                  ) : (
+                                    <>
+                                      {convo.lastMessageType === "system_alert" && <AlertTriangle className="w-3 h-3" />}
+                                      {convo.lastMessageType === "system_safe" && <CheckCircle2 className="w-3 h-3" />}
+                                      {convo.lastMessageType === "system_info" && <Info className="w-3 h-3" />}
+                                    </>
+                                  )}
                                   {label}
                                 </span>
                               )}
                               {(() => {
-                                // Replace raw legacy "Sharing live location: https://…" URL
-                                // previews with a clean human label. Both the new
-                                // structured-meta messages and old raw-URL ones get the
-                                // same friendly preview here.
                                 const raw = convo.lastMessage || "";
-                                const isLiveLoc =
-                                  /Sharing live location\b/i.test(raw) ||
-                                  /\bis sharing their live location\b/i.test(raw) ||
-                                  /maps\?q=-?\d+\.?\d*,-?\d+\.?\d*/i.test(raw);
                                 const display = isLiveLoc ? "Live location shared" : raw;
                                 return display.length > 60
                                   ? display.substring(0, 60) + "..."
