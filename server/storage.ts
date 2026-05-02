@@ -899,7 +899,10 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(safetyTimers.userId, user.id),
           eq(safetyTimers.status, "escalated"),
-          gte(safetyTimers.startedAt, recencyCutoff),
+          or(
+            gte(safetyTimers.resolvedAt, recencyCutoff),
+            and(isNull(safetyTimers.resolvedAt), gte(safetyTimers.startedAt, recencyCutoff)),
+          ),
         ))
         .orderBy(desc(safetyTimers.startedAt)).limit(1);
       if (escalated) safetyTimer = escalated;
@@ -909,7 +912,10 @@ export class DatabaseStorage implements IStorage {
         .where(and(
           eq(safeWalks.userId, user.id),
           eq(safeWalks.status, "escalated"),
-          gte(safeWalks.startedAt, recencyCutoff),
+          or(
+            gte(safeWalks.resolvedAt, recencyCutoff),
+            and(isNull(safeWalks.resolvedAt), gte(safeWalks.startedAt, recencyCutoff)),
+          ),
         ))
         .orderBy(desc(safeWalks.startedAt)).limit(1);
       if (escalated) safeWalk = escalated;
