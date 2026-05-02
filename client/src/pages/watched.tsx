@@ -75,10 +75,13 @@ function DrillAcknowledgeButton({ drillId, userName, userId }: { drillId: string
       toast({ title: "You're ready", description: `${userName} has been notified that you've got their back.` });
     },
     onError: (err: any) => {
-      if (err.message?.includes("already acknowledged")) {
+      const msg = err.message || "";
+      if (msg.includes("already acknowledged") || msg.includes("already confirmed")) {
         setAcknowledged(true);
+        toast({ title: "Already confirmed", description: `${userName} already knows you've got their back.` });
+        return;
       }
-      toast({ title: "Could not confirm", description: err.message || "Please try again.", variant: "destructive" });
+      toast({ title: "Could not confirm", description: msg || "Please try again.", variant: "destructive" });
     },
   });
 

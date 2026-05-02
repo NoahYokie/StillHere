@@ -6,7 +6,7 @@ import { processLocationContext, getUserContext, getRecentContextEvents } from "
 import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db } from "./db";
-import { eq, and, lt, gte, desc, isNull } from "drizzle-orm";
+import { eq, and, lt, gte, desc, isNull, sql } from "drizzle-orm";
 import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts } from "@shared/schema";
 import {
   generateRegistrationOptions,
@@ -1457,27 +1457,64 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
 
       const drillId = req.params.drillId;
-      const [drill] = await db.select().from(incidents).where(eq(incidents.id, drillId)).limit(1);
-      if (!drill || !drill.isDrill) return res.status(404).json({ error: "This safety test is no longer available." });
-      if (drill.status !== "open") return res.status(400).json({ error: "This safety test has already finished." });
-      if (drill.drillAcknowledgedByContactId) return res.status(400).json({ error: "Someone has already confirmed for this test." });
 
-      const contacts = await storage.getContacts(drill.userId);
-      const watcherContact = contacts.find(c => c.linkedUserId === userId);
-      if (!watcherContact) return res.status(403).json({ error: "Not a linked watcher for this user" });
+      const ackResult = await db.transaction(async (tx) => {
+        const lockResult = await tx.execute(sql`SELECT id, user_id, status, is_drill, started_at, drill_responses, drill_acknowledged_by_contact_id FROM incidents WHERE id = ${drillId} FOR UPDATE`);
+        const locked: any = (lockResult as any).rows?.[0];
+        if (!locked || !locked.is_drill) return { error: { status: 404, body: { error: "This safety test is no longer available." } } };
+        if (locked.status !== "open") return { error: { status: 400, body: { error: "This safety test has already finished." } } };
 
-      await db.update(incidents).set({
-        drillAcknowledgedAt: new Date(),
-        drillAcknowledgedByContactId: watcherContact.id,
-      }).where(eq(incidents.id, drillId));
+        const contactList = await storage.getContacts(locked.user_id);
+        const watcherContact = contactList.find(c => c.linkedUserId === userId);
+        if (!watcherContact) return { error: { status: 403, body: { error: "Not a linked watcher for this user" } } };
 
+        let responses: Array<{ contactId: string; contactName: string; role: string; respondedAt: string; responseTimeMs: number }> = [];
+        try {
+          const parsed = JSON.parse(locked.drill_responses || "[]");
+          responses = Array.isArray(parsed)
+            ? parsed.filter((r: any) => r && typeof r === "object" && typeof r.contactId === "string")
+            : [];
+        } catch {
+          responses = [];
+        }
+        if (responses.some(r => r.contactId === watcherContact.id)) {
+          return { error: { status: 400, body: { error: "You've already confirmed for this drill.", alreadyAcknowledged: true } } };
+        }
+
+        const respondedAt = new Date();
+        const startedAtMs = locked.started_at ? new Date(locked.started_at).getTime() : respondedAt.getTime();
+        responses.push({
+          contactId: watcherContact.id,
+          contactName: watcherContact.name,
+          role: (watcherContact.circleRole as string) || "primary",
+          respondedAt: respondedAt.toISOString(),
+          responseTimeMs: Math.max(0, respondedAt.getTime() - startedAtMs),
+        });
+
+        const updates: any = { drillResponses: JSON.stringify(responses) };
+        if (!locked.drill_acknowledged_by_contact_id) {
+          updates.drillAcknowledgedAt = respondedAt;
+          updates.drillAcknowledgedByContactId = watcherContact.id;
+        }
+        await tx.update(incidents).set(updates).where(eq(incidents.id, drillId));
+        return { ok: { drillUserId: locked.user_id as string, watcherContact, responses, respondedAt } };
+      });
+
+      if ("error" in ackResult && ackResult.error) {
+        return res.status(ackResult.error.status).json(ackResult.error.body);
+      }
+      const okResult = (ackResult as any).ok;
+      const drill = { id: drillId, userId: okResult.drillUserId };
+      const watcherContact = okResult.watcherContact;
+      const responses = okResult.responses;
+      const respondedAt: Date = okResult.respondedAt;
       const watcherUser = await storage.getUser(userId);
       const watcherName = watcherUser?.name || watcherContact.name;
 
       await sendPushNotification(drill.userId, {
         title: "Guardian ready",
         body: `${watcherName} confirmed they're ready. Your Safety Circle is prepared.`,
-        url: "/",
+        url: `/safety-circle/drill?id=${drillId}`,
         tag: `drill-ack-${drillId}`,
       });
 
@@ -1486,15 +1523,111 @@ export async function registerRoutes(
         io.to(`user:${drill.userId}`).emit("drill:acknowledged", {
           drillId,
           acknowledgedBy: watcherName,
-          acknowledgedAt: new Date().toISOString(),
+          acknowledgedAt: respondedAt.toISOString(),
+          responseCount: responses.length,
         });
       }
 
-      console.log(`[DRILL] Acknowledged by ${watcherName} (${userId}) for drill ${drillId}`);
-      res.json({ success: true });
+      console.log(`[DRILL] Acknowledged by ${userId} for drill ${drillId} (response ${responses.length})`);
+      res.json({ success: true, responseCount: responses.length });
     } catch (error) {
       console.error("Error acknowledging drill:", error);
       res.status(500).json({ error: "Failed to acknowledge drill" });
+    }
+  });
+
+  app.get("/api/safety-drill/:drillId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const drillId = req.params.drillId;
+      const [drill] = await db.select().from(incidents).where(eq(incidents.id, drillId)).limit(1);
+      if (!drill || !drill.isDrill) return res.status(404).json({ error: "Drill not found" });
+
+      const isOwner = drill.userId === userId;
+      let isLinkedWatcher = false;
+      if (!isOwner) {
+        const contactList = await storage.getContacts(drill.userId);
+        isLinkedWatcher = contactList.some(c => c.linkedUserId === userId);
+      }
+      if (!isOwner && !isLinkedWatcher) return res.status(403).json({ error: "Forbidden" });
+
+      let responses: Array<{ contactId: string; contactName: string; role: string; respondedAt: string; responseTimeMs: number }> = [];
+      try {
+        const parsed = JSON.parse(drill.drillResponses || "[]");
+        responses = Array.isArray(parsed) ? parsed.filter(r => r && typeof r === "object" && r.contactId) : [];
+      } catch { responses = [] }
+
+      const allContacts = await storage.getContacts(drill.userId);
+      const watchersWithLink = allContacts.filter(c => c.linkedUserId);
+
+      const guardians = watchersWithLink.map(c => {
+        const r = responses.find(x => x.contactId === c.id);
+        return {
+          contactId: c.id,
+          name: c.name,
+          role: c.circleRole,
+          responded: !!r,
+          respondedAt: r?.respondedAt || null,
+          responseTimeMs: r?.responseTimeMs || null,
+        };
+      });
+
+      res.json({
+        drillId: drill.id,
+        status: drill.status,
+        startedAt: drill.startedAt,
+        resolvedAt: drill.resolvedAt,
+        guardians,
+        totalGuardians: watchersWithLink.length,
+        respondedCount: responses.length,
+      });
+    } catch (error) {
+      console.error("Error fetching drill:", error);
+      res.status(500).json({ error: "Failed to fetch drill" });
+    }
+  });
+
+  app.get("/api/safety-circle/readiness", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const contactList = await storage.getContacts(userId);
+      const now = Date.now();
+      const guardians = await Promise.all(contactList.map(async (c) => {
+        let lastActiveAt: string | null = null;
+        let readiness: "ready" | "idle" | "needs_attention" | "unknown" = "unknown";
+        if (c.linkedUserId) {
+          const linkedUser = await storage.getUser(c.linkedUserId);
+          if (linkedUser?.lastHeartbeatAt) {
+            lastActiveAt = new Date(linkedUser.lastHeartbeatAt).toISOString();
+            const ageMs = now - new Date(linkedUser.lastHeartbeatAt).getTime();
+            if (ageMs < 24 * 60 * 60 * 1000) readiness = "ready";
+            else if (ageMs < 7 * 24 * 60 * 60 * 1000) readiness = "idle";
+            else readiness = "needs_attention";
+          } else {
+            readiness = "unknown";
+          }
+        }
+        return {
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          role: (c.circleRole as string) || "primary",
+          linked: !!c.linkedUserId,
+          readiness,
+          lastActiveAt,
+        };
+      }));
+      const ready = guardians.filter(g => g.readiness === "ready").length;
+      res.json({
+        guardians,
+        totalCount: guardians.length,
+        readyCount: ready,
+      });
+    } catch (error) {
+      console.error("Error fetching circle readiness:", error);
+      res.status(500).json({ error: "Failed to fetch readiness" });
     }
   });
 

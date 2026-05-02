@@ -46,6 +46,9 @@ import SafeWalkPage from "@/pages/safe-walk";
 import SavedPlacesPage from "@/pages/saved-places";
 import WeeklyReportPage from "@/pages/weekly-report";
 import SafetyCirclePage from "@/pages/safety-circle";
+import SafetyCircleManagePage from "@/pages/safety-circle-manage";
+import SafetyCircleGuardianViewPage from "@/pages/safety-circle-guardian-view";
+import SafetyCircleDrillPage from "@/pages/safety-circle-drill";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -217,6 +220,27 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <SafetyCirclePage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/safety-circle/manage">
+        <RequireAuth>
+          <RequireSetup>
+            <SafetyCircleManagePage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/safety-circle/guardian-view">
+        <RequireAuth>
+          <RequireSetup>
+            <SafetyCircleGuardianViewPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/safety-circle/drill">
+        <RequireAuth>
+          <RequireSetup>
+            <SafetyCircleDrillPage />
           </RequireSetup>
         </RequireAuth>
       </Route>

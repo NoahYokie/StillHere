@@ -59,6 +59,12 @@ Key architectural features include:
 - **Area Mode (Neighborhood Obfuscation):** When `sharingMode === 'area'`, server-side `obfuscateCoord()` applies a deterministic random offset to all lat/lng values.
 - **API Location Redaction:** For `presence`/`paused` modes, lat/lng/accuracy fields are set to `null` in the API response. For `area` mode, obfuscated coordinates are sent.
 - **Action-First Incident Language:** All concern notifications now include a clear action or instruction to wait.
+- **Safety Circle WOW Redesign:** Premium five-screen Safety Circle experience styled like Apple Health. Routes:
+  - `/safety-circle` (hero shield, primary guardian card with readiness, How It Works stepper, Guardian View card, Run Safety Drill card, reassurance card)
+  - `/safety-circle/manage` (per-guardian cards sorted primary→backup→support with role badge, readiness state, last active)
+  - `/safety-circle/guardian-view` (live preview of what watchers see: map or hidden state per `sharingMode`, status rows, privacy note; concern-state location override surfaces an amber note)
+  - `/safety-circle/drill` (intro screen, Start Drill button, live polled results with per-guardian response time)
+  Backend additions: `incidents.drillResponses` JSON column for multi-watcher acks (atomic via `db.transaction` + `SELECT FOR UPDATE`), `GET /api/safety-drill/:drillId` (live drill state, owner or linked watcher only), `GET /api/safety-circle/readiness` (per-guardian readiness `ready`/`idle`/`needs_attention`/`unknown` based on heartbeat age).
 
 ### External Dependencies
 - **Location Services:** Google Maps Platform (Places API New, Routes API)
