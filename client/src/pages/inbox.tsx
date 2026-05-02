@@ -293,9 +293,21 @@ export default function InboxPage() {
                                   {label}
                                 </span>
                               )}
-                              {convo.lastMessage.length > 60
-                                ? convo.lastMessage.substring(0, 60) + "..."
-                                : convo.lastMessage}
+                              {(() => {
+                                // Replace raw legacy "Sharing live location: https://…" URL
+                                // previews with a clean human label. Both the new
+                                // structured-meta messages and old raw-URL ones get the
+                                // same friendly preview here.
+                                const raw = convo.lastMessage || "";
+                                const isLiveLoc =
+                                  /Sharing live location\b/i.test(raw) ||
+                                  /\bis sharing their live location\b/i.test(raw) ||
+                                  /maps\?q=-?\d+\.?\d*,-?\d+\.?\d*/i.test(raw);
+                                const display = isLiveLoc ? "Live location shared" : raw;
+                                return display.length > 60
+                                  ? display.substring(0, 60) + "..."
+                                  : display;
+                              })()}
                             </p>
                           )}
                           {convo.unreadCount > 0 && (

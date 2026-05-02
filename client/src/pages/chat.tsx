@@ -133,6 +133,17 @@ export default function ChatPage() {
     enabled: !!otherUserId,
   });
 
+  // Tracks whether the current user has ANY active live-location share, regardless
+  // of which conversation it was started from. This drives the "You're sharing
+  // your live location" banner so users can always stop sharing, even on cards
+  // that have rolled into the "ended" state on the client.
+  const { data: liveStatus } = useQuery<{ active: boolean; share: any }>({
+    queryKey: ["/api/live-location/status"],
+    enabled: !!currentUserId,
+    refetchInterval: 30_000,
+  });
+  const isCurrentlySharing = !!liveStatus?.active;
+
   useEffect(() => {
     const key = JSON.stringify(serverMessages.map((m) => m.id));
     if (key === lastFetchedRef.current) return;
@@ -433,13 +444,15 @@ export default function ChatPage() {
     );
   }
 
-  async function handleStopSharing(_msg: LocalMessage) {
+  async function handleStopSharing(_msg?: LocalMessage) {
     try {
       // Stop the continuous client uploader first so we don't race with the server.
       await stopLiveTracking();
       await apiRequest("POST", "/api/live-location/stop", {});
       toast({ title: "Stopped sharing", description: "Your live location is no longer visible." });
       queryClient.invalidateQueries({ queryKey: ["/api/messages", otherUserId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
     } catch {
       toast({ title: "Could not stop sharing", variant: "destructive" });
     }
@@ -951,6 +964,34 @@ export default function ChatPage() {
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Active-share banner — always visible while a live-location session is
+          actually running on the server, so users can stop sharing even when no
+          card in this thread is in the "active" state. */}
+      {isCurrentlySharing && (
+        <div
+          className="border-t border-primary/30 bg-primary/5 px-3 py-2 flex items-center gap-2"
+          data-testid="banner-sharing-active"
+        >
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </span>
+          <p className="text-xs text-foreground flex-1 truncate">
+            You're sharing your live location
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleStopSharing()}
+            className="h-7 text-[11px] px-2.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+            data-testid="button-banner-stop-sharing"
+          >
+            <StopCircle className="h-3.5 w-3.5 mr-1" />
+            Stop sharing
+          </Button>
+        </div>
+      )}
 
       {/* Compact Quick Action Bar — pill-style icon+label, smaller and sharper */}
       <div className="border-t border-border/60 bg-card px-3 pt-2 pb-1.5">
