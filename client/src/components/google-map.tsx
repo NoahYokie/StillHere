@@ -29,7 +29,7 @@ interface MapPoint {
   timestamp?: string;
 }
 
-interface MapPerson {
+export interface MapPerson {
   id: string;
   name: string;
   lat: number;

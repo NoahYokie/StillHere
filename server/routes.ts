@@ -6310,6 +6310,162 @@ export async function registerRoutes(
     }
   });
 
+  // ---- Family Chat + Pulse + Close ----
+
+  app.get("/api/family/messages", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.json({ messages: [] });
+      const messages = await storage.getFamilyMessages(overview.family.id, 200);
+      // Hydrate sender names without N+1 surprises - small N here.
+      const senderIds = Array.from(new Set(messages.map(m => m.senderId).filter((s): s is string => !!s)));
+      const nameById = new Map<string, string>();
+      for (const id of senderIds) {
+        const u = await storage.getUser(id);
+        if (u) nameById.set(id, u.name || "Family member");
+      }
+      res.json({
+        messages: messages.map(m => ({
+          ...m,
+          senderName: m.senderId ? (nameById.get(m.senderId) || "Family member") : null,
+        })),
+      });
+    } catch (e) {
+      console.error("[family] messages get failed", e);
+      res.status(500).json({ error: "Failed to load messages" });
+    }
+  });
+
+  app.post("/api/family/messages", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const body = (req.body?.body || "").toString().trim();
+      if (!body) return res.status(400).json({ error: "Message cannot be empty" });
+      if (body.length > 2000) return res.status(400).json({ error: "Message too long" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "Create a family first" });
+
+      const msg = await storage.saveFamilyMessage({
+        familyId: overview.family.id,
+        senderId: userId,
+        body,
+        kind: "user",
+      });
+      const me = await storage.getUser(userId);
+      const payload = { ...msg, senderName: me?.name || "Family member" };
+      const recipients = await storage.getActiveFamilyUserIds(overview.family.id);
+      for (const uid of recipients) {
+        emitToUser(uid, "family:message:new", payload);
+      }
+      res.json({ message: payload });
+    } catch (e) {
+      console.error("[family] message send failed", e);
+      res.status(500).json({ error: "Failed to send" });
+    }
+  });
+
+  // Family Pulse - one-tap "I'm OK" broadcast. Optional location attached.
+  app.post("/api/family/pulse", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "Create a family first" });
+      const me = await storage.getUser(userId);
+      const myName = me?.name || "Family member";
+
+      const lat = req.body?.lat != null ? Number(req.body.lat) : null;
+      const lng = req.body?.lng != null ? Number(req.body.lng) : null;
+      if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+        await storage.recordHeartbeat(userId, lat, lng).catch(() => {});
+      }
+
+      const msg = await storage.saveFamilyMessage({
+        familyId: overview.family.id,
+        senderId: userId,
+        body: `${myName} is OK.`,
+        kind: "pulse",
+        meta: lat != null && lng != null ? { lat, lng } : undefined,
+      });
+      const payload = { ...msg, senderName: myName };
+      const recipients = await storage.getActiveFamilyUserIds(overview.family.id);
+      for (const uid of recipients) emitToUser(uid, "family:message:new", payload);
+      res.json({ message: payload });
+    } catch (e) {
+      console.error("[family] pulse failed", e);
+      res.status(500).json({ error: "Failed to send pulse" });
+    }
+  });
+
+  // Family Panic - urgent broadcast to family chat. Does NOT replace the
+  // user's full SOS / contact-escalation flow (the home SOS still does that).
+  app.post("/api/family/panic", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "Create a family first" });
+      const me = await storage.getUser(userId);
+      const myName = me?.name || "Family member";
+      const lat = req.body?.lat != null ? Number(req.body.lat) : null;
+      const lng = req.body?.lng != null ? Number(req.body.lng) : null;
+      const note = (req.body?.note || "").toString().trim().slice(0, 280);
+      if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+        await storage.recordHeartbeat(userId, lat, lng).catch(() => {});
+      }
+      const body = note
+        ? `${myName} needs help: ${note}`
+        : `${myName} needs help right now.`;
+      const msg = await storage.saveFamilyMessage({
+        familyId: overview.family.id,
+        senderId: userId,
+        body,
+        kind: "panic",
+        meta: lat != null && lng != null ? { lat, lng } : undefined,
+      });
+      const payload = { ...msg, senderName: myName };
+      const recipients = await storage.getActiveFamilyUserIds(overview.family.id);
+      for (const uid of recipients) {
+        emitToUser(uid, "family:message:new", payload);
+        // Best-effort push so offline family members are paged.
+        try {
+          await sendPushNotification(uid, {
+            title: `${myName} needs help`,
+            body: note || "Tap to open the family map.",
+            url: "/family",
+            tag: "family-panic",
+          });
+        } catch {}
+      }
+      res.json({ message: payload });
+    } catch (e) {
+      console.error("[family] panic failed", e);
+      res.status(500).json({ error: "Failed to send alert" });
+    }
+  });
+
+  // Admin closes (deletes) the entire family group. Members are detached;
+  // group chat history is removed. Self-leave goes through DELETE /family/member/:id.
+  app.delete("/api/family", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const overview = await storage.getFamilyForUser(userId);
+      if (!overview.family) return res.status(404).json({ error: "No family to close" });
+      if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can close the family" });
+      const recipients = await storage.getActiveFamilyUserIds(overview.family.id);
+      await storage.deleteFamily(overview.family.id);
+      for (const uid of recipients) emitToUser(uid, "family:closed", { familyId: overview.family.id });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("[family] close failed", e);
+      res.status(500).json({ error: "Failed to close family" });
+    }
+  });
+
   app.delete("/api/family/member/:memberId", async (req, res) => {
     try {
       const userId = getUserId(req);

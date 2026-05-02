@@ -861,8 +861,26 @@ export const familyMembersRelations = relations(familyMembers, ({ one }) => ({
   user: one(users, { fields: [familyMembers.userId], references: [users.id] }),
 }));
 
+// Family group chat - everyone in the family can see and send.
+// Kind 'system' covers Family Pulse, "arrived at Home", panic alerts, etc.
+export const familyMessages = pgTable("family_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  familyId: uuid("family_id").notNull().references(() => families.id, { onDelete: "cascade" }),
+  senderId: uuid("sender_id").references(() => users.id, { onDelete: "set null" }),
+  body: text("body").notNull(),
+  kind: text("kind").notNull().default("user"), // 'user' | 'pulse' | 'panic' | 'system'
+  meta: text("meta"), // JSON string
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("family_messages_family_id_idx").on(table.familyId),
+  index("family_messages_created_at_idx").on(table.createdAt),
+]);
+
 export const insertFamilySchema = createInsertSchema(families).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFamilyMemberSchema = createInsertSchema(familyMembers).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFamilyMessageSchema = createInsertSchema(familyMessages).omit({ id: true, createdAt: true });
+export type FamilyMessage = typeof familyMessages.$inferSelect;
+export type InsertFamilyMessage = z.infer<typeof insertFamilyMessageSchema>;
 
 export type Family = typeof families.$inferSelect;
 export type InsertFamily = z.infer<typeof insertFamilySchema>;

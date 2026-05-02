@@ -68,12 +68,14 @@ import {
   type TripPoint,
   families,
   familyMembers,
+  familyMessages,
   type Family,
   type FamilyMember,
   type FamilyMemberView,
   type FamilyOverview,
   type FamilyRole,
   type FamilyMemberStatus,
+  type FamilyMessage,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
 import { gte, lte } from "drizzle-orm";
@@ -2236,6 +2238,45 @@ export class DatabaseStorage implements IStorage {
     await db.update(familyMembers)
       .set({ status: "removed", updatedAt: new Date() })
       .where(eq(familyMembers.id, memberId));
+  }
+
+  // Hard-delete a whole family (admin only - enforced at the route layer).
+  // Cascades remove members and messages via FK ON DELETE CASCADE.
+  async deleteFamily(familyId: string): Promise<void> {
+    await db.delete(families).where(eq(families.id, familyId));
+  }
+
+  // ---- Family Chat ----
+  async saveFamilyMessage(params: {
+    familyId: string;
+    senderId: string | null;
+    body: string;
+    kind?: "user" | "pulse" | "panic" | "system";
+    meta?: Record<string, any>;
+  }): Promise<FamilyMessage> {
+    const [row] = await db.insert(familyMessages).values({
+      familyId: params.familyId,
+      senderId: params.senderId ?? null,
+      body: params.body,
+      kind: params.kind || "user",
+      meta: params.meta ? JSON.stringify(params.meta) : null,
+    }).returning();
+    return row;
+  }
+
+  async getFamilyMessages(familyId: string, limit: number = 100): Promise<FamilyMessage[]> {
+    const rows = await db.select().from(familyMessages)
+      .where(eq(familyMessages.familyId, familyId))
+      .orderBy(desc(familyMessages.createdAt))
+      .limit(limit);
+    return rows.reverse(); // oldest first for chat display
+  }
+
+  // Active member user-ids for a family - used to fan out socket events.
+  async getActiveFamilyUserIds(familyId: string): Promise<string[]> {
+    const rows = await db.select({ userId: familyMembers.userId }).from(familyMembers)
+      .where(and(eq(familyMembers.familyId, familyId), eq(familyMembers.status, "active")));
+    return rows.map(r => r.userId).filter((u): u is string => !!u);
   }
 }
 
