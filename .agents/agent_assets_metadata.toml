@@ -359,3 +359,51 @@ id = "aDHEJQcjCW0MR0ktT_7Kk"
 uri = "file://attached_assets/screenshots/6d1419bd-9d4b-4189-9865-b97fdd563ba4-00-11sz52b33amu0_kirk_replit_dev_mockup_preview_sos-emergency-page_StatusCard.png"
 type = "image"
 title = "5. Status Card — modular tiles, dashboard feel"
+
+[[outputs]]
+id = "dN-rJd0drN8mJ8cVgohPR"
+uri = "file://screenshots/01_dashboard_hook.jpg"
+type = "image"
+title = "01 — Dashboard hook (active alert + I'm OK)"
+
+[[outputs]]
+id = "KW8B5wVB7RcYaIs9DoiTT"
+uri = "file://screenshots/02_escalation.jpg"
+type = "image"
+title = "02 — Watcher dashboard (needs swap)"
+
+[[outputs]]
+id = "LNH73z0EPjUWhNywlwKbS"
+uri = "file://screenshots/03_safety_circle.jpg"
+type = "image"
+title = "03 — Manage Guardians (Mom/Partner/Brother + roles)"
+
+[[outputs]]
+id = "u9XPE2JeKx0F_sFTAPqX-"
+uri = "file://screenshots/04_privacy_control.jpg"
+type = "image"
+title = "04 — Trust & Safety (privacy)"
+
+[[outputs]]
+id = "8fyEi6FqirfdvXeHzYsUx"
+uri = "file://screenshots/05_sos.jpg"
+type = "image"
+title = "05 — SOS state (same as 01 — duplicate)"
+
+[[outputs]]
+id = "7_NpfiXjtbT4kUAKI5kib"
+uri = "file://screenshots/06_safe_walk.jpg"
+type = "image"
+title = "06 — Safe Walk"
+
+[[outputs]]
+id = "B0XxNwu4wSAoKzFG-8LEC"
+uri = "file://screenshots/07_weekly_report.jpg"
+type = "image"
+title = "07 — Weekly Safety Report"
+
+[[outputs]]
+id = "KPRG-Jm9cIw6zpH_t9_gX"
+uri = "file://screenshots/08_brand_close.jpg"
+type = "image"
+title = "08 — Brand close (404 — needs fix)"
