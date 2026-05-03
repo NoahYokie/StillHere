@@ -156,15 +156,9 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
     ? signedMapImageUrl(context.lat, context.lng) : null;
   const addressLine = context?.address?.trim() || coords;
 
-  // Pure HTML/CSS logo — no external image, so it always renders even when
-  // image proxies block the fetch. The 'S' monogram + StillHere wordmark.
-  const logoBlock = `
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block;vertical-align:middle;">
-              <tr>
-                <td style="background:${style.logoBg};color:#ffffff;width:32px;height:32px;border-radius:8px;font-size:16px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;line-height:32px;letter-spacing:-0.02em;">S</td>
-                <td style="padding-left:10px;font-size:16px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">StillHere</td>
-              </tr>
-            </table>`;
+  // Pure text wordmark — guaranteed to render in every email client. No image
+  // dependency, no broken-icon risk.
+  const logoBlock = `<span style="display:inline-block;vertical-align:middle;font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-0.015em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">StillHere</span>`;
 
   const locationBlock = addressLine ? `
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
