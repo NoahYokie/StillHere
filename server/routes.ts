@@ -257,6 +257,11 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
   return { resolved: true, hadIncident };
 }
 
+function isValidEmail(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null },
   userName: string,
@@ -268,10 +273,14 @@ async function notifyContact(
   await sendSmsFn(normalizedPhone, userName, link);
   console.log(`[NOTIFY] Sent SMS to contact`);
 
-  if (contact.email) {
+  const cleanEmail = isValidEmail(contact.email) ? contact.email!.trim() : null;
+  if (contact.email && !cleanEmail) {
+    console.warn(`[NOTIFY] Skipping email for contact ${contact.id} — value in email field is not a valid email address`);
+  }
+  if (cleanEmail) {
     try {
       const subjectUser = await storage.getUser(contact.userId);
-      await sendEmergencyEmail(contact.email, userName, link, reason, {
+      await sendEmergencyEmail(contact.email!.trim(), userName, link, reason, {
         lat: subjectUser?.lastLat ?? null,
         lng: subjectUser?.lastLng ?? null,
         locationAt: subjectUser?.lastLocationAt ?? null,
@@ -6256,10 +6265,10 @@ export async function registerRoutes(
               } else {
                 console.log(`[TIMER] Skipping SMS for ${contact.name}: no phone number`);
               }
-              if (contact.email) {
+              if (isValidEmail(contact.email)) {
                 try {
                   const { sendEmail } = await import("./email");
-                  await sendEmail(contact.email,
+                  await sendEmail(contact.email!.trim(),
                     `StillHere Alert: ${user.name}'s Safety Timer Expired`,
                     `${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
                   );
@@ -6382,10 +6391,10 @@ export async function registerRoutes(
               } else {
                 console.log(`[SAFE-WALK] Skipping SMS for ${contact.name}: no phone number`);
               }
-              if (contact.email) {
+              if (isValidEmail(contact.email)) {
                 try {
                   const { sendEmail } = await import("./email");
-                  await sendEmail(contact.email,
+                  await sendEmail(contact.email!.trim(),
                     `StillHere Alert: ${user.name} Did Not Arrive${destInfo}`,
                     `${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
                   );

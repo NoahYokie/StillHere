@@ -799,7 +799,9 @@ export const tripPointsRelations = relations(tripPoints, ({ one }) => ({
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ userId: true, updatedAt: true });
-export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, userId: true, createdAt: true });
+export const insertContactSchema = createInsertSchema(contacts).omit({ id: true, userId: true, createdAt: true }).extend({
+  email: z.string().trim().email("Please enter a valid email address").nullish().or(z.literal("").transform(() => null)),
+});
 export const insertCheckinSchema = createInsertSchema(checkins).omit({ id: true, createdAt: true });
 export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, startedAt: true });
 export const insertLocationSessionSchema = createInsertSchema(locationSessions).omit({ id: true, updatedAt: true });
