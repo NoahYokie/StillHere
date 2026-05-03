@@ -7,6 +7,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Heart, ArrowLeft, Fingerprint, Check } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 export default function LoginCodePage() {
@@ -243,14 +244,11 @@ export default function LoginCodePage() {
             >
               {resendMutation.isPending ? "Sending..." : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
             </button>
-            <button
-              onClick={() => setLocation("/login")}
-              className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-              data-testid="button-change-number"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Change number
-            </button>
+            <BackButton
+              to="/login"
+              label="Change number"
+              testId="button-change-number"
+            />
           </div>
         </CardContent>
       </Card>

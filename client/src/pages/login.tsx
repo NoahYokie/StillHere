@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Heart, HelpCircle, ArrowLeft, Fingerprint, Smartphone } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 export default function LoginPage() {
@@ -216,29 +217,19 @@ export default function LoginPage() {
                       : "Continue securely"}
                 </Button>
               </form>
-              <div className="mt-5 text-center">
-                <button
+              <div className="mt-5 flex justify-center">
+                <BackButton
                   onClick={() => setShowPhoneLogin(false)}
-                  className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                  data-testid="button-back-to-options"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to sign in options
-                </button>
+                  label="Back to sign in options"
+                  testId="button-back-to-options"
+                />
               </div>
             </div>
           )}
 
           <div className="mt-7 flex flex-col items-center gap-3">
             {!showPhoneLogin && (
-              <button
-                onClick={() => setLocation("/")}
-                className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                data-testid="link-back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </button>
+              <BackButton to="/" testId="link-back" />
             )}
             <button
               onClick={() => setLocation("/help")}
