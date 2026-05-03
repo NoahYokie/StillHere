@@ -51,3 +51,4 @@ integrations = ["javascript_database:1.0.0", "stripe:1.0.0", "revenuecat:1.0.0"]
 VAPID_PUBLIC_KEY = "BJ-UTaFhyGDWdJME7-g5oQdFzjKvtjSN_vFh7Vr7OR7yuDQRf8LkzyuZNDyV4oPkhYknu0x4EAoaCJJ45YR06H8"
 VAPID_PRIVATE_KEY = "aUey2SCQiCPNU9Oxiy-fzJFBF8bh7sO162rIsNMtmRg"
 BASE_URL = "https://stillhere.health"
+EMAIL_FROM = "alerts@alert.stillhere.health"
