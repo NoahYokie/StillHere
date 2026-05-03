@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { eq, desc, and, ne, gt, lt, or, isNull, isNotNull } from "drizzle-orm";
+import { eq, desc, and, ne, gt, gte, lt, or, isNull, isNotNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -717,13 +717,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async regenerateTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]> {
-    await this.revokeAllTokensForUser(userId);
+    // CRITICAL: never revoke tokens that have already been embedded in SMS/email
+    // links sitting in someone's inbox. We reuse the contact's most recent valid
+    // (unrevoked, unexpired) token, and only mint a fresh one when none exists.
+    // Tokens still auto-expire after 30 days, so leaked-link safety is preserved.
     const userContacts = await this.getContacts(userId);
     const result: { contact: Contact; token: string }[] = [];
+    const now = new Date();
     for (const contact of userContacts) {
       if (contact.softDeletedAt) continue;
-      const tokenRecord = await this.generateToken(contact.id);
-      result.push({ contact, token: tokenRecord.token });
+      const [existing] = await db.select().from(contactTokens)
+        .where(and(
+          eq(contactTokens.contactId, contact.id),
+          eq(contactTokens.revoked, false),
+          gte(contactTokens.expiresAt, now),
+        ))
+        .orderBy(desc(contactTokens.expiresAt))
+        .limit(1);
+      if (existing) {
+        result.push({ contact, token: existing.token });
+      } else {
+        const tokenRecord = await this.generateToken(contact.id);
+        result.push({ contact, token: tokenRecord.token });
+      }
     }
     return result.sort((a, b) => a.contact.priority - b.contact.priority);
   }
