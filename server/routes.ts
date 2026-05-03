@@ -5294,8 +5294,53 @@ export async function registerRoutes(
 
         console.log(`[WELLNESS CALL] SOS notified ${notifiedIds.length}/${sortedSos.length} contacts for ${user.name}`);
 
+        // ----- "We care" wraparound: keep the user supported, don't just hang up -----
+        // 1. Text the USER themselves so they have a written record of who's coming
+        //    and a clear 911 prompt, even if they hang up the call.
+        if (user.phone) {
+          const notifiedNames = sortedSos
+            .filter(c => notifiedIds.includes(c.id))
+            .map(c => c.name);
+          const namesLine = notifiedNames.length > 0
+            ? `${notifiedNames.slice(0, 3).join(", ")}${notifiedNames.length > 3 ? ` and ${notifiedNames.length - 3} more` : ""}`
+            : "your safety circle";
+          const userSmsBody = `StillHere: We hear you. ${namesLine} ${notifiedNames.length === 1 ? "has" : "have"} been alerted and ${notifiedNames.length === 1 ? "is" : "are"} on the way.\n\nIf this is life-threatening, call 911 now.\n\nYou are not alone. Stay safe.`;
+          sendSms(user.phone, userSmsBody).catch((err: any) => {
+            console.error(`[WELLNESS CALL] User SMS failed:`, err?.message || err);
+          });
+        }
+
+        // 2. Push the user's own device with a "we're with you" card linking to
+        //    the live SOS view (one-tap 911, primary contact, location share).
+        sendPushNotification(user.id, {
+          title: "We're with you",
+          body: `${notifiedIds.length} contact${notifiedIds.length === 1 ? "" : "s"} alerted. Tap for one-tap 911, contact call, and live location.`,
+          tag: "sos-active",
+          url: "/sos",
+        }).catch((err: any) => {
+          console.error(`[WELLNESS CALL] User push failed:`, err?.message || err);
+        });
+
+        // 3. Keep the call alive with a real menu + comfort loop instead of
+        //    saying "stay on the line" then hanging up after 3 seconds.
+        const primaryName = sortedSos[0]?.name || "your primary contact";
+        const safePrimary = escapeXml(primaryName);
+        const safeUserName = escapeXml(user.name);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">We hear you. Your safety circle is being alerted right now. Stay on the line if you can. Someone will reach you very soon.</Say><Pause length="2"/><Say voice="Google.en-US-Neural2-F">If you can call emergency services yourself, please do. You are not alone.</Say><Pause length="3"/><Hangup/></Response>`;
+<Response>
+  <Say voice="Google.en-US-Neural2-F">We hear you, ${safeUserName}. You are not alone. Help is on the way right now.</Say>
+  <Pause length="1"/>
+  <Say voice="Google.en-US-Neural2-F">${notifiedIds.length} ${notifiedIds.length === 1 ? "person has" : "people have"} been alerted, including ${safePrimary}. We are also sending you a text message with their names.</Say>
+  <Pause length="1"/>
+  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="15">
+    <Say voice="Google.en-US-Neural2-F">To be connected directly to ${safePrimary} right now, press 1.</Say>
+    <Pause length="1"/>
+    <Say voice="Google.en-US-Neural2-F">For emergency services guidance, press 0.</Say>
+    <Pause length="1"/>
+    <Say voice="Google.en-US-Neural2-F">Or simply stay on the line. We will stay with you until help arrives.</Say>
+  </Gather>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
         return res.type("text/xml").send(twiml);
       }
 
@@ -5326,6 +5371,120 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in wellness call gather:", error);
       res.status(500).send("");
+    }
+  });
+
+  // After the user pressed 2 ("I need help"), this handles the second-tier
+  // menu so we never just leave them on a dead line.
+  app.post("/api/wellness-call/help-followup", verifyTwilioSignature, async (req, res) => {
+    try {
+      const digits = req.body.Digits;
+      const calledNumber = req.body.To;
+      const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
+      const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
+
+      // Press 1 -> patch them through to their primary contact via <Dial>
+      if (digits === "1" && user) {
+        const allContacts = await storage.getContacts(user.id);
+        const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
+        const primary = sorted[0];
+        if (primary && primary.phone) {
+          const safeName = escapeXml(primary.name);
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">Connecting you to ${safeName} now. Please hold.</Say>
+  <Dial timeout="25" callerId="${process.env.TWILIO_PHONE_NUMBER || ""}" answerOnBridge="true">
+    <Number>${escapeXml(primary.phone)}</Number>
+  </Dial>
+  <Say voice="Google.en-US-Neural2-F">We could not reach ${safeName} right now. We will keep trying your safety circle. Stay with us.</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+          return res.type("text/xml").send(twiml);
+        }
+        // No contact available -> fall through to comfort
+        const twimlNoContact = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">We don't have a contact phone number on file to connect you to. Please call 911 if this is life-threatening. We will stay with you.</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+        return res.type("text/xml").send(twimlNoContact);
+      }
+
+      // Press 0 -> emergency services guidance
+      if (digits === "0") {
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">If this is a life-threatening emergency, please hang up now and dial 911. Your safety circle has already been alerted and we will keep them updated.</Say>
+  <Pause length="2"/>
+  <Say voice="Google.en-US-Neural2-F">If you cannot hang up, stay with us. We are right here with you.</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      // Anything else (timeout, other digit) -> comfort loop
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`;
+      res.type("text/xml").send(twiml);
+    } catch (error) {
+      console.error("Error in wellness call help-followup:", error);
+      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
+    }
+  });
+
+  // Comfort loop: stays on the call with the user, gently checking in, instead
+  // of hanging up. Bounded to 3 cycles (~3 min) so the call eventually ends if
+  // they truly cannot respond, but every cycle re-offers the "press 1 to be
+  // connected" option.
+  app.post("/api/wellness-call/comfort", verifyTwilioSignature, async (req, res) => {
+    try {
+      const cycle = Math.max(1, Math.min(parseInt(String(req.query.cycle || "1"), 10) || 1, 3));
+      const calledNumber = req.body.To;
+      const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
+      const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
+
+      let primaryName = "your primary contact";
+      if (user) {
+        const allContacts = await storage.getContacts(user.id);
+        const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
+        if (sorted[0]) primaryName = sorted[0].name;
+      }
+      const safePrimary = escapeXml(primaryName);
+
+      // Final cycle -> warm sign-off (never just a dead "Goodbye")
+      if (cycle >= 3) {
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">We need to end this call now so the line stays open for ${safePrimary}, but we are not leaving you. Your safety circle has been alerted, you have a text message from us, and we will check on you again very soon.</Say>
+  <Pause length="1"/>
+  <Say voice="Google.en-US-Neural2-F">If you are in danger right now, please call 911. You are not alone. Take care.</Say>
+  <Hangup/>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      // Reassurance varies a little per cycle so it doesn't feel robotic
+      const reassurance = cycle === 1
+        ? `We are still right here with you. ${safePrimary} has been alerted and is on the way.`
+        : `Hang in there. Your safety circle has been notified and someone will reach you very soon.`;
+
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">${reassurance}</Say>
+  <Pause length="2"/>
+  <Say voice="Google.en-US-Neural2-F">Take a slow breath with me. In. And out. You are doing great.</Say>
+  <Pause length="2"/>
+  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="20">
+    <Say voice="Google.en-US-Neural2-F">Press 1 anytime to be connected directly to ${safePrimary}. Press 0 for emergency services guidance. Or just stay on the line with us.</Say>
+  </Gather>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=${cycle + 1}</Redirect>
+</Response>`;
+      res.type("text/xml").send(twiml);
+    } catch (error) {
+      console.error("Error in wellness call comfort:", error);
+      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Google.en-US-Neural2-F">You are not alone. Help is on the way. Take care.</Say><Hangup/></Response>`);
     }
   });
 
