@@ -57,6 +57,39 @@ app.use((_req, res, next) => {
 
 app.set("trust proxy", 1);
 
+// Stripe webhook MUST be registered before express.json() so the raw Buffer
+// body reaches stripe-replit-sync for signature verification. It also needs
+// to bypass the rate limiter and the JSON Content-Type guard below.
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    try {
+      const signature = req.headers["stripe-signature"];
+      if (!signature) return res.status(400).json({ error: "Missing stripe-signature" });
+      const sig = Array.isArray(signature) ? signature[0] : signature;
+      if (!Buffer.isBuffer(req.body)) {
+        console.error("[stripe] webhook body is not a Buffer");
+        return res.status(500).json({ error: "Webhook processing error" });
+      }
+      const { getStripeSync } = await import("./stripeClient");
+      const sync = await getStripeSync();
+      await sync.processWebhook(req.body as Buffer, sig);
+      // Reflect any subscription change into our app's `users.premiumUntil`.
+      try {
+        const { reconcileEntitlementFromWebhook } = await import("./billing");
+        await reconcileEntitlementFromWebhook(req.body as Buffer);
+      } catch (err) {
+        console.error("[stripe] entitlement reconcile failed", err);
+      }
+      res.status(200).json({ received: true });
+    } catch (err: any) {
+      console.error("[stripe] webhook error:", err?.message || err);
+      res.status(400).json({ error: "Webhook processing error" });
+    }
+  },
+);
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -65,7 +98,7 @@ const apiLimiter = rateLimit({
   message: { error: "Too many requests, please try again later" },
   skip: (req) => {
     const fullPath = req.originalUrl || req.path;
-    return fullPath === "/api/health";
+    return fullPath === "/api/health" || fullPath === "/api/stripe/webhook";
   },
 });
 

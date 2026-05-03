@@ -44,6 +44,13 @@ export const users = pgTable("users", {
   sleepEnd: text("sleep_end").notNull().default("07:00"),
   sharingMode: sharingModeEnum("sharing_mode").notNull().default("precise"),
   setupConfirmedAt: timestamp("setup_confirmed_at"),
+  // Billing / subscription state. `premiumUntil` is the unified entitlement
+  // expiry across Stripe (web) and RevenueCat (iOS/Android). `premiumSource`
+  // records which store granted it so we can route portal links correctly.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  premiumUntil: timestamp("premium_until"),
+  premiumSource: text("premium_source"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
