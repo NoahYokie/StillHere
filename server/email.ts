@@ -1,5 +1,17 @@
+import { Resend } from "resend";
+
 const SENDER_NAME = "StillHere";
 const SENDER_EMAIL = process.env.EMAIL_FROM || "alerts@stillhere.health";
+
+// Lazy singleton: only construct the Resend client if a key is configured.
+// Lets the app boot in dev/preview environments without RESEND_API_KEY set.
+let resendClient: Resend | null | undefined;
+function getResend(): Resend | null {
+  if (resendClient !== undefined) return resendClient;
+  const key = process.env.RESEND_API_KEY;
+  resendClient = key ? new Resend(key) : null;
+  return resendClient;
+}
 
 export interface SendEmailResult {
   success: boolean;
@@ -29,8 +41,28 @@ function safeSubject(s: string): string {
 
 export async function sendEmail(to: string, subject: string, body: string): Promise<SendEmailResult> {
   const masked = to.replace(/(.{2}).*(@.*)/, "$1***$2");
-  console.log(`[EMAIL] Would send to ${masked}: ${subject} (${body.length} chars)`);
-  return { success: true };
+  const client = getResend();
+  if (!client) {
+    console.log(`[EMAIL] (dry-run, RESEND_API_KEY not set) to=${masked} subject="${subject}" (${body.length} chars)`);
+    return { success: true };
+  }
+  try {
+    const { data, error } = await client.emails.send({
+      from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
+      to: [to],
+      subject,
+      html: body,
+    });
+    if (error) {
+      console.error(`[EMAIL] send failed to=${masked}:`, error.message || error);
+      return { success: false, error: error.message || String(error) };
+    }
+    console.log(`[EMAIL] sent to=${masked} id=${data?.id} subject="${subject}"`);
+    return { success: true };
+  } catch (err: any) {
+    console.error(`[EMAIL] send threw to=${masked}:`, err?.message || err);
+    return { success: false, error: err?.message || String(err) };
+  }
 }
 
 export async function sendEmergencyEmail(
