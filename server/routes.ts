@@ -318,6 +318,11 @@ export async function registerRoutes(
       timestamp: new Date().toISOString(),
     });
   });
+
+  // Stripe billing routes (checkout, portal, products, /api/billing/me).
+  // The webhook is registered earlier in server/index.ts with raw body parsing.
+  const { registerStripeRoutes } = await import("./stripeRoutes");
+  registerStripeRoutes(app);
   
   // ============================================
   // AUTH ROUTES (public)

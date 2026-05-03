@@ -168,6 +168,30 @@ app.use((req, res, next) => {
   setupSocketServer(httpServer);
   await registerRoutes(httpServer, app);
 
+  // Bring up the stripe.* schema (idempotent) and create/refresh the managed
+  // webhook endpoint so Stripe events flow into stripe-replit-sync. Runs in
+  // the background so a Stripe outage cannot block app startup.
+  (async () => {
+    try {
+      const { runMigrations } = await import("stripe-replit-sync");
+      await runMigrations({ connectionString: process.env.DATABASE_URL!, max: 1 });
+      const { getStripeSync } = await import("./stripeClient");
+      const sync = await getStripeSync();
+      const proto = process.env.REPLIT_DEPLOYMENT === "1" ? "https" : "https";
+      const host = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0];
+      if (host && typeof sync.findOrCreateManagedWebhook === "function") {
+        await sync.findOrCreateManagedWebhook(`${proto}://${host}/api/stripe/webhook`);
+        log("stripe webhook ensured", "stripe");
+      }
+      if (typeof sync.syncBackfill === "function") {
+        await sync.syncBackfill();
+        log("stripe backfill complete", "stripe");
+      }
+    } catch (err: any) {
+      log(`stripe init skipped: ${err?.message || err}`, "stripe");
+    }
+  })();
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
 

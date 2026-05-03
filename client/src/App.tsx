@@ -51,6 +51,7 @@ import SafetyCircleManagePage from "@/pages/safety-circle-manage";
 import SafetyCircleGuardianViewPage from "@/pages/safety-circle-guardian-view";
 import SafetyCircleDrillPage from "@/pages/safety-circle-drill";
 import FamilyPage from "@/pages/family";
+import BillingPage from "@/pages/billing";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -258,6 +259,11 @@ function Router() {
           <RequireSetup>
             <FamilyPage />
           </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/billing">
+        <RequireAuth>
+          <BillingPage />
         </RequireAuth>
       </Route>
       <Route path="/tour" component={TourPage} />
