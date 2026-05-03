@@ -313,8 +313,8 @@ export async function sendEmergencyEmail(
     : `Safety alert: ${userName} missed a check in (StillHere)`);
   const title = issos ? "Emergency SOS activated" : "Missed safety check in";
   const eventLine = issos
-    ? `<strong>${safeName}</strong> just activated an emergency SOS. We've already tried reaching them by app push, SMS, and phone call.`
-    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check in. We've already tried reaching them by app push, SMS, and phone call.`;
+    ? `<strong>${safeName}</strong> just activated an emergency SOS. We are contacting their Safety Circle right now by app, SMS, phone call, and email.`
+    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check in. We are contacting their Safety Circle right now by app, SMS, phone call, and email.`;
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to notify you the moment a safety event is detected.`;
 
   const enriched = await enrichContext(context);

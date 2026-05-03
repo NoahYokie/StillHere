@@ -1058,7 +1058,7 @@ export default function ChatPage() {
             className="text-[10px] text-muted-foreground text-center mt-1.5"
             data-testid="text-offline-hint"
           >
-            {otherUserName} is offline. Messages and shares will be delivered when they're back.
+            App message pending. If this is an emergency, we are still contacting {otherUserName} by SMS, phone call, and email.
           </p>
         )}
       </div>

@@ -1,0 +1,57 @@
+We found two issues during manual SOS testing. Please fix these now without changing unrelated features.
+
+ISSUE 1 — Duplicate SOS alerts
+Current behaviour:
+If SOS is triggered multiple times while an emergency/help request is already active, the app creates/sends repeated SOS messages.
+
+Required behaviour:
+If there is already an active SOS/help incident for the user:
+- Do NOT create a new incident
+- Do NOT spam the guardian with repeated email/SMS/call alerts
+- Instead update the existing active incident timeline with something like:
+  “SOS button pressed again at [time]”
+- In the chat thread, show only one primary SOS alert card/message for the active incident
+- Optional: add a small update message such as “SOS re-confirmed” instead of another full emergency message
+
+Add a dedupe/cooldown rule:
+- Within 60 seconds: ignore duplicate SOS presses completely or show “SOS already active”
+- After 60 seconds while still active: log as repeat press, but do not resend full escalation unless configured as reminder/re-alert
+
+ISSUE 2 — In-app message says guardian offline
+Current behaviour:
+The chat says:
+“Ishong is offline. Messages and shares will be delivered when they’re back.”
+
+This makes the emergency system feel weak.
+
+Required behaviour:
+For emergency/SOS conversations, change the offline wording to something safer:
+“App message pending. We’re still contacting them by SMS, phone call, and email.”
+
+Important:
+Do NOT imply the emergency depends only on in-app messaging.
+
+ISSUE 3 — Escalation wording must match real actions
+Check the email/in-app copy:
+If SMS/call have not actually completed yet, do not say:
+“We’ve already tried SMS and phone call.”
+
+Use dynamic wording:
+- Before escalation completes: “We’re contacting your Safety Circle by app, SMS, phone call, and email.”
+- After each channel is attempted, show timeline items:
+  “Email sent”
+  “SMS sent”
+  “Phone call attempted”
+  “Guardian opened link” if available
+
+ISSUE 4 — Test/debug output
+After fixing, report back with:
+- Files changed
+- Existing SOS route/logic location
+- How active incident dedupe works
+- What happens if SOS is pressed 3 times in a row
+- Whether email/SMS/call are suppressed during duplicate presses
+- Any commands/tests run
+
+Do not touch landing page, login screens, pricing, RevenueCat, or Family Mode in this task.
+Focus only on SOS duplicate handling, emergency chat wording, and escalation copy accuracy.

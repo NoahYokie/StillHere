@@ -1029,10 +1029,42 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       
-      // Prevent duplicate incidents
+      // Prevent duplicate incidents AND duplicate escalation. If an incident is
+      // already open we never re-fire SMS/calls/emails. Within 60s of the original
+      // press we treat it as a no-op (the user is just tapping again because the
+      // UI doesn't feel "loud" enough). After 60s we append a timeline entry so
+      // there's a forensic record, but still no resend.
       const existingIncident = await storage.getOpenIncident(userId);
       if (existingIncident) {
-        return res.json({ success: true, incident: existingIncident, alreadyActive: true });
+        const ageMs = Date.now() - new Date(existingIncident.startedAt).getTime();
+        const COOLDOWN_MS = 60_000;
+        if (ageMs >= COOLDOWN_MS) {
+          try {
+            const timeline: any[] = (() => {
+              try { return JSON.parse(existingIncident.escalationTimeline || "[]"); } catch { return []; }
+            })();
+            timeline.push({
+              type: "sos_repeat_press",
+              time: new Date().toISOString(),
+              detail: "SOS button pressed again",
+            });
+            await storage.updateIncident(existingIncident.id, {
+              escalationTimeline: JSON.stringify(timeline),
+            });
+          } catch (e) {
+            console.error("[SOS] Failed to log repeat press to timeline:", e);
+          }
+        }
+        return res.json({
+          success: true,
+          incident: existingIncident,
+          alreadyActive: true,
+          deduped: true,
+          cooldownActive: ageMs < COOLDOWN_MS,
+          message: ageMs < COOLDOWN_MS
+            ? "SOS already active. Your Safety Circle is being contacted right now."
+            : "SOS already active. We are still contacting your Safety Circle.",
+        });
       }
       
       // Capture moment-of-SOS location from request body if provided
