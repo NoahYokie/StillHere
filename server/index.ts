@@ -179,7 +179,7 @@ app.use((req, res, next) => {
   (async () => {
     try {
       const { runMigrations } = await import("stripe-replit-sync");
-      await runMigrations({ connectionString: process.env.DATABASE_URL!, max: 1 });
+      await runMigrations({ connectionString: process.env.DATABASE_URL!, max: 1 } as any);
       const { getStripeSync } = await import("./stripeClient");
       const sync = await getStripeSync();
       const proto = process.env.REPLIT_DEPLOYMENT === "1" ? "https" : "https";

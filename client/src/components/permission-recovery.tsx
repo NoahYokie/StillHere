@@ -56,9 +56,9 @@ export function PermissionRecoveryCard() {
                 Some permissions need updating for full safety coverage.
               </p>
               <Button
-                variant="link"
+                variant="ghost"
                 size="sm"
-                className="text-amber-700 dark:text-amber-400 h-auto p-0 mt-1 text-xs"
+                className="text-amber-700 dark:text-amber-400 h-auto p-0 mt-1 text-xs underline-offset-4 hover:underline"
                 onClick={() => setExpanded(true)}
                 data-testid="button-learn-more-permissions"
               >

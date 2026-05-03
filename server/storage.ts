@@ -81,7 +81,7 @@ import {
   type FamilyPlace,
 } from "@shared/schema";
 import { addHours, startOfDay, format } from "date-fns";
-import { gte, lte } from "drizzle-orm";
+import { lte } from "drizzle-orm";
 
 function startOfDayInTimezone(date: Date, tz: string): Date {
   try {
@@ -150,6 +150,8 @@ export interface IStorage {
   getSoftDeletedContactsByWatcher(watcherUserId: string): Promise<(Contact & { ownerName: string })[]>;
   cleanupExpiredSoftDeletes(): Promise<number>;
   cleanupExpiredLocationData(): Promise<{ pointsDeleted: number; sharesDeleted: number; usersProcessed: number }>;
+  setSmsOptOutByPhone(phone: string, optedOut: boolean): Promise<{ usersUpdated: number; contactsUpdated: number }>;
+  isPhoneSmsOptedOut(phone: string): Promise<boolean>;
   getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
@@ -389,7 +391,9 @@ export class DatabaseStorage implements IStorage {
           lte(users.lastHeartbeatAt, cutoff)
         )
       );
-    return results.filter((r): r is { id: string; safetyState: string; lastHeartbeatAt: Date } => r.lastHeartbeatAt !== null);
+    return results
+      .filter((r) => r.lastHeartbeatAt !== null)
+      .map((r) => ({ id: r.id, safetyState: r.safetyState as string, lastHeartbeatAt: r.lastHeartbeatAt as Date }));
   }
 
   async getSettings(userId: string): Promise<Settings | undefined> {
@@ -664,6 +668,34 @@ export class DatabaseStorage implements IStorage {
       await this.deleteContact(row.id);
     }
     return expired.length;
+  }
+
+  async setSmsOptOutByPhone(phone: string, optedOut: boolean): Promise<{ usersUpdated: number; contactsUpdated: number }> {
+    // Set/clear SMS opt-out for any user OR contact row matching this phone.
+    // Same number could exist on both sides (a user who is also someone else's
+    // emergency contact), so we update both.
+    const optedOutAt = optedOut ? new Date() : null;
+    const updatedUsers = await db.update(users)
+      .set({ smsOptedOut: optedOut, smsOptedOutAt: optedOutAt })
+      .where(eq(users.phone, phone))
+      .returning({ id: users.id });
+    const updatedContacts = await db.update(contacts)
+      .set({ smsOptedOut: optedOut, smsOptedOutAt: optedOutAt })
+      .where(eq(contacts.phone, phone))
+      .returning({ id: contacts.id });
+    return { usersUpdated: updatedUsers.length, contactsUpdated: updatedContacts.length };
+  }
+
+  async isPhoneSmsOptedOut(phone: string): Promise<boolean> {
+    // True if the phone matches ANY opted-out row (user or contact).
+    const u = await db.select({ id: users.id }).from(users)
+      .where(and(eq(users.phone, phone), eq(users.smsOptedOut, true)))
+      .limit(1);
+    if (u.length > 0) return true;
+    const c = await db.select({ id: contacts.id }).from(contacts)
+      .where(and(eq(contacts.phone, phone), eq(contacts.smsOptedOut, true)))
+      .limit(1);
+    return c.length > 0;
   }
 
   async cleanupExpiredLocationData(): Promise<{ pointsDeleted: number; sharesDeleted: number; usersProcessed: number }> {

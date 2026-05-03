@@ -506,18 +506,18 @@ export async function registerRoutes(
   
   app.delete("/api/account", async (req, res) => {
     try {
-      const user = await getUserFromSession(req);
-      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      const sessionToken = getSessionToken(req);
+      if (!sessionToken) return res.status(401).json({ error: "Not authenticated" });
+      const session = await getUserFromSession(sessionToken);
+      if (!session) return res.status(401).json({ error: "Not authenticated" });
+      const user = session.user;
 
       await db.delete(users).where(eq(users.id, user.id));
 
-      const sessionToken = getSessionToken(req);
-      if (sessionToken) {
-        await deleteSession(sessionToken);
-      }
+      await deleteSession(sessionToken);
       clearSessionCookie(res);
 
-      console.log(`[AUTH] Account deleted for user ***${user.phone?.slice(-4)}`);
+      console.log(`[AUTH] Account deleted for user ***${user.phone?.slice(-4) ?? "????"}`);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting account:", error);
@@ -936,7 +936,7 @@ export async function registerRoutes(
       if (openIncident) {
         timeline.push({
           type: "incident",
-          time: openIncident.createdAt.toISOString(),
+          time: openIncident.startedAt.toISOString(),
           detail: openIncident.reason === "sos"
             ? "SOS alert triggered"
             : "Missed check-in alert triggered",
@@ -1400,7 +1400,7 @@ export async function registerRoutes(
       const hideLocation = (mode === "presence" || mode === "paused") && !isConcern;
       const obfuscateLocation = mode === "area" && !isConcern;
 
-      function obfuscateCoordPreview(value: number, seed: string): number {
+      const obfuscateCoordPreview = (value: number, seed: string): number => {
         let hash = 0;
         for (let i = 0; i < seed.length; i++) {
           hash = ((hash << 5) - hash) + seed.charCodeAt(i);
@@ -2511,7 +2511,7 @@ export async function registerRoutes(
       if (!currentUserId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const receiverId = req.params.userId;
+      const receiverId = String(req.params.userId);
       const { lat, lng, accuracy, durationMinutes } = req.body || {};
 
       // Sharing location with yourself is meaningless and would be confusing,
@@ -2525,7 +2525,7 @@ export async function registerRoutes(
       if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
         return res.status(400).json({ error: "lat/lng out of range" });
       }
-      const duration = Math.min(Math.max(parseInt(durationMinutes ?? 30, 10) || 30, 5), 240);
+      const duration = Math.min(Math.max(parseInt(String(durationMinutes ?? 30), 10) || 30, 5), 240);
 
       const myContacts = await storage.getContacts(currentUserId);
       const theirContacts = await storage.getContacts(receiverId);
@@ -2549,10 +2549,10 @@ export async function registerRoutes(
           currentUserId,
           lat,
           lng,
-          typeof accuracy === "number" ? accuracy : null,
-          null,
-          null,
-          null,
+          typeof accuracy === "number" ? accuracy : 0,
+          0,
+          0,
+          "stationary",
         );
       } catch (err: any) {
         console.error("[SHARE-LOC] live-location session creation failed:", err?.message || err);
@@ -2961,7 +2961,7 @@ export async function registerRoutes(
       if (!currentUserId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const receiverId = req.params.userId;
+      const receiverId = String(req.params.userId);
       const { type, content, meta } = req.body || {};
 
       if (type !== "system_safe" && type !== "system_info") {
@@ -3574,6 +3574,33 @@ export async function registerRoutes(
       }
       
       const normalized = normalizePhone(from);
+
+      // SMS opt-out / opt-in keywords. We check these FIRST, before any user
+      // lookup, because the sender may be a contact (not a registered user)
+      // who only ever receives alerts. Both users and contacts get tracked.
+      // Case- and punctuation-insensitive (Twilio sends raw text).
+      const cleaned = body.replace(/[^a-z]/g, "");
+      const STOP_WORDS = new Set(["stop", "stopall", "unsubscribe", "cancel", "end", "quit"]);
+      const START_WORDS = new Set(["start", "unstop"]);
+      const isStopWord = STOP_WORDS.has(cleaned);
+      const isStartWord = START_WORDS.has(cleaned);
+
+      if (isStopWord || isStartWord) {
+        try {
+          const result = await storage.setSmsOptOutByPhone(normalized, isStopWord);
+          console.log(`[SMS-OPTOUT] ${isStopWord ? "OPT_OUT" : "OPT_IN"} for ***${normalized.slice(-4)} (users=${result.usersUpdated} contacts=${result.contactsUpdated})`);
+        } catch (err: any) {
+          console.error(`[SMS-OPTOUT] failed to update opt-out state:`, err?.message || err);
+        }
+        // Twilio's carrier-level STOP also intercepts further sends, so we
+        // intentionally return an empty TwiML response: Twilio will append
+        // its own compliance reply for STOP. For START we send a brief ack.
+        if (isStartWord) {
+          return res.type("text/xml").send('<Response><Message>You are re-subscribed to StillHere safety messages. Reply STOP to opt out at any time.</Message></Response>');
+        }
+        return res.type("text/xml").send('<Response></Response>');
+      }
+
       const user = await storage.getUserByPhone(normalized);
       
       if (!user) {
@@ -3628,7 +3655,7 @@ export async function registerRoutes(
             notifiedContactIds: JSON.stringify(first ? [first.id] : []),
             lastContactNotifiedAt: new Date(),
             contact1NotifiedAt: new Date(),
-            nextActionAt: addMinutes(new Date(), userSettings.escalationMinutes || 20),
+            nextActionAt: addMinutes(new Date(), userSettings?.escalationMinutes || 20),
           });
         }
         return res.type("text/xml").send('<Response><Message>SOS alert sent. Your emergency contacts are being notified.</Message></Response>');
@@ -3991,7 +4018,7 @@ export async function registerRoutes(
               min: Math.max(1, Math.ceil(durationSec / 60)),
               km: Math.round((route.distanceMeters || 0) / 100) / 10,
               polyline: route.polyline?.encodedPolyline || null,
-            };
+            } as any;
           } else {
             results[key] = null;
           }
@@ -5299,11 +5326,11 @@ export async function registerRoutes(
     const watcherId = getUserId(req);
     if (!watcherId) return res.status(401).json({ error: "Not authenticated" });
     try {
-      const targetUserId = req.params.userId;
-      const contacts = await storage.getEmergencyContacts(targetUserId);
-      const watcher = await storage.getUserById(watcherId);
+      const targetUserId = String(req.params.userId);
+      const contacts = await storage.getContacts(targetUserId);
+      const watcher = await storage.getUser(watcherId);
       if (!watcher) return res.status(403).json({ error: "Forbidden" });
-      const isContact = contacts.some(c => c.phone === watcher.phone);
+      const isContact = contacts.some((c: any) => c.phone === watcher.phone);
       if (!isContact) return res.status(403).json({ error: "Not authorized to view this user's safe walk" });
 
       const walk = await storage.getActiveSafeWalk(targetUserId);
@@ -5969,13 +5996,13 @@ export async function registerRoutes(
             autoWellnessCallEnabled: autoWellnessCallFlag,
             twilioConfigured: twilioReady,
             hasPhone,
-            phoneLast4: hasPhone ? `***${user.phone.slice(-4)}` : null,
+            phoneLast4: hasPhone && user.phone ? `***${user.phone.slice(-4)}` : null,
             willAttemptCall: wellnessCallEnabled,
             incidentId: incident.id,
             timestamp: timeStr,
           }));
 
-          if (wellnessCallEnabled) {
+          if (wellnessCallEnabled && user.phone) {
             try {
               console.log(`[ESCALATION] Step 3/3: Calling ${user.name} (***${user.phone.slice(-4)})`);
               const twilio = (await import("twilio")).default;
@@ -6414,6 +6441,7 @@ export async function registerRoutes(
             const subs = await storage.getPushSubscriptions(w.userId);
             for (const sub of subs) {
               try {
+                const webpush = (await import("web-push")).default;
                 await webpush.sendNotification(
                   { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
                   JSON.stringify({
@@ -7177,9 +7205,9 @@ export async function registerRoutes(
       if (!overview.family) return res.status(404).json({ error: "No family" });
       // Only admin can delete shared places (kept simple, mirrors close-family rule)
       if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can delete places" });
-      await storage.deleteFamilyPlace(req.params.placeId, overview.family.id);
+      await storage.deleteFamilyPlace(String(req.params.placeId), overview.family.id);
       // Drop transient transition state so the in-memory map can't grow unbounded
-      purgePlaceFromGeofenceState(req.params.placeId);
+      purgePlaceFromGeofenceState(String(req.params.placeId));
       res.json({ ok: true });
     } catch (e) {
       console.error("[family] place delete failed", e);
@@ -7241,7 +7269,7 @@ export async function registerRoutes(
 
       const schedule = await storage.createFamilyPlaceSchedule({
         familyId: overview.family.id,
-        placeId,
+        placeId: String(placeId),
         memberId,
         daysOfWeek: cleanDays.join(","),
         expectedStartMinutes: startMin,

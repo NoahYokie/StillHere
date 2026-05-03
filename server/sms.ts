@@ -90,6 +90,25 @@ export async function sendSms(
   }
 
   const masked = `***${to.slice(-4)}`;
+
+  // In-app SMS opt-out check (in addition to Twilio's carrier-level STOP).
+  // Lazy-imported to avoid circular dependency with storage. If the recipient
+  // has previously replied STOP/CANCEL/etc, we short-circuit BEFORE hitting
+  // Twilio so we don't pay for, log, or attempt a delivery the carrier will
+  // reject. Caller should treat this as a soft-skip and fall back to push,
+  // voice call, and email.
+  try {
+    const { storage } = await import("./storage");
+    if (await storage.isPhoneSmsOptedOut(to)) {
+      console.log(`[SMS] Skipped (opted out): ${masked}`);
+      return { success: false, error: "Recipient opted out of SMS" };
+    }
+  } catch (err) {
+    // Defensive: never block a send because the opt-out lookup itself failed.
+    // If the DB is down we want emergency SMS to still go out.
+    console.warn(`[SMS] opt-out check failed for ${masked}, sending anyway`);
+  }
+
   console.log(`[SMS] Sending to ${masked}`);
 
   if (messagingServiceSid) {

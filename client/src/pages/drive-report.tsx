@@ -203,7 +203,7 @@ function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolea
                 ) : (
                   <div className="rounded-lg overflow-hidden border p-2">
                     <TripReplay
-                      points={trailPoints}
+                      points={trailPoints.map(p => ({ ...p, recordedAt: typeof p.recordedAt === "string" ? p.recordedAt : new Date(p.recordedAt as any).toISOString() })) as any}
                       className="w-full h-48"
                       startAddress={startGeo?.short || undefined}
                       endAddress={endGeo?.short || undefined}

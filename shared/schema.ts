@@ -55,6 +55,17 @@ export const users = pgTable("users", {
   // before the daily cron deletes it. Default 30 days. UI exposes 7/30/90.
   // Active live tracking sessions are NEVER deleted regardless of this value.
   locationDataRetentionDays: integer("location_data_retention_days").notNull().default(30),
+  // SMS opt-out (in-app tracking, in addition to Twilio carrier-level STOP).
+  // Set true when the user replies STOP/CANCEL/etc to our messaging service;
+  // cleared when they reply START/UNSTOP. Sends are short-circuited when true.
+  smsOptedOut: boolean("sms_opted_out").notNull().default(false),
+  smsOptedOutAt: timestamp("sms_opted_out_at"),
+  // Last known location snapshot (mirrored from live-location updates and
+  // SOS payloads). Used by emergency emails and watcher previews when no
+  // active live share exists.
+  lastLat: doublePrecision("last_lat"),
+  lastLng: doublePrecision("last_lng"),
+  lastLocationAt: timestamp("last_location_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -110,6 +121,11 @@ export const contacts = pgTable("contacts", {
   linkedUserId: uuid("linked_user_id").references(() => users.id),
   softDeletedAt: timestamp("soft_deleted_at"),
   softDeletedBy: text("soft_deleted_by"),
+  // SMS opt-out for this contact (replies STOP/CANCEL/etc to our service).
+  // sendSms() short-circuits sends to opted-out numbers; escalation continues
+  // via push, voice call, and email.
+  smsOptedOut: boolean("sms_opted_out").notNull().default(false),
+  smsOptedOutAt: timestamp("sms_opted_out_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("contacts_user_id_idx").on(table.userId),
