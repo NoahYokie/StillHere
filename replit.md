@@ -63,6 +63,7 @@ Key architectural features include:
 - **Pinpoint Location Precision:** All lat/lng columns use PostgreSQL `doublePrecision`.
 - **Guardian Map (Multi-Watched Live View):** Single-screen map showing all monitored users with color-coded markers, activity icons, and smart camera focusing.
 - **Family Mode (Map-First Safety Hub):** A map-centric family experience at `/family` with live member pins, shared places, group chat, and scheduled place expectations.
+- **Store Submission Readiness:** `shared/billing-products.ts` holds the canonical product/entitlement/offering identifiers (`stillhere_premium_monthly`, `stillhere_premium_yearly`, entitlement `premium`, offering `default`) used by Stripe seed script, RevenueCat client, and the iOS/Android stores. `ios/App/Podfile` includes `RevenuecatPurchasesCapacitor` so `pod install` after `npx cap sync ios` wires StoreKit in. `@capacitor/android` is installed so `npx cap add android` (run on a Mac with Node 22) scaffolds the Android project; the RC plugin auto-adds the `BILLING` permission on `cap sync`. End-to-end submission steps (Apple Developer, Play Console, RevenueCat dashboard, secrets) are documented in `STORE_SUBMISSION.md` at the repo root.
 - **Payments / Premium Subscription:** Offers "StillHere Premium" with monthly/yearly billing. Web payments use Stripe Checkout; mobile payments use RevenueCat (`@revenuecat/purchases-capacitor`) for App Store/Google Play. Both funnel into a unified entitlement system based on `users.premiumUntil` and `users.premiumSource`.
 
 ### External Dependencies

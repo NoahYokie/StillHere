@@ -3,11 +3,12 @@
 //
 // Run with:  npx tsx scripts/seedStripeProducts.ts
 import { getUncachableStripeClient } from "../server/stripeClient";
+import { PRICE_MONTHLY_CENTS, PRICE_YEARLY_CENTS } from "../shared/billing-products";
 
 const PRODUCT_NAME = "StillHere Premium";
 const PRODUCT_DESCRIPTION = "Full StillHere safety monitoring with unlimited contacts, live location, and 24/7 alerts.";
-const MONTHLY_AMOUNT = 799;   // $7.99
-const YEARLY_AMOUNT = 5999;   // $59.99
+const MONTHLY_AMOUNT = PRICE_MONTHLY_CENTS;
+const YEARLY_AMOUNT = PRICE_YEARLY_CENTS;
 
 async function main() {
   const stripe = await getUncachableStripeClient();
