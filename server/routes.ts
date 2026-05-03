@@ -4812,17 +4812,38 @@ export async function registerRoutes(
         }
       }
 
+      const selfUser = await storage.getUser(userId);
       const totalIncidents = weekIncidents.length;
-      const unresolvedIncidents = weekIncidents.filter((i) => i.status !== "resolved");
+      const unresolvedIncidents = weekIncidents.filter((i) => i.status !== "resolved" && !i.isDrill);
       const slowResolutions = weekIncidents.filter((i) => {
         if (!i.resolvedAt) return false;
         return i.resolvedAt.getTime() - i.startedAt.getTime() > 30 * 60 * 1000;
       });
+      const lastHbMs = selfUser?.lastHeartbeatAt ? new Date(selfUser.lastHeartbeatAt).getTime() : 0;
+      const heartbeatAgeMs = lastHbMs ? now.getTime() - lastHbMs : Infinity;
+      const heartbeatStale = heartbeatAgeMs > 4 * 60 * 60 * 1000;
+      const safetyConcernNow = selfUser?.safetyState === "concern";
+      const accountAgeMs = selfUser?.createdAt ? now.getTime() - new Date(selfUser.createdAt).getTime() : 0;
+      const expectedCheckins = accountAgeMs > 3 * 24 * 60 * 60 * 1000;
+      const zeroCheckinsWhenExpected = expectedCheckins && weekCheckins.length === 0;
+      const currentlyOff = unresolvedIncidents.length > 0 || safetyConcernNow || heartbeatStale || zeroCheckinsWhenExpected;
 
       let summaryTone: "good" | "mixed" | "concern";
       let summary: string;
 
-      if (totalIncidents === 0) {
+      if (currentlyOff) {
+        summaryTone = "concern";
+        if (unresolvedIncidents.length > 0) {
+          summary =
+            "There's an alert that hasn't been resolved yet this week. Your contacts have been kept informed. Tap I'm OK as soon as you can so they know you're safe.";
+        } else if (safetyConcernNow || heartbeatStale) {
+          summary =
+            "Your phone hasn't checked in for a while, so your safety status couldn't be confirmed right now. Open the app and tap I'm OK to let your Safety Circle know you're alright.";
+        } else {
+          summary =
+            "There were no check-ins logged this week. Your Safety Circle hasn't heard from you. Open the app and tap I'm OK so they know you're safe.";
+        }
+      } else if (totalIncidents === 0) {
         summaryTone = "good";
         summary =
           "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up  -  this is exactly what peace of mind looks like.";
@@ -4832,13 +4853,8 @@ export async function registerRoutes(
           "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay. The system worked exactly as it should  -  catching the small things so nothing gets missed.";
       } else {
         summaryTone = "concern";
-        if (unresolvedIncidents.length > 0) {
-          summary =
-            "There was a moment this week where we couldn't confirm safety right away. We want you to know that every alert was taken seriously, and your contacts were kept informed throughout. If anything felt off, consider reviewing your check-in schedule.";
-        } else {
-          summary =
-            "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases. Your safety network stepped in when it mattered most.";
-        }
+        summary =
+          "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases. Your safety network stepped in when it mattered most.";
       }
 
       const timeline = deduped.map(({ text, time }) => ({ text, time }));
@@ -4993,16 +5009,35 @@ export async function registerRoutes(
         }
       }
 
+      const user = await storage.getUser(watchedUserId);
+      const watchedName = user?.name || "They";
       const totalIncidents = weekIncidents.length;
-      const unresolvedIncidents = weekIncidents.filter((i) => i.status !== "resolved");
+      const unresolvedIncidents = weekIncidents.filter((i) => i.status !== "resolved" && !i.isDrill);
       const slowResolutions = weekIncidents.filter((i) => {
         if (!i.resolvedAt) return false;
         return i.resolvedAt.getTime() - i.startedAt.getTime() > 30 * 60 * 1000;
       });
+      const lastHbMs = user?.lastHeartbeatAt ? new Date(user.lastHeartbeatAt).getTime() : 0;
+      const heartbeatAgeMs = lastHbMs ? now.getTime() - lastHbMs : Infinity;
+      const heartbeatStale = heartbeatAgeMs > 4 * 60 * 60 * 1000;
+      const safetyConcernNow = user?.safetyState === "concern";
+      const accountAgeMs = user?.createdAt ? now.getTime() - new Date(user.createdAt).getTime() : 0;
+      const expectedCheckins = accountAgeMs > 3 * 24 * 60 * 60 * 1000;
+      const zeroCheckinsWhenExpected = expectedCheckins && weekCheckins.length === 0;
+      const currentlyOff = unresolvedIncidents.length > 0 || safetyConcernNow || heartbeatStale || zeroCheckinsWhenExpected;
 
       let summaryTone: "good" | "mixed" | "concern";
       let summary: string;
-      if (totalIncidents === 0) {
+      if (currentlyOff) {
+        summaryTone = "concern";
+        if (unresolvedIncidents.length > 0) {
+          summary = `${watchedName} has an alert that hasn't been resolved yet this week. You've been kept informed. If you haven't already, reach out to make sure they're safe.`;
+        } else if (safetyConcernNow || heartbeatStale) {
+          summary = `${watchedName}'s phone hasn't checked in for a while, so their safety status couldn't be confirmed right now. It might be worth a quick call or message to make sure they're okay.`;
+        } else {
+          summary = `${watchedName} hasn't logged any check-ins this week. It might be worth reaching out to see how they're doing.`;
+        }
+      } else if (totalIncidents === 0) {
         summaryTone = "good";
         summary = "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up.";
       } else if (totalIncidents <= 2 && unresolvedIncidents.length === 0 && slowResolutions.length === 0) {
@@ -5010,12 +5045,8 @@ export async function registerRoutes(
         summary = "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay.";
       } else {
         summaryTone = "concern";
-        summary = unresolvedIncidents.length > 0
-          ? "There was a moment this week where safety couldn't be confirmed right away. Every alert was taken seriously and contacts were kept informed."
-          : "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases.";
+        summary = "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases.";
       }
-
-      const user = await storage.getUser(watchedUserId);
       res.json({
         summaryTone,
         summary,
