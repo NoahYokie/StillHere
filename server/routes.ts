@@ -1769,7 +1769,7 @@ export async function registerRoutes(
         const savedContacts = await storage.saveContactsList(userId, contactsList.map((c, i) => ({
           name: c.name.trim(),
           phone: normalizePhone(c.phone),
-          email: c.email?.trim() || null,
+          email: isValidEmail(c.email) ? c.email!.trim() : null,
           priority: c.priority || (i + 1),
         })));
 

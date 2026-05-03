@@ -300,9 +300,9 @@ export async function sendEmergencyEmail(
   const safeName = esc(userName);
   const level: AlertLevel = issos ? "emergency" : "warning";
   const subject = safeSubject(issos
-    ? `Urgent: ${userName} needs help — StillHere`
-    : `Safety alert: ${userName} missed a check-in — StillHere`);
-  const title = issos ? "Emergency SOS activated" : "Missed safety check-in";
+    ? `Urgent: ${userName} needs help (StillHere)`
+    : `Safety alert: ${userName} missed a check in (StillHere)`);
+  const title = issos ? "Emergency SOS activated" : "Missed safety check in";
   const eventLine = issos
     ? `<strong>${safeName}</strong> just activated an emergency SOS. We've already tried reaching them by app push, SMS, and phone call.`
     : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check-in. We've already tried reaching them by app push, SMS, and phone call.`;
