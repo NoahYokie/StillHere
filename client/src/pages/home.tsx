@@ -533,11 +533,20 @@ export default function Home() {
       // and let the server snapshot it. Fresh location is fetched async AFTER send,
       // and only if permission is already granted (no popup, ever).
       const sosBody = buildSosBody();
-      return apiRequest("POST", "/api/sos", sosBody);
+      const res = await apiRequest("POST", "/api/sos", sosBody);
+      const data = await res.json().catch(() => ({}));
+      return data;
     },
-    onSuccess: (_data, _vars, _ctx) => {
+    onSuccess: (data: any) => {
       triggerHaptic([100, 50, 100, 50, 200]);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      if (data?.alreadyActive) {
+        toast({
+          title: "Help request already active",
+          description: "Your Safety Circle is being contacted right now. No duplicate alerts were sent.",
+        });
+        return;
+      }
       const cached = getCachedPosition();
       toast({
         title: "Alert sent",

@@ -50,6 +50,12 @@ import { emitToUser, isUserOnline } from "./socket";
 import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
 
 // Helper to get userId from session
+// Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
+// before any await yields, so concurrent SOS taps from the same user can never
+// race past the dedup check. Values are wall-clock ms timestamps.
+const sosInFlightByUser = new Map<string, number>();
+const SOS_INFLIGHT_TTL_MS = 60_000;
+
 const getUserId = (req: Request): string | null => {
   return (req as any).userId || null;
 };
@@ -1028,12 +1034,56 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      
-      // Prevent duplicate incidents AND duplicate escalation. If an incident is
-      // already open we never re-fire SMS/calls/emails. Within 60s of the original
-      // press we treat it as a no-op (the user is just tapping again because the
-      // UI doesn't feel "loud" enough). After 60s we append a timeline entry so
-      // there's a forensic record, but still no resend.
+
+      // STEP 1 - synchronous in-flight lock. This runs to completion before any
+      // await yields, so two concurrent SOS taps from the same user cannot both
+      // pass this gate. Without this, a TOCTOU race on getOpenIncident lets 3
+      // rapid presses each create their own incident and each fire emails/SMS.
+      const nowMs = Date.now();
+      const inFlightAt = sosInFlightByUser.get(userId);
+      if (inFlightAt && nowMs - inFlightAt < SOS_INFLIGHT_TTL_MS) {
+        // A SOS from this user is already in flight or was just processed.
+        // Look up the existing incident (best-effort) and return without
+        // touching any notification channel. No new incident, no emails,
+        // no SMS, no calls.
+        const existing = await storage.getOpenIncident(userId).catch(() => undefined);
+        if (existing) {
+          // Append a timeline entry so the repeat press is on record.
+          try {
+            const timeline: any[] = (() => {
+              try { return JSON.parse(existing.escalationTimeline || "[]"); } catch { return []; }
+            })();
+            timeline.push({
+              type: "sos_repeat_press",
+              time: new Date().toISOString(),
+              detail: "SOS button pressed again",
+            });
+            await storage.updateIncident(existing.id, {
+              escalationTimeline: JSON.stringify(timeline),
+            });
+          } catch (e) {
+            console.error("[SOS] Failed to log repeat press to timeline:", e);
+          }
+        }
+        console.log(`[SOS] Suppressed duplicate press for user=${userId} (in-flight lock, ${nowMs - inFlightAt}ms after first press)`);
+        return res.json({
+          success: true,
+          incident: existing || null,
+          alreadyActive: true,
+          deduped: true,
+          message: "Help request already active. We are still contacting your Safety Circle.",
+        });
+      }
+      // Claim the lock NOW, before any await. This is the critical line.
+      sosInFlightByUser.set(userId, nowMs);
+      // Auto-expire so a future legitimate SOS isn't blocked.
+      setTimeout(() => {
+        const v = sosInFlightByUser.get(userId);
+        if (v === nowMs) sosInFlightByUser.delete(userId);
+      }, SOS_INFLIGHT_TTL_MS).unref?.();
+
+      // STEP 2 - DB-level dedup as a backstop (covers the case where the in-memory
+      // lock has expired but an incident from a prior press is still open).
       const existingIncident = await storage.getOpenIncident(userId);
       if (existingIncident) {
         const ageMs = Date.now() - new Date(existingIncident.startedAt).getTime();
