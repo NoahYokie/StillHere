@@ -9,6 +9,14 @@ import { ChevronLeft, Shield, Check, Sparkles } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlement } from "@/hooks/use-entitlement";
+import {
+  isNativePlatform,
+  fetchNativeOfferings,
+  purchaseNativePackage,
+  restoreNativePurchases,
+  type NativeOffering,
+} from "@/lib/revenuecat";
+import { useState } from "react";
 
 interface Price { id: string; unitAmount: number; currency: string; recurring: { interval: string } | null }
 interface Product { id: string; name: string; description: string | null; prices: Price[] }
@@ -31,9 +39,51 @@ export default function BillingPage() {
   const { toast } = useToast();
   const { isPremium, premiumUntil, source, hasStripeSubscription, isLoading: entLoading } = useEntitlement();
 
+  const onNative = isNativePlatform();
+
   const productsQuery = useQuery<{ products: Product[] }>({
     queryKey: ["/api/stripe/products"],
+    enabled: !onNative,
   });
+
+  const nativeOfferingsQuery = useQuery<NativeOffering | null>({
+    queryKey: ["revenuecat-offerings"],
+    queryFn: () => fetchNativeOfferings(),
+    enabled: onNative,
+    staleTime: 60_000,
+  });
+  const [nativeBusy, setNativeBusy] = useState(false);
+
+  async function buyNative(packageId: string) {
+    setNativeBusy(true);
+    try {
+      const ok = await purchaseNativePackage(packageId);
+      if (ok) {
+        toast({ title: "Subscription active", description: "Welcome to StillHere Premium." });
+        queryClient.invalidateQueries({ queryKey: ["/api/billing/me"] });
+      }
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (!msg.toLowerCase().includes("cancel")) {
+        toast({ title: "Purchase failed", description: msg || "Please try again.", variant: "destructive" });
+      }
+    } finally {
+      setNativeBusy(false);
+    }
+  }
+
+  async function restoreNative() {
+    setNativeBusy(true);
+    try {
+      const ok = await restoreNativePurchases();
+      toast({ title: ok ? "Purchases restored" : "Nothing to restore", description: ok ? "Premium is active again." : "We didn't find any active subscriptions." });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/me"] });
+    } catch (err: any) {
+      toast({ title: "Restore failed", description: String(err?.message || ""), variant: "destructive" });
+    } finally {
+      setNativeBusy(false);
+    }
+  }
 
   // After returning from Stripe Checkout we may land here with ?status=success.
   // Refresh entitlement so the UI flips to "active" without a hard reload.
@@ -140,7 +190,42 @@ export default function BillingPage() {
           </CardContent>
         </Card>
 
-        {productsQuery.isLoading ? (
+        {onNative ? (
+          nativeOfferingsQuery.isLoading ? (
+            <div className="space-y-2"><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
+          ) : !nativeOfferingsQuery.data ? (
+            <Card><CardContent className="p-4 text-sm text-muted-foreground">
+              In-app purchases aren't ready yet. Make sure your products are configured in RevenueCat and try again.
+            </CardContent></Card>
+          ) : (
+            <div className="grid gap-3">
+              {nativeOfferingsQuery.data.monthly && (
+                <PlanCard
+                  title="Monthly"
+                  priceLabel={`${nativeOfferingsQuery.data.monthly.priceString} / month`}
+                  helper="Billed every month, cancel anytime."
+                  disabled={isPremium || nativeBusy}
+                  onSelect={() => buyNative(nativeOfferingsQuery.data!.monthly!.identifier)}
+                  testId="button-buy-monthly"
+                />
+              )}
+              {nativeOfferingsQuery.data.yearly && (
+                <PlanCard
+                  title="Yearly"
+                  priceLabel={`${nativeOfferingsQuery.data.yearly.priceString} / year`}
+                  helper="Best value."
+                  badge="Best value"
+                  disabled={isPremium || nativeBusy}
+                  onSelect={() => buyNative(nativeOfferingsQuery.data!.yearly!.identifier)}
+                  testId="button-buy-yearly"
+                />
+              )}
+              <Button variant="ghost" size="sm" onClick={restoreNative} disabled={nativeBusy} data-testid="button-restore-purchases">
+                Restore purchases
+              </Button>
+            </div>
+          )
+        ) : productsQuery.isLoading ? (
           <div className="space-y-2"><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
         ) : !product ? (
           <Card><CardContent className="p-4 text-sm text-muted-foreground">

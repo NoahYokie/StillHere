@@ -98,7 +98,11 @@ const apiLimiter = rateLimit({
   message: { error: "Too many requests, please try again later" },
   skip: (req) => {
     const fullPath = req.originalUrl || req.path;
-    return fullPath === "/api/health" || fullPath === "/api/stripe/webhook";
+    return (
+      fullPath === "/api/health" ||
+      fullPath === "/api/stripe/webhook" ||
+      fullPath === "/api/revenuecat/webhook"
+    );
   },
 });
 
@@ -123,6 +127,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   if (req.path === "/api/cron/tick") return next();
   if (req.path === "/api/auth/logout") return next();
   if (req.path === "/api/sms/incoming") return next();
+  if (req.path === "/api/revenuecat/webhook") return next();
   if (req.path.startsWith("/api/wellness-call/")) return next();
   if (req.path.startsWith("/api/checkin/quick") || req.path.startsWith("/api/status/simple")) return next();
 

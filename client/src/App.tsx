@@ -297,6 +297,15 @@ function CapacitorInit() {
   }, [auth?.authenticated]);
 
   useEffect(() => {
+    const userId = auth?.user?.id;
+    if (userId && isNative()) {
+      import("@/lib/revenuecat")
+        .then(({ configureRevenueCat }) => configureRevenueCat(userId))
+        .catch((err) => console.error("[App] RevenueCat init failed:", err));
+    }
+  }, [auth?.user?.id]);
+
+  useEffect(() => {
     if (auth?.authenticated) {
       resumeLiveTrackingIfNeeded().catch(() => {});
     }

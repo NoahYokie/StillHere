@@ -3,7 +3,7 @@
 import type { Express, Request } from "express";
 import { db } from "./db";
 import { users } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { isPremium } from "./billing";
 
@@ -22,47 +22,38 @@ export function registerStripeRoutes(app: Express) {
     }
   });
 
-  // Active products + prices (synced from Stripe by stripe-replit-sync).
+  // Active products + prices fetched live from Stripe (cached in-memory for
+  // 60s). We only have one product so this is cheap; querying Stripe directly
+  // avoids depending on the products table being backfilled.
+  let productsCache: { at: number; data: any } | null = null;
   app.get("/api/stripe/products", async (_req, res) => {
     try {
-      const result = await db.execute(sql`
-        SELECT
-          p.id            AS product_id,
-          p.name          AS product_name,
-          p.description   AS product_description,
-          p.metadata      AS product_metadata,
-          pr.id           AS price_id,
-          pr.unit_amount  AS unit_amount,
-          pr.currency     AS currency,
-          pr.recurring    AS recurring
-        FROM stripe.products p
-        LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
-        WHERE p.active = true
-        ORDER BY p.id, pr.unit_amount
-      `);
-      const map = new Map<string, any>();
-      for (const row of result.rows as any[]) {
-        if (!map.has(row.product_id)) {
-          map.set(row.product_id, {
-            id: row.product_id,
-            name: row.product_name,
-            description: row.product_description,
-            metadata: row.product_metadata || {},
-            prices: [],
-          });
-        }
-        if (row.price_id) {
-          map.get(row.product_id).prices.push({
-            id: row.price_id,
-            unitAmount: Number(row.unit_amount),
-            currency: row.currency,
-            recurring: row.recurring,
-          });
-        }
+      if (productsCache && Date.now() - productsCache.at < 60_000) {
+        return res.json(productsCache.data);
       }
-      res.json({ products: Array.from(map.values()) });
+      const stripe = await getUncachableStripeClient();
+      const productList = await stripe.products.list({ active: true, limit: 20 });
+      const out: any[] = [];
+      for (const p of productList.data) {
+        const prices = await stripe.prices.list({ product: p.id, active: true, limit: 10 });
+        out.push({
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          metadata: p.metadata || {},
+          prices: prices.data.map((pr) => ({
+            id: pr.id,
+            unitAmount: pr.unit_amount,
+            currency: pr.currency,
+            recurring: pr.recurring ? { interval: pr.recurring.interval } : null,
+          })),
+        });
+      }
+      const payload = { products: out };
+      productsCache = { at: Date.now(), data: payload };
+      res.json(payload);
     } catch (err: any) {
-      console.error("[stripe] list products failed", err);
+      console.error("[stripe] list products failed", err?.message || err);
       res.status(500).json({ error: "Failed to list products" });
     }
   });

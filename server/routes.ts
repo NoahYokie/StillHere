@@ -323,6 +323,9 @@ export async function registerRoutes(
   // The webhook is registered earlier in server/index.ts with raw body parsing.
   const { registerStripeRoutes } = await import("./stripeRoutes");
   registerStripeRoutes(app);
+  // RevenueCat routes for iOS/Android in-app purchases.
+  const { registerRevenueCatRoutes } = await import("./revenuecatRoutes");
+  registerRevenueCatRoutes(app);
   
   // ============================================
   // AUTH ROUTES (public)
