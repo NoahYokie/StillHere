@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { ArrowLeft, Bug, Star, CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp, ThumbsUp } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -136,9 +137,7 @@ export default function FeedbackPage() {
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="flex items-center gap-3 p-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/")} data-testid="button-back-feedback">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton to="/" testId="button-back-feedback" />
           <h1 className="text-lg font-semibold">Feedback</h1>
         </div>
         <div className="flex border-b">

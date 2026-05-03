@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  ArrowLeft,
   MapPin,
   AlertTriangle,
   Footprints,
@@ -18,6 +17,7 @@ import {
   Map as MapIcon,
   ChevronUp,
 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import GoogleMap from "@/components/google-map";
 import type { WatchedUser } from "@shared/schema";
 import { getSocket } from "@/lib/socket";
@@ -252,15 +252,7 @@ export default function GuardianMapPage() {
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="icon"
-            className="pointer-events-auto shadow-lg"
-            onClick={() => setLocation("/watched")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+          <BackButton to="/watched" className="pointer-events-auto shadow-lg" />
           <Card className="pointer-events-auto flex-1 px-3 py-2 flex items-center gap-3 shadow-lg">
             <MapIcon className="w-4 h-4 text-primary" />
             <div className="flex-1 min-w-0">

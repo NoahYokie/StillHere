@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Car, Gauge, AlertTriangle, Clock, MapPin, Navigation, Zap, TrendingUp, Route, ChevronDown, ChevronUp, Play } from "lucide-react";
+import { Car, Gauge, AlertTriangle, Clock, MapPin, Navigation, Zap, TrendingUp, Route, ChevronDown, ChevronUp, Play } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import GoogleMap from "@/components/google-map";
 import TripReplay from "@/components/trip-replay";
 import type { TripPoint } from "@shared/schema";
@@ -254,9 +255,7 @@ export default function DriveReportPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-drive-report">
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(isWatcher ? "/watched" : "/drive")} data-testid="button-back">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <BackButton onClick={() => navigate(isWatcher ? "/watched" : "/drive")} />
         <div className="flex-1">
           <h1 className="text-lg font-semibold" data-testid="text-title">Driving Report</h1>
           {report && isWatcher && (

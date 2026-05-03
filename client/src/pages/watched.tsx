@@ -13,10 +13,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, MessageSquare, Phone, CheckCircle2, AlertTriangle, Clock,
+  MessageSquare, Phone, CheckCircle2, AlertTriangle, Clock,
   Shield, ShieldCheck, ShieldAlert, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2, Car,
   MapPin,
 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -227,14 +228,7 @@ export default function WatchedPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center gap-3 mb-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+          <BackButton to="/" />
           <div className="flex-1">
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Watcher Dashboard</h1>
             <p className="text-sm text-muted-foreground">

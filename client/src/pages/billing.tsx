@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, Shield, Check, Sparkles } from "lucide-react";
+import { Shield, Check, Sparkles } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useEntitlement } from "@/hooks/use-entitlement";
@@ -124,9 +125,7 @@ export default function BillingPage() {
     <div className="min-h-screen bg-background pb-12">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
-            <ChevronLeft className="w-5 h-5" />
-          </Button>
+          <BackButton to="/" />
           <h1 className="text-base font-semibold">Subscription</h1>
         </div>
       </header>

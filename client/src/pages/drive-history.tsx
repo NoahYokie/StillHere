@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Car, AlertTriangle, Gauge, MapPin, Clock } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { formatDistanceToNow, format } from "date-fns";
 import type { DriveSession, SpeedAlert } from "@shared/schema";
 
@@ -30,9 +31,7 @@ export default function DriveHistoryPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/drive")} data-testid="button-back-drive">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <BackButton to="/drive" testId="button-back-drive" />
         <h1 className="text-lg font-semibold" data-testid="text-drive-history-title">Drive History</h1>
       </div>
 

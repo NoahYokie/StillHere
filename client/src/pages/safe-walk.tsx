@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Navigation, MapPin, ChevronLeft, Home, Briefcase, Search, CheckCircle2, Clock, Footprints, Bike, Bus, Car } from "lucide-react";
+import { Navigation, MapPin, Home, Briefcase, Search, CheckCircle2, Clock, Footprints, Bike, Bus, Car } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
@@ -334,9 +335,7 @@ export default function SafeWalkPage() {
     return (
       <div className="min-h-screen bg-background pb-8">
         <header className={`${isOverdue ? "bg-destructive" : "bg-primary"} text-primary-foreground px-6 py-4 flex items-center gap-3`}>
-          <Button variant="ghost" size="icon" className="text-primary-foreground" onClick={() => navigate("/")} data-testid="button-back">
-            <ChevronLeft className="h-6 w-6" />
-          </Button>
+          <BackButton onClick={() => navigate("/")} tone="onPrimary" />
           <div>
             <h1 className="text-xl font-semibold" data-testid="text-title">
               {isOverdue ? "Running Late" : "Safe Walk Active"}
@@ -419,9 +418,7 @@ export default function SafeWalkPage() {
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="bg-primary text-primary-foreground px-6 py-4 flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="text-primary-foreground" onClick={() => navigate("/")} data-testid="button-back">
-          <ChevronLeft className="h-6 w-6" />
-        </Button>
+        <BackButton onClick={() => navigate("/")} tone="onPrimary" />
         <div>
           <h1 className="text-xl font-semibold" data-testid="text-title">Safe Walk</h1>
           <p className="text-sm opacity-90">We'll watch until you arrive safely</p>

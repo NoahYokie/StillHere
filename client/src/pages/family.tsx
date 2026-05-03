@@ -20,12 +20,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, Heart, MapPin, MessageCircle, UserPlus, Loader2, Send,
+  Heart, MapPin, MessageCircle, UserPlus, Loader2, Send,
   ShieldCheck, Activity, AlertTriangle, Eye, LogOut, Trash2, Users,
   Sparkles, Battery, Car, Settings as SettingsIcon, Crown,
   Home as HomeIcon, GraduationCap, Briefcase, Dumbbell, Trees, Plus, Navigation,
   Phone, Clock, CheckCircle2, X,
 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -555,9 +556,7 @@ export default function FamilyPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-10 bg-card/80 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+          <BackButton to="/" />
           <h1 className="text-lg font-bold">Family</h1>
         </header>
         <div className="px-4 py-8 max-w-md mx-auto">
@@ -614,9 +613,7 @@ export default function FamilyPage() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-card/90 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <BackButton to="/" />
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold truncate" data-testid="text-family-name">{family.name}</h1>
           <p className="text-xs text-muted-foreground">

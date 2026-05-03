@@ -1,7 +1,8 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Shield, MapPin, Heart, Lock, Eye, Users, Mail, Server, Smartphone } from "lucide-react";
+import { Shield, MapPin, Heart, Lock, Eye, Users, Mail, Server, Smartphone } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 
 export default function TrustPage() {
   const [, setLocation] = useLocation();
@@ -11,9 +12,7 @@ export default function TrustPage() {
       <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-50">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => window.history.back()} className="p-1 -ml-1 hover:bg-white/10 rounded-lg" data-testid="button-back">
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+            <BackButton tone="onPrimary" />
             <div>
               <h1 className="text-xl font-semibold" data-testid="text-page-title">Trust & Safety</h1>
               <p className="text-sm opacity-90">How StillHere protects you</p>

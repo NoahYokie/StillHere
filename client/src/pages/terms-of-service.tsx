@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 
 export default function TermsOfServicePage() {
   const [, setLocation] = useLocation();
@@ -8,9 +9,7 @@ export default function TermsOfServicePage() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-terms-of-service">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => window.history.back()} data-testid="button-back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+        <BackButton />
         <h1 className="text-lg font-semibold">Terms of Service</h1>
       </header>
 

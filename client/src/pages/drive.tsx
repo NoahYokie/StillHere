@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Car, Gauge, MapPin, Clock, AlertTriangle, History, Play, Square, Shield, Navigation, Zap, BarChart3 } from "lucide-react";
+import { Car, Gauge, MapPin, Clock, AlertTriangle, History, Play, Square, Shield, Navigation, Zap, BarChart3 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import { drivingMonitor } from "@/lib/driving-monitor";
 import CrashCountdown from "@/components/crash-countdown";
@@ -195,9 +196,7 @@ export default function DrivePage() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-drive">
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/")} data-testid="button-back-drive">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <BackButton to="/" testId="button-back-drive" />
         <div className="flex-1">
           <h1 className="text-lg font-semibold" data-testid="text-drive-title">Driving Safety</h1>
         </div>

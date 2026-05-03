@@ -6,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ChevronLeft, Plus, MapPin, Home, Briefcase, Trash2, Pencil, Search, X } from "lucide-react";
+import { Plus, MapPin, Home, Briefcase, Trash2, Pencil, Search, X } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import {
   AlertDialog,
@@ -211,9 +212,7 @@ export default function SavedPlacesPage() {
     <div className="min-h-screen bg-background">
       <header className="bg-primary text-primary-foreground px-4 py-3">
         <div className="max-w-md mx-auto flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="text-primary-foreground" onClick={() => setLocation("/")} data-testid="button-back">
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
+          <BackButton to="/" tone="onPrimary" />
           <h1 className="text-lg font-semibold flex-1">Saved Places</h1>
           {!showAdd && (
             <Button

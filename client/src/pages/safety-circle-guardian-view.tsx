@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Eye, MapPin, BatteryFull, Clock, CheckCircle2, Lock, AlertTriangle } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import GoogleMap from "@/components/google-map";
 import { formatTimeForViewer } from "@/lib/timezone";
 import type { UserStatus } from "@shared/schema";
@@ -53,9 +54,7 @@ export default function SafetyCircleGuardianViewPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/safety-circle")} data-testid="button-back" aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton to="/safety-circle" />
           <h1 className="text-base font-semibold tracking-tight">Guardian's View</h1>
         </div>
       </header>

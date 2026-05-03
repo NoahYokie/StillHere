@@ -10,6 +10,7 @@ import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivi
 import { subscribe as subscribeLocation, subscribeLocating } from "@/lib/location-service";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
@@ -253,9 +254,7 @@ export default function LiveLocationPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="text-primary-foreground hover:bg-primary/80" data-testid="button-back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+        <BackButton onClick={() => navigate("/")} tone="onPrimary" />
         <div className="flex-1">
           <h1 className="text-lg font-semibold">Live Location</h1>
           <p className="text-xs opacity-80">

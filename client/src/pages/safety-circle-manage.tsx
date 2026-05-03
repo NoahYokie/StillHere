@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ChevronRight, Plus, Clock, Info } from "lucide-react";
+import { ChevronRight, Plus, Clock, Info } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { formatDistanceToNow } from "date-fns";
 
 type Readiness = "ready" | "idle" | "needs_attention" | "unknown";
@@ -71,9 +72,7 @@ export default function SafetyCircleManagePage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/safety-circle")} data-testid="button-back" aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton to="/safety-circle" />
           <h1 className="text-base font-semibold tracking-tight">Manage Guardians</h1>
           <Button
             variant="ghost"

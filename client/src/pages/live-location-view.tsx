@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { ArrowLeft, MapPin, Navigation, Footprints, Car, Bike, PersonStanding, Zap, RefreshCw, ExternalLink, Clock, Route, ArrowRight, Shield, Hospital, Flame, History, Play, Pause, X, Layers } from "lucide-react";
+import { MapPin, Navigation, Footprints, Car, Bike, PersonStanding, Zap, RefreshCw, ExternalLink, Clock, Route, ArrowRight, Shield, Hospital, Flame, History, Play, Pause, X, Layers } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { useLocation, useParams } from "wouter";
 import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes, subDays, startOfDay, endOfDay } from "date-fns";
 import { getSocket } from "@/lib/socket";
@@ -433,9 +434,7 @@ export default function LiveLocationViewPage() {
     return (
       <div className="min-h-screen bg-background">
         <div className="sticky top-0 z-10 bg-primary text-primary-foreground p-4 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/live-location")} className="text-primary-foreground hover:bg-primary/80">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton onClick={() => navigate("/live-location")} tone="onPrimary" />
           <h1 className="text-lg font-semibold">Live Location</h1>
         </div>
         <div className="p-4 text-center">
@@ -454,9 +453,7 @@ export default function LiveLocationViewPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/live-location")} className="text-primary-foreground hover:bg-primary/80" data-testid="button-back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+        <BackButton onClick={() => navigate("/live-location")} tone="onPrimary" />
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-semibold truncate">{userName}</h1>
           {liveTimestamp && (

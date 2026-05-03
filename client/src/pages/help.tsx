@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Heart, ChevronLeft, ChevronDown } from "lucide-react";
+import { Heart, ChevronDown } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { useState } from "react";
 
 const faqs = [
@@ -238,9 +239,7 @@ export default function HelpPage() {
       <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-50">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => window.history.back()} className="p-1 -ml-1 hover:bg-white/10 rounded-lg" data-testid="button-back">
-              <ChevronLeft className="h-5 w-5" />
-            </button>
+            <BackButton tone="onPrimary" />
             <div className="flex items-center gap-2">
               <Heart className="h-5 w-5" />
               <span className="font-semibold">Help & FAQ</span>

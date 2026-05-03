@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, Shield, ShieldCheck, ShieldAlert, AlertTriangle, Clock, MapPin, CheckCircle2 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 
 interface TimelineItem {
   text: string;
@@ -105,13 +106,7 @@ export default function WeeklyReportPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
-          <button
-            onClick={() => navigate("/")}
-            className="p-2 -ml-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            data-testid="button-back"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-          </button>
+          <BackButton to="/" />
           <div>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white" data-testid="text-page-title">
               Weekly Safety Report

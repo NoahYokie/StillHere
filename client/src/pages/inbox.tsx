@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, MessageCircle, Users, AlertTriangle, CheckCircle2, Info, MapPin } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { formatDistanceToNow } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { queryClient } from "@/lib/queryClient";
@@ -163,9 +164,7 @@ export default function InboxPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center gap-3 mb-5">
-          <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+          <BackButton to="/" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <MessageCircle className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />

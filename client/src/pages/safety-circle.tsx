@@ -3,9 +3,10 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, ChevronRight, Eye, ShieldCheck, Bell, MessageSquare, PhoneCall,
+  ChevronRight, Eye, ShieldCheck, Bell, MessageSquare, PhoneCall,
   Check, Clock, UserPlus,
 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { formatDistanceToNow } from "date-fns";
 
 type Readiness = "ready" | "idle" | "needs_attention" | "unknown";
@@ -78,15 +79,7 @@ export default function SafetyCirclePage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/")}
-            data-testid="button-back"
-            aria-label="Back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton to="/" />
           <h1 className="text-base font-semibold tracking-tight">Safety Circle</h1>
         </div>
       </header>

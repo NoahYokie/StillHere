@@ -4,7 +4,6 @@ import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowLeft,
   Send,
   Phone,
   CheckCheck,
@@ -21,6 +20,7 @@ import {
   StopCircle,
   Loader2,
 } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
@@ -855,14 +855,10 @@ export default function ChatPage() {
     <div className="min-h-screen bg-background flex flex-col" data-testid="chat-page">
       {/* Header with presence */}
       <div className="border-b border-border/60 px-4 py-3 flex items-center gap-3 bg-card">
-        <Button
-          variant="ghost"
-          size="icon"
+        <BackButton
           onClick={() => (window.history.length > 1 ? window.history.back() : setLocation("/"))}
-          data-testid="button-back-chat"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+          testId="button-back-chat"
+        />
         <div className="relative shrink-0">
           <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center">
             <UserIcon className="h-4 w-4 text-primary" />

@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ShieldCheck, Bell, MessageCircle, CheckCircle2, X, Check, Loader2, Lock, Hourglass } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -95,9 +96,7 @@ export default function SafetyCircleDrillPage() {
               <X className="h-5 w-5" />
             </Button>
           ) : (
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/safety-circle")} data-testid="button-back" aria-label="Back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+            <BackButton to="/safety-circle" />
           )}
           <h1 className="text-base font-semibold tracking-tight">
             {drillId ? "Drill Results" : "Run Safety Drill"}

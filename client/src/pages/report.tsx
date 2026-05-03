@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Printer, CheckCircle2, AlertTriangle, Heart, MapPin, Activity, Car, Gauge, Zap } from "lucide-react";
+import { Printer, CheckCircle2, AlertTriangle, Heart, MapPin, Activity, Car, Gauge, Zap } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import type { ReportData } from "@shared/schema";
 
 export default function ReportPage() {
@@ -34,9 +35,7 @@ export default function ReportPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6 print:hidden">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/watched")} data-testid="button-back">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
+            <BackButton to="/watched" />
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Safety Report</h1>
           </div>
           <Button variant="outline" size="sm" onClick={handlePrint} data-testid="button-print">

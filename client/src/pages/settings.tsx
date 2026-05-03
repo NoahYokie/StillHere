@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge, ChevronRight, ChevronUp, ChevronDown, User, CheckCircle2, PhoneOff } from "lucide-react";
+import { BackButton } from "@/components/back-button";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
 import { requestMotionPermission } from "@/lib/fall-detection";
@@ -445,15 +446,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-background pb-12">
       <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-primary-foreground"
-            onClick={() => setLocation("/")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <BackButton to="/" tone="onPrimary" />
           <h1 className="text-xl font-semibold" data-testid="text-settings-title">Settings</h1>
         </div>
       </header>
