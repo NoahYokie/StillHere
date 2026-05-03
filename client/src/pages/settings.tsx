@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted, isPermissionMarkedEnabled } from "@/lib/permissions";
+import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted, isPermissionMarkedEnabled, clearPermissionIntent } from "@/lib/permissions";
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -57,6 +57,16 @@ interface ContactEntry {
 function SafetyHealthCard() {
   const health = usePermissionHealth();
   const [fixing, setFixing] = useState(false);
+  const { toast } = useToast();
+
+  const disablePermission = (key: "location" | "notifications" | "motion", label: string) => {
+    clearPermissionIntent(key);
+    health.refresh();
+    toast({
+      title: `${label} turned off in StillHere`,
+      description: "We've stopped using it. To fully revoke at the OS level, open your phone Settings > StillHere.",
+    });
+  };
 
   if (health.loading) return null;
 
@@ -150,6 +160,17 @@ function SafetyHealthCard() {
                   data-testid={`button-fix-${item.key}`}
                 >
                   {item.partial ? "Update" : "Enable"}
+                </Button>
+              )}
+              {item.ok && !item.partial && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => disablePermission(item.key as any, item.label)}
+                  data-testid={`button-disable-${item.key}`}
+                >
+                  Disable
                 </Button>
               )}
             </div>
@@ -497,32 +518,58 @@ export default function SettingsPage() {
                 return (
                   <div key={index} className="rounded-lg border bg-card" data-testid={`contact-row-${index}`}>
                     {!isEditing && hasData ? (
-                      <div
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
-                        onClick={() => setEditingContactIndex(index)}
-                        data-testid={`button-edit-contact-${index}`}
-                      >
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-primary">{index + 1}</span>
+                      <div className="flex items-center gap-2 px-3 py-2.5" data-testid={`row-contact-${index}`}>
+                        <div className="flex flex-col items-center shrink-0">
+                          {index > 0 && (
+                            <button
+                              type="button"
+                              className="h-4 w-5 flex items-center justify-center text-muted-foreground hover:text-primary"
+                              onClick={(e) => { e.stopPropagation(); moveContactEntry(index, index - 1); }}
+                              aria-label="Move up"
+                              data-testid={`button-move-up-collapsed-${index}`}
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {index < contactEntries.length - 1 && (
+                            <button
+                              type="button"
+                              className="h-4 w-5 flex items-center justify-center text-muted-foreground hover:text-primary"
+                              onClick={(e) => { e.stopPropagation(); moveContactEntry(index, index + 1); }}
+                              aria-label="Move down"
+                              data-testid={`button-move-down-collapsed-${index}`}
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{contact.name || "Unnamed"}</p>
-                          <p className="text-xs text-muted-foreground truncate">{contact.phone}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 capitalize" data-testid={`badge-role-${index}`}>
-                            {index === 0 ? "Primary" : index === 1 ? "Backup" : "Support"}
-                          </span>
-                          {linkedUserId ? (
-                            <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5" data-testid={`badge-on-stillhere-${index}`}>
-                              On StillHere
+                        <div
+                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => setEditingContactIndex(index)}
+                          data-testid={`button-edit-contact-${index}`}
+                        >
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-primary">{index + 1}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{contact.name || "Unnamed"}</p>
+                            <p className="text-xs text-muted-foreground truncate">{contact.phone}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 capitalize" data-testid={`badge-role-${index}`}>
+                              {index === 0 ? "Primary" : index === 1 ? "Backup" : "Support"}
                             </span>
-                          ) : savedContact ? (
-                            <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-2 py-0.5" data-testid={`badge-sms-only-${index}`}>
-                              SMS only
-                            </span>
-                          ) : null}
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            {linkedUserId ? (
+                              <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5" data-testid={`badge-on-stillhere-${index}`}>
+                                On StillHere
+                              </span>
+                            ) : savedContact ? (
+                              <span className="text-[10px] bg-muted text-muted-foreground rounded-full px-2 py-0.5" data-testid={`badge-sms-only-${index}`}>
+                                SMS only
+                              </span>
+                            ) : null}
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </div>
                         </div>
                       </div>
                     ) : (
