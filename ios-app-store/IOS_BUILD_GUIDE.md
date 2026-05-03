@@ -45,26 +45,20 @@ cp ios-app-store/AppIcon-Contents.json ios/App/App/Assets.xcassets/AppIcon.appic
 
 Open `ios/App/App/Info.plist` in Xcode and add these required privacy descriptions:
 
+**Source of truth:** these strings are defined in `capacitor.config.json` under `ios.infoPlist` and merged into `ios/App/App/Info.plist` automatically by `npx cap sync ios`. Do not edit `Info.plist` by hand — edit `capacitor.config.json` instead.
+
 | Key | Value |
 |-----|-------|
-| NSCameraUsageDescription | StillHere uses your camera for video calls with your emergency contacts. |
-| NSMicrophoneUsageDescription | StillHere uses your microphone for video calls with your emergency contacts. |
-| NSLocationWhenInUseUsageDescription | StillHere can share your location with emergency contacts when you need help. |
-| NSMotionUsageDescription | StillHere uses motion sensors to detect falls and automatically alert your emergency contacts. |
-| NSUserNotificationsUsageDescription | StillHere sends notifications to remind you to check in and alert you about emergencies. |
+| NSLocationWhenInUseUsageDescription | StillHere uses your location during check-ins, safety features, and maps so you and your trusted contacts can see where help may be needed. |
+| NSLocationAlwaysAndWhenInUseUsageDescription | StillHere uses your location in the background to keep you safe. If you miss a check-in or need help, we can alert your trusted contacts with your location so they can reach you quickly. |
+| NSLocationAlwaysUsageDescription | Background location lets StillHere watch over you even when your phone is locked. This way, your trusted contacts are always just a tap away if something happens. |
+| NSMotionUsageDescription | StillHere uses motion sensors to detect possible falls or vehicle crashes and automatically alert your emergency contacts. |
+| NSMicrophoneUsageDescription | StillHere uses your microphone for voice calls with your trusted contacts so you can speak directly during a check-in or emergency. |
 
-Or add directly to Info.plist:
-
-```xml
-<key>NSCameraUsageDescription</key>
-<string>StillHere uses your camera for video calls with your emergency contacts.</string>
-<key>NSMicrophoneUsageDescription</key>
-<string>StillHere uses your microphone for video calls with your emergency contacts.</string>
-<key>NSLocationWhenInUseUsageDescription</key>
-<string>StillHere can share your location with emergency contacts when you need help.</string>
-<key>NSMotionUsageDescription</key>
-<string>StillHere uses motion sensors to detect falls and automatically alert your emergency contacts.</string>
-```
+Notes:
+- **Camera:** not requested. StillHere voice calls are audio-only (no video). Do not add `NSCameraUsageDescription` unless a video calling feature ships, otherwise Apple will flag the unused permission.
+- **Contacts:** not requested. Emergency contacts are entered manually inside the app; iOS Contacts are never imported. Do not add `NSContactsUsageDescription`.
+- **Notifications:** there is no `NSUserNotificationsUsageDescription` key. The system push prompt is not customizable. The in-app pre-permission education screen is what Apple recommends, and it is already implemented.
 
 ## Step 6: Configure Xcode Project
 
