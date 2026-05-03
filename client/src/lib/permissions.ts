@@ -135,6 +135,19 @@ export function usePermissionHealth() {
 
   const refresh = useCallback(async () => {
     const result = await getPermissionHealth();
+    // Auto-mark intent if the OS confirms the permission is granted now.
+    // This back-fills users who enabled permissions before this sticky
+    // logic existed, so they don't see a one-time "Not enabled" flicker.
+    if (result.location === "granted" || result.location === "always" || result.location === "when_in_use") {
+      markPermissionEnabled("location");
+    }
+    if (result.notifications === "granted") markPermissionEnabled("notifications");
+    if (result.motion === "granted") markPermissionEnabled("motion");
+    // If the OS now says denied, clear our sticky flag so the user sees
+    // the real "Blocked" state and knows to fix it in phone Settings.
+    if (result.location === "denied") clearPermissionIntent("location");
+    if (result.notifications === "denied") clearPermissionIntent("notifications");
+    if (result.motion === "denied") clearPermissionIntent("motion");
     setHealth({ ...result, loading: false });
   }, []);
 
@@ -156,6 +169,24 @@ export function usePermissionHealth() {
 const DISMISS_KEY = "permission_recovery_dismissed_at";
 const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Sticky "user intent" memory. Once a user successfully enables a permission
+// through our flow, we remember it locally so the UI does not flip back to
+// "Not enabled" if the OS returns `prompt` on the next visit (which happens
+// on iOS Safari, after page reloads, or in private browsing). The visual
+// only reverts when the OS explicitly reports `denied` (Blocked).
+type PermissionKey = "location" | "notifications" | "motion";
+const INTENT_KEY = (k: PermissionKey) => `stillhere_permission_intent_${k}`;
+
+export function markPermissionEnabled(key: PermissionKey): void {
+  try { localStorage.setItem(INTENT_KEY(key), String(Date.now())); } catch {}
+}
+export function clearPermissionIntent(key: PermissionKey): void {
+  try { localStorage.removeItem(INTENT_KEY(key)); } catch {}
+}
+export function isPermissionMarkedEnabled(key: PermissionKey): boolean {
+  try { return !!localStorage.getItem(INTENT_KEY(key)); } catch { return false; }
+}
+
 export function isDismissed(): boolean {
   const val = localStorage.getItem(DISMISS_KEY);
   if (!val) return false;
@@ -176,7 +207,9 @@ export async function requestLocationPermission(): Promise<boolean> {
       const BackgroundGeolocation = BG.default || BG.BackgroundGeolocation;
       if (BackgroundGeolocation?.requestPermission) {
         const status = await BackgroundGeolocation.requestPermission();
-        return status === 3;
+        const ok = status === 3;
+        if (ok) markPermissionEnabled("location");
+        return ok;
       }
     } catch {}
 
@@ -186,7 +219,9 @@ export async function requestLocationPermission(): Promise<boolean> {
       const Geolocation = Geo.Geolocation;
       if (Geolocation?.requestPermissions) {
         const result = await Geolocation.requestPermissions();
-        return result.location === "granted";
+        const ok = result.location === "granted";
+        if (ok) markPermissionEnabled("location");
+        return ok;
       }
     } catch {}
   }
@@ -198,6 +233,7 @@ export async function requestLocationPermission(): Promise<boolean> {
         timeout: 10000,
       });
     });
+    if (pos) markPermissionEnabled("location");
     return !!pos;
   } catch {
     return false;
@@ -212,22 +248,31 @@ export async function requestNotificationPermission(): Promise<boolean> {
       const PushNotifications = Push.PushNotifications;
       if (PushNotifications?.requestPermissions) {
         const result = await PushNotifications.requestPermissions();
-        return result.receive === "granted";
+        const ok = result.receive === "granted";
+        if (ok) markPermissionEnabled("notifications");
+        return ok;
       }
     } catch {}
   }
 
   if (!("Notification" in window)) return false;
   const result = await Notification.requestPermission();
-  return result === "granted";
+  const ok = result === "granted";
+  if (ok) markPermissionEnabled("notifications");
+  return ok;
 }
 
 export async function requestMotionPermissionWrapper(): Promise<boolean> {
   const DME = DeviceMotionEvent as any;
-  if (typeof DME.requestPermission !== "function") return true;
+  if (typeof DME.requestPermission !== "function") {
+    markPermissionEnabled("motion");
+    return true;
+  }
   try {
     const result = await DME.requestPermission();
-    return result === "granted";
+    const ok = result === "granted";
+    if (ok) markPermissionEnabled("motion");
+    return ok;
   } catch {
     return false;
   }

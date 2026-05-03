@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted } from "@/lib/permissions";
+import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted, isPermissionMarkedEnabled } from "@/lib/permissions";
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -60,40 +60,47 @@ function SafetyHealthCard() {
 
   if (health.loading) return null;
 
-  const locationOk = isLocationFullyGranted(health.location);
+  // Sticky display: if the user has previously enabled a permission through
+  // our flow, keep showing it as Enabled even if the OS reports `prompt` on
+  // this visit (common on iOS Safari and after page reloads). The display
+  // only reverts when the OS explicitly reports `denied` (Blocked).
+  const locationOsOk = isLocationFullyGranted(health.location);
   const locationPartial = health.location === "when_in_use";
-  const notifOk = health.notifications === "granted";
-  const motionOk = health.motion === "granted";
+  const locationStickyOk = (locationOsOk || isPermissionMarkedEnabled("location")) && health.location !== "denied";
+  const notifOsOk = health.notifications === "granted";
+  const notifStickyOk = (notifOsOk || isPermissionMarkedEnabled("notifications")) && health.notifications !== "denied";
+  const motionOsOk = health.motion === "granted";
+  const motionStickyOk = (motionOsOk || isPermissionMarkedEnabled("motion")) && health.motion !== "denied";
 
   const items = [
     {
       key: "location",
       label: "Location",
-      ok: locationOk && !locationPartial,
+      ok: locationStickyOk && !locationPartial,
       partial: locationPartial,
       denied: health.location === "denied",
-      unknown: health.location === "unknown",
-      description: getLocationLabel(health.location),
+      unknown: health.location === "unknown" && !isPermissionMarkedEnabled("location"),
+      description: locationStickyOk && !locationPartial ? "Enabled" : getLocationLabel(health.location),
       fix: async () => { setFixing(true); await requestLocationPermission(); health.refresh(); setFixing(false); },
     },
     {
       key: "notifications",
       label: "Notifications",
-      ok: notifOk,
+      ok: notifStickyOk,
       partial: false,
       denied: health.notifications === "denied",
-      unknown: health.notifications === "unknown",
-      description: notifOk ? "Enabled" : health.notifications === "denied" ? "Blocked  -  update in phone Settings" : "Not enabled",
+      unknown: health.notifications === "unknown" && !isPermissionMarkedEnabled("notifications"),
+      description: notifStickyOk ? "Enabled" : health.notifications === "denied" ? "Blocked  -  update in phone Settings" : "Not enabled",
       fix: async () => { setFixing(true); await requestNotificationPermission(); health.refresh(); setFixing(false); },
     },
     {
       key: "motion",
       label: "Motion detection",
-      ok: motionOk,
+      ok: motionStickyOk,
       partial: false,
       denied: health.motion === "denied",
-      unknown: health.motion === "unknown",
-      description: motionOk ? "Enabled" : health.motion === "unknown" ? "Not available" : "Not enabled",
+      unknown: health.motion === "unknown" && !isPermissionMarkedEnabled("motion"),
+      description: motionStickyOk ? "Enabled" : health.motion === "unknown" ? "Not available" : "Not enabled",
       fix: async () => { setFixing(true); await requestMotionPermissionWrapper(); health.refresh(); setFixing(false); },
     },
   ];
@@ -149,7 +156,7 @@ function SafetyHealthCard() {
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground mt-2">
-          Permission status refreshes when you return to the app.
+          Once enabled, your permissions stay on until you change them in your phone Settings.
         </p>
       </CardContent>
     </Card>
