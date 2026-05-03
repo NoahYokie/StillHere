@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { subscribe as subscribeLocation, getOneShotPosition } from "@/lib/location-service";
+import { subscribe as subscribeLocation, getOneShotPosition, getCurrentPosition as getCachedPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -41,6 +41,42 @@ async function getCheckinLocation(): Promise<{ lat?: number; lng?: number; timez
     if (pos) return { lat: pos.lat, lng: pos.lng, timezone };
   } catch {}
   return { timezone };
+}
+
+// Build SOS request body from cached location only. This is a SYNC read of the
+// location service's last known position - it never triggers an OS permission
+// popup and never blocks. If no cache exists (permission never granted, app
+// just opened, etc.) the body is empty and the server uses the user's last
+// stored location instead.
+function buildSosBody(): { lat?: number; lng?: number; accuracy?: number } {
+  try {
+    const cached = getCachedPosition();
+    if (cached) {
+      return { lat: cached.lat, lng: cached.lng, accuracy: cached.accuracy };
+    }
+  } catch {}
+  return {};
+}
+
+// Best-effort post-SOS location refresh. Only fires if the OS has already
+// granted location permission - we check first via the Permissions API so
+// we never accidentally trigger a popup AFTER the user has already pressed SOS.
+async function refreshLocationIfPermitted(): Promise<void> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) return;
+    const status = await navigator.permissions.query({ name: "geolocation" as PermissionName }).catch(() => null);
+    if (!status || status.state !== "granted") return;
+    const pos = await getOneShotPosition();
+    if (pos) {
+      try {
+        await apiRequest("POST", "/api/location/update", {
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+        });
+      } catch {}
+    }
+  } catch {}
 }
 
 function EscalationBanner({ status }: { status: UserStatus }) {
@@ -380,12 +416,16 @@ export default function Home() {
 
   useEffect(() => {
     if (fallCountdown === 0 && fallCountdown !== null) {
-      apiRequest("POST", "/api/sos", {}).then(() => {
+      const sosBody = buildSosBody();
+      apiRequest("POST", "/api/sos", sosBody).then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
           title: "Fall detected - SOS sent",
-          description: "Your emergency contacts have been alerted.",
+          description: sosBody.lat != null
+            ? "Your emergency contacts have been alerted with your location."
+            : "Your emergency contacts have been alerted. Location unavailable, last known location used.",
         });
+        refreshLocationIfPermitted();
       }).catch(() => {});
       setFallCountdown(null);
     }
@@ -407,12 +447,16 @@ export default function Home() {
         if (longPressTimerRef.current) clearInterval(longPressTimerRef.current);
         longPressTimerRef.current = null;
         triggerHaptic([200, 100, 200, 100, 200]);
-        apiRequest("POST", "/api/sos", {}).then(() => {
+        const sosBody = buildSosBody();
+        apiRequest("POST", "/api/sos", sosBody).then(() => {
           queryClient.invalidateQueries({ queryKey: ["/api/status"] });
           toast({
             title: "Discreet SOS sent",
-            description: "Your emergency contacts have been alerted.",
+            description: sosBody.lat != null
+              ? "Your emergency contacts have been alerted with your location."
+              : "Your emergency contacts have been alerted. Location unavailable, last known location used.",
           });
+          refreshLocationIfPermitted();
         }).catch(() => {});
         setLongPressProgress(0);
       }
@@ -483,23 +527,27 @@ export default function Home() {
 
   const sosMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/sos", {});
+      // CRITICAL: SOS must fire instantly. Never await any geolocation call here -
+      // that would trigger an OS permission popup and block the alert. Instead we
+      // attach whatever the location service already has cached (sync, never blocks)
+      // and let the server snapshot it. Fresh location is fetched async AFTER send,
+      // and only if permission is already granted (no popup, ever).
+      const sosBody = buildSosBody();
+      return apiRequest("POST", "/api/sos", sosBody);
     },
-    onSuccess: () => {
+    onSuccess: (_data, _vars, _ctx) => {
       triggerHaptic([100, 50, 100, 50, 200]);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      const cached = getCachedPosition();
       toast({
         title: "Alert sent",
-        description: "Your emergency contacts were notified.",
+        description: cached
+          ? "Your emergency contacts were notified with your location."
+          : "Your emergency contacts were notified. Location unavailable, last known location used.",
       });
-      
+
       if (status?.settings?.locationMode !== "off") {
-        getOneShotPosition().then((pos) => {
-          if (pos) {
-            sendLocationToServer(pos);
-            setLocationEnabled(true);
-          }
-        });
+        refreshLocationIfPermitted();
       }
     },
     onError: () => {

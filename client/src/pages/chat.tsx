@@ -466,7 +466,20 @@ export default function ChatPage() {
 
   async function handleTriggerSos() {
     try {
-      const res = await apiRequest("POST", "/api/messages/sos", {});
+      // SOS must fire instantly. We attach cached location (sync, no popup) so the
+      // server has a snapshot, but we never await a fresh geolocation fetch here -
+      // that would trigger an OS permission prompt and block the alert.
+      let sosBody: any = {};
+      try {
+        const { getCurrentPosition: getCachedPos } = await import("@/lib/location-service");
+        const cached = getCachedPos();
+        if (cached) {
+          sosBody.lat = cached.lat;
+          sosBody.lng = cached.lng;
+          sosBody.accuracy = cached.accuracy;
+        }
+      } catch {}
+      const res = await apiRequest("POST", "/api/messages/sos", sosBody);
       const data = await res.json();
       toast({
         title: "SOS sent",
