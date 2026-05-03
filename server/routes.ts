@@ -269,7 +269,13 @@ async function notifyContact(
 
   if (contact.email) {
     try {
-      await sendEmergencyEmail(contact.email, userName, link, reason);
+      const subjectUser = await storage.getUser(contact.userId);
+      await sendEmergencyEmail(contact.email, userName, link, reason, {
+        lat: subjectUser?.lastLat ?? null,
+        lng: subjectUser?.lastLng ?? null,
+        locationAt: subjectUser?.lastLocationAt ?? null,
+        timezone: subjectUser?.timezone ?? null,
+      });
       console.log(`[NOTIFY] Also sent email to contact`);
     } catch (e) {
       console.error(`[NOTIFY] Email failed:`, e);
@@ -3105,7 +3111,13 @@ export async function registerRoutes(
               contact.email,
               user.name,
               link,
-              speedKmh
+              speedKmh,
+              {
+                lat: lat ?? user.lastLat ?? null,
+                lng: lng ?? user.lastLng ?? null,
+                locationAt: new Date(),
+                timezone: user.timezone ?? null,
+              }
             );
           }
 
@@ -3986,7 +3998,12 @@ export async function registerRoutes(
           for (const contact of allContacts) {
             if (contact.email) {
               try {
-                await sendGeofenceEmail(contact.email, user?.name || "User", zone.name);
+                await sendGeofenceEmail(contact.email, user?.name || "User", zone.name, {
+                  lat,
+                  lng,
+                  locationAt: new Date(),
+                  timezone: user?.timezone ?? null,
+                });
               } catch (err: any) {
                 console.error(`[GEOFENCE] Email to ${contact.name} about zone ${zone.name} failed:`, err?.message || err);
               }
