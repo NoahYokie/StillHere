@@ -261,8 +261,23 @@ export default function SettingsPage() {
       toast({ title: "Contacts saved" });
       setEditingContactIndex(null);
     },
-    onError: () => {
-      toast({ title: "Error saving contacts", variant: "destructive" });
+    onError: async (error: any) => {
+      let message = "Please try again.";
+      try {
+        if (error?.response && typeof error.response.json === "function") {
+          const body = await error.response.json();
+          if (body?.error) message = body.error;
+        } else if (typeof error?.message === "string") {
+          const m = error.message.match(/\{.*\}/);
+          if (m) {
+            const parsed = JSON.parse(m[0]);
+            if (parsed?.error) message = parsed.error;
+          } else if (error.message) {
+            message = error.message;
+          }
+        }
+      } catch {}
+      toast({ title: "Couldn't save contacts", description: message, variant: "destructive" });
     },
   });
 

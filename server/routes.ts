@@ -1741,6 +1741,15 @@ export async function registerRoutes(
         }
 
         const ownerUser = await storage.getUser(userId);
+        // Guard: a contact cannot be the user's own phone (would cause an infinite loopback on emergency dial)
+        const ownerPhoneNorm = ownerUser?.phone ? normalizePhone(ownerUser.phone) : null;
+        if (ownerPhoneNorm) {
+          for (const c of contactsList) {
+            if (normalizePhone(c.phone) === ownerPhoneNorm) {
+              return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number — the person we should call to check on you." });
+            }
+          }
+        }
         const savedContacts = await storage.saveContactsList(userId, contactsList.map((c, i) => ({
           name: c.name.trim(),
           phone: normalizePhone(c.phone),
@@ -1794,7 +1803,19 @@ export async function registerRoutes(
       if (!contact1Name || !contact1Phone) {
         return res.status(400).json({ error: "Contact 1 is required" });
       }
-      
+
+      // Guard: a contact cannot be the user's own phone (would cause an infinite loopback on emergency dial)
+      const legacyOwner = await storage.getUser(userId);
+      const legacyOwnerPhoneNorm = legacyOwner?.phone ? normalizePhone(legacyOwner.phone) : null;
+      if (legacyOwnerPhoneNorm) {
+        if (normalizePhone(contact1Phone) === legacyOwnerPhoneNorm) {
+          return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number — the person we should call to check on you." });
+        }
+        if (contact2Phone && normalizePhone(contact2Phone) === legacyOwnerPhoneNorm) {
+          return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number — the person we should call to check on you." });
+        }
+      }
+
       const savedContacts = await storage.upsertContacts(userId, {
         contact1: {
           name: contact1Name,
