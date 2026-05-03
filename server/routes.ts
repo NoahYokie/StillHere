@@ -3108,15 +3108,20 @@ export async function registerRoutes(
           }
 
           if (contact.email) {
+            // Truthful pairing: if the crash payload included fresh GPS, use
+            // it with `now`. Otherwise fall back to the user's last stored
+            // location AND its actual recorded timestamp — never pair an old
+            // coordinate with a "just now" timestamp.
+            const hasFreshGps = lat != null && lng != null;
             await sendCrashEmail(
               contact.email,
               user.name,
               link,
               speedKmh,
               {
-                lat: lat ?? user.lastLat ?? null,
-                lng: lng ?? user.lastLng ?? null,
-                locationAt: new Date(),
+                lat: hasFreshGps ? lat : (user.lastLat ?? null),
+                lng: hasFreshGps ? lng : (user.lastLng ?? null),
+                locationAt: hasFreshGps ? new Date() : (user.lastLocationAt ?? null),
                 timezone: user.timezone ?? null,
               }
             );
