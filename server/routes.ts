@@ -14,7 +14,8 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
-import { randomBytes } from "crypto";
+import { randomBytes, createHmac } from "crypto";
+import * as crypto from "crypto";
 import {
   createOtp,
   verifyOtp,
@@ -3599,6 +3600,44 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Static map proxy error:", err);
       res.status(500).json({ error: "Failed to load static map" });
+    }
+  });
+
+  // Public, signed static-map endpoint used by safety alert emails. Email
+  // recipients are unauthenticated (just an inbox), so we sign the params with
+  // SESSION_SECRET to prevent strangers from using us as a free Google Maps
+  // proxy. Image-only response, never reveals the API key.
+  app.get("/api/email/static-map", async (req, res) => {
+    try {
+      const lat = parseFloat(String(req.query.lat ?? ""));
+      const lng = parseFloat(String(req.query.lng ?? ""));
+      const sig = String(req.query.sig ?? "");
+      if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).send("Invalid coordinates");
+      }
+      const secret = process.env.SESSION_SECRET;
+      if (!secret) return res.status(500).send("Not configured");
+      const expected = crypto.createHmac("sha256", secret)
+        .update(`map:${lat.toFixed(5)}:${lng.toFixed(5)}`)
+        .digest("hex").slice(0, 32);
+      if (sig !== expected) return res.status(403).send("Invalid signature");
+      const key = process.env.GOOGLE_MAPS_API_KEY;
+      if (!key) return res.status(500).send("Maps not configured");
+      const url =
+        `https://maps.googleapis.com/maps/api/staticmap` +
+        `?center=${lat},${lng}` +
+        `&zoom=15&size=560x240&scale=2&maptype=roadmap` +
+        `&markers=color:0xdc2626%7C${lat},${lng}` +
+        `&key=${key}`;
+      const upstream = await fetch(url);
+      if (!upstream.ok) return res.status(502).send("Map unavailable");
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.setHeader("Content-Type", upstream.headers.get("content-type") || "image/png");
+      res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+      res.send(buf);
+    } catch (err) {
+      console.error("[EMAIL-MAP] proxy error:", err);
+      res.status(500).send("Map error");
     }
   });
 

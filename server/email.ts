@@ -1,14 +1,12 @@
 import { Resend } from "resend";
+import { createHmac } from "crypto";
 
 const SENDER_NAME = "StillHere";
 const SENDER_EMAIL = process.env.EMAIL_FROM || "alerts@stillhere.health";
 
-// Public-facing brand URL used for the logo asset and unauthenticated links.
-// Override via BRAND_BASE_URL if hosted elsewhere. Must be HTTPS.
+// Public-facing brand URL — must be HTTPS and externally reachable since
+// email clients fetch images/links from outside our network.
 const BRAND_BASE_URL = process.env.BRAND_BASE_URL || "https://stillhere.health";
-// Use the 192x192 PWA icon — Gmail's image proxy renders it cleanly at 32px,
-// the bare /favicon.png was too small and rendered as a blurry square.
-const LOGO_URL = `${BRAND_BASE_URL}/icons/icon-192x192.png`;
 
 let resendClient: Resend | null | undefined;
 function getResend(): Resend | null {
@@ -23,16 +21,14 @@ export interface SendEmailResult {
   error?: string;
 }
 
-// Per-email contextual data the renderer can use to show location/time.
 export interface EmailContext {
   lat?: number | null;
   lng?: number | null;
-  address?: string | null;          // optional reverse-geocoded address
-  locationAt?: Date | null;         // when the location reading was taken
-  timezone?: string | null;         // IANA tz of the subject user
+  address?: string | null;
+  locationAt?: Date | null;
+  timezone?: string | null;
 }
 
-// Escape any user-controlled string before interpolating into HTML/subject.
 function esc(s: string | null | undefined): string {
   if (s === null || s === undefined) return "";
   return String(s)
@@ -43,15 +39,20 @@ function esc(s: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-// Strip control chars from anything used in a Subject: header (defense-in-depth
-// against header injection if a real SMTP transport is ever wired in).
 function safeSubject(s: string): string {
   return s.replace(/[\r\n\t\0]+/g, " ").slice(0, 200);
 }
 
-// Render a date in the subject user's IANA timezone. Falls back to the
-// recipient's offset (UTC) if no tz is known. Always includes the city
-// abbreviation so it's unambiguous regardless of where the recipient lives.
+// "Australia/Melbourne" -> "Melbourne time"
+// "America/New_York" -> "New York time"
+// Falls back to "UTC" if the IANA tz can't be parsed.
+function tzLabel(timezone?: string | null): string {
+  if (!timezone) return "UTC";
+  const parts = timezone.split("/");
+  const city = parts[parts.length - 1].replace(/_/g, " ");
+  return `${city} time`;
+}
+
 function fmtLocalTime(d: Date, timezone?: string | null): string {
   const tz = timezone || "UTC";
   try {
@@ -59,10 +60,9 @@ function fmtLocalTime(d: Date, timezone?: string | null): string {
       weekday: "short", month: "short", day: "numeric", timeZone: tz,
     });
     const time = d.toLocaleTimeString("en-US", {
-      hour: "numeric", minute: "2-digit", hour12: true,
-      timeZone: tz, timeZoneName: "short",
+      hour: "numeric", minute: "2-digit", hour12: true, timeZone: tz,
     });
-    return `${date}, ${time}`;
+    return `${date}, ${time} (${tzLabel(timezone)})`;
   } catch {
     return d.toUTCString();
   }
@@ -73,27 +73,70 @@ function fmtCoords(lat?: number | null, lng?: number | null): string | null {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
-function mapsUrl(lat?: number | null, lng?: number | null): string | null {
+function gmapsUrl(lat?: number | null, lng?: number | null): string | null {
   if (lat == null || lng == null) return null;
   return `https://www.google.com/maps?q=${lat},${lng}`;
 }
 
+// Build a signed URL to our /api/email/static-map proxy. HMAC matches the
+// verification in server/routes.ts so randoms can't use us as a free proxy.
+function signedMapImageUrl(lat: number, lng: number): string | null {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return null;
+  const sig = createHmac("sha256", secret)
+    .update(`map:${lat.toFixed(5)}:${lng.toFixed(5)}`)
+    .digest("hex").slice(0, 32);
+  return `${BRAND_BASE_URL}/api/email/static-map?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&sig=${sig}`;
+}
+
+// Server-side reverse geocode with in-memory cache + 2s timeout. Best-effort —
+// returns null if the API call fails or takes too long, so we never block
+// sending an emergency email on a slow Google response.
+const geocodeCache = new Map<string, { address: string | null; at: number }>();
+const GEOCODE_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return null;
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const cached = geocodeCache.get(cacheKey);
+  if (cached && (Date.now() - cached.at) < GEOCODE_TTL_MS) return cached.address;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const resp = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}&result_type=street_address|route|premise|locality`,
+      { signal: ctrl.signal },
+    );
+    clearTimeout(timer);
+    const data: any = await resp.json();
+    let address: string | null = null;
+    if (data?.status === "OK" && data?.results?.length) {
+      address = data.results[0].formatted_address || null;
+    }
+    geocodeCache.set(cacheKey, { address, at: Date.now() });
+    return address;
+  } catch {
+    return null;
+  }
+}
+
 type AlertLevel = "emergency" | "warning" | "info";
 
-const LEVEL: Record<AlertLevel, { label: string; accent: string; ctaBg: string; badgeBg: string; badgeText: string }> = {
-  emergency: { label: "Emergency",   accent: "#dc2626", ctaBg: "#dc2626", badgeBg: "#fee2e2", badgeText: "#991b1b" },
-  warning:   { label: "Safety alert", accent: "#f59e0b", ctaBg: "#f59e0b", badgeBg: "#fef3c7", badgeText: "#92400e" },
-  info:      { label: "Update",       accent: "#2563eb", ctaBg: "#2563eb", badgeBg: "#dbeafe", badgeText: "#1e40af" },
+const LEVEL: Record<AlertLevel, { label: string; accent: string; ctaBg: string; badgeBg: string; badgeText: string; logoBg: string }> = {
+  emergency: { label: "Emergency",    accent: "#dc2626", ctaBg: "#dc2626", badgeBg: "#fee2e2", badgeText: "#991b1b", logoBg: "#dc2626" },
+  warning:   { label: "Safety alert", accent: "#f59e0b", ctaBg: "#f59e0b", badgeBg: "#fef3c7", badgeText: "#92400e", logoBg: "#0f172a" },
+  info:      { label: "Update",       accent: "#2563eb", ctaBg: "#2563eb", badgeBg: "#dbeafe", badgeText: "#1e40af", logoBg: "#0f172a" },
 };
 
 interface RenderArgs {
   level: AlertLevel;
   title: string;
   userName: string;
-  eventLine: string;        // pre-formatted, can include <strong>
+  eventLine: string;
   ctaUrl: string;
   ctaLabel: string;
-  whyReceiving: string;     // pre-formatted
+  whyReceiving: string;
   emergencyHint?: boolean;
   context?: EmailContext;
 }
@@ -108,17 +151,35 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
   const locTime = context?.locationAt ? esc(fmtLocalTime(context.locationAt, tz)) : null;
 
   const coords = fmtCoords(context?.lat, context?.lng);
-  const gmaps = mapsUrl(context?.lat, context?.lng);
-  const addressOrCoords = context?.address?.trim() || coords;
+  const gmaps = gmapsUrl(context?.lat, context?.lng);
+  const mapImg = (context?.lat != null && context?.lng != null)
+    ? signedMapImageUrl(context.lat, context.lng) : null;
+  const addressLine = context?.address?.trim() || coords;
 
-  const locationBlock = (addressOrCoords && gmaps) ? `
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
+  // Pure HTML/CSS logo — no external image, so it always renders even when
+  // image proxies block the fetch. The 'S' monogram + StillHere wordmark.
+  const logoBlock = `
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block;vertical-align:middle;">
+              <tr>
+                <td style="background:${style.logoBg};color:#ffffff;width:32px;height:32px;border-radius:8px;font-size:16px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;line-height:32px;letter-spacing:-0.02em;">S</td>
+                <td style="padding-left:10px;font-size:16px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">StillHere</td>
+              </tr>
+            </table>`;
+
+  const locationBlock = addressLine ? `
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
           <tr><td style="padding:14px 16px;">
             <p style="margin:0 0 4px 0;font-size:12px;color:#64748b;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">Last known location</p>
-            <p style="margin:0 0 2px 0;font-size:15px;color:#0f172a;line-height:1.4;">${esc(addressOrCoords)}</p>
-            ${locTime ? `<p style="margin:0;font-size:12px;color:#64748b;">Reported ${locTime}</p>` : ""}
+            <p style="margin:0 0 2px 0;font-size:15px;color:#0f172a;line-height:1.4;font-weight:500;">${esc(addressLine)}</p>
+            ${context?.address && coords ? `<p style="margin:2px 0 0 0;font-size:12px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${esc(coords)}</p>` : ""}
+            ${locTime ? `<p style="margin:6px 0 0 0;font-size:12px;color:#64748b;">Reported ${locTime}</p>` : ""}
           </td></tr>
         </table>` : "";
+
+  const mapBlock = (mapImg && gmaps) ? `
+        <a href="${esc(gmaps)}" style="display:block;text-decoration:none;border-radius:10px;overflow:hidden;margin:0 0 18px 0;border:1px solid #e2e8f0;">
+          <img src="${esc(mapImg)}" alt="Map showing ${safeName}'s last known location" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;" />
+        </a>` : "";
 
   const fallbackLink = gmaps ? `
           <p style="margin:12px 0 0 0;font-size:14px;line-height:1.5;color:#475569;text-align:center;">
@@ -149,10 +210,7 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
         <tr><td style="padding:14px 22px;border-bottom:1px solid #f1f5f9;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td align="left" style="vertical-align:middle;">
-                <img src="${esc(LOGO_URL)}" width="32" height="32" alt="StillHere" style="display:inline-block;vertical-align:middle;border-radius:7px;border:0;">
-                <span style="display:inline-block;vertical-align:middle;margin-left:10px;font-size:16px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;">StillHere</span>
-              </td>
+              <td align="left" style="vertical-align:middle;">${logoBlock}</td>
               <td align="right" style="vertical-align:middle;">
                 <span style="display:inline-block;background:${style.badgeBg};color:${style.badgeText};font-size:11px;font-weight:600;letter-spacing:0.04em;padding:5px 10px;border-radius:9999px;">${style.label}</span>
               </td>
@@ -168,6 +226,7 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
           <p style="margin:0 0 8px 0;font-size:14px;color:#475569;">Person at risk: <strong style="color:#0f172a;">${safeName}</strong></p>
           <p style="margin:0 0 22px 0;font-size:16px;line-height:1.55;color:#1e293b;">${eventLine}</p>
           ${locationBlock}
+          ${mapBlock}
         </td></tr>
 
         <tr><td style="padding:0 24px 26px 24px;">
@@ -199,6 +258,15 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
   </table>
 </body>
 </html>`;
+}
+
+// Resolve address before render (best-effort). Mutates context with the
+// reverse-geocoded street address so the email shows it instead of bare coords.
+async function enrichContext(context?: EmailContext): Promise<EmailContext | undefined> {
+  if (!context) return context;
+  if (context.address || context.lat == null || context.lng == null) return context;
+  const address = await reverseGeocode(context.lat, context.lng);
+  return { ...context, address: address || null };
 }
 
 export async function sendEmail(to: string, subject: string, body: string): Promise<SendEmailResult> {
@@ -240,20 +308,17 @@ export async function sendEmergencyEmail(
   const subject = safeSubject(issos
     ? `Urgent: ${userName} needs help — StillHere`
     : `Safety alert: ${userName} missed a check-in — StillHere`);
-
   const title = issos ? "Emergency SOS activated" : "Missed safety check-in";
   const eventLine = issos
     ? `<strong>${safeName}</strong> just activated an emergency SOS. We've already tried reaching them by app push, SMS, and phone call.`
     : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check-in. We've already tried reaching them by app push, SMS, and phone call.`;
-  const ctaLabel = "View live status";
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to notify you the moment a safety event is detected.`;
 
+  const enriched = await enrichContext(context);
   const body = renderEmail({
     level, title, userName, eventLine,
-    ctaUrl: link, ctaLabel,
-    whyReceiving,
-    emergencyHint: true,
-    context,
+    ctaUrl: link, ctaLabel: "View live status",
+    whyReceiving, emergencyHint: true, context: enriched,
   });
   return sendEmail(contactEmail, subject, body);
 }
@@ -268,20 +333,15 @@ export async function sendCrashEmail(
   const safeName = esc(userName);
   const speedInfo = speedKmh ? ` while travelling at about <strong>${Math.round(speedKmh)} km/h</strong>` : "";
   const subject = safeSubject(`Urgent: Possible crash detected for ${userName} — StillHere`);
-
   const eventLine = `A possible vehicle crash has been detected for <strong>${safeName}</strong>${speedInfo}. Their phone reported a sudden impact and stopped moving.`;
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We notify you immediately when crash-detection is triggered.`;
 
+  const enriched = await enrichContext(context);
   const body = renderEmail({
-    level: "emergency",
-    title: "Possible vehicle crash detected",
-    userName,
-    eventLine,
-    ctaUrl: link,
-    ctaLabel: "View live location",
-    whyReceiving,
-    emergencyHint: true,
-    context,
+    level: "emergency", title: "Possible vehicle crash detected",
+    userName, eventLine,
+    ctaUrl: link, ctaLabel: "View live location",
+    whyReceiving, emergencyHint: true, context: enriched,
   });
   return sendEmail(contactEmail, subject, body);
 }
@@ -295,20 +355,15 @@ export async function sendGeofenceEmail(
   const safeName = esc(userName);
   const safeZone = esc(zoneName);
   const subject = safeSubject(`${userName} left "${zoneName}" — StillHere`);
-
   const eventLine = `<strong>${safeName}</strong> has left their <strong>"${safeZone}"</strong> zone. This may not indicate an emergency — you're being notified because ${safeName} set up location monitoring for this zone.`;
   const whyReceiving = `${safeName} added you as a trusted contact and enabled zone notifications for <strong>"${safeZone}"</strong>. Only zone exits are shared, never live coordinates.`;
 
+  const enriched = await enrichContext(context);
   const body = renderEmail({
-    level: "info",
-    title: `Left "${zoneName}" zone`,
-    userName,
-    eventLine,
-    ctaUrl: `${BRAND_BASE_URL}/family`,
-    ctaLabel: "View live location",
-    whyReceiving,
-    emergencyHint: false,
-    context,
+    level: "info", title: `Left "${zoneName}" zone`,
+    userName, eventLine,
+    ctaUrl: `${BRAND_BASE_URL}/family`, ctaLabel: "View live location",
+    whyReceiving, emergencyHint: false, context: enriched,
   });
   return sendEmail(contactEmail, subject, body);
 }

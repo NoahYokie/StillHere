@@ -1,0 +1,175 @@
+1. LOGO (this must be fixed ASAP)
+
+Right now:
+👉 Broken image / placeholder icon
+
+❌ This is a trust killer
+❌ Apple reviewers WILL notice this
+❌ Users subconsciously think “this might be fake”
+
+Fix (non-negotiable)
+
+You need a hosted public logo URL
+
+Tell Replit:
+
+⸻
+
+PROMPT – LOGO FIX
+
+Fix email logo rendering.
+
+Requirements:
+
+* Replace broken image with hosted StillHere logo
+* Use a publicly accessible HTTPS URL (e.g. from CDN or app domain)
+* Add fallback text: “StillHere” if image fails
+* Ensure compatibility across Gmail, iOS Mail, Outlook
+
+Use inline styles (not external CSS)
+
+⸻
+
+👉 If you don’t have a logo yet, I can generate one for you next.
+
+⸻
+
+🗺️ 2. MAP PREVIEW (THIS IS A POWER MOVE)
+
+You’re 100% right.
+
+Right now:
+👉 Coordinates only
+
+That’s functional
+
+But what we want:
+👉 Visual map preview = instant understanding
+
+⸻
+
+What to add:
+
+Above the button, include:
+
+👉 Static map image
+
+Example:
+
+* Google Static Maps API
+* Or Mapbox static image
+
+⸻
+
+Why this matters:
+
+In an emergency:
+
+* People don’t read
+* People scan visuals
+
+A map = instant clarity
+
+⸻
+
+Tell Replit:
+
+⸻
+
+PROMPT – MAP PREVIEW
+
+Add static map preview to emergency emails.
+
+Requirements:
+
+* Generate static map image using coordinates
+* Show marker at last known location
+* Place image above “View live location” button
+* Image should be clickable → opens live map
+
+Use:
+
+* Google Static Maps API OR Mapbox
+
+Fallback:
+
+* If image fails, keep coordinates visible
+
+⸻
+
+⸻
+
+🕒 3. TIMEZONE (CRITICAL BUG)
+
+You caught a serious issue.
+
+Right now:
+👉 Showing GMT / wrong time
+
+❌ In emergencies, wrong time = confusion
+❌ Could literally delay response
+
+⸻
+
+Correct behaviour:
+
+If user is in Perth:
+
+👉 Must show:
+Local time (AWST / GMT+8)
+
+⸻
+
+Fix logic:
+
+You need:
+
+* User timezone stored (or inferred)
+* Convert server UTC → user local time
+
+⸻
+
+Tell Replit:
+
+⸻
+
+PROMPT – TIMEZONE FIX
+
+Fix timestamp to show correct local time.
+
+Requirements:
+
+* Convert all timestamps from UTC → user local timezone
+* Detect timezone from:
+    * User profile OR
+    * Device OR
+    * Location coordinates (fallback)
+* Format:
+    Example: “Sun, May 3, 4:19 PM (Perth time)”
+* Ensure consistency across:
+    * Email
+    * App
+    * Logs
+
+⸻
+
+⸻
+
+🔥 4. EXTRA UPGRADE (THIS WILL PUT YOU AHEAD)
+
+Right now you show:
+
+👉 Coordinates
+👉 Map (soon)
+
+Add this:
+
+👉 Readable address
+
+Example:
+“Last known location:
+123 Hay Street, Perth WA”
+
+Use:
+
+* Reverse geocoding (Google / OpenStreetMap)
