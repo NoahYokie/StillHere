@@ -111,19 +111,53 @@ export async function sendSms(
 
   console.log(`[SMS] Sending to ${masked}`);
 
+  // Twilio status callback URL — Advanced Opt-Out Messaging Services accept
+  // the message synchronously and only mark it failed (with ErrorCode=21610)
+  // asynchronously. Pointing statusCallback at /api/sms/status lets us learn
+  // about the carrier-level opt-out and back-sync our DB.
+  const baseUrl = process.env.BASE_URL
+    || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(",")[0].trim()}` : null);
+  const statusCallback = baseUrl ? `${baseUrl}/api/sms/status` : undefined;
+
+  // Twilio error code for "Attempt to send to unsubscribed recipient".
+  // When the carrier-level STOP registry rejects a message, our app's DB
+  // is unaware. Back-sync the opt-out flag so future attempts are gated
+  // at our level (saving cost + surfacing the state in our UI/logs).
+  const TWILIO_OPTED_OUT_CODE = 21610;
+  const isOptedOutError = (err: any): boolean =>
+    err && (err.code === TWILIO_OPTED_OUT_CODE || err.status === TWILIO_OPTED_OUT_CODE);
+  const backsyncOptOut = async (err: any): Promise<void> => {
+    if (!isOptedOutError(err)) return;
+    try {
+      const { storage } = await import("./storage");
+      await storage.setSmsOptOutByPhone(to, true);
+      console.log(`[SMS] Carrier reported opt-out for ${masked} (code 21610), back-synced to DB`);
+    } catch (e: any) {
+      console.warn(`[SMS] Failed to back-sync carrier opt-out for ${masked}: ${e?.message || e}`);
+    }
+  };
+
   if (messagingServiceSid) {
     try {
-      const message = await c.messages.create({ to, body, messagingServiceSid });
+      const message = await c.messages.create({ to, body, messagingServiceSid, statusCallback });
       console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
+      await backsyncOptOut(error);
+      if (isOptedOutError(error)) {
+        return { success: false, error: "Recipient opted out of SMS" };
+      }
       console.warn(`[SMS] Messaging service failed for ${masked}: ${error.message}, trying fallback`);
       if (fromPhone) {
         try {
-          const message = await c.messages.create({ to, body, from: fromPhone });
+          const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
           console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
           return { success: true, messageId: message.sid };
         } catch (fallbackError: any) {
+          await backsyncOptOut(fallbackError);
+          if (isOptedOutError(fallbackError)) {
+            return { success: false, error: "Recipient opted out of SMS" };
+          }
           console.error(`[SMS] Phone fallback also failed for ${masked}:`, fallbackError.message);
           return { success: false, error: fallbackError.message };
         }
@@ -134,17 +168,25 @@ export async function sendSms(
 
   if (alphaSender) {
     try {
-      const message = await c.messages.create({ to, body, from: alphaSender });
+      const message = await c.messages.create({ to, body, from: alphaSender, statusCallback });
       console.log(`[SMS] Sent to ${masked} via alpha sender "${alphaSender}": ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
+      await backsyncOptOut(error);
+      if (isOptedOutError(error)) {
+        return { success: false, error: "Recipient opted out of SMS" };
+      }
       console.warn(`[SMS] Alpha sender "${alphaSender}" failed for ${masked}: ${error.message}, trying phone fallback`);
       if (fromPhone) {
         try {
-          const message = await c.messages.create({ to, body, from: fromPhone });
+          const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
           console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
           return { success: true, messageId: message.sid };
         } catch (fallbackError: any) {
+          await backsyncOptOut(fallbackError);
+          if (isOptedOutError(fallbackError)) {
+            return { success: false, error: "Recipient opted out of SMS" };
+          }
           console.error(`[SMS] Phone fallback also failed for ${masked}:`, fallbackError.message);
           return { success: false, error: fallbackError.message };
         }
@@ -155,10 +197,14 @@ export async function sendSms(
 
   if (fromPhone) {
     try {
-      const message = await c.messages.create({ to, body, from: fromPhone });
+      const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
       console.log(`[SMS] Sent to ${masked} via phone number: ${message.sid}`);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
+      await backsyncOptOut(error);
+      if (isOptedOutError(error)) {
+        return { success: false, error: "Recipient opted out of SMS" };
+      }
       console.error(`[SMS] Failed to send to ${masked}:`, error.message);
       return { success: false, error: error.message };
     }

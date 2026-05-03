@@ -3668,6 +3668,46 @@ export async function registerRoutes(
     }
   });
 
+  // Twilio delivery status callback. With Advanced Opt-Out enabled on a
+  // Messaging Service, Twilio accepts an outbound SMS synchronously (returns
+  // a SID) and only later marks the message as `failed` with `ErrorCode=21610`
+  // when the carrier-level STOP registry rejects it. Without this webhook,
+  // our DB never learns about the opt-out and we keep wasting Twilio quota
+  // on every escalation. When we see `failed` + 21610 here, we back-sync the
+  // opt-out flag so the next attempt is short-circuited at our gate.
+  app.post("/api/sms/status", verifyTwilioSignature, async (req, res) => {
+    try {
+      const messageStatus = req.body?.MessageStatus || req.body?.messageStatus;
+      const errorCode = parseInt(String(req.body?.ErrorCode || req.body?.errorCode || "0"), 10);
+      const to = req.body?.To || req.body?.to;
+      const messageSid = req.body?.MessageSid || req.body?.messageSid;
+
+      if (!to) {
+        return res.status(200).send("ok");
+      }
+
+      const masked = `***${String(to).slice(-4)}`;
+      const isFailed = messageStatus === "failed" || messageStatus === "undelivered";
+      const isOptedOutCode = errorCode === 21610;
+
+      if (isFailed && isOptedOutCode) {
+        try {
+          const result = await storage.setSmsOptOutByPhone(normalizePhone(String(to)), true);
+          console.log(`[SMS-STATUS] Carrier opt-out for ${masked} (sid=${messageSid}, code=21610), back-synced (users=${result.usersUpdated} contacts=${result.contactsUpdated})`);
+        } catch (err: any) {
+          console.error(`[SMS-STATUS] Failed to back-sync opt-out for ${masked}:`, err?.message || err);
+        }
+      } else if (isFailed) {
+        console.warn(`[SMS-STATUS] Delivery failed for ${masked} (sid=${messageSid}, status=${messageStatus}, code=${errorCode})`);
+      }
+
+      res.status(200).send("ok");
+    } catch (error) {
+      console.error("Error in SMS status webhook:", error);
+      res.status(200).send("ok");
+    }
+  });
+
   // ============================================
   // GOOGLE MAPS API PROXY ENDPOINTS
   // ============================================
