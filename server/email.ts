@@ -305,7 +305,7 @@ export async function sendEmergencyEmail(
   const title = issos ? "Emergency SOS activated" : "Missed safety check in";
   const eventLine = issos
     ? `<strong>${safeName}</strong> just activated an emergency SOS. We've already tried reaching them by app push, SMS, and phone call.`
-    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check-in. We've already tried reaching them by app push, SMS, and phone call.`;
+    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check in. We've already tried reaching them by app push, SMS, and phone call.`;
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to notify you the moment a safety event is detected.`;
 
   const enriched = await enrichContext(context);
@@ -326,7 +326,7 @@ export async function sendCrashEmail(
 ): Promise<SendEmailResult> {
   const safeName = esc(userName);
   const speedInfo = speedKmh ? ` while travelling at about <strong>${Math.round(speedKmh)} km/h</strong>` : "";
-  const subject = safeSubject(`Urgent: Possible crash detected for ${userName} — StillHere`);
+  const subject = safeSubject(`Urgent: Possible crash detected for ${userName} (StillHere)`);
   const eventLine = `A possible vehicle crash has been detected for <strong>${safeName}</strong>${speedInfo}. Their phone reported a sudden impact and stopped moving.`;
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We notify you immediately when crash-detection is triggered.`;
 
@@ -348,8 +348,8 @@ export async function sendGeofenceEmail(
 ): Promise<SendEmailResult> {
   const safeName = esc(userName);
   const safeZone = esc(zoneName);
-  const subject = safeSubject(`${userName} left "${zoneName}" — StillHere`);
-  const eventLine = `<strong>${safeName}</strong> has left their <strong>"${safeZone}"</strong> zone. This may not indicate an emergency — you're being notified because ${safeName} set up location monitoring for this zone.`;
+  const subject = safeSubject(`${userName} left "${zoneName}" (StillHere)`);
+  const eventLine = `<strong>${safeName}</strong> has left their <strong>"${safeZone}"</strong> zone. This may not indicate an emergency. You're being notified because ${safeName} set up location monitoring for this zone.`;
   const whyReceiving = `${safeName} added you as a trusted contact and enabled zone notifications for <strong>"${safeZone}"</strong>. Only zone exits are shared, never live coordinates.`;
 
   const enriched = await enrichContext(context);
