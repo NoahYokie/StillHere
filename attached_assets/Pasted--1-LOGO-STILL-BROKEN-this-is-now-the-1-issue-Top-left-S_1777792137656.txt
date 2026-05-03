@@ -1,0 +1,126 @@
+🚨 1. LOGO STILL BROKEN (this is now the #1 issue)
+
+Top left:
+👉 Still showing broken image icon
+
+At this stage, this is the only thing dragging the whole email down.
+
+Why this matters more than you think:
+
+* First thing user sees = trust signal
+* In emergencies → people judge instantly
+* Broken logo = “this might not be legit”
+
+⸻
+
+Fix it properly (don’t hack it)
+
+Tell Replit:
+
+⸻
+
+PROMPT – FINAL LOGO FIX
+
+Fix StillHere email logo permanently.
+
+Requirements:
+
+1. Use a real hosted image:
+
+* Store logo at a public HTTPS URL (e.g. stillhere.health/logo.png)
+
+2. Email-safe implementation:
+
+* Use <img> with inline styles
+* Set width/height explicitly (e.g. 32–40px)
+* Add alt text: “StillHere”
+
+3. Add fallback:
+
+* If image fails → show styled text “StillHere”
+
+4. Ensure compatibility:
+
+* Gmail (mobile + desktop)
+* iOS Mail
+* Outlook
+
+Do not leave broken placeholder.
+
+⸻
+
+If you don’t have a logo yet, say the word — I’ll generate one that fits your brand.
+
+⸻
+
+🗺️ 2. MAP PREVIEW STILL MISSING (this is your upgrade lever)
+
+Right now:
+👉 You removed coordinates (good UX choice)
+👉 But didn’t replace them with anything visual
+
+So now:
+❌ User doesn’t see location context immediately
+
+⸻
+
+What you should have:
+
+Right under the text:
+
+👉 A small map preview image
+(with a pin on location)
+
+⸻
+
+Why this is powerful:
+
+* People don’t read → they glance
+* Map = instant understanding
+* Makes your app feel premium + serious
+
+⸻
+
+Tell Replit:
+
+⸻
+
+PROMPT – ADD MAP PREVIEW
+
+Add static map preview to emergency email.
+
+Requirements:
+
+1. Generate static map image using coordinates
+2. Show marker at last known location
+3. Place image ABOVE the red CTA button
+4. Make image clickable → opens live location
+
+Use:
+
+* Google Static Maps API OR Mapbox
+
+5. Fallback:
+
+* If map fails, show coordinates text
+
+6. Keep mobile optimized (full width, rounded corners)
+
+⸻
+
+⸻
+
+🧠 Small but powerful tweak (optional but worth it)
+
+Change button text:
+
+Current:
+👉 “View live status”
+
+Better:
+👉 “View live location”
+
+Reason:
+
+* “Status” is vague
+* “Location” is exactly what they need

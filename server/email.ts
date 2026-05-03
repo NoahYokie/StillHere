@@ -156,9 +156,18 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
     ? signedMapImageUrl(context.lat, context.lng) : null;
   const addressLine = context?.address?.trim() || coords;
 
-  // Pure text wordmark — guaranteed to render in every email client. No image
-  // dependency, no broken-icon risk.
-  const logoBlock = `<span style="display:inline-block;vertical-align:middle;font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-0.015em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">StillHere</span>`;
+  // Hosted PNG logo (icon-192) + adjacent wordmark. The wordmark text is the
+  // alt text AND a visible sibling, so if the image fails to load the brand
+  // is still legible. Width/height are explicit for Outlook/Gmail.
+  const logoBlock = `
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block;vertical-align:middle;">
+              <tr>
+                <td style="vertical-align:middle;padding:0 8px 0 0;line-height:0;">
+                  <img src="${BRAND_BASE_URL}/icons/icon-192x192.png" width="32" height="32" alt="StillHere" style="display:block;width:32px;height:32px;border:0;border-radius:7px;" />
+                </td>
+                <td style="vertical-align:middle;font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-0.015em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">StillHere</td>
+              </tr>
+            </table>`;
 
   const locationBlock = addressLine ? `
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
@@ -244,7 +253,7 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
 
         <tr><td align="center" style="padding:14px 24px 18px 24px;">
           <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">
-            <a href="${esc(BRAND_BASE_URL)}" style="color:#94a3b8;text-decoration:none;">stillhere.health</a> · Personal safety check-ins
+            <a href="${esc(BRAND_BASE_URL)}" style="color:#94a3b8;text-decoration:none;">stillhere.health</a> · Personal safety check ins
           </p>
         </td></tr>
       </table>
@@ -311,7 +320,7 @@ export async function sendEmergencyEmail(
   const enriched = await enrichContext(context);
   const body = renderEmail({
     level, title, userName, eventLine,
-    ctaUrl: link, ctaLabel: "View live status",
+    ctaUrl: link, ctaLabel: "View live location",
     whyReceiving, emergencyHint: true, context: enriched,
   });
   return sendEmail(contactEmail, subject, body);
@@ -328,7 +337,7 @@ export async function sendCrashEmail(
   const speedInfo = speedKmh ? ` while travelling at about <strong>${Math.round(speedKmh)} km/h</strong>` : "";
   const subject = safeSubject(`Urgent: Possible crash detected for ${userName} (StillHere)`);
   const eventLine = `A possible vehicle crash has been detected for <strong>${safeName}</strong>${speedInfo}. Their phone reported a sudden impact and stopped moving.`;
-  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We notify you immediately when crash-detection is triggered.`;
+  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We notify you immediately when crash detection is triggered.`;
 
   const enriched = await enrichContext(context);
   const body = renderEmail({

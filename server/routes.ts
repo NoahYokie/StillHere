@@ -1762,7 +1762,7 @@ export async function registerRoutes(
         if (ownerPhoneNorm) {
           for (const c of contactsList) {
             if (normalizePhone(c.phone) === ownerPhoneNorm) {
-              return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number — the person we should call to check on you." });
+              return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number, the person we should call to check on you." });
             }
           }
         }
@@ -1825,10 +1825,10 @@ export async function registerRoutes(
       const legacyOwnerPhoneNorm = legacyOwner?.phone ? normalizePhone(legacyOwner.phone) : null;
       if (legacyOwnerPhoneNorm) {
         if (normalizePhone(contact1Phone) === legacyOwnerPhoneNorm) {
-          return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number — the person we should call to check on you." });
+          return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number, the person we should call to check on you." });
         }
         if (contact2Phone && normalizePhone(contact2Phone) === legacyOwnerPhoneNorm) {
-          return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number — the person we should call to check on you." });
+          return res.status(400).json({ error: "You can't add your own phone number as an emergency contact. Please enter someone else's number, the person we should call to check on you." });
         }
       }
 
