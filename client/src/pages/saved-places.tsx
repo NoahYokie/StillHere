@@ -97,6 +97,13 @@ export default function SavedPlacesPage() {
   const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedAddress, setSelectedAddress] = useState("");
   const [radius, setRadius] = useState(200);
+  const [unit, setUnit] = useState<DistanceUnit>(() => loadUnit());
+
+  const toggleUnit = () => {
+    const next: DistanceUnit = unit === "metric" ? "imperial" : "metric";
+    setUnit(next);
+    saveUnit(next);
+  };
 
   const searchTimeoutRef = { current: null as ReturnType<typeof setTimeout> | null };
   const searchIdRef = { current: 0 };
@@ -357,7 +364,18 @@ export default function SavedPlacesPage() {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground">Alert radius</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-muted-foreground">Alert radius</label>
+                  <button
+                    type="button"
+                    onClick={toggleUnit}
+                    className="text-xs font-medium text-primary px-2 py-0.5 rounded-md bg-primary/10 hover:bg-primary/15 transition-colors"
+                    data-testid="button-toggle-unit"
+                    aria-label={`Switch to ${unit === "metric" ? "imperial (feet/miles)" : "metric (meters/km)"}`}
+                  >
+                    {unit === "metric" ? "m / km" : "ft / mi"}
+                  </button>
+                </div>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
@@ -369,7 +387,7 @@ export default function SavedPlacesPage() {
                     className="flex-1 accent-primary"
                     data-testid="input-radius"
                   />
-                  <span className="text-sm font-medium w-16 text-right">{radius} m</span>
+                  <span className="text-sm font-medium w-20 text-right" data-testid="text-radius-display">{formatRadius(radius, unit)}</span>
                 </div>
               </div>
 
@@ -413,7 +431,7 @@ export default function SavedPlacesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate" data-testid={`text-place-name-${place.id}`}>{place.name}</p>
-                      <p className="text-xs text-muted-foreground">{TYPE_LABELS[place.type] || "Place"} &middot; {place.radiusMeters}m radius</p>
+                      <p className="text-xs text-muted-foreground">{TYPE_LABELS[place.type] || "Place"} &middot; {formatRadius(place.radiusMeters, unit)} radius</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => startEdit(place)} data-testid={`button-edit-${place.id}`}>
