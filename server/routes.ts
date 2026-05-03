@@ -6309,6 +6309,21 @@ export async function registerRoutes(
         console.error("[CRON] Soft-delete cleanup failed:", err);
       }
 
+      // Privacy: delete historical location data older than each user's
+      // retention window. Throttled to once per 24h via a server-side flag
+      // so it doesn't run on every 2-min cron tick. No PII is logged.
+      try {
+        const lastRunMs = (global as any).__lastLocationCleanupAt || 0;
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+        if (Date.now() - lastRunMs >= TWENTY_FOUR_HOURS_MS) {
+          (global as any).__lastLocationCleanupAt = Date.now();
+          const result = await storage.cleanupExpiredLocationData();
+          console.log(`[CRON][retention] location cleanup: users=${result.usersProcessed} points=${result.pointsDeleted} shares=${result.sharesDeleted}`);
+        }
+      } catch (err: any) {
+        console.error("[CRON][retention] location cleanup failed:", err?.message || err);
+      }
+
       // Safety Timer escalation
       let timerEscalations = 0;
       try {

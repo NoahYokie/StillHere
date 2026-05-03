@@ -51,6 +51,10 @@ export const users = pgTable("users", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   premiumUntil: timestamp("premium_until"),
   premiumSource: text("premium_source"),
+  // Privacy: how long historical location data is retained for this user
+  // before the daily cron deletes it. Default 30 days. UI exposes 7/30/90.
+  // Active live tracking sessions are NEVER deleted regardless of this value.
+  locationDataRetentionDays: integer("location_data_retention_days").notNull().default(30),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

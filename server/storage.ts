@@ -149,6 +149,7 @@ export interface IStorage {
   getSoftDeletedContacts(userId: string): Promise<Contact[]>;
   getSoftDeletedContactsByWatcher(watcherUserId: string): Promise<(Contact & { ownerName: string })[]>;
   cleanupExpiredSoftDeletes(): Promise<number>;
+  cleanupExpiredLocationData(): Promise<{ pointsDeleted: number; sharesDeleted: number; usersProcessed: number }>;
   getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
@@ -663,6 +664,52 @@ export class DatabaseStorage implements IStorage {
       await this.deleteContact(row.id);
     }
     return expired.length;
+  }
+
+  async cleanupExpiredLocationData(): Promise<{ pointsDeleted: number; sharesDeleted: number; usersProcessed: number }> {
+    // Privacy retention: delete historical location data older than each
+    // user's configured retention window (default 30d). NEVER touches active
+    // live tracking sessions - only ended/historical rows are removed.
+    const allUsers = await db.select({
+      id: users.id,
+      retentionDays: users.locationDataRetentionDays,
+    }).from(users);
+
+    let pointsDeleted = 0;
+    let sharesDeleted = 0;
+
+    for (const u of allUsers) {
+      const days = Math.max(1, u.retentionDays || 30);
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      // 1. Delete historical breadcrumb points older than cutoff for this user.
+      //    Safe even for currently-active shares: we only drop points whose
+      //    recordedAt is before the cutoff. Recent points (within retention)
+      //    and any point belonging to an active session that's newer than the
+      //    cutoff are preserved.
+      const deletedPoints = await db.delete(liveLocationPoints).where(
+        and(
+          eq(liveLocationPoints.userId, u.id),
+          lt(liveLocationPoints.recordedAt, cutoff),
+        ),
+      ).returning({ id: liveLocationPoints.id });
+      pointsDeleted += deletedPoints.length;
+
+      // 2. Delete share rows that are NO LONGER ACTIVE and whose lastUpdatedAt
+      //    is older than the cutoff. The active=true guard is the safety rule:
+      //    a still-active live tracking session cannot be deleted regardless
+      //    of age. Cascade on share_id will also clean any straggler points.
+      const deletedShares = await db.delete(liveLocationShares).where(
+        and(
+          eq(liveLocationShares.userId, u.id),
+          eq(liveLocationShares.active, false),
+          lt(liveLocationShares.lastUpdatedAt, cutoff),
+        ),
+      ).returning({ id: liveLocationShares.id });
+      sharesDeleted += deletedShares.length;
+    }
+
+    return { pointsDeleted, sharesDeleted, usersProcessed: allUsers.length };
   }
 
   async getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined> {
