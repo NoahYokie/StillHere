@@ -455,27 +455,6 @@ export async function registerRoutes(
     }
   });
   
-  // DEV-ONLY: snapshot auth shortcut for screenshot capture (gated by NODE_ENV)
-  app.get("/api/__snapshot-auth", async (req, res) => {
-    if (process.env.NODE_ENV === "production") return res.status(404).end();
-    const token = String(req.query.token || "");
-    const next = String(req.query.next || "/");
-    if (token === "clear") {
-      res.clearCookie("stillhere_session", { path: "/" });
-    } else if (token) {
-      res.cookie("stillhere_session", token, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        maxAge: 60 * 60 * 1000,
-        path: "/",
-      });
-    } else {
-      return res.status(400).send("missing token");
-    }
-    res.redirect(302, next.startsWith("/") ? next : "/");
-  });
-
   // Get current auth status
   app.get("/api/auth/me", async (req, res) => {
     try {
