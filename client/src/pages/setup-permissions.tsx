@@ -11,30 +11,33 @@ import {
 
 type Step = "location" | "notifications" | "motion" | "done";
 
-const steps: { key: Step; icon: typeof MapPin; title: string; description: string; detail: string; buttonLabel: string }[] = [
+const steps: { key: Step; icon: typeof MapPin; title: string; description: string; detail: string; secondary: string; buttonLabel: string }[] = [
   {
     key: "location",
     icon: MapPin,
-    title: "Location access",
-    description: "For StillHere to check on you in the background, your phone needs to allow location access at all times.",
-    detail: "This helps your trusted contacts know where you are if you miss a check-in or trigger an SOS. Your location is only shared with people you choose.",
-    buttonLabel: "I understand  -  continue",
+    title: "Location helps your Safety Circle find you when it matters",
+    description: "StillHere uses location for safety features like SOS, Safe Walk, driving safety, check-ins, and live maps.",
+    detail: "Your location is only shared with people you choose. You can pause or change sharing anytime.",
+    secondary: "You stay in control.",
+    buttonLabel: "Continue",
   },
   {
     key: "notifications",
     icon: Bell,
-    title: "Notifications",
-    description: "Notifications let StillHere remind you before escalating to your contacts.",
-    detail: "They also let your trusted contacts get updates when you confirm you are safe. Without notifications, you might miss important reminders.",
-    buttonLabel: "I understand  -  continue",
+    title: "Notifications keep your safety loop active",
+    description: "StillHere sends check-in reminders, safety alerts, all-clear updates, and urgent messages from your Safety Circle.",
+    detail: "These alerts help the system reach you before escalating to your contacts.",
+    secondary: "You can change notification settings anytime.",
+    buttonLabel: "Continue",
   },
   {
     key: "motion",
     icon: Activity,
-    title: "Motion detection",
-    description: "Motion access helps StillHere detect falls and possible driving incidents more reliably.",
-    detail: "This powers fall detection and shake-to-SOS. If your phone detects a sudden impact, StillHere can start a countdown and alert your contacts if you don't respond.",
-    buttonLabel: "I understand  -  continue",
+    title: "Motion helps detect serious events",
+    description: "StillHere can use motion sensors to help detect possible falls or vehicle crashes and start an emergency flow if you do not respond.",
+    detail: "",
+    secondary: "Motion data is used for safety, not surveillance.",
+    buttonLabel: "Continue",
   },
 ];
 
@@ -89,10 +92,10 @@ export default function SetupPermissionsPage() {
             <CardTitle className="text-2xl" data-testid="text-permissions-complete">
               {allGranted ? "You're all set" : "Setup complete"}
             </CardTitle>
-            <CardDescription className="text-base mt-2">
+            <CardDescription className="text-base mt-2" data-testid="text-permissions-summary">
               {allGranted
                 ? "StillHere has the access it needs to keep you safe."
-                : "You can update permissions anytime in Settings."}
+                : "StillHere will still work, but some safety features may be limited. You can update permissions anytime in Settings."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -151,15 +154,11 @@ export default function SetupPermissionsPage() {
             <p className="text-base text-foreground leading-relaxed" data-testid="text-permission-description">
               {step.description}
             </p>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {step.detail}
-            </p>
-          </div>
-
-          <div className="bg-muted/50 rounded-lg p-3">
-            <p className="text-xs text-muted-foreground">
-              You can change this anytime in your phone's Settings.
-            </p>
+            {step.detail && (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {step.detail}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -173,6 +172,12 @@ export default function SetupPermissionsPage() {
               {requesting ? "Requesting..." : step.buttonLabel}
               <ChevronRight className="h-4 w-4 ml-2" />
             </Button>
+            <p
+              className="text-xs text-center text-muted-foreground"
+              data-testid="text-permission-secondary"
+            >
+              {step.secondary}
+            </p>
             <Button
               variant="ghost"
               onClick={handleSkip}
