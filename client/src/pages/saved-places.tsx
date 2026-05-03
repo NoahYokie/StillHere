@@ -47,6 +47,41 @@ const TYPE_COLORS: Record<string, string> = {
   custom: "bg-teal-500",
 };
 
+type DistanceUnit = "metric" | "imperial";
+
+// Locales that default to imperial measurements for short distances.
+// US, Liberia, Myanmar — everything else defaults to metric.
+function detectDefaultUnit(): DistanceUnit {
+  if (typeof navigator === "undefined") return "metric";
+  const lang = (navigator.language || "").toLowerCase();
+  if (lang === "en-us" || lang.startsWith("en-us") || lang === "en-lr" || lang === "my-mm") return "imperial";
+  return "metric";
+}
+
+function loadUnit(): DistanceUnit {
+  if (typeof window === "undefined") return "metric";
+  const stored = window.localStorage.getItem("stillhere:distanceUnit");
+  if (stored === "metric" || stored === "imperial") return stored;
+  return detectDefaultUnit();
+}
+
+function saveUnit(u: DistanceUnit) {
+  try { window.localStorage.setItem("stillhere:distanceUnit", u); } catch {}
+}
+
+// Render a radius (meters) in the user's chosen unit. Imperial uses feet
+// below ~528ft (~160m), then switches to yards for readability.
+function formatRadius(meters: number, unit: DistanceUnit): string {
+  if (unit === "imperial") {
+    const feet = Math.round(meters * 3.28084);
+    if (feet < 1000) return `${feet} ft`;
+    const miles = meters / 1609.344;
+    return miles >= 0.1 ? `${miles.toFixed(2)} mi` : `${feet} ft`;
+  }
+  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
+  return `${meters} m`;
+}
+
 export default function SavedPlacesPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
