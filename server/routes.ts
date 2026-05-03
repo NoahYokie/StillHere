@@ -5161,16 +5161,101 @@ export async function registerRoutes(
   }
 
   // ===== AUTOMATED WELLNESS CHECK CALL =====
+  // Map of country (ISO-2) -> local emergency services number. Used so the
+  // wellness call says the right number for the user's actual location, not a
+  // hard-coded "911". Falls back to a generic phrase below.
+  const EMERGENCY_NUMBERS: Record<string, string> = {
+    US: "911", CA: "911", MX: "911",
+    GB: "999", IE: "999", KE: "999", HK: "999", SG: "999",
+    AU: "000", NZ: "111",
+    DE: "112", FR: "112", ES: "112", IT: "112", NL: "112", BE: "112",
+    PT: "112", AT: "112", SE: "112", DK: "112", FI: "112", NO: "112",
+    CH: "112", PL: "112", CZ: "112", HU: "112", GR: "112", RO: "112",
+    IS: "112", LU: "112", EE: "112", LV: "112", LT: "112", BG: "112",
+    HR: "112", SK: "112", SI: "112", TR: "112",
+    IN: "112", KR: "112", IL: "112",
+    JP: "110", CN: "110", TW: "110",
+    BR: "190", AR: "911", CL: "133",
+    ZA: "10111", AE: "999", SA: "999",
+  };
+
+  // Crude timezone -> country fallback for when we have no GPS yet.
+  function countryFromTimezone(tz: string | null | undefined): string | null {
+    if (!tz) return null;
+    if (tz.startsWith("Australia/")) return "AU";
+    if (tz === "Pacific/Auckland" || tz === "Pacific/Chatham") return "NZ";
+    if (tz === "Europe/London" || tz === "Europe/Belfast") return "GB";
+    if (tz === "Europe/Dublin") return "IE";
+    if (tz.startsWith("Europe/")) return "DE"; // any EU -> 112
+    if (tz === "Asia/Tokyo") return "JP";
+    if (tz === "Asia/Shanghai" || tz === "Asia/Hong_Kong") return "CN";
+    if (tz === "Asia/Seoul") return "KR";
+    if (tz === "Asia/Kolkata" || tz === "Asia/Calcutta") return "IN";
+    if (tz === "Asia/Singapore") return "SG";
+    if (tz === "Asia/Dubai") return "AE";
+    if (tz.startsWith("America/Toronto") || tz.startsWith("America/Vancouver") || tz.startsWith("America/Montreal") || tz.startsWith("America/Halifax") || tz.startsWith("America/Edmonton") || tz.startsWith("America/Winnipeg")) return "CA";
+    if (tz.startsWith("America/Mexico")) return "MX";
+    if (tz.startsWith("America/Sao_Paulo") || tz.startsWith("America/Bahia") || tz.startsWith("America/Fortaleza")) return "BR";
+    if (tz.startsWith("America/")) return "US";
+    if (tz === "Africa/Johannesburg") return "ZA";
+    return null;
+  }
+
+  // Reverse-geocode lat/lng -> ISO country code via Google. Aggressively
+  // timed out (1.5s) because this runs on the wellness-call TwiML hot path
+  // and we'd rather fall back to timezone than make the user wait on the line.
+  async function countryFromLatLng(lat: number, lng: number): Promise<string | null> {
+    const key = process.env.GOOGLE_MAPS_API_KEY;
+    if (!key) return null;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 1500);
+      const resp = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&result_type=country&key=${key}`,
+        { signal: ctrl.signal }
+      );
+      clearTimeout(timer);
+      const data: any = await resp.json();
+      const country = data?.results?.[0]?.address_components?.find((c: any) => c.types?.includes("country"));
+      return country?.short_name || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Returns the best emergency number we can determine for this user.
+  // Priority: GPS reverse-geocode -> timezone heuristic -> "911" default.
+  // Also returns a friendly phrase usable in TwiML/SMS.
+  async function getEmergencyInfoForUser(user: { id: string; timezone: string; lastHeartbeatLat: number | null; lastHeartbeatLng: number | null }): Promise<{ number: string; phrase: string; country: string | null }> {
+    let country: string | null = null;
+    if (user.lastHeartbeatLat != null && user.lastHeartbeatLng != null) {
+      country = await countryFromLatLng(user.lastHeartbeatLat, user.lastHeartbeatLng);
+    }
+    if (!country) country = countryFromTimezone(user.timezone);
+    const number = (country && EMERGENCY_NUMBERS[country]) || "911";
+    const phrase = country
+      ? `your local emergency services on ${number}`
+      : `your local emergency services, ${number}`;
+    return { number, phrase, country };
+  }
+
+  // Reusable: wrap text in calm-paced SSML for Polly Joanna Neural.
+  // Polly Neural voices sound much more natural than Google Neural2 over the
+  // phone, and prosody rate=92% gives a measured, professional pace.
+  const calm = (text: string) => `<prosody rate="92%">${text}</prosody>`;
+
   app.post("/api/wellness-call/respond", verifyTwilioSignature, async (req, res) => {
     try {
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="15">
-    <Say voice="Google.en-US-Neural2-F">Hello, this is StillHere. We noticed you missed your safety check-in. Press 1 if you're okay. Press 2 if you need help.</Say>
+    <Say voice="Polly.Joanna-Neural">${calm("Hello, this is StillHere. We noticed you missed your safety check-in.")}</Say>
+    <Pause length="1"/>
+    <Say voice="Polly.Joanna-Neural">${calm("Press 1 if you're okay. Press 2 if you need help.")}</Say>
     <Pause length="3"/>
-    <Say voice="Google.en-US-Neural2-F">Press 1 if you're safe. Press 2 if you need help.</Say>
+    <Say voice="Polly.Joanna-Neural">${calm("Take your time. Press 1 if you're safe. Press 2 if you need help.")}</Say>
   </Gather>
-  <Say voice="Google.en-US-Neural2-F">No response was received. Your emergency contacts will be notified shortly. Goodbye.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("No response was received. Your safety circle will be notified shortly. Take care.")}</Say>
   <Hangup/>
 </Response>`;
       res.type("text/xml").send(twiml);
@@ -5195,7 +5280,7 @@ export async function registerRoutes(
         if (openIncidentForUser?.wellnessCallStatus === "safe" || openIncidentForUser?.wellnessCallStatus === "help") {
           console.log(`[WELLNESS CALL] Press 1 received but incident ${openIncidentForUser.id} already terminal (${openIncidentForUser.wellnessCallStatus}). Ignoring duplicate.`);
           const twimlDup = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">Thank you. You are already checked in. Goodbye.</Say><Hangup/></Response>`;
+<Response><Say voice="Polly.Joanna-Neural">${calm("Thank you. You are already checked in. Take care.")}</Say><Hangup/></Response>`;
           return res.type("text/xml").send(twimlDup);
         }
         if (openIncidentForUser) {
@@ -5204,7 +5289,15 @@ export async function registerRoutes(
         const result = await resolveCheckin(user.id, "call");
         console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} confirmed safe via phone call, hadIncident=${result.hadIncident}`);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">Great, thank you for confirming. You are now checked in and your safety circle has been notified that you are safe.</Say><Pause length="1"/><Say voice="Google.en-US-Neural2-F">Take care and stay safe. Goodbye.</Say><Pause length="2"/><Hangup/></Response>`;
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm("Wonderful. Thank you for confirming.")}</Say>
+  <Pause length="1"/>
+  <Say voice="Polly.Joanna-Neural">${calm("You are now checked in, and your safety circle has been notified that you are safe.")}</Say>
+  <Pause length="1"/>
+  <Say voice="Polly.Joanna-Neural">${calm("Take care, and have a lovely day.")}</Say>
+  <Pause length="1"/>
+  <Hangup/>
+</Response>`;
         return res.type("text/xml").send(twiml);
       }
 
@@ -5221,7 +5314,7 @@ export async function registerRoutes(
         if (incident?.wellnessCallStatus === "help") {
           console.log(`[WELLNESS CALL] Press 2 received but incident ${incident.id} already marked help. Ignoring duplicate.`);
           const twimlDup = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">We hear you. Help is on the way. Goodbye.</Say><Hangup/></Response>`;
+<Response><Say voice="Polly.Joanna-Neural">${calm("We hear you. Help is on the way. We are right here with you.")}</Say><Pause length="2"/><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`;
           return res.type("text/xml").send(twimlDup);
         }
 
@@ -5295,8 +5388,14 @@ export async function registerRoutes(
         console.log(`[WELLNESS CALL] SOS notified ${notifiedIds.length}/${sortedSos.length} contacts for ${user.name}`);
 
         // ----- "We care" wraparound: keep the user supported, don't just hang up -----
+        // Resolve the user's local emergency number from their last known
+        // location (GPS) with timezone fallback, so we say "999" in the UK,
+        // "000" in Australia, "112" in the EU, etc.  -  not just "911".
+        const emergency = await getEmergencyInfoForUser(user as any);
+        console.log(`[WELLNESS CALL] Local emergency number for ${user.name}: ${emergency.number} (country=${emergency.country || "unknown"})`);
+
         // 1. Text the USER themselves so they have a written record of who's coming
-        //    and a clear 911 prompt, even if they hang up the call.
+        //    and a clear local-emergency prompt, even if they hang up the call.
         if (user.phone) {
           const notifiedNames = sortedSos
             .filter(c => notifiedIds.includes(c.id))
@@ -5304,17 +5403,17 @@ export async function registerRoutes(
           const namesLine = notifiedNames.length > 0
             ? `${notifiedNames.slice(0, 3).join(", ")}${notifiedNames.length > 3 ? ` and ${notifiedNames.length - 3} more` : ""}`
             : "your safety circle";
-          const userSmsBody = `StillHere: We hear you. ${namesLine} ${notifiedNames.length === 1 ? "has" : "have"} been alerted and ${notifiedNames.length === 1 ? "is" : "are"} on the way.\n\nIf this is life-threatening, call 911 now.\n\nYou are not alone. Stay safe.`;
+          const userSmsBody = `StillHere: We hear you. ${namesLine} ${notifiedNames.length === 1 ? "has" : "have"} been alerted and ${notifiedNames.length === 1 ? "is" : "are"} on the way.\n\nIf this is life-threatening, call ${emergency.number} now.\n\nYou are not alone. Stay safe.`;
           sendSms(user.phone, userSmsBody).catch((err: any) => {
             console.error(`[WELLNESS CALL] User SMS failed:`, err?.message || err);
           });
         }
 
         // 2. Push the user's own device with a "we're with you" card linking to
-        //    the live SOS view (one-tap 911, primary contact, location share).
+        //    the live SOS view (one-tap emergency, primary contact, location share).
         sendPushNotification(user.id, {
           title: "We're with you",
-          body: `${notifiedIds.length} contact${notifiedIds.length === 1 ? "" : "s"} alerted. Tap for one-tap 911, contact call, and live location.`,
+          body: `${notifiedIds.length} contact${notifiedIds.length === 1 ? "" : "s"} alerted. Tap for one-tap ${emergency.number}, contact call, and live location.`,
           tag: "sos-active",
           url: "/sos",
         }).catch((err: any) => {
@@ -5326,18 +5425,19 @@ export async function registerRoutes(
         const primaryName = sortedSos[0]?.name || "your primary contact";
         const safePrimary = escapeXml(primaryName);
         const safeUserName = escapeXml(user.name);
+        const safeEmergency = escapeXml(emergency.number);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">We hear you, ${safeUserName}. You are not alone. Help is on the way right now.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We hear you, ${safeUserName}. You are not alone. Help is on the way right now.`)}</Say>
   <Pause length="1"/>
-  <Say voice="Google.en-US-Neural2-F">${notifiedIds.length} ${notifiedIds.length === 1 ? "person has" : "people have"} been alerted, including ${safePrimary}. We are also sending you a text message with their names.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`${notifiedIds.length} ${notifiedIds.length === 1 ? "person has" : "people have"} been alerted, including ${safePrimary}. We are also sending you a text message with their names.`)}</Say>
   <Pause length="1"/>
   <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="15">
-    <Say voice="Google.en-US-Neural2-F">To be connected directly to ${safePrimary} right now, press 1.</Say>
+    <Say voice="Polly.Joanna-Neural">${calm(`To be connected directly to ${safePrimary} right now, press 1.`)}</Say>
     <Pause length="1"/>
-    <Say voice="Google.en-US-Neural2-F">For emergency services guidance, press 0.</Say>
+    <Say voice="Polly.Joanna-Neural">${calm(`If this is life-threatening, please hang up and dial ${safeEmergency} now. Or, press 0 for guidance.`)}</Say>
     <Pause length="1"/>
-    <Say voice="Google.en-US-Neural2-F">Or simply stay on the line. We will stay with you until help arrives.</Say>
+    <Say voice="Polly.Joanna-Neural">${calm("Or simply stay on the line. We will stay with you until help arrives.")}</Say>
   </Gather>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
 </Response>`;
@@ -5366,7 +5466,7 @@ export async function registerRoutes(
       }
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">We didn't receive a valid response. Your safety circle will be notified shortly. Goodbye.</Say><Hangup/></Response>`;
+<Response><Say voice="Polly.Joanna-Neural">${calm("We didn't receive a response. Your safety circle will be notified shortly. Take care.")}</Say><Hangup/></Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call gather:", error);
@@ -5392,31 +5492,34 @@ export async function registerRoutes(
           const safeName = escapeXml(primary.name);
           const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">Connecting you to ${safeName} now. Please hold.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`Connecting you to ${safeName} now. Please hold.`)}</Say>
   <Dial timeout="25" callerId="${process.env.TWILIO_PHONE_NUMBER || ""}" answerOnBridge="true">
     <Number>${escapeXml(primary.phone)}</Number>
   </Dial>
-  <Say voice="Google.en-US-Neural2-F">We could not reach ${safeName} right now. We will keep trying your safety circle. Stay with us.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We could not reach ${safeName} right now. We will keep trying your safety circle. Stay with us.`)}</Say>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
 </Response>`;
           return res.type("text/xml").send(twiml);
         }
         // No contact available -> fall through to comfort
+        const emergencyNoContact = user ? await getEmergencyInfoForUser(user as any) : { number: "911" };
         const twimlNoContact = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">We don't have a contact phone number on file to connect you to. Please call 911 if this is life-threatening. We will stay with you.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We don't have a contact phone number on file to connect you to. Please call ${emergencyNoContact.number} if this is life-threatening. We will stay with you.`)}</Say>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
 </Response>`;
         return res.type("text/xml").send(twimlNoContact);
       }
 
-      // Press 0 -> emergency services guidance
+      // Press 0 -> emergency services guidance, with user's local number
       if (digits === "0") {
+        const emergency = user ? await getEmergencyInfoForUser(user as any) : { number: "911" };
+        const safeEmergency = escapeXml(emergency.number);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">If this is a life-threatening emergency, please hang up now and dial 911. Your safety circle has already been alerted and we will keep them updated.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`If this is a life-threatening emergency, please hang up now and dial ${safeEmergency}. Your safety circle has already been alerted, and we will keep them updated.`)}</Say>
   <Pause length="2"/>
-  <Say voice="Google.en-US-Neural2-F">If you cannot hang up, stay with us. We are right here with you.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("If you cannot hang up, stay with us. We are right here with you.")}</Say>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
 </Response>`;
         return res.type("text/xml").send(twiml);
@@ -5445,20 +5548,24 @@ export async function registerRoutes(
       const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
 
       let primaryName = "your primary contact";
+      let emergencyNumber = "911";
       if (user) {
         const allContacts = await storage.getContacts(user.id);
         const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
         if (sorted[0]) primaryName = sorted[0].name;
+        const e = await getEmergencyInfoForUser(user as any);
+        emergencyNumber = e.number;
       }
       const safePrimary = escapeXml(primaryName);
+      const safeEmergency = escapeXml(emergencyNumber);
 
       // Final cycle -> warm sign-off (never just a dead "Goodbye")
       if (cycle >= 3) {
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">We need to end this call now so the line stays open for ${safePrimary}, but we are not leaving you. Your safety circle has been alerted, you have a text message from us, and we will check on you again very soon.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We need to end this call now so the line stays open for ${safePrimary}, but we are not leaving you. Your safety circle has been alerted, you have a text message from us, and we will check on you again very soon.`)}</Say>
   <Pause length="1"/>
-  <Say voice="Google.en-US-Neural2-F">If you are in danger right now, please call 911. You are not alone. Take care.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`If you are in danger right now, please call ${safeEmergency}. You are not alone. Take care.`)}</Say>
   <Hangup/>
 </Response>`;
         return res.type("text/xml").send(twiml);
@@ -5467,16 +5574,18 @@ export async function registerRoutes(
       // Reassurance varies a little per cycle so it doesn't feel robotic
       const reassurance = cycle === 1
         ? `We are still right here with you. ${safePrimary} has been alerted and is on the way.`
-        : `Hang in there. Your safety circle has been notified and someone will reach you very soon.`;
+        : `Hang in there. Your safety circle has been notified, and someone will reach you very soon.`;
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">${reassurance}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(reassurance)}</Say>
   <Pause length="2"/>
-  <Say voice="Google.en-US-Neural2-F">Take a slow breath with me. In. And out. You are doing great.</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("Let's take a slow breath together. Breathe in.")}</Say>
+  <Pause length="2"/>
+  <Say voice="Polly.Joanna-Neural">${calm("And gently breathe out. You are doing great.")}</Say>
   <Pause length="2"/>
   <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="20">
-    <Say voice="Google.en-US-Neural2-F">Press 1 anytime to be connected directly to ${safePrimary}. Press 0 for emergency services guidance. Or just stay on the line with us.</Say>
+    <Say voice="Polly.Joanna-Neural">${calm(`Press 1 anytime to be connected directly to ${safePrimary}. Press 0 for emergency services guidance. Or just stay on the line with us.`)}</Say>
   </Gather>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=${cycle + 1}</Redirect>
 </Response>`;
@@ -5484,7 +5593,7 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in wellness call comfort:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Google.en-US-Neural2-F">You are not alone. Help is on the way. Take care.</Say><Hangup/></Response>`);
+<Response><Say voice="Polly.Joanna-Neural">${calm("You are not alone. Help is on the way. Take care.")}</Say><Hangup/></Response>`);
     }
   });
 
