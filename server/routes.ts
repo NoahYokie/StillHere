@@ -6070,8 +6070,12 @@ export async function registerRoutes(
               const { sendEmail } = await import("./email");
               const { format: fmtDate } = await import("date-fns");
 
+              const escHtml = (s: string | null | undefined) =>
+                String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+              const safeWatchedName = escHtml(watchedUser.name);
+
               const checkinRows = checkinList.map(c =>
-                `<tr><td>${fmtDate(c.createdAt, "MMM d, yyyy")}</td><td>${fmtDate(c.createdAt, "h:mm a")}</td><td>${c.method}</td></tr>`
+                `<tr><td>${fmtDate(c.createdAt, "MMM d, yyyy")}</td><td>${fmtDate(c.createdAt, "h:mm a")}</td><td>${escHtml(c.method)}</td></tr>`
               ).join("");
               const incidentRows = incidentList.map(i =>
                 `<tr><td>${fmtDate(i.startedAt, "MMM d, yyyy")}</td><td>${i.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</td><td>${i.status === "resolved" ? "Resolved" : "Open"}</td></tr>`
@@ -6080,7 +6084,7 @@ export async function registerRoutes(
               const complianceRate = Math.min(100, Math.round((checkinList.length / Math.max(1, periodDays)) * 100));
 
               const html = `
-                <h2>StillHere Safety Report for ${watchedUser.name}</h2>
+                <h2>StillHere Safety Report for ${safeWatchedName}</h2>
                 <p>Report period: ${fmtDate(from, "MMM d, yyyy")} - ${fmtDate(now, "MMM d, yyyy")}</p>
                 <h3>Summary</h3>
                 <ul>
@@ -6090,10 +6094,11 @@ export async function registerRoutes(
                 </ul>
                 ${checkinList.length > 0 ? `<h3>Checkin History</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Time</th><th>Method</th></tr>${checkinRows}</table>` : ""}
                 ${incidentList.length > 0 ? `<h3>Incidents</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Type</th><th>Status</th></tr>${incidentRows}</table>` : ""}
-                <p style="color:#888;font-size:12px;margin-top:20px;">This report was generated automatically by StillHere. ${watchedUser.name} has consented to share this information.</p>
+                <p style="color:#888;font-size:12px;margin-top:20px;">This report was generated automatically by StillHere. ${safeWatchedName} has consented to share this information.</p>
               `;
 
-              await sendEmail(recipientEmail, `StillHere Report: ${watchedUser.name} (${pref.frequency})`, html);
+              const subject = `StillHere Report: ${watchedUser.name} (${pref.frequency})`.replace(/[\r\n\t\0]+/g, " ").slice(0, 200);
+              await sendEmail(recipientEmail, subject, html);
               reportsSent++;
             }
 
