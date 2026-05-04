@@ -27,6 +27,7 @@ import {
   Home,
   Briefcase,
 } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 
 const tourSteps = [
   {
@@ -158,7 +159,7 @@ function CheckinScreen() {
     <div className="flex flex-col h-full">
       <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <Heart className="h-3.5 w-3.5" />
+          <img src={logoPath} alt="" className="h-3.5 w-3.5 object-contain" />
           <span className="text-xs font-semibold">StillHere</span>
         </div>
         <p className="text-[10px] text-white/70">Good morning, Sarah</p>
@@ -198,7 +199,7 @@ function ReminderScreen() {
         <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-200">
           <div className="flex items-start gap-2">
             <div className="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0">
-              <Heart className="h-4 w-4 text-white" />
+              <img src={logoPath} alt="" className="h-5 w-5 object-contain" />
             </div>
             <div className="flex-1">
               <div className="flex items-center justify-between">
@@ -292,7 +293,7 @@ function SOSScreen() {
     <div className="flex flex-col h-full">
       <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <Heart className="h-3.5 w-3.5" />
+          <img src={logoPath} alt="" className="h-3.5 w-3.5 object-contain" />
           <span className="text-xs font-semibold">StillHere</span>
         </div>
         <p className="text-[10px] text-white/70">Welcome, Sarah</p>
@@ -328,7 +329,7 @@ function DiscreetScreen() {
     <div className="flex flex-col h-full">
       <div className="bg-sky-500 text-white px-4 pt-5 pb-3">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <Heart className="h-3.5 w-3.5" />
+          <img src={logoPath} alt="" className="h-3.5 w-3.5 object-contain" />
           <span className="text-xs font-semibold">StillHere</span>
         </div>
       </div>
@@ -559,7 +560,7 @@ function WellnessCallScreen() {
       </div>
       <div className="flex-1 flex flex-col items-center justify-center bg-gray-900 px-4">
         <div className="w-16 h-16 rounded-full bg-sky-500 flex items-center justify-center mb-3">
-          <Heart className="h-8 w-8 text-white" />
+          <img src={logoPath} alt="" className="h-10 w-10 object-contain" />
         </div>
         <p className="text-white text-sm font-semibold mb-1">StillHere</p>
         <p className="text-[10px] text-gray-400 mb-6">Wellness Check</p>

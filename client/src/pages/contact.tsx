@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield, Smartphone, Sparkles } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import type { ContactPageData } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
@@ -146,7 +147,10 @@ export default function ContactPage() {
       <header className="bg-primary text-primary-foreground px-6 py-4">
         <div className="max-w-md mx-auto flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold" data-testid="text-app-title">StillHere</h1>
+            <div className="flex items-center gap-2" data-testid="text-app-title">
+              <img src={logoPath} alt="StillHere" className="h-8 w-8 object-contain" />
+              <span className="text-xl font-semibold">StillHere</span>
+            </div>
             <p className="text-sm opacity-90" data-testid="text-status-for">
               Status for {user.name}
             </p>

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, Shield, ShieldCheck, ShieldAlert, AlertTriangle, Clock, MapPin, CheckCircle2 } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 
 interface TimelineItem {
@@ -189,9 +190,12 @@ export default function WeeklyReportPage() {
         )}
 
         <div className="text-center pt-4 pb-2">
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            StillHere • Your safety, always watched over
-          </p>
+          <div className="flex items-center justify-center gap-1.5">
+            <img src={logoPath} alt="StillHere" className="h-5 w-5 object-contain" />
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              StillHere - Your safety, always watched over
+            </p>
+          </div>
         </div>
       </div>
     </div>

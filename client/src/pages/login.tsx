@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Heart, HelpCircle, ArrowLeft, Fingerprint, Smartphone } from "lucide-react";
+import { HelpCircle, ArrowLeft, Fingerprint, Smartphone } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
@@ -120,9 +121,7 @@ export default function LoginPage() {
         <CardHeader className="text-center pt-8 pb-2">
           <div className="relative mx-auto mb-5">
             <div className="absolute inset-0 rounded-full bg-primary/15 blur-xl" aria-hidden="true" />
-            <div className="relative w-16 h-16 bg-primary rounded-full flex items-center justify-center ring-4 ring-primary/10">
-              <Heart className="h-8 w-8 text-primary-foreground" />
-            </div>
+            <img src={logoPath} alt="StillHere" className="relative w-20 h-20 object-contain mx-auto" />
           </div>
           <CardTitle className="text-2xl font-semibold tracking-tight" data-testid="text-login-title">
             StillHere

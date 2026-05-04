@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, HelpCircle, Shield, LogOut, Bell, Smartphone, UserPlus, Trash2, GripVertical, Activity, Phone, MessageCircle, Video, Fingerprint, Plus, X, FileText, Car, Gauge, ChevronRight, ChevronUp, ChevronDown, User, CheckCircle2, PhoneOff } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
@@ -490,7 +491,10 @@ export default function SettingsPage() {
       <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center gap-4">
           <BackButton to="/" tone="onPrimary" />
-          <h1 className="text-xl font-semibold" data-testid="text-settings-title">Settings</h1>
+          <div className="flex items-center gap-2">
+            <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
+            <h1 className="text-xl font-semibold" data-testid="text-settings-title">Settings</h1>
+          </div>
         </div>
       </header>
 

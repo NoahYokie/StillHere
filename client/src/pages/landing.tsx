@@ -8,6 +8,7 @@ import {
   Plane, Stethoscope, Home as HomeIcon, MoonStar, ShieldCheck, Hand,
   EyeOff, Pause, ArrowRight, ChevronUp,
 } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 
 type Stage = 0 | 1 | 2 | 3;
 
@@ -19,7 +20,7 @@ function PhoneScreen({ stage }: { stage: Stage }) {
       <div className="flex-1 flex flex-col bg-slate-50">
         <div className="bg-white px-3.5 md:px-5 pt-5 md:pt-7 pb-2 md:pb-3 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <Heart className="h-3 md:h-4 w-3 md:w-4 text-primary" />
+            <img src={logoPath} alt="" className="h-3 md:h-4 w-3 md:w-4 object-contain" />
             <span className="text-[11px] md:text-sm font-semibold text-gray-800">StillHere</span>
           </div>
           <span className="text-[8px] md:text-[10px] text-gray-400">9:41</span>
@@ -202,7 +203,7 @@ function WatchScreen({ stage }: { stage: Stage }) {
       <div className="absolute top-1/2 -right-[3px] -translate-y-1/2 w-[4px] h-5 bg-gray-600 rounded-r-sm" />
       <div className="flex-1 bg-black rounded-[1.4rem] md:rounded-[1.75rem] overflow-hidden flex flex-col">
         <div className="px-2 pt-2 md:pt-2.5 flex items-center gap-1">
-          <Heart className="h-2 w-2 md:h-2.5 md:w-2.5 text-cyan-400" />
+          <img src={logoPath} alt="" className="h-2 w-2 md:h-2.5 md:w-2.5 object-contain" />
           <span className="text-[6px] md:text-[7px] font-semibold text-cyan-400">StillHere</span>
         </div>
 
@@ -325,7 +326,7 @@ export default function LandingPage() {
       <header className="hidden md:block bg-background/80 backdrop-blur-md border-b border-border sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
           <button onClick={() => scrollTo("hero")} className="flex items-center gap-2" data-testid="link-home">
-            <Heart className="h-5 w-5 text-primary fill-primary/20" />
+            <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
             <span className="text-lg font-bold tracking-tight" data-testid="text-landing-title">StillHere</span>
           </button>
           <nav className="flex items-center gap-1">
@@ -358,7 +359,7 @@ export default function LandingPage() {
 
         <div className="relative flex-1 md:flex-none flex flex-col md:block px-6 pt-12 pb-6 md:py-20 max-w-6xl md:mx-auto md:w-full">
           <div className="flex items-center gap-2 md:hidden mb-6">
-            <Heart className="h-6 w-6 fill-white/20" />
+            <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
             <span className="text-lg font-semibold tracking-tight" data-testid="text-landing-title-mobile">StillHere</span>
           </div>
 
@@ -974,7 +975,7 @@ export default function LandingPage() {
         <div className="max-w-6xl md:mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <Heart className="h-4 w-4 text-primary fill-primary/20" />
+              <img src={logoPath} alt="StillHere" className="h-5 w-5 object-contain" />
               <span className="hidden md:inline">StillHere. A safety check in app.</span>
               <span className="md:hidden">StillHere</span>
             </div>

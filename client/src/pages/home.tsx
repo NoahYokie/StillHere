@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, AlertTriangle, Clock, Phone, UserCheck, AlertCircle, Bell, Activity, Car, Smartphone, Timer, Navigation, ShieldCheck } from "lucide-react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
 import { getQuoteOfTheDay } from "@/lib/quotes";
@@ -634,9 +635,10 @@ export default function Home() {
             userName={status?.user?.name}
             onSosTap={() => setShowSosConfirm(true)}
           />
-          <h1 className="text-base font-semibold tracking-tight" data-testid="text-app-title">
-            StillHere
-          </h1>
+          <div className="flex items-center gap-1.5" data-testid="text-app-title">
+            <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
+            <span className="text-base font-semibold tracking-tight">StillHere</span>
+          </div>
           <Button
             variant="ghost"
             size="icon"

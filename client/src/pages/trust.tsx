@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, MapPin, Heart, Lock, Eye, Users, Mail, Server, Smartphone } from "lucide-react";
 import { BackButton } from "@/components/back-button";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 
 export default function TrustPage() {
   const [, setLocation] = useLocation();
@@ -14,8 +15,13 @@ export default function TrustPage() {
           <div className="flex items-center gap-3">
             <BackButton tone="onPrimary" />
             <div>
-              <h1 className="text-xl font-semibold" data-testid="text-page-title">Trust & Safety</h1>
-              <p className="text-sm opacity-90">How StillHere protects you</p>
+              <div className="flex items-center gap-2">
+                <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
+                <div>
+                  <h1 className="text-xl font-semibold" data-testid="text-page-title">Trust & Safety</h1>
+                  <p className="text-sm opacity-90">How StillHere protects you</p>
+                </div>
+              </div>
             </div>
           </div>
           <Button
