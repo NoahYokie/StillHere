@@ -338,8 +338,7 @@ export default function GuardianMapPage() {
           showMyLocation={false}
           onPersonTap={(id) => {
             if (id === "__me__") return;
-            setFocusedId(id);
-            setSheetOpen(false);
+            setLocation(`/live-location/${id}`);
           }}
           className="w-full h-full"
         />
@@ -515,8 +514,7 @@ export default function GuardianMapPage() {
                       type="button"
                       onClick={() => {
                         if (hasCoords) {
-                          setFocusedId(w.userId);
-                          setSheetOpen(false);
+                          setLocation(`/live-location/${w.userId}`);
                         }
                       }}
                       className={`w-full text-left rounded-xl p-3 transition border ring-1 ${colors.bg} ${colors.ring} ${
