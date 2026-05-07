@@ -511,6 +511,7 @@ export default function GoogleMapComponent({
   const peoplePositionsRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
   const peopleDataRef = useRef<Map<string, MapPerson>>(new Map());
   const lastUpdateAtRef = useRef<number>(0);
+  const idleResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accuracyCirclesRef = useRef<Map<string, google.maps.Circle>>(new Map());
   const trailPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const routePolylineRef = useRef<google.maps.Polyline | null>(null);
@@ -572,10 +573,27 @@ export default function GoogleMapComponent({
     mapInstanceRef.current = map;
     infoWindowRef.current = new google.maps.InfoWindow();
 
-    const l1 = map.addListener("dragstart", () => { userInteractedRef.current = true; setShowRecenter(true); });
+    const onUserInteract = () => {
+      userInteractedRef.current = true;
+      setShowRecenter(true);
+      if (idleResumeTimerRef.current) clearTimeout(idleResumeTimerRef.current);
+      if (followMarker || smartCamera) {
+        idleResumeTimerRef.current = setTimeout(() => {
+          userInteractedRef.current = false;
+          setShowRecenter(false);
+          const m = mapInstanceRef.current;
+          if (m) {
+            programmaticMoveRef.current = true;
+            m.panTo({ lat: center.lat, lng: center.lng });
+            setTimeout(() => { programmaticMoveRef.current = false; }, 300);
+          }
+        }, 6000);
+      }
+    };
+    const l1 = map.addListener("dragstart", onUserInteract);
     const l2 = map.addListener("zoom_changed", () => {
       if (programmaticMoveRef.current) return;
-      if (initRef.current) { userInteractedRef.current = true; setShowRecenter(true); }
+      if (initRef.current) onUserInteract();
     });
     mapListenersRef.current = [l1, l2];
 
@@ -1223,18 +1241,19 @@ export default function GoogleMapComponent({
       {showRecenter && mapRef.current && (
         <button
           onClick={handleRecenter}
-          style={{ position: "absolute", bottom: 16, right: 16, zIndex: 10 }}
-          className="bg-white dark:bg-gray-800 shadow-lg rounded-full w-11 h-11 flex items-center justify-center border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 20 }}
+          className="bg-white dark:bg-gray-800 shadow-xl rounded-full pl-3 pr-4 py-2 flex items-center gap-2 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           data-testid="button-recenter-map"
           title="Re-center map"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2v4" />
             <path d="M12 18v4" />
             <path d="M2 12h4" />
             <path d="M18 12h4" />
           </svg>
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Recenter</span>
         </button>
       )}
     </>
