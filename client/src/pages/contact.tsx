@@ -162,64 +162,44 @@ export default function ContactPage() {
       </header>
 
       <main className="max-w-md mx-auto px-6 py-6 space-y-6">
-        {/* Status Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                <User className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-lg" data-testid="text-user-name">{user.name}</CardTitle>
-                <CardDescription>
-                  Last checkin:{" "}
-                  <span data-testid="text-last-checkin">
-                    {lastCheckin
-                      ? formatDistanceToNow(new Date(lastCheckin.createdAt), { addSuffix: true })
-                      : "Never"}
-                  </span>
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Status:</span>
-              <span className={`font-medium ${getStatusColor()}`} data-testid="text-status">
-                {getStatusText()}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Alert Banner */}
+        {/* Big high-contrast Alert Banner — top of page so it dominates the screen */}
         {hasActiveIncident && !isBeingHandled && (
           <>
-            <Card className={isSOS ? "bg-destructive/10 border-destructive/30" : "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800"}>
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isSOS ? "text-destructive" : "text-yellow-600 dark:text-yellow-500"}`} />
-                  <div>
-                    <p className={`font-medium ${isSOS ? "text-destructive" : "text-yellow-700 dark:text-yellow-400"}`}>
-                      {isSOS ? "Help has been requested" : "Missed checkin"}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {isSOS
-                        ? `${user.name} pressed the emergency button.`
-                        : `${user.name} hasn't checked in as expected.`}
-                    </p>
-                  </div>
+            <div
+              className={`rounded-2xl p-6 shadow-xl ${isSOS ? "bg-red-600 text-white" : "bg-amber-500 text-white"}`}
+              data-testid="banner-alert"
+            >
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-8 w-8 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                <div className="flex-1">
+                  <p className="text-2xl font-bold leading-tight">
+                    {isSOS ? "Help has been requested" : "Missed check-in"}
+                  </p>
+                  <p className="text-base font-medium mt-2 opacity-95">
+                    {isSOS
+                      ? `${user.name} pressed the emergency button.`
+                      : `${user.name} hasn't checked in as expected.`}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* What to do next guidance */}
-            <div className="bg-muted/50 rounded-lg p-4 mt-4" data-testid="guidance-next-steps">
-              <p className="text-sm font-medium mb-2">What to do next:</p>
-              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Try calling them</li>
-                <li>If no answer, send them a text message</li>
-                <li>If still no response, call local emergency services</li>
+            {/* What to do next guidance — bold dark text, clear numbered chips */}
+            <div className="bg-white dark:bg-gray-900 border-2 border-gray-900 dark:border-gray-100 rounded-2xl p-5" data-testid="guidance-next-steps">
+              <p className="text-base font-bold mb-3 text-gray-900 dark:text-gray-100 uppercase tracking-wide">What to do next</p>
+              <ol className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <span className="w-7 h-7 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 text-sm">1</span>
+                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100 pt-0.5">Try calling them</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-7 h-7 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 text-sm">2</span>
+                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100 pt-0.5">If no answer, send them a text</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="w-7 h-7 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 text-sm">3</span>
+                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100 pt-0.5">If still no response, call emergency services</span>
+                </li>
               </ol>
             </div>
 
@@ -284,6 +264,38 @@ export default function ContactPage() {
               );
             })()}
           </>
+        )}
+
+        {/* Status Card — only show prominently when no active alert (otherwise the alert banner is the headline) */}
+        {!(hasActiveIncident && !isBeingHandled) && (
+          <Card className="border-2">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+                  <User className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-bold" data-testid="text-user-name">{user.name}</CardTitle>
+                  <CardDescription className="text-sm font-medium">
+                    Last check-in:{" "}
+                    <span data-testid="text-last-checkin">
+                      {lastCheckin
+                        ? formatDistanceToNow(new Date(lastCheckin.createdAt), { addSuffix: true })
+                        : "Never"}
+                    </span>
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">Status:</span>
+                <span className={`text-base font-bold ${getStatusColor()}`} data-testid="text-status">
+                  {getStatusText()}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {hasTrip && (
@@ -383,17 +395,16 @@ export default function ContactPage() {
           </Card>
         )}
 
-        {/* Contact Actions */}
+        {/* Contact Actions — bold and high-contrast */}
         <div className="space-y-3">
           <Button
-            variant="outline"
             size="lg"
-            className="w-full justify-start gap-3"
+            className="w-full justify-center gap-3 h-14 text-base font-bold bg-green-600 hover:bg-green-700 text-white shadow-md"
             asChild
             data-testid="button-call"
           >
             <a href={`tel:${user.phone || ""}`}>
-              <Phone className="h-5 w-5" />
+              <Phone className="h-6 w-6" strokeWidth={2.5} />
               Call {user.name}
             </a>
           </Button>
@@ -401,16 +412,15 @@ export default function ContactPage() {
           <Button
             variant="outline"
             size="lg"
-            className="w-full justify-start gap-3"
+            className="w-full justify-center gap-3 h-14 text-base font-bold border-2 border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100"
             asChild
             data-testid="button-message"
           >
             <a href={`sms:${user.phone || ""}`}>
-              <MessageSquare className="h-5 w-5" />
+              <MessageSquare className="h-6 w-6" strokeWidth={2.5} />
               Message {user.name}
             </a>
           </Button>
-
         </div>
 
         {/* Action Buttons */}
