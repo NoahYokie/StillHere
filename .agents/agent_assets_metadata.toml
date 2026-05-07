@@ -413,3 +413,9 @@ id = "qGWUScuRbjKwcotESaTl-"
 uri = "file://attached_assets/screenshots/stillhere_health_emergency_L7cPLf4xAV.png"
 type = "image"
 title = "StillHere Emergency Link - Full Page"
+
+[[outputs]]
+id = "tbixjakZD2Ng00Ub_EYuq"
+uri = "file://attached_assets/screenshots/emergency_phone_fit.png"
+type = "image"
+title = "StillHere Emergency Link - iPhone Portrait (1290x2796)"
