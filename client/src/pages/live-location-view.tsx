@@ -478,6 +478,7 @@ export default function LiveLocationViewPage() {
               zoom={17}
               className="w-full h-full absolute inset-0"
               showTrail={historyMode ? historyPoints.length > 1 : livePoints.length > 1}
+              fitTrailBounds={historyMode}
               markerLabel={userName}
               showStreetView={true}
               showTraffic={!historyMode}

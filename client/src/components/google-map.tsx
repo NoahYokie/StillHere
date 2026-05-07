@@ -69,6 +69,7 @@ interface GoogleMapProps {
   zoom?: number;
   className?: string;
   showTrail?: boolean;
+  fitTrailBounds?: boolean;
   markerLabel?: string;
   onPersonTap?: (personId: string) => void;
   mapType?: "roadmap" | "satellite" | "terrain" | "hybrid";
@@ -470,6 +471,7 @@ export default function GoogleMapComponent({
   zoom = 16,
   className = "w-full h-64",
   showTrail = true,
+  fitTrailBounds = true,
   markerLabel,
   onPersonTap,
   mapType = "roadmap",
@@ -842,14 +844,14 @@ export default function GoogleMapComponent({
       }
     }
 
-    if (points.length > 2 && !userInteractedRef.current) {
+    if (fitTrailBounds && points.length > 2 && !userInteractedRef.current) {
       programmaticMoveRef.current = true;
       const bounds = new google.maps.LatLngBounds();
       points.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
       map.fitBounds(bounds, 40);
       setTimeout(() => { programmaticMoveRef.current = false; }, 300);
     }
-  }, [points, showTrail]);
+  }, [points, showTrail, fitTrailBounds]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
