@@ -479,6 +479,7 @@ export default function LiveLocationViewPage() {
               className="w-full h-full absolute inset-0"
               showTrail={historyMode ? historyPoints.length > 1 : livePoints.length > 1}
               fitTrailBounds={historyMode}
+              followMarker={!historyMode}
               markerLabel={userName}
               showStreetView={true}
               showTraffic={!historyMode}

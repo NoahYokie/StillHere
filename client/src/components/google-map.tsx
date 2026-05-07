@@ -70,6 +70,7 @@ interface GoogleMapProps {
   className?: string;
   showTrail?: boolean;
   fitTrailBounds?: boolean;
+  followMarker?: boolean;
   markerLabel?: string;
   onPersonTap?: (personId: string) => void;
   mapType?: "roadmap" | "satellite" | "terrain" | "hybrid";
@@ -436,7 +437,8 @@ function animateMarkerPosition(
   marker: google.maps.marker.AdvancedMarkerElement,
   from: { lat: number; lng: number },
   to: { lat: number; lng: number },
-  duration = 800
+  duration = 800,
+  onStep?: (pos: { lat: number; lng: number }) => void
 ) {
   const prev = activeAnimations.get(marker);
   if (prev) cancelAnimationFrame(prev);
@@ -444,15 +446,18 @@ function animateMarkerPosition(
   const start = performance.now();
   const dLat = to.lat - from.lat;
   const dLng = to.lng - from.lng;
+  const useLinear = duration > 1500;
 
   function step(now: number) {
     const elapsed = now - start;
     const t = Math.min(elapsed / duration, 1);
-    const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-    marker.position = {
+    const eased = useLinear ? t : (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
+    const pos = {
       lat: from.lat + dLat * eased,
       lng: from.lng + dLng * eased,
     };
+    marker.position = pos;
+    if (onStep) onStep(pos);
     if (t < 1) {
       const id = requestAnimationFrame(step);
       activeAnimations.set(marker, id);
@@ -472,6 +477,7 @@ export default function GoogleMapComponent({
   className = "w-full h-64",
   showTrail = true,
   fitTrailBounds = true,
+  followMarker = false,
   markerLabel,
   onPersonTap,
   mapType = "roadmap",
@@ -504,6 +510,7 @@ export default function GoogleMapComponent({
   const peopleMarkersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
   const peoplePositionsRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
   const peopleDataRef = useRef<Map<string, MapPerson>>(new Map());
+  const lastUpdateAtRef = useRef<number>(0);
   const accuracyCirclesRef = useRef<Map<string, google.maps.Circle>>(new Map());
   const trailPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const routePolylineRef = useRef<google.maps.Polyline | null>(null);
@@ -789,12 +796,28 @@ export default function GoogleMapComponent({
       const newPos = { lat: center.lat, lng: center.lng };
 
       if (animateMarkers && prevPos && (prevPos.lat !== newPos.lat || prevPos.lng !== newPos.lng)) {
-        animateMarkerPosition(marker, prevPos, newPos);
+        const now = performance.now();
+        const lastT = lastUpdateAtRef.current;
+        lastUpdateAtRef.current = now;
+        const gap = lastT ? now - lastT : 0;
+        const duration = gap > 1200 ? Math.min(Math.max(gap, 1500), 8000) : 800;
+        const onStep = followMarker && !userInteractedRef.current
+          ? (pos: { lat: number; lng: number }) => {
+              programmaticMoveRef.current = true;
+              map.panTo(pos);
+            }
+          : undefined;
+        animateMarkerPosition(marker, prevPos, newPos, duration, onStep);
       } else {
         marker.position = newPos;
+        if (followMarker && !userInteractedRef.current) {
+          programmaticMoveRef.current = true;
+          map.panTo(newPos);
+          setTimeout(() => { programmaticMoveRef.current = false; }, 300);
+        }
       }
       marker.content = createMarkerElement(points?.[points.length - 1]?.activity);
-      if (!userInteractedRef.current) {
+      if (!followMarker && !userInteractedRef.current) {
         programmaticMoveRef.current = true;
         map.panTo(newPos);
         setTimeout(() => { programmaticMoveRef.current = false; }, 300);
