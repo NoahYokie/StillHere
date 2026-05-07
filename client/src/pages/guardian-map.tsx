@@ -35,6 +35,8 @@ type MapPerson = {
   isMe?: boolean;
   safetyState?: string | null;
   hasSafetyEvent?: boolean;
+  safetyStateReason?: string | null;
+  incidentReason?: string | null;
 };
 
 type LiveSnapshot = Record<string, {
@@ -218,6 +220,8 @@ export default function GuardianMapPage() {
         lastUpdated,
         safetyState: w.safetyState,
         hasSafetyEvent: w.hasOpenIncident || w.safetyState === "concern",
+        safetyStateReason: w.safetyStateReason,
+        incidentReason: w.incidentReason,
       });
     });
     if (myPos) {

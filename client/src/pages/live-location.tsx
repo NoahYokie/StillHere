@@ -30,6 +30,9 @@ interface LiveShare {
   userName?: string;
   safetyState?: string | null;
   hasSafetyEvent?: boolean;
+  safetyStateReason?: string | null;
+  incidentReason?: string | null;
+  hasOpenIncident?: boolean;
 }
 
 function getActivityIcon(activity: string | null) {
@@ -231,6 +234,9 @@ export default function LiveLocationPage() {
         accuracy: share.lastAccuracy,
         safetyState: share.safetyState as "active" | "quiet" | "concern" | undefined,
         hasSafetyEvent: share.hasSafetyEvent,
+        safetyStateReason: share.safetyStateReason ?? null,
+        incidentReason: share.incidentReason ?? null,
+        hasOpenIncident: share.hasOpenIncident ?? false,
       });
     }
   });

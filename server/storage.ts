@@ -287,7 +287,7 @@ export interface IStorage {
   updateLiveLocation(shareId: string, userId: string, lat: number, lng: number, accuracy: number | null, speed: number | null, heading: number | null, activity: string): Promise<LiveLocationPoint>;
   getLiveLocationPoints(shareId: string, since?: Date, limit?: number): Promise<LiveLocationPoint[]>;
   getAllActiveLiveShares(): Promise<LiveLocationShare[]>;
-  getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean })[]>;
+  getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean; safetyStateReason: string | null; incidentReason: string | null; hasOpenIncident: boolean })[]>;
 
   // Report Data
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
@@ -1982,14 +1982,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(liveLocationShares).where(eq(liveLocationShares.active, true));
   }
 
-  async getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean })[]> {
+  async getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean; safetyStateReason: string | null; incidentReason: string | null; hasOpenIncident: boolean })[]> {
     const watcherContacts = await db.select().from(contacts)
       .where(and(
         eq(contacts.linkedUserId, watcherUserId),
         isNull(contacts.softDeletedAt)
       ));
 
-    const results: (LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean })[] = [];
+    const results: (LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean; safetyStateReason: string | null; incidentReason: string | null; hasOpenIncident: boolean })[] = [];
     for (const contact of watcherContacts) {
       const [share] = await db.select().from(liveLocationShares)
         .where(and(eq(liveLocationShares.userId, contact.userId), eq(liveLocationShares.active, true)))
@@ -2003,6 +2003,9 @@ export class DatabaseStorage implements IStorage {
             userName: user.name,
             safetyState: user.safetyState,
             hasSafetyEvent: !!openIncident,
+            safetyStateReason: user.safetyStateReason ?? null,
+            incidentReason: openIncident?.reason ?? null,
+            hasOpenIncident: !!openIncident,
           });
         }
       }

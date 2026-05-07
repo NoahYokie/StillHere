@@ -42,6 +42,8 @@ export interface MapPerson {
   accuracy?: number | null;
   safetyState?: string | null;
   hasSafetyEvent?: boolean;
+  safetyStateReason?: string | null;
+  incidentReason?: string | null;
   groupedNames?: string[];
 }
 
@@ -499,6 +501,7 @@ export default function GoogleMapComponent({
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const peopleMarkersRef = useRef<Map<string, google.maps.marker.AdvancedMarkerElement>>(new Map());
   const peoplePositionsRef = useRef<Map<string, { lat: number; lng: number }>>(new Map());
+  const peopleDataRef = useRef<Map<string, MapPerson>>(new Map());
   const accuracyCirclesRef = useRef<Map<string, google.maps.Circle>>(new Map());
   const trailPolylinesRef = useRef<google.maps.Polyline[]>([]);
   const routePolylineRef = useRef<google.maps.Polyline | null>(null);
@@ -623,12 +626,14 @@ export default function GoogleMapComponent({
           marker.map = null;
           peopleMarkersRef.current.delete(id);
           peoplePositionsRef.current.delete(id);
+          peopleDataRef.current.delete(id);
           accuracyCirclesRef.current.get(id)?.setMap(null);
           accuracyCirclesRef.current.delete(id);
         }
       });
 
       renderPeople.forEach(person => {
+        peopleDataRef.current.set(person.id, person);
         const existing = peopleMarkersRef.current.get(person.id);
         const prevPos = peoplePositionsRef.current.get(person.id);
         const newPos = { lat: person.lat, lng: person.lng };
@@ -676,20 +681,31 @@ export default function GoogleMapComponent({
             zIndex: person.isMe ? 1000 : 0,
           });
 
+          const personId = person.id;
           marker.addListener("click", () => {
-            if (onPersonTap && !person.isMe) {
-              onPersonTap(person.id);
+            const current = peopleDataRef.current.get(personId) ?? person;
+            if (onPersonTap && !current.isMe) {
+              onPersonTap(current.id);
             }
             if (showInfoWindows && infoWindowRef.current) {
-              const actLabel = activityLabels[person.activity || "stationary"] || "Stationary";
-              const actColor = activityColors[person.activity || "stationary"] || "#9ca3af";
-              const speedStr = formatInfoSpeed(person.speed);
-              const timeStr = person.lastUpdated
-                ? new Date(person.lastUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              const actLabel = activityLabels[current.activity || "stationary"] || "Stationary";
+              const actColor = activityColors[current.activity || "stationary"] || "#9ca3af";
+              const speedStr = formatInfoSpeed(current.speed);
+              const timeStr = current.lastUpdated
+                ? new Date(current.lastUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                 : "";
+              const isConcern = current.safetyState === "concern";
+              const incidentLabels: Record<string, string> = {
+                sos: "SOS triggered",
+                missed_checkin: "Missed check-in",
+                test: "Safety drill",
+              };
+              const concernText = current.incidentReason
+                ? incidentLabels[current.incidentReason] || current.incidentReason
+                : current.safetyStateReason || "Needs attention";
               infoWindowRef.current.setContent(`
-                <div style="font-family:system-ui;min-width:140px;padding:4px 0">
-                  <div style="font-weight:700;font-size:14px;margin-bottom:6px">${escapeHtml(person.name)}${person.isMe ? " (You)" : ""}</div>
+                <div style="font-family:system-ui;min-width:160px;max-width:220px;padding:4px 0">
+                  <div style="font-weight:700;font-size:14px;margin-bottom:6px">${escapeHtml(current.name)}${current.isMe ? " (You)" : ""}</div>
                   <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                     <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${actColor}"></span>
                     <span style="font-size:13px">${escapeHtml(actLabel)}</span>
@@ -698,6 +714,12 @@ export default function GoogleMapComponent({
                     <span>🏎️ ${escapeHtml(speedStr)}</span>
                     ${timeStr ? `<span>🕐 ${escapeHtml(timeStr)}</span>` : ""}
                   </div>
+                  ${isConcern ? `
+                    <div style="margin-top:8px;padding:6px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px">
+                      <div style="font-size:11px;font-weight:700;color:#b91c1c;letter-spacing:0.04em">CONCERN</div>
+                      <div style="font-size:12px;color:#7f1d1d;margin-top:2px;line-height:1.3">${escapeHtml(concernText)}</div>
+                    </div>
+                  ` : ""}
                 </div>
               `);
               infoWindowRef.current.open(map, marker);
@@ -1089,6 +1111,7 @@ export default function GoogleMapComponent({
       peopleMarkersRef.current.forEach(m => m.map = null);
       peopleMarkersRef.current.clear();
       peoplePositionsRef.current.clear();
+      peopleDataRef.current.clear();
       trailPolylinesRef.current.forEach(p => p.setMap(null));
       trailPolylinesRef.current = [];
       routePolylineRef.current?.setMap(null);
