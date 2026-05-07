@@ -475,7 +475,7 @@ export default function LiveLocationViewPage() {
               points={historyMode
                 ? historyPoints.map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt }))
                 : livePoints.map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt }))}
-              zoom={16}
+              zoom={17}
               className="w-full h-full absolute inset-0"
               showTrail={historyMode ? historyPoints.length > 1 : livePoints.length > 1}
               markerLabel={userName}
