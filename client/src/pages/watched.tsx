@@ -399,7 +399,17 @@ export default function WatchedPage() {
               onClick={() => setExpandedUser(isExpanded ? null : user.userId)}
             >
               <div className="flex items-center gap-2">
-                <h3 className="font-medium truncate" data-testid={`text-user-name-${user.userId}`}>{user.userName}</h3>
+                <button
+                  type="button"
+                  className="font-medium truncate text-left hover:underline focus:outline-none focus-visible:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLocation(`/live-location/${user.userId}`);
+                  }}
+                  data-testid={`text-user-name-${user.userId}`}
+                >
+                  {user.userName}
+                </button>
                 {user.circleRole && (
                   <Badge variant="outline" className="text-[10px] capitalize shrink-0" data-testid={`badge-role-${user.userId}`}>{user.circleRole}</Badge>
                 )}

@@ -107,7 +107,18 @@ export default function GuardianMapPage() {
   const [, setLocation] = useLocation();
   const [threeD, setThreeD] = useState(false);
   const [mapType, setMapType] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
-  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(() => {
+    try {
+      const cached = localStorage.getItem("stillhere_watcher_pos");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (typeof parsed?.lat === "number" && typeof parsed?.lng === "number") {
+          return { lat: parsed.lat, lng: parsed.lng };
+        }
+      }
+    } catch {}
+    return null;
+  });
   const [liveSnap, setLiveSnap] = useState<LiveSnapshot>({});
   const [sheetOpen, setSheetOpen] = useState(true);
   const initialFitRef = useRef(false);
@@ -117,14 +128,29 @@ export default function GuardianMapPage() {
     refetchInterval: 30_000,
   });
 
-  // Get watcher's own browser location for fit-bounds context.
+  // Watch the watcher's own browser location continuously so fit-bounds always
+  // includes both the watcher and the watched users (Life360-style overview).
   useEffect(() => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
-    );
+    const onPos = (pos: GeolocationPosition) => {
+      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setMyPos(next);
+      try {
+        localStorage.setItem("stillhere_watcher_pos", JSON.stringify(next));
+      } catch {}
+    };
+    navigator.geolocation.getCurrentPosition(onPos, () => {}, {
+      enableHighAccuracy: true,
+      timeout: 8000,
+      maximumAge: 60_000,
+    });
+    const watchId = navigator.geolocation.watchPosition(onPos, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 30_000,
+    });
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, []);
 
   // Subscribe to live location updates for any watched user.
