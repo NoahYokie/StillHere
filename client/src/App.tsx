@@ -134,7 +134,7 @@ function Router() {
       <Route path="/watched">
         <RequireAuth>
           <RequireSetup>
-            <WatchedPage />
+            <GuardianMapPage />
           </RequireSetup>
         </RequireAuth>
       </Route>
@@ -142,6 +142,13 @@ function Router() {
         <RequireAuth>
           <RequireSetup>
             <GuardianMapPage />
+          </RequireSetup>
+        </RequireAuth>
+      </Route>
+      <Route path="/watched/list">
+        <RequireAuth>
+          <RequireSetup>
+            <WatchedPage />
           </RequireSetup>
         </RequireAuth>
       </Route>

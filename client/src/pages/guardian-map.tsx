@@ -16,6 +16,10 @@ import {
   Building2,
   Map as MapIcon,
   ChevronUp,
+  List,
+  Maximize2,
+  MessageSquare,
+  Phone,
 } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import GoogleMap from "@/components/google-map";
@@ -122,7 +126,8 @@ export default function GuardianMapPage() {
     return null;
   });
   const [liveSnap, setLiveSnap] = useState<LiveSnapshot>({});
-  const [sheetOpen, setSheetOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const initialFitRef = useRef(false);
 
   const { data: watchedUsers, isLoading } = useQuery<WatchedUser[]>({
@@ -281,7 +286,7 @@ export default function GuardianMapPage() {
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <BackButton to="/watched" className="pointer-events-auto shadow-lg" />
+          <BackButton to="/" className="pointer-events-auto shadow-lg" />
           <Card className="pointer-events-auto flex-1 px-3 py-2 flex items-center gap-3 shadow-lg">
             <MapIcon className="w-4 h-4 text-primary" />
             <div className="flex-1 min-w-0">
@@ -305,6 +310,16 @@ export default function GuardianMapPage() {
             <Building2 className="w-4 h-4" />
             3D
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="pointer-events-auto shadow-lg gap-1"
+            onClick={() => setLocation("/watched/list")}
+            data-testid="button-open-list-view"
+          >
+            <List className="w-4 h-4" />
+            List
+          </Button>
         </div>
       </div>
 
@@ -315,6 +330,7 @@ export default function GuardianMapPage() {
           zoom={people.length > 1 ? 11 : 14}
           people={people}
           smartCamera
+          focusPersonId={focusedId}
           mapType={threeD && mapType === "roadmap" ? "satellite" : mapType}
           tilt={threeD ? 67.5 : 0}
           heading={threeD ? 30 : 0}
@@ -322,7 +338,8 @@ export default function GuardianMapPage() {
           showMyLocation={false}
           onPersonTap={(id) => {
             if (id === "__me__") return;
-            setLocation(`/live-location/${id}`);
+            setFocusedId(id);
+            setSheetOpen(false);
           }}
           className="w-full h-full"
         />
@@ -345,7 +362,113 @@ export default function GuardianMapPage() {
           </Card>
         </div>
 
+        {/* Focused person card */}
+        {focusedId && (() => {
+          const w = (watchedUsers || []).find((x) => x.userId === focusedId);
+          if (!w) return null;
+          const colors = stateColor(w.safetyState, w.hasOpenIncident);
+          const live = liveSnap[w.userId];
+          const activity = (live?.activity ?? w.lastActivity ?? "stationary") as string;
+          const lastTs =
+            live?.timestamp ??
+            (w.lastLocationAt ? new Date(w.lastLocationAt).toISOString() : undefined) ??
+            (w.lastHeartbeatAt ? new Date(w.lastHeartbeatAt).toISOString() : undefined);
+          return (
+            <div className="absolute bottom-4 left-0 right-0 z-20 px-3 pointer-events-none">
+              <Card
+                className="pointer-events-auto max-w-3xl mx-auto p-3 shadow-2xl border-2"
+                data-testid={`card-focused-${w.userId}`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-12 h-12 rounded-full ${colors.bg} flex items-center justify-center border shrink-0`}>
+                    <span className="text-lg font-semibold">
+                      {w.userName?.charAt(0)?.toUpperCase() || "?"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold truncate" data-testid={`text-focused-name-${w.userId}`}>
+                        {w.userName}
+                      </p>
+                      <Badge variant="outline" className={`text-[10px] ${colors.text}`}>
+                        {colors.label}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <ActivityIcon activity={activity} className="w-3.5 h-3.5" />
+                        {ACTIVITY_LABEL[activity] || "Still"}
+                      </span>
+                      {lastTs && (
+                        <>
+                          <span>·</span>
+                          <span>{formatDistanceToNow(new Date(lastTs), { addSuffix: true })}</span>
+                        </>
+                      )}
+                    </div>
+                    {w.hasOpenIncident && (
+                      <div className="flex items-center gap-1 mt-1 text-xs text-red-600 dark:text-red-400">
+                        <AlertTriangle className="w-3 h-3" />
+                        <span className="font-medium">
+                          {w.incidentReason === "sos"
+                            ? "SOS triggered"
+                            : w.incidentReason === "missed_checkin"
+                            ? "Missed check-in"
+                            : "Needs attention"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFocusedId(null)}
+                    className="shrink-0 gap-1"
+                    data-testid="button-show-all"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                    Show all
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLocation(`/chat/${w.userId}`)}
+                    className="gap-1"
+                    data-testid={`button-message-${w.userId}`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Message
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLocation(`/call/${w.userId}`)}
+                    className="gap-1"
+                    data-testid={`button-call-${w.userId}`}
+                  >
+                    <Phone className="w-4 h-4" />
+                    Call
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setLocation(`/live-location/${w.userId}`)}
+                    className="gap-1"
+                    data-testid={`button-live-${w.userId}`}
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Live view
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          );
+        })()}
+
         {/* Bottom sheet trigger (mobile) */}
+        {!focusedId ? (
         <div className="absolute bottom-4 left-0 right-0 z-10 px-3 pointer-events-none">
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
@@ -392,7 +515,8 @@ export default function GuardianMapPage() {
                       type="button"
                       onClick={() => {
                         if (hasCoords) {
-                          setLocation(`/live-location/${w.userId}`);
+                          setFocusedId(w.userId);
+                          setSheetOpen(false);
                         }
                       }}
                       className={`w-full text-left rounded-xl p-3 transition border ring-1 ${colors.bg} ${colors.ring} ${
@@ -464,6 +588,7 @@ export default function GuardianMapPage() {
             </SheetContent>
           </Sheet>
         </div>
+        ) : null}
       </div>
     </div>
   );
