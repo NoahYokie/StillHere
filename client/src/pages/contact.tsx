@@ -27,6 +27,37 @@ export default function ContactPage() {
   const [showHandleConfirm, setShowHandleConfirm] = useState(false);
   const [showEscalateConfirm, setShowEscalateConfirm] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
+  // Screenshot mode is gated so a real contact who accidentally gets a link with
+  // `?screenshot=...` appended cannot lose access to call/message/escalate controls.
+  // In dev we accept `?screenshot=1`. In production we require the value to match
+  // VITE_SCREENSHOT_KEY (a secret you set in env). If the key isn't set, screenshot
+  // mode is disabled entirely in production.
+  const screenshotMode = (() => {
+    if (typeof window === "undefined") return false;
+    const param = new URLSearchParams(window.location.search).get("screenshot");
+    if (!param) return false;
+    if (import.meta.env.DEV && param === "1") return true;
+    const key = import.meta.env.VITE_SCREENSHOT_KEY as string | undefined;
+    return !!key && param === key;
+  })();
+
+  useEffect(() => {
+    if (screenshotMode && typeof document !== "undefined") {
+      document.documentElement.classList.add("screenshot-mode");
+      const style = document.createElement("style");
+      style.id = "screenshot-mode-style";
+      style.textContent = `
+        html.screenshot-mode, html.screenshot-mode body { background: #f3f4f6 !important; overflow-x: hidden; }
+        html.screenshot-mode ::-webkit-scrollbar { display: none; }
+        html.screenshot-mode * { scrollbar-width: none; }
+      `;
+      document.head.appendChild(style);
+      return () => {
+        document.documentElement.classList.remove("screenshot-mode");
+        document.getElementById("screenshot-mode-style")?.remove();
+      };
+    }
+  }, [screenshotMode]);
 
   const { data, isLoading, error } = useQuery<ContactPageData>({
     queryKey: ["/api/emergency", token],
@@ -142,40 +173,42 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-12">
-      {/* Header */}
-      <header className="bg-primary text-primary-foreground px-6 py-4">
-        <div className="max-w-md mx-auto flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2" data-testid="text-app-title">
-              <img src={logoPath} alt="StillHere" className="h-8 w-8 object-contain" />
-              <span className="text-xl font-semibold">StillHere</span>
+    <div className={`min-h-screen bg-background ${screenshotMode ? "pb-0" : "pb-12"}`}>
+      {/* Header — hidden in screenshot mode so the alert is the headline */}
+      {!screenshotMode && (
+        <header className="bg-primary text-primary-foreground px-6 py-4">
+          <div className="max-w-md mx-auto flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2" data-testid="text-app-title">
+                <img src={logoPath} alt="StillHere" className="h-8 w-8 object-contain" />
+                <span className="text-xl font-semibold">StillHere</span>
+              </div>
+              <p className="text-sm opacity-90" data-testid="text-status-for">
+                Status for {user.name}
+              </p>
             </div>
-            <p className="text-sm opacity-90" data-testid="text-status-for">
-              Status for {user.name}
-            </p>
+            <span className="text-[10px] uppercase tracking-wide bg-white/15 px-2 py-1 rounded font-medium whitespace-nowrap mt-1" data-testid="badge-no-login">
+              No login needed
+            </span>
           </div>
-          <span className="text-[10px] uppercase tracking-wide bg-white/15 px-2 py-1 rounded font-medium whitespace-nowrap mt-1" data-testid="badge-no-login">
-            No login needed
-          </span>
-        </div>
-      </header>
+        </header>
+      )}
 
-      <main className="max-w-md mx-auto px-6 py-6 space-y-6">
+      <main className={`max-w-md mx-auto ${screenshotMode ? "px-5 py-5 space-y-4" : "px-6 py-6 space-y-6"}`}>
         {/* Big high-contrast Alert Banner — top of page so it dominates the screen */}
         {hasActiveIncident && !isBeingHandled && (
           <>
             <div
-              className={`rounded-2xl p-6 shadow-xl ${isSOS ? "bg-red-600 text-white" : "bg-amber-500 text-white"}`}
+              className={`rounded-2xl shadow-xl ${screenshotMode ? "p-7" : "p-6"} ${isSOS ? "bg-red-600 text-white" : "bg-amber-500 text-white"}`}
               data-testid="banner-alert"
             >
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-8 w-8 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                <AlertTriangle className={`flex-shrink-0 mt-0.5 ${screenshotMode ? "h-10 w-10" : "h-8 w-8"}`} strokeWidth={2.5} />
                 <div className="flex-1">
-                  <p className="text-2xl font-bold leading-tight">
+                  <p className={`font-bold leading-tight ${screenshotMode ? "text-3xl" : "text-2xl"}`}>
                     {isSOS ? "Help has been requested" : "Missed check-in"}
                   </p>
-                  <p className="text-base font-medium mt-2 opacity-95">
+                  <p className={`font-medium mt-2 opacity-95 ${screenshotMode ? "text-lg" : "text-base"}`}>
                     {isSOS
                       ? `${user.name} pressed the emergency button.`
                       : `${user.name} hasn't checked in as expected.`}
@@ -185,21 +218,19 @@ export default function ContactPage() {
             </div>
 
             {/* What to do next guidance — bold dark text, clear numbered chips */}
-            <div className="bg-white dark:bg-gray-900 border-2 border-gray-900 dark:border-gray-100 rounded-2xl p-5" data-testid="guidance-next-steps">
-              <p className="text-base font-bold mb-3 text-gray-900 dark:text-gray-100 uppercase tracking-wide">What to do next</p>
-              <ol className="space-y-3">
-                <li className="flex items-start gap-3">
-                  <span className="w-7 h-7 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 text-sm">1</span>
-                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100 pt-0.5">Try calling them</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="w-7 h-7 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 text-sm">2</span>
-                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100 pt-0.5">If no answer, send them a text</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="w-7 h-7 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 text-sm">3</span>
-                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100 pt-0.5">If still no response, call emergency services</span>
-                </li>
+            <div className={`bg-white dark:bg-gray-900 border-2 border-gray-900 dark:border-gray-100 rounded-2xl ${screenshotMode ? "p-6" : "p-5"}`} data-testid="guidance-next-steps">
+              <p className={`font-bold mb-3 text-gray-900 dark:text-gray-100 uppercase tracking-wide ${screenshotMode ? "text-lg" : "text-base"}`}>What to do next</p>
+              <ol className={screenshotMode ? "space-y-3.5" : "space-y-3"}>
+                {[
+                  "Try calling them",
+                  "If no answer, send them a text",
+                  "If still no response, call emergency services",
+                ].map((step, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className={`rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-bold flex items-center justify-center shrink-0 ${screenshotMode ? "w-9 h-9 text-base" : "w-7 h-7 text-sm"}`}>{i + 1}</span>
+                    <span className={`font-semibold text-gray-900 dark:text-gray-100 pt-1 ${screenshotMode ? "text-lg" : "text-base"}`}>{step}</span>
+                  </li>
+                ))}
               </ol>
             </div>
 
@@ -395,7 +426,8 @@ export default function ContactPage() {
           </Card>
         )}
 
-        {/* Contact Actions — bold and high-contrast */}
+        {/* Contact Actions — hidden in screenshot mode */}
+        {!screenshotMode && (
         <div className="space-y-3">
           <Button
             size="lg"
@@ -422,9 +454,10 @@ export default function ContactPage() {
             </a>
           </Button>
         </div>
+        )}
 
         {/* Action Buttons */}
-        {hasActiveIncident && !isBeingHandled && (
+        {!screenshotMode && hasActiveIncident && !isBeingHandled && (
           <div className="space-y-3">
             <Button
               size="lg"
@@ -467,7 +500,18 @@ export default function ContactPage() {
           </Card>
         )}
 
-        {/* Get the App promo */}
+        {/* stillhere.health browser pill — proves the page is opened in any browser, no app needed */}
+        {screenshotMode && (
+          <div className="flex justify-center pt-2 pb-4" data-testid="pill-domain">
+            <div className="inline-flex items-center gap-2 bg-white border border-gray-300 rounded-full px-5 py-2 shadow-sm">
+              <svg className="h-3.5 w-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span className="text-base font-semibold text-gray-800">stillhere.health</span>
+            </div>
+          </div>
+        )}
+
+        {/* Get the App promo — hidden in screenshot mode */}
+        {!screenshotMode && (
         <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/30" data-testid="card-get-app">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3 mb-4">
@@ -519,6 +563,7 @@ export default function ContactPage() {
             </p>
           </CardContent>
         </Card>
+        )}
 
       </main>
 
