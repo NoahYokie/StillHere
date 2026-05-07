@@ -407,3 +407,9 @@ id = "KPRG-Jm9cIw6zpH_t9_gX"
 uri = "file://screenshots/08_brand_close.jpg"
 type = "image"
 title = "08 — Brand close (404 — needs fix)"
+
+[[outputs]]
+id = "qGWUScuRbjKwcotESaTl-"
+uri = "file://attached_assets/screenshots/stillhere_health_emergency_L7cPLf4xAV.png"
+type = "image"
+title = "StillHere Emergency Link - Full Page"
