@@ -105,7 +105,6 @@ function stateColor(state: string | null | undefined, hasIncident: boolean): {
 
 export default function GuardianMapPage() {
   const [, setLocation] = useLocation();
-  const [focusId, setFocusId] = useState<string | null>(null);
   const [threeD, setThreeD] = useState(false);
   const [mapType, setMapType] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
   const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -286,14 +285,14 @@ export default function GuardianMapPage() {
           zoom={people.length > 1 ? 11 : 14}
           people={people}
           smartCamera
-          focusPersonId={focusId}
           mapType={threeD && mapType === "roadmap" ? "satellite" : mapType}
           tilt={threeD ? 67.5 : 0}
           heading={threeD ? 30 : 0}
           showMapTypeControl={false}
           showMyLocation={false}
           onPersonTap={(id) => {
-            if (id !== "__me__") setFocusId(id);
+            if (id === "__me__") return;
+            setLocation(`/live-location/${id}`);
           }}
           className="w-full h-full"
         />
@@ -363,8 +362,7 @@ export default function GuardianMapPage() {
                       type="button"
                       onClick={() => {
                         if (hasCoords) {
-                          setFocusId(w.userId);
-                          setSheetOpen(false);
+                          setLocation(`/live-location/${w.userId}`);
                         }
                       }}
                       className={`w-full text-left rounded-xl p-3 transition border ring-1 ${colors.bg} ${colors.ring} ${
