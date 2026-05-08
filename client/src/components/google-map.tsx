@@ -337,7 +337,7 @@ function createDestinationMarker(name?: string): HTMLElement {
     <div style="background:#ef4444;color:white;border-radius:50% 50% 50% 0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;transform:rotate(-45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">
       <span style="transform:rotate(45deg)">📍</span>
     </div>
-    ${name ? `<div style="background:white;border-radius:12px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.2);border:1px solid #e5e7eb;max-width:120px;overflow:hidden;text-overflow:ellipsis">${name}</div>` : ""}
+    ${name ? `<div style="background:white;border-radius:12px;padding:1px 6px;font-size:10px;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.2);border:1px solid #e5e7eb;max-width:120px;overflow:hidden;text-overflow:ellipsis">${escapeHtml(name)}</div>` : ""}
   `;
   return el;
 }

@@ -439,7 +439,8 @@ export async function registerRoutes(
             }
           }
         } catch (err: any) {
-          console.error(`[AUTH] Contact backfill failed for ${normalizedPhone}:`, err?.message || err);
+          const maskedPhone = normalizedPhone ? `***${normalizedPhone.slice(-4)}` : "(no phone)";
+          console.error(`[AUTH] Contact backfill failed for ${maskedPhone}:`, err?.message || err);
         }
       }
       
