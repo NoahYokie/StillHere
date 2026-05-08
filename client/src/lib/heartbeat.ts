@@ -1,4 +1,6 @@
 import { getCurrentPosition } from "./location-service";
+import { Capacitor } from "@capacitor/core";
+import { Device } from "@capacitor/device";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = 300_000;
@@ -8,6 +10,21 @@ let consecutiveFailures = 0;
 let currentIntervalMs = DEFAULT_INTERVAL_MS;
 
 async function getBatteryInfo(): Promise<{ level: number; charging: boolean } | null> {
+  // On native iOS / Android (Capacitor) use the Device plugin, which surfaces
+  // the real OS battery level. Safari blocks the web Battery API, so the
+  // Capacitor path is the only way to get accurate readings on iPhone.
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const info = await Device.getBatteryInfo();
+      if (typeof info.batteryLevel === "number") {
+        return {
+          level: info.batteryLevel,
+          charging: !!info.isCharging,
+        };
+      }
+    } catch {}
+  }
+  // Web fallback (Chrome/Edge/Android browser support this; Safari does not).
   try {
     if ("getBattery" in navigator) {
       const battery = await (navigator as any).getBattery();
