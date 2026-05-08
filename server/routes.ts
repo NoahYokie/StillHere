@@ -200,8 +200,12 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     }
     console.log(`[ALL-CLEAR] Complete: ${smsSuccess} success, ${smsFailed} failed`);
 
-    await storage.revokeAllTokensForUser(userId);
-    console.log(`[RESOLVE] Emergency tokens revoked`);
+    // Intentionally do NOT revoke tokens here. The all-clear SMS we just sent
+    // contains links built from these tokens; revoking them would break the
+    // watcher's link the moment they tap it. Tokens auto-expire after 30 days,
+    // and the /api/emergency/:token/handle and /escalate endpoints already
+    // refuse any incident whose status is "resolved", so leaving the read-only
+    // view live is safe.
   }
 
   let watcherNotified = false;
