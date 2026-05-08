@@ -5855,7 +5855,7 @@ export async function registerRoutes(
       // Append to the incident escalation timeline so the watcher dashboard,
       // emergency page, and weekly report all show the truth.
       if (user) {
-        const incident = await storage.getOpenIncident(user.id);
+        const incident = await storage.getLatestRealOpenIncident(user.id);
         if (incident && !incident.isDrill) {
           let timeline: any[] = [];
           try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
@@ -5926,7 +5926,7 @@ export async function registerRoutes(
 
       if (digits === "1" && user) {
         // Resolved! Mark the incident closed and check the user in.
-        const incident = await storage.getOpenIncident(user.id);
+        const incident = await storage.getLatestRealOpenIncident(user.id);
         if (incident && !incident.isDrill) {
           let timeline: any[] = [];
           try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
@@ -5955,7 +5955,7 @@ export async function registerRoutes(
 
       if (digits === "2" && user) {
         // Still not resolved — log it and force the next escalation step soon.
-        const incident = await storage.getOpenIncident(user.id);
+        const incident = await storage.getLatestRealOpenIncident(user.id);
         if (incident && !incident.isDrill) {
           let timeline: any[] = [];
           try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
