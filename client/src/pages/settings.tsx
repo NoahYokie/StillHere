@@ -205,6 +205,7 @@ export default function SettingsPage() {
   const [autoWellnessCall, setAutoWellnessCall] = useState(false);
   const [escalationMinutes, setEscalationMinutes] = useState(20);
   const [customInterval, setCustomInterval] = useState("");
+  const [showCustomInterval, setShowCustomInterval] = useState(false);
   const [customPauseHours, setCustomPauseHours] = useState("");
   const [contactEntries, setContactEntries] = useState<ContactEntry[]>([]);
   const [contactsInitialized, setContactsInitialized] = useState(false);
@@ -688,54 +689,166 @@ export default function SettingsPage() {
                   <span className="font-semibold text-sm">Check-in Schedule</span>
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="space-y-4">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground mb-2 block">How often?</Label>
-                  <RadioGroup value={checkinInterval.toString()} onValueChange={handleIntervalChange} className="space-y-1.5">
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="24" id="daily" data-testid="radio-daily" />
-                      <Label htmlFor="daily" className="text-sm">Once a day</Label>
+              <AccordionContent className="space-y-5 pt-1">
+                {/* Live summary so the user always sees the result of their settings in plain English */}
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3" data-testid="schedule-summary">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <div className="text-sm leading-relaxed">
+                      <span className="font-medium text-foreground">
+                        {checkinInterval === 24 ? "Every day" :
+                         checkinInterval === 48 ? "Every 2 days" :
+                         checkinInterval === 168 ? "Every week" :
+                         `Every ${checkinInterval} hours`}
+                      </span>
+                      {checkinInterval === 24 && timeOptions.find(t => t.value === preferredTime) && (
+                        <span className="text-muted-foreground"> around <span className="font-medium text-foreground">{timeOptions.find(t => t.value === preferredTime)?.label}</span></span>
+                      )}
+                      <span className="text-muted-foreground">. If you miss it, your safety circle is alerted after </span>
+                      <span className="font-medium text-foreground">{graceMinutes} minutes</span>
+                      <span className="text-muted-foreground">.</span>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="48" id="48h" data-testid="radio-48h" />
-                      <Label htmlFor="48h" className="text-sm">Every 2 days</Label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="168" id="weekly" data-testid="radio-weekly" />
-                      <Label htmlFor="weekly" className="text-sm">Once a week</Label>
-                    </div>
-                  </RadioGroup>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input type="number" placeholder="Custom hrs" value={customInterval} onChange={(e) => setCustomInterval(e.target.value)} className="w-24 h-8 text-sm" data-testid="input-custom-interval" />
-                    <Button size="sm" className="h-8" onClick={() => handleIntervalChange(customInterval)} disabled={!customInterval} data-testid="button-set-custom">Set</Button>
                   </div>
                 </div>
+
+                {/* Step 1 — Frequency */}
                 <div>
-                  <Label className="text-xs font-medium text-muted-foreground mb-2 block">Preferred time</Label>
-                  <Select value={preferredTime} onValueChange={(value) => { setPreferredTime(value); settingsMutation.mutate({ preferredCheckinTime: value }); }}>
-                    <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-checkin-time">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timeOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">1</span>
+                    <Label className="text-sm font-semibold text-foreground">How often should we check on you?</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3 ml-7">Pick a rhythm that fits your routine.</p>
+                  <RadioGroup
+                    value={showCustomInterval || ![24, 48, 168].includes(checkinInterval) ? "custom" : checkinInterval.toString()}
+                    onValueChange={(v) => {
+                      if (v === "custom") {
+                        setShowCustomInterval(true);
+                      } else {
+                        setShowCustomInterval(false);
+                        setCustomInterval("");
+                        handleIntervalChange(v);
+                      }
+                    }}
+                    className="space-y-2 ml-7"
+                  >
+                    <Label htmlFor="daily" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 24 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-daily">
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="24" id="daily" data-testid="radio-daily" />
+                        <div>
+                          <div className="text-sm font-medium">Once a day</div>
+                          <div className="text-xs text-muted-foreground">Recommended for most people</div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">24h</span>
+                    </Label>
+                    <Label htmlFor="48h" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 48 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-48h">
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="48" id="48h" data-testid="radio-48h" />
+                        <div>
+                          <div className="text-sm font-medium">Every 2 days</div>
+                          <div className="text-xs text-muted-foreground">For low-risk routines</div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">48h</span>
+                    </Label>
+                    <Label htmlFor="weekly" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 168 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-weekly">
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="168" id="weekly" data-testid="radio-weekly" />
+                        <div>
+                          <div className="text-sm font-medium">Once a week</div>
+                          <div className="text-xs text-muted-foreground">Long trips or steady routines</div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">168h</span>
+                    </Label>
+                    <Label htmlFor="custom" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${(showCustomInterval || ![24, 48, 168].includes(checkinInterval)) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-custom">
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="custom" id="custom" data-testid="radio-custom" />
+                        <div>
+                          <div className="text-sm font-medium">Custom</div>
+                          <div className="text-xs text-muted-foreground">
+                            {![24, 48, 168].includes(checkinInterval) ? `Currently every ${checkinInterval} hours` : "Set your own interval in hours"}
+                          </div>
+                        </div>
+                      </div>
+                    </Label>
+                  </RadioGroup>
+                  {/* Custom input only shows when Custom is selected */}
+                  {(showCustomInterval || ![24, 48, 168].includes(checkinInterval)) && (
+                    <div className="flex items-center gap-2 mt-2 ml-7" data-testid="custom-interval-input">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={720}
+                        placeholder={![24, 48, 168].includes(checkinInterval) ? checkinInterval.toString() : "Hours"}
+                        value={customInterval}
+                        onChange={(e) => setCustomInterval(e.target.value)}
+                        className="w-28 h-9 text-sm"
+                        data-testid="input-custom-interval"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-9"
+                        onClick={() => {
+                          const hrs = parseInt(customInterval);
+                          if (isNaN(hrs) || hrs < 1) return;
+                          handleIntervalChange(customInterval);
+                          setCustomInterval("");
+                          setShowCustomInterval(false);
+                        }}
+                        disabled={!customInterval || parseInt(customInterval) < 1}
+                        data-testid="button-set-custom"
+                      >
+                        Apply
+                      </Button>
+                      <span className="text-xs text-muted-foreground">hours between check-ins</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Step 2 — Preferred time (only meaningful for daily cadence) */}
                 <div>
-                  <Label className="text-xs font-medium text-muted-foreground mb-2 block">Grace period before alerting contacts</Label>
-                  <RadioGroup value={graceMinutes.toString()} onValueChange={handleGraceChange} className="space-y-1.5">
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="10" id="10min" data-testid="radio-10min" />
-                      <Label htmlFor="10min" className="text-sm">10 minutes</Label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="15" id="15min" data-testid="radio-15min" />
-                      <Label htmlFor="15min" className="text-sm">15 minutes</Label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="30" id="30min" data-testid="radio-30min" />
-                      <Label htmlFor="30min" className="text-sm">30 minutes</Label>
-                    </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">2</span>
+                    <Label className="text-sm font-semibold text-foreground">What time of day works best?</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3 ml-7">We'll send your check-in reminder around this time.</p>
+                  <div className="ml-7">
+                    <Select value={preferredTime} onValueChange={(value) => { setPreferredTime(value); settingsMutation.mutate({ preferredCheckinTime: value }); }}>
+                      <SelectTrigger className="w-44 h-9 text-sm" data-testid="select-checkin-time">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timeOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Step 3 — Grace period */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">3</span>
+                    <Label className="text-sm font-semibold text-foreground">How long should we wait before alerting your circle?</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3 ml-7">If you miss your check-in, we'll wait this long before reaching out to your contacts.</p>
+                  <RadioGroup value={graceMinutes.toString()} onValueChange={handleGraceChange} className="grid grid-cols-3 gap-2 ml-7">
+                    {[
+                      { v: "10", label: "10 min", hint: "Strict" },
+                      { v: "15", label: "15 min", hint: "Balanced" },
+                      { v: "30", label: "30 min", hint: "Relaxed" },
+                    ].map((opt) => (
+                      <Label
+                        key={opt.v}
+                        htmlFor={`grace-${opt.v}`}
+                        className={`flex flex-col items-center justify-center rounded-md border p-3 cursor-pointer transition ${graceMinutes.toString() === opt.v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+                        data-testid={`card-grace-${opt.v}`}
+                      >
+                        <RadioGroupItem value={opt.v} id={`grace-${opt.v}`} className="sr-only" data-testid={`radio-${opt.v}min`} />
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        <span className="text-xs text-muted-foreground mt-0.5">{opt.hint}</span>
+                      </Label>
+                    ))}
                   </RadioGroup>
                 </div>
               </AccordionContent>
