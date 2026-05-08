@@ -189,6 +189,7 @@ export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [showTestConfirm, setShowTestConfirm] = useState(false);
+  const [showRotateConfirm, setShowRotateConfirm] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [checkinInterval, setCheckinInterval] = useState(24);
   const [preferredTime, setPreferredTime] = useState("09:00");
@@ -333,6 +334,22 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: "Error", variant: "destructive" });
+    },
+  });
+
+  const rotateTokensMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/safety-circle/rotate-tokens", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Watcher links refreshed",
+        description: `${data?.rotated ?? 0} fresh links will reach your circle on the next alert. Old links no longer work.`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Could not refresh links", variant: "destructive" });
     },
   });
 
@@ -1134,6 +1151,21 @@ export default function SettingsPage() {
           </Accordion>
         </Card>
       </main>
+
+      <AlertDialog open={showRotateConfirm} onOpenChange={setShowRotateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refresh all watcher links?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Any old links sitting in your watchers' SMS history will stop working. New links go out automatically with your next safety alert. Use this if a phone was lost, a contact left, or you just want a clean slate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-rotate-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { rotateTokensMutation.mutate(); setShowRotateConfirm(false); }} data-testid="button-rotate-confirm">Refresh links</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showTestConfirm} onOpenChange={setShowTestConfirm}>
         <AlertDialogContent>

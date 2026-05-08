@@ -1062,8 +1062,12 @@ export class DatabaseStorage implements IStorage {
         .limit(1);
       return {
         mode: "allclear",
-        user: { id: user.id, name: user.name, phone: null },
-        contact,
+        // Minimal projection: no stable identifiers, no phone/email, no role.
+        // The allclear page only needs the subject's first name to display the
+        // confirmation; everything else is omitted so a forwarded link cannot
+        // be used to fingerprint the user or watcher.
+        user: { id: "", name: user.name, phone: null },
+        contact: { id: "", name: contact.name, phone: "", email: null, userId: "", priority: 0 } as unknown as Contact,
         lastCheckin: null,
         incident: null,
         locationSession: null,

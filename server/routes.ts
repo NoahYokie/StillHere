@@ -2271,7 +2271,9 @@ export async function registerRoutes(
       const now = new Date();
       
       const contacts = await storage.getContacts(data.user.id);
-      const tokens = await storage.getContactTokensForUser(data.user.id);
+      // Use regenerate so a fresh standing token is minted if no live one exists
+      // (existing tokens may have aged past the 24h hard cap).
+      const tokens = await storage.regenerateTokensForUser(data.user.id);
       const baseUrl = getBaseUrl();
       const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
       const firstContact = sortedContacts[0];
@@ -4634,7 +4636,7 @@ export async function registerRoutes(
           const incident = await storage.createIncident(user.id, "sos");
           const allContacts = await storage.getContacts(user.id);
           const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
-          const tokens = await storage.getContactTokensForUser(user.id);
+          const tokens = await storage.regenerateTokensForUser(user.id);
           const baseUrl = getBaseUrl();
           const first = sorted[0];
           if (first) {
@@ -6195,7 +6197,7 @@ export async function registerRoutes(
         const graceMs = (userSettings?.graceMinutes || 15) * 60 * 1000;
 
         const contacts = await storage.getContacts(incident.userId);
-        const tokens = await storage.getContactTokensForUser(incident.userId);
+        const tokens = await storage.regenerateTokensForUser(incident.userId);
         const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
 
         let notifiedIds: string[] = [];
