@@ -5755,20 +5755,24 @@ export async function registerRoutes(
       const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
 
       // Press 1 -> patch them through to their primary contact via <Dial>
+      // The Dial uses an `action` URL so Twilio posts back the real outcome
+      // (DialCallStatus + DialCallDuration). Without the action attribute,
+      // Twilio plays the next verb after the call regardless of whether the
+      // contact answered, which caused us to incorrectly say
+      // "we couldn't reach <name>" even after a successful conversation.
       if (digits === "1" && user) {
         const allContacts = await storage.getContacts(user.id);
         const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
         const primary = sorted[0];
         if (primary && primary.phone) {
           const safeName = escapeXml(primary.name);
+          const safeContactId = escapeXml(primary.id);
           const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm(`Connecting you to ${safeName} now. Please hold.`)}</Say>
-  <Dial timeout="25" callerId="${process.env.TWILIO_PHONE_NUMBER || ""}" answerOnBridge="true">
+  <Dial timeout="25" callerId="${process.env.TWILIO_PHONE_NUMBER || ""}" answerOnBridge="true" action="/api/wellness-call/dial-result?contactId=${safeContactId}" method="POST">
     <Number>${escapeXml(primary.phone)}</Number>
   </Dial>
-  <Say voice="Polly.Joanna-Neural">${calm(`We could not reach ${safeName} right now. We will keep trying your safety circle. Stay with us.`)}</Say>
-  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
 </Response>`;
           return res.type("text/xml").send(twiml);
         }
@@ -5802,6 +5806,189 @@ export async function registerRoutes(
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call help-followup:", error);
+      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
+    }
+  });
+
+  // Dial result: Twilio posts the real outcome of the watcher dial here
+  // (DialCallStatus + DialCallDuration). This is the fix for the bug where we
+  // told the user "we couldn't reach <name>" even after a successful call.
+  //
+  // - If the contact actually answered for at least ~15s (real conversation),
+  //   we stamp the incident timeline as "contact_reached" and ask the user
+  //   whether the situation is resolved (the post-contact follow-up).
+  // - If the contact didn't answer (no-answer / busy / failed / canceled),
+  //   we honestly tell the user we couldn't reach them and continue the
+  //   comfort loop (escalation is already running in the background).
+  app.post("/api/wellness-call/dial-result", verifyTwilioSignature, async (req, res) => {
+    try {
+      const dialStatus = String(req.body.DialCallStatus || "").toLowerCase();
+      const dialDurationSec = parseInt(String(req.body.DialCallDuration || "0"), 10) || 0;
+      const calledNumber = req.body.To;
+      const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
+      const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
+      const contactId = typeof req.query.contactId === "string" ? req.query.contactId : null;
+
+      let contactName = "your contact";
+      if (user && contactId) {
+        const contact = (await storage.getContacts(user.id)).find(c => c.id === contactId);
+        if (contact) contactName = contact.name;
+      }
+      const safeName = escapeXml(contactName);
+
+      // "Real conversation" threshold: the contact answered AND stayed on
+      // long enough that the user got to actually speak with them.
+      const wasReached = dialStatus === "completed" && dialDurationSec >= 15;
+
+      console.log(JSON.stringify({
+        event: "WELLNESS_CALL_DIAL_RESULT",
+        userId: user?.id || null,
+        contactId,
+        contactName,
+        dialStatus,
+        dialDurationSec,
+        wasReached,
+        timestamp: new Date().toISOString(),
+      }));
+
+      // Append to the incident escalation timeline so the watcher dashboard,
+      // emergency page, and weekly report all show the truth.
+      if (user) {
+        const incident = await storage.getOpenIncident(user.id);
+        if (incident && !incident.isDrill) {
+          let timeline: any[] = [];
+          try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
+          if (wasReached) {
+            timeline.push({
+              type: "contact_reached",
+              time: new Date().toISOString(),
+              detail: `User spoke with ${contactName} for ${Math.round(dialDurationSec / 60 * 10) / 10} min`,
+            });
+          } else {
+            timeline.push({
+              type: "call_failed",
+              time: new Date().toISOString(),
+              detail: `Could not reach ${contactName} (${dialStatus || "no response"})`,
+            });
+          }
+          await storage.updateIncident(incident.id, {
+            escalationTimeline: JSON.stringify(timeline),
+          });
+        }
+      }
+
+      if (wasReached) {
+        // Ask the user whether the situation is resolved.
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm(`Welcome back. We're glad you got through to ${safeName}.`)}</Say>
+  <Pause length="1"/>
+  <Gather numDigits="1" action="/api/wellness-call/post-contact-followup" method="POST" timeout="15">
+    <Say voice="Polly.Joanna-Neural">${calm(`Is everything okay now? Press 1 if you're safe and the situation is resolved. Press 2 if you still need more help.`)}</Say>
+    <Pause length="2"/>
+    <Say voice="Polly.Joanna-Neural">${calm(`Take your time. Press 1 if you're safe. Press 2 if you still need help.`)}</Say>
+  </Gather>
+  <Say voice="Polly.Joanna-Neural">${calm("We didn't catch your response. We'll keep your safety circle on alert just in case.")}</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      // Truly didn't reach them — be honest, continue the comfort loop.
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm(`We could not reach ${safeName} right now. We will keep trying your safety circle. Stay with us.`)}</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+      res.type("text/xml").send(twiml);
+    } catch (error) {
+      console.error("Error in wellness call dial-result:", error);
+      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
+    }
+  });
+
+  // Post-contact follow-up: after a confirmed conversation with a watcher,
+  // we ask the user if the situation is resolved.
+  // - Press 1 = resolved -> resolveCheckin (closes incident, sends all-clear
+  //   SMS to the rest of the circle, stops further escalation, logs to the
+  //   weekly safety report).
+  // - Press 2 = still needs help -> log timeline entry and accelerate
+  //   escalation by setting nextActionAt to now so the next cron tick
+  //   immediately notifies the next contact in the chain.
+  app.post("/api/wellness-call/post-contact-followup", verifyTwilioSignature, async (req, res) => {
+    try {
+      const digits = req.body.Digits;
+      const calledNumber = req.body.To;
+      const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
+      const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
+
+      if (digits === "1" && user) {
+        // Resolved! Mark the incident closed and check the user in.
+        const incident = await storage.getOpenIncident(user.id);
+        if (incident && !incident.isDrill) {
+          let timeline: any[] = [];
+          try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
+          timeline.push({
+            type: "resolved",
+            time: new Date().toISOString(),
+            detail: "User confirmed safe by phone after speaking with their contact",
+          });
+          await storage.updateIncident(incident.id, {
+            wellnessCallStatus: "safe",
+            escalationTimeline: JSON.stringify(timeline),
+          });
+        }
+        const result = await resolveCheckin(user.id, "call", { resolvedBy: "user" });
+        console.log(`[WELLNESS CALL] Post-contact resolution: user ${user.name} confirmed safe (incidentResolved=${result.hadIncident})`);
+
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm("Wonderful. We've checked you in and let your safety circle know you're safe.")}</Say>
+  <Pause length="1"/>
+  <Say voice="Polly.Joanna-Neural">${calm("Take care, and have a lovely day.")}</Say>
+  <Hangup/>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      if (digits === "2" && user) {
+        // Still not resolved — log it and force the next escalation step soon.
+        const incident = await storage.getOpenIncident(user.id);
+        if (incident && !incident.isDrill) {
+          let timeline: any[] = [];
+          try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
+          timeline.push({
+            type: "still_need_help",
+            time: new Date().toISOString(),
+            detail: "User confirmed they still need help after speaking with their contact",
+          });
+          // Set nextActionAt to now so the cron picks up this incident on its
+          // next tick and notifies the next contact in the chain immediately.
+          await storage.updateIncident(incident.id, {
+            escalationTimeline: JSON.stringify(timeline),
+            nextActionAt: new Date(),
+          });
+          console.log(`[WELLNESS CALL] User ${user.name} still needs help — accelerating escalation to next contact`);
+        }
+        const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm("We hear you. We're alerting the next person in your safety circle right now. We are right here with you.")}</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+        return res.type("text/xml").send(twiml);
+      }
+
+      // No clear response — stay with them, keep escalation going.
+      const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm("We didn't catch that. We'll keep your safety circle on alert. We're right here with you.")}</Say>
+  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+</Response>`;
+      res.type("text/xml").send(twiml);
+    } catch (error) {
+      console.error("Error in wellness call post-contact-followup:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
     }
