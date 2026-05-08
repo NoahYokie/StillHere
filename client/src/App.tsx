@@ -279,6 +279,7 @@ function Router() {
       <Route path="/privacy" component={PrivacyPolicyPage} />
       <Route path="/terms" component={TermsOfServicePage} />
       <Route path="/emergency/:token" component={ContactPage} />
+      <Route path="/e/:token" component={ContactPage} />
       <Route component={NotFound} />
     </Switch>
   );

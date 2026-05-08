@@ -1106,6 +1106,9 @@ export default function SettingsPage() {
                 <Button variant="outline" size="sm" className="w-full h-8 text-xs justify-start" onClick={() => setShowTestConfirm(true)} disabled={testMutation.isPending} data-testid="button-run-test">
                   <FlaskConical className="h-3.5 w-3.5 mr-1.5" /> Run a test notification
                 </Button>
+                <Button variant="outline" size="sm" className="w-full h-8 text-xs justify-start" onClick={() => setShowRotateConfirm(true)} disabled={rotateTokensMutation.isPending} data-testid="button-rotate-watcher-links">
+                  <Shield className="h-3.5 w-3.5 mr-1.5" /> {rotateTokensMutation.isPending ? "Refreshing..." : "Refresh all watcher links"}
+                </Button>
                 <div className="space-y-1.5">
                   <Button variant="ghost" size="sm" className="w-full h-8 text-xs justify-start" onClick={() => setLocation("/help")} data-testid="link-help">
                     <HelpCircle className="h-3.5 w-3.5 mr-1.5" /> What happens if...

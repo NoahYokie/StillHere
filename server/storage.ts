@@ -155,8 +155,9 @@ export interface IStorage {
   getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
-  getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined>;
-  generateToken(contactId: string): Promise<ContactToken>;
+  getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string } | undefined>;
+  generateToken(contactId: string, options?: { ttlHours?: number; purpose?: "standing" | "incident" | "allclear" }): Promise<ContactToken>;
+  rotateAllStandingTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
   revokeAllTokensForUser(userId: string): Promise<void>;
   regenerateTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
   
@@ -744,15 +745,21 @@ export class DatabaseStorage implements IStorage {
     return { pointsDeleted, sharesDeleted, usersProcessed: allUsers.length };
   }
 
-  async getContactByToken(token: string): Promise<{ contact: Contact; user: User } | undefined> {
+  async getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string } | undefined> {
     const [tokenRecord] = await db.select().from(contactTokens).where(
       and(eq(contactTokens.token, token), eq(contactTokens.revoked, false))
     );
     if (!tokenRecord) return undefined;
 
-    // Enforce expiry: a leaked token must not grant indefinite access to
-    // emergency portal data and actions.
-    if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) < new Date()) {
+    // Hard ceiling: regardless of the stored expiry, no watcher token may live
+    // longer than 24 hours from the moment it was minted. This caps blast radius
+    // for any link sitting in an SMS inbox, screenshot, or backup.
+    const HARD_CAP_MS = 24 * 60 * 60 * 1000;
+    const createdAt = new Date(tokenRecord.createdAt);
+    const hardExpiry = new Date(createdAt.getTime() + HARD_CAP_MS);
+    const storedExpiry = tokenRecord.expiresAt ? new Date(tokenRecord.expiresAt) : hardExpiry;
+    const effectiveExpiry = storedExpiry < hardExpiry ? storedExpiry : hardExpiry;
+    if (effectiveExpiry < new Date()) {
       return undefined;
     }
 
@@ -763,27 +770,51 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUser(contact.userId);
     if (!user) return undefined;
 
-    return { contact, user };
+    return { contact, user, purpose: tokenRecord.purpose || "standing" };
   }
 
-  async generateToken(contactId: string): Promise<ContactToken> {
-    // Generate a short, URL-safe token (10 characters, mixed case alphanumeric)
+  async generateToken(
+    contactId: string,
+    options?: { ttlHours?: number; purpose?: "standing" | "incident" | "allclear" },
+  ): Promise<ContactToken> {
+    // Generate a short, URL-safe token (10 characters, mixed case alphanumeric).
+    // 54^10 = ~2.6 * 10^17 keyspace, derived from crypto-grade randomBytes.
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
     let token = '';
     const bytes = randomBytes(10);
     for (let i = 0; i < 10; i++) {
       token += chars[bytes[i] % chars.length];
     }
-    // Tokens expire after 30 days. Watchers can always be re-issued a fresh
-    // token by the user; meanwhile a leaked link auto-disarms.
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    // Tokens are capped at 24 hours. Watchers can always be re-issued a fresh
+    // link via the next escalation, and old links sitting in inboxes auto-disarm.
+    const requestedHours = options?.ttlHours ?? 24;
+    const ttlHours = Math.min(Math.max(1, requestedHours), 24);
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
+    const purpose = options?.purpose || "standing";
     const [result] = await db.insert(contactTokens).values({
       contactId,
       token,
       revoked: false,
+      purpose,
       expiresAt,
     }).returning();
     return result;
+  }
+
+  async rotateAllStandingTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]> {
+    // User-initiated panic rotation: revoke every live token across all purposes
+    // and mint fresh standing tokens. Used by Settings -> "Rotate watcher links".
+    const userContacts = await this.getContacts(userId);
+    const out: { contact: Contact; token: string }[] = [];
+    for (const contact of userContacts) {
+      if (contact.softDeletedAt) continue;
+      await db.update(contactTokens)
+        .set({ revoked: true })
+        .where(and(eq(contactTokens.contactId, contact.id), eq(contactTokens.revoked, false)));
+      const fresh = await this.generateToken(contact.id, { ttlHours: 24, purpose: "standing" });
+      out.push({ contact, token: fresh.token });
+    }
+    return out.sort((a, b) => a.contact.priority - b.contact.priority);
   }
 
   async revokeAllTokensForUser(userId: string): Promise<void> {
@@ -796,27 +827,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async regenerateTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]> {
-    // CRITICAL: never revoke tokens that have already been embedded in SMS/email
-    // links sitting in someone's inbox. We reuse the contact's most recent valid
-    // (unrevoked, unexpired) token, and only mint a fresh one when none exists.
-    // Tokens still auto-expire after 30 days, so leaked-link safety is preserved.
+    // Reuse a contact's most recent standing token only if it's still within the
+    // 24h hard cap; otherwise mint a fresh one. We never revoke a token that
+    // might be sitting in an inbox, but the 24h cap (enforced in
+    // getContactByToken) means an unused token auto-disarms within a day anyway.
     const userContacts = await this.getContacts(userId);
     const result: { contact: Contact; token: string }[] = [];
     const now = new Date();
+    const minCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     for (const contact of userContacts) {
       if (contact.softDeletedAt) continue;
       const [existing] = await db.select().from(contactTokens)
         .where(and(
           eq(contactTokens.contactId, contact.id),
           eq(contactTokens.revoked, false),
+          eq(contactTokens.purpose, "standing"),
           gte(contactTokens.expiresAt, now),
+          gte(contactTokens.createdAt, minCreatedAt),
         ))
-        .orderBy(desc(contactTokens.expiresAt))
+        .orderBy(desc(contactTokens.createdAt))
         .limit(1);
       if (existing) {
         result.push({ contact, token: existing.token });
       } else {
-        const tokenRecord = await this.generateToken(contact.id);
+        const tokenRecord = await this.generateToken(contact.id, { ttlHours: 24, purpose: "standing" });
         result.push({ contact, token: tokenRecord.token });
       }
     }
@@ -1016,7 +1050,32 @@ export class DatabaseStorage implements IStorage {
     const result = await this.getContactByToken(token);
     if (!result) return undefined;
 
-    const { contact, user } = result;
+    const { contact, user, purpose } = result;
+
+    // All-clear links are read-only resolution receipts. They never carry
+    // location, history, or actions, even if the user later starts a new
+    // sharing session. Returning a minimal payload guarantees that.
+    if (purpose === "allclear") {
+      const [recentResolved] = await db.select().from(incidents)
+        .where(and(eq(incidents.userId, user.id), eq(incidents.status, "resolved")))
+        .orderBy(desc(incidents.resolvedAt))
+        .limit(1);
+      return {
+        mode: "allclear",
+        user: { id: user.id, name: user.name, phone: null },
+        contact,
+        lastCheckin: null,
+        incident: null,
+        locationSession: null,
+        handlingContact: null,
+        safetyTimer: null,
+        safeWalk: null,
+        crashDrive: null,
+        tripTrail: [],
+        resolvedAt: recentResolved?.resolvedAt ? new Date(recentResolved.resolvedAt).toISOString() : null,
+      };
+    }
+
     const lastCheckin = await this.getLastCheckin(user.id);
     const incident = await this.getOpenIncident(user.id);
     const locationSession = await this.getActiveLocationSession(user.id);
@@ -1077,6 +1136,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     return {
+      mode: "live",
       user: {
         id: user.id,
         name: user.name,
@@ -1091,6 +1151,7 @@ export class DatabaseStorage implements IStorage {
       safeWalk: safeWalk || null,
       crashDrive: crashDrive || null,
       tripTrail,
+      resolvedAt: null,
     };
   }
 
@@ -1132,12 +1193,24 @@ export class DatabaseStorage implements IStorage {
   async getContactTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]> {
     const userContacts = await this.getContacts(userId);
     const result: { contact: Contact; token: string }[] = [];
+    const now = new Date();
+    const minCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     for (const contact of userContacts) {
+      if (contact.softDeletedAt) continue;
+      // Only return live, standing tokens still within the 24h hard cap.
       const [tokenRecord] = await db
         .select()
         .from(contactTokens)
-        .where(and(eq(contactTokens.contactId, contact.id), eq(contactTokens.revoked, false)));
+        .where(and(
+          eq(contactTokens.contactId, contact.id),
+          eq(contactTokens.revoked, false),
+          eq(contactTokens.purpose, "standing"),
+          gte(contactTokens.expiresAt, now),
+          gte(contactTokens.createdAt, minCreatedAt),
+        ))
+        .orderBy(desc(contactTokens.createdAt))
+        .limit(1);
       if (tokenRecord) {
         result.push({ contact, token: tokenRecord.token });
       }

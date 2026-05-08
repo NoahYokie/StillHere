@@ -153,59 +153,37 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
 
     const baseUrl = getBaseUrl();
     const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-    const contactsWithTokens = await storage.getContactTokensForUser(userId);
-    console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contactsWithTokens=${contactsWithTokens.length}`);
+    const allContacts = await storage.getContacts(userId);
+    console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contacts=${allContacts.length}`);
 
     const smsDedup = new Set<string>();
 
-    if (contactsWithTokens.length === 0) {
-      const allContacts = await storage.getContacts(userId);
-      console.log(`[ALL-CLEAR] WARNING: No active tokens found. Total contacts=${allContacts.length}. Tokens may have been revoked early.`);
-      for (const contact of allContacts) {
-        const normalizedPhone = normalizePhone(contact.phone);
-        if (smsDedup.has(normalizedPhone)) {
-          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, reason: duplicate phone)`);
-          continue;
-        }
-        try {
-          const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, `${baseUrl}/`);
-          smsSuccess++;
-          smsDedup.add(normalizedPhone);
-          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms)`);
-          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
-        } catch (err: any) {
-          smsFailed++;
-          console.error(`[ALL-CLEAR] FAILED (fallback) to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
-        }
+    for (const contact of allContacts) {
+      if (contact.softDeletedAt) continue;
+      const normalizedPhone = normalizePhone(contact.phone);
+      if (smsDedup.has(normalizedPhone)) {
+        console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, reason: duplicate phone)`);
+        continue;
       }
-    } else {
-      for (const { contact, token } of contactsWithTokens) {
-        const normalizedPhone = normalizePhone(contact.phone);
-        if (smsDedup.has(normalizedPhone)) {
-          console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, reason: duplicate phone)`);
-          continue;
-        }
-        try {
-          const link = `${baseUrl}/emergency/${token}`;
-          const allClearResult = await sendAllClearNotification(normalizedPhone, user.name, link);
-          smsSuccess++;
-          smsDedup.add(normalizedPhone);
-          console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms)`);
-          console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
-        } catch (err: any) {
-          smsFailed++;
-          console.error(`[ALL-CLEAR] FAILED to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
-        }
+      try {
+        // Mint a purpose='allclear', short-lived (4h) token specifically for this
+        // resolution SMS. The link surfaces a read-only "they're safe" page with
+        // no location, no history, and no actions, even if the user starts a new
+        // sharing session later. Standing tokens are not reused here, so a leaked
+        // SMS link cannot grant ongoing visibility.
+        const fresh = await storage.generateToken(contact.id, { ttlHours: 4, purpose: "allclear" });
+        const link = `${baseUrl}/e/${fresh.token}`;
+        await sendAllClearNotification(normalizedPhone, user.name, link);
+        smsSuccess++;
+        smsDedup.add(normalizedPhone);
+        console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms, ttlHours: 4)`);
+        console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
+      } catch (err: any) {
+        smsFailed++;
+        console.error(`[ALL-CLEAR] FAILED to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
       }
     }
     console.log(`[ALL-CLEAR] Complete: ${smsSuccess} success, ${smsFailed} failed`);
-
-    // Intentionally do NOT revoke tokens here. The all-clear SMS we just sent
-    // contains links built from these tokens; revoking them would break the
-    // watcher's link the moment they tap it. Tokens auto-expire after 30 days,
-    // and the /api/emergency/:token/handle and /escalate endpoints already
-    // refuse any incident whose status is "resolved", so leaving the read-only
-    // view live is safe.
   }
 
   let watcherNotified = false;
@@ -1715,6 +1693,21 @@ export async function registerRoutes(
     }
   });
 
+  // Rotate every watcher link (panic button for the user).
+  // Revokes all live tokens across all purposes and mints fresh standing tokens.
+  app.post("/api/safety-circle/rotate-tokens", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      const fresh = await storage.rotateAllStandingTokensForUser(userId);
+      console.log(`[SECURITY] User ${userId} rotated all watcher tokens. ${fresh.length} fresh standing tokens minted.`);
+      res.json({ success: true, rotated: fresh.length });
+    } catch (error) {
+      console.error("Error rotating watcher tokens:", error);
+      res.status(500).json({ error: "Failed to rotate watcher links" });
+    }
+  });
+
   app.get("/api/safety-circle/readiness", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -2193,7 +2186,16 @@ export async function registerRoutes(
   });
 
   // Contact page - get data
+  // Hygiene headers prevent caching and search indexing of any watcher token URL.
+  const applyEmergencyHygiene = (res: any) => {
+    res.setHeader("Cache-Control", "no-store, private, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
+    res.setHeader("Referrer-Policy", "no-referrer");
+  };
+
   app.get("/api/emergency/:token", emergencyLimiter, async (req, res) => {
+    applyEmergencyHygiene(res);
     try {
       const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
@@ -2211,12 +2213,18 @@ export async function registerRoutes(
 
   // Contact takes responsibility
   app.post("/api/emergency/:token/handle", emergencyLimiter, async (req, res) => {
+    applyEmergencyHygiene(res);
     try {
       const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
       
       if (!data) {
         return res.status(404).json({ error: "Invalid or expired link" });
+      }
+
+      // Resolution-receipt links cannot trigger any action.
+      if (data.mode === "allclear") {
+        return res.status(403).json({ error: "This link is read-only" });
       }
       
       if (!data.incident || data.incident.status === "resolved") {
@@ -2243,12 +2251,17 @@ export async function registerRoutes(
 
   // Contact escalates (manual escalation - "I can't help")
   app.post("/api/emergency/:token/escalate", emergencyLimiter, async (req, res) => {
+    applyEmergencyHygiene(res);
     try {
       const token = req.params.token as string;
       const data = await storage.getContactPageData(token);
       
       if (!data) {
         return res.status(404).json({ error: "Invalid or expired link" });
+      }
+
+      if (data.mode === "allclear") {
+        return res.status(403).json({ error: "This link is read-only" });
       }
       
       if (!data.incident || data.incident.status === "resolved") {

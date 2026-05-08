@@ -142,11 +142,16 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
 }));
 
 // Contact Tokens table
+// Purpose:
+//   'standing'  - default watcher link, refreshed lazily, max 24h lifetime
+//   'incident'  - link to live incident view, expires when incident resolves + small grace
+//   'allclear'  - read-only "they're safe" link sent in resolution SMS, 4h lifetime, no location data
 export const contactTokens = pgTable("contact_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
   token: text("token").notNull().unique(),
   revoked: boolean("revoked").notNull().default(false),
+  purpose: text("purpose").notNull().default("standing"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -1165,6 +1170,9 @@ export interface WatchedUser {
 }
 
 export interface ContactPageData {
+  // 'live'     - normal watcher view, may include location during active sharing windows
+  // 'allclear' - read-only resolution view; never carries location or history
+  mode: "live" | "allclear";
   user: {
     id: string;
     name: string;
@@ -1179,4 +1187,6 @@ export interface ContactPageData {
   safeWalk: SafeWalk | null;
   crashDrive: DriveSession | null;
   tripTrail: TripPoint[];
+  // Resolution timestamp for allclear views, set when mode === 'allclear'.
+  resolvedAt: string | null;
 }

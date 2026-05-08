@@ -119,6 +119,34 @@ export default function ContactPage() {
     );
   }
 
+  // Resolution-receipt mode: minimal "they're safe" page with no location,
+  // no history, and no actions. Triggered when the link came from an all-clear SMS.
+  if (data.mode === "allclear") {
+    const resolvedTime = data.resolvedAt
+      ? new Date(data.resolvedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      : null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12" data-testid="page-allclear">
+        <Card className="max-w-md w-full border-accent/30">
+          <CardContent className="pt-8 pb-8 text-center space-y-4">
+            <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
+              <CheckCircle2 className="h-10 w-10 text-accent" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold mb-1">All clear</h2>
+              <p className="text-base text-muted-foreground" data-testid="text-allclear-summary">
+                {data.user.name} confirmed they are safe{resolvedTime ? ` at ${resolvedTime}` : ""}. No action is needed.
+              </p>
+            </div>
+            <div className="text-xs text-muted-foreground border-t pt-4">
+              This is a read-only confirmation. Open the StillHere app for live status during future check-ins.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const { user, contact, lastCheckin, incident, locationSession, handlingContact, safetyTimer, safeWalk, crashDrive, tripTrail } = data;
   const hasActiveIncident = incident && incident.status !== "resolved";
   const isBeingHandled = incident?.status === "paused" && handlingContact;
