@@ -111,6 +111,44 @@ function getTimezoneOffsetMs(date: Date, tz: string): number {
   return new Date(tzStr).getTime() - new Date(utcStr).getTime();
 }
 
+// Compute the next check-in due moment as the next occurrence of the user's
+// preferred local time-of-day in their timezone, strictly after `lastTime`.
+// For sub-daily intervals (< 24h, or non-daily multiples) we fall back to
+// the simple elapsed-hours model since "preferred time" only makes sense
+// for daily-cadence schedules.
+export function computeNextCheckinDue(opts: {
+  lastTime: Date;
+  intervalHours: number;
+  preferredCheckinTime: string | null | undefined;
+  timezone: string | null | undefined;
+}): Date {
+  const { lastTime, intervalHours } = opts;
+  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
+  if (!isDailyLike) {
+    return addHours(lastTime, intervalHours);
+  }
+  const tz = opts.timezone || "UTC";
+  const pref = (opts.preferredCheckinTime || "09:00").trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(pref);
+  const targetH = Math.max(0, Math.min(23, m ? parseInt(m[1], 10) : 9));
+  const targetM = Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0));
+  const stepDays = intervalHours / 24;
+  const stepMs = stepDays * 86_400_000;
+
+  let dayStart = startOfDayInTimezone(lastTime, tz);
+  let candidate = new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
+  // Advance until strictly after lastTime. Re-anchor each iteration so DST
+  // transitions don't cause drift.
+  let safety = 0;
+  while (candidate <= lastTime && safety < 400) {
+    const probe = new Date(candidate.getTime() + stepMs + 3_600_000);
+    dayStart = startOfDayInTimezone(probe, tz);
+    candidate = new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
+    safety++;
+  }
+  return candidate;
+}
+
 function obfuscateCoord(value: number, seed: string): number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -1023,13 +1061,14 @@ export class DatabaseStorage implements IStorage {
     const openIncident = await this.getOpenIncident(userId);
     const activeLocationSession = await this.getActiveLocationSession(userId);
 
-    // Calculate next checkin due
-    let nextCheckinDue: Date;
-    if (lastCheckin) {
-      nextCheckinDue = addHours(lastCheckin.createdAt, userSettings.checkinIntervalHours);
-    } else {
-      nextCheckinDue = addHours(user.createdAt, userSettings.checkinIntervalHours);
-    }
+    // Calculate next checkin due, anchored to the user's preferred local
+    // time-of-day for daily-cadence schedules.
+    const nextCheckinDue = computeNextCheckinDue({
+      lastTime: lastCheckin?.createdAt || user.createdAt,
+      intervalHours: userSettings.checkinIntervalHours,
+      preferredCheckinTime: userSettings.preferredCheckinTime,
+      timezone: user.timezone,
+    });
 
     const contactLimit = await this.getContactLimit(userId);
 
@@ -1175,10 +1214,16 @@ export class DatabaseStorage implements IStorage {
       const openIncident = await this.getOpenIncident(user.id);
       if (openIncident) continue;
 
-      // Check timing
+      // Check timing — honor the user's preferred local time-of-day so a
+      // missed 7pm check-in doesn't fire its reminder at the wrong hour.
       const lastCheckin = await this.getLastCheckin(user.id);
       const lastTime = lastCheckin?.createdAt || user.createdAt;
-      const dueTime = addHours(lastTime, userSettings.checkinIntervalHours);
+      const dueTime = computeNextCheckinDue({
+        lastTime,
+        intervalHours: userSettings.checkinIntervalHours,
+        preferredCheckinTime: userSettings.preferredCheckinTime,
+        timezone: user.timezone,
+      });
       const graceTime = new Date(dueTime.getTime() + userSettings.graceMinutes * 60 * 1000);
 
       if (now > dueTime) {
@@ -1413,12 +1458,12 @@ export class DatabaseStorage implements IStorage {
       const lastCheckin = await this.getLastCheckin(user.id);
       const openIncident = await this.getOpenIncident(user.id);
 
-      let nextCheckinDue: Date;
-      if (lastCheckin) {
-        nextCheckinDue = addHours(lastCheckin.createdAt, userSettings?.checkinIntervalHours || 24);
-      } else {
-        nextCheckinDue = addHours(user.createdAt, userSettings?.checkinIntervalHours || 24);
-      }
+      const nextCheckinDue = computeNextCheckinDue({
+        lastTime: lastCheckin?.createdAt || user.createdAt,
+        intervalHours: userSettings?.checkinIntervalHours || 24,
+        preferredCheckinTime: userSettings?.preferredCheckinTime,
+        timezone: user.timezone,
+      });
 
       let lastLocationAt: Date | null = null;
       let lastLocationLat: number | null = null;
