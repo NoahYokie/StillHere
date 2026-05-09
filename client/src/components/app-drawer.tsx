@@ -24,6 +24,7 @@ import {
   Settings,
   HelpCircle,
   Info,
+  Compass,
   AlertTriangle,
   ChevronRight,
   LogOut,
@@ -66,6 +67,7 @@ const sections: NavSection[] = [
     title: "Settings",
     items: [
       { label: "Settings", icon: Settings, route: "/settings", testid: "drawer-link-settings" },
+      { label: "Replay tour", icon: Compass, route: "/?tour=1", testid: "drawer-link-replay-tour" },
       { label: "Help & Support", icon: HelpCircle, route: "/help", testid: "drawer-link-help" },
       { label: "About StillHere", icon: Info, route: "/trust", testid: "drawer-link-about" },
     ],
@@ -91,6 +93,17 @@ export function AppDrawer({ userName, onSosTap }: AppDrawerProps) {
 
   const go = (route: string) => {
     setOpen(false);
+    if (route === "/?tour=1") {
+      try {
+        window.localStorage.removeItem("stillhere.tour.v1.completed");
+      } catch {}
+      if (window.location.pathname === "/") {
+        window.location.search = "?tour=1";
+      } else {
+        window.location.href = "/?tour=1";
+      }
+      return;
+    }
     setLocation(route);
   };
 
