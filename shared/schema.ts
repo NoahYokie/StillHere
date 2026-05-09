@@ -304,6 +304,25 @@ export const locationSessionsRelations = relations(locationSessions, ({ one }) =
   }),
 }));
 
+// SMS delivery telemetry. Twilio calls /api/sms/status as a message moves
+// through queued -> sent -> delivered (or failed/undelivered). We store the
+// last status per messageSid so the system can react to undelivered alerts
+// during an active incident, and so operators have an audit trail.
+// PII minimization: we store only the last 4 digits of the recipient number.
+export const smsDeliveryLogs = pgTable("sms_delivery_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  messageSid: text("message_sid").notNull().unique(),
+  toLast4: text("to_last4").notNull(),
+  status: text("status").notNull(),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("sms_delivery_logs_status_idx").on(table.status),
+]);
+export type SmsDeliveryLog = typeof smsDeliveryLogs.$inferSelect;
+
 // Messages table
 // Conversations exist only between a user and members of their Safety Circle
 // (watchers / emergency contacts). Authorization is enforced at the route layer.

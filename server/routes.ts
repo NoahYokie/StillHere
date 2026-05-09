@@ -3697,28 +3697,58 @@ export async function registerRoutes(
   // opt-out flag so the next attempt is short-circuited at our gate.
   app.post("/api/sms/status", verifyTwilioSignature, async (req, res) => {
     try {
-      const messageStatus = req.body?.MessageStatus || req.body?.messageStatus;
-      const errorCode = parseInt(String(req.body?.ErrorCode || req.body?.errorCode || "0"), 10);
+      const messageStatus = String(req.body?.MessageStatus || req.body?.messageStatus || "");
+      const errorCodeRaw = req.body?.ErrorCode || req.body?.errorCode || null;
+      const errorCode = errorCodeRaw ? parseInt(String(errorCodeRaw), 10) : 0;
       const to = req.body?.To || req.body?.to;
-      const messageSid = req.body?.MessageSid || req.body?.messageSid;
+      const messageSid = String(req.body?.MessageSid || req.body?.messageSid || "");
 
-      if (!to) {
+      if (!to || !messageSid) {
         return res.status(200).send("ok");
       }
 
-      const masked = `***${String(to).slice(-4)}`;
+      const toStr = String(to);
+      const masked = `***${toStr.slice(-4)}`;
       const isFailed = messageStatus === "failed" || messageStatus === "undelivered";
       const isOptedOutCode = errorCode === 21610;
 
+      // 1. Always persist the latest status for this message (upsert by sid).
+      try {
+        await storage.recordSmsDelivery({
+          messageSid,
+          toLast4: toStr.slice(-4),
+          status: messageStatus || "unknown",
+          errorCode: errorCode ? String(errorCode) : null,
+          errorMessage: req.body?.ErrorMessage || req.body?.errorMessage || null,
+        });
+      } catch (err: any) {
+        console.warn(`[SMS-STATUS] Failed to persist delivery log for ${masked}:`, err?.message || err);
+      }
+
+      // 2. Carrier-level opt-out back-sync.
       if (isFailed && isOptedOutCode) {
         try {
-          const result = await storage.setSmsOptOutByPhone(normalizePhone(String(to)), true);
+          const result = await storage.setSmsOptOutByPhone(normalizePhone(toStr), true);
           console.log(`[SMS-STATUS] Carrier opt-out for ${masked} (sid=${messageSid}, code=21610), back-synced (users=${result.usersUpdated} contacts=${result.contactsUpdated})`);
         } catch (err: any) {
           console.error(`[SMS-STATUS] Failed to back-sync opt-out for ${masked}:`, err?.message || err);
         }
       } else if (isFailed) {
         console.warn(`[SMS-STATUS] Delivery failed for ${masked} (sid=${messageSid}, status=${messageStatus}, code=${errorCode})`);
+      }
+
+      // 3. If a watcher's alert SMS failed during an active incident, accelerate
+      // escalation: set nextActionAt = now so the cron escalates within ~2 min
+      // instead of waiting the full escalationMinutes window.
+      if (isFailed) {
+        try {
+          const accelerated = await storage.accelerateEscalationForFailedSms(normalizePhone(toStr));
+          if (accelerated > 0) {
+            console.log(`[SMS-STATUS] Failed delivery to ${masked} during ${accelerated} active incident(s); escalation accelerated.`);
+          }
+        } catch (err: any) {
+          console.warn(`[SMS-STATUS] Failed to accelerate escalation for ${masked}:`, err?.message || err);
+        }
       }
 
       res.status(200).send("ok");

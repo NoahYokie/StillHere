@@ -19,6 +19,8 @@ import {
   geofences,
   locationBreadcrumbs,
   satelliteDevices,
+  smsDeliveryLogs,
+  type SmsDeliveryLog,
   type User,
   type InsertUser,
   type Settings,
@@ -190,6 +192,8 @@ export interface IStorage {
   cleanupExpiredLocationData(): Promise<{ pointsDeleted: number; sharesDeleted: number; usersProcessed: number }>;
   setSmsOptOutByPhone(phone: string, optedOut: boolean): Promise<{ usersUpdated: number; contactsUpdated: number }>;
   isPhoneSmsOptedOut(phone: string): Promise<boolean>;
+  recordSmsDelivery(input: { messageSid: string; toLast4: string; status: string; errorCode: string | null; errorMessage: string | null }): Promise<void>;
+  accelerateEscalationForFailedSms(phone: string): Promise<number>;
   getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
@@ -723,6 +727,95 @@ export class DatabaseStorage implements IStorage {
       .where(eq(contacts.phone, phone))
       .returning({ id: contacts.id });
     return { usersUpdated: updatedUsers.length, contactsUpdated: updatedContacts.length };
+  }
+
+  async recordSmsDelivery(input: { messageSid: string; toLast4: string; status: string; errorCode: string | null; errorMessage: string | null }): Promise<void> {
+    // Twilio does NOT guarantee callback ordering, so we make the upsert
+    // monotonic: a stale non-terminal status (queued/sending/sent) must
+    // never overwrite a terminal one (delivered/failed/undelivered). We
+    // implement this by only updating when the new status has a rank >=
+    // the stored rank.
+    // Also sanitize errorMessage: Twilio's free-text error sometimes echoes
+    // the full E.164 destination, which would defeat our "last4 only" PII
+    // minimization. We strip any E.164-looking sequences before storing.
+    const sanitizedErrorMessage = input.errorMessage
+      ? input.errorMessage.replace(/\+?\d{7,15}/g, "[redacted-phone]").slice(0, 500)
+      : null;
+
+    const rank = (s: string): number => {
+      switch (s) {
+        case "queued": return 1;
+        case "accepted": return 1;
+        case "scheduled": return 1;
+        case "sending": return 2;
+        case "sent": return 3;
+        case "delivered": return 10;
+        case "undelivered": return 10;
+        case "failed": return 10;
+        default: return 0;
+      }
+    };
+
+    const existing = await db.select({ status: smsDeliveryLogs.status })
+      .from(smsDeliveryLogs)
+      .where(eq(smsDeliveryLogs.messageSid, input.messageSid))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(smsDeliveryLogs).values({
+        messageSid: input.messageSid,
+        toLast4: input.toLast4,
+        status: input.status,
+        errorCode: input.errorCode,
+        errorMessage: sanitizedErrorMessage,
+      });
+      return;
+    }
+
+    if (rank(input.status) < rank(existing[0].status)) {
+      // Out-of-order callback for an already-terminal row: ignore.
+      return;
+    }
+
+    await db.update(smsDeliveryLogs)
+      .set({
+        status: input.status,
+        errorCode: input.errorCode,
+        errorMessage: sanitizedErrorMessage,
+        updatedAt: new Date(),
+      })
+      .where(eq(smsDeliveryLogs.messageSid, input.messageSid));
+  }
+
+  async accelerateEscalationForFailedSms(phone: string): Promise<number> {
+    // Find open incidents whose owner has this phone listed as a contact AND
+    // whose escalation flow is actively in progress (we recently notified a
+    // contact). We require lastContactNotifiedAt within the last 30 minutes
+    // so a failed OTP/reminder/all-clear SMS to an unrelated contact during
+    // an unrelated open incident never advances escalation. This is a
+    // conservative narrowing; precise per-message attribution requires
+    // mapping messageSid -> incidentId at send time and is tracked separately.
+    if (!phone) return 0;
+    const matchingContacts = await db.select({ userId: contacts.userId })
+      .from(contacts)
+      .where(eq(contacts.phone, phone));
+    if (matchingContacts.length === 0) return 0;
+    const userIds = Array.from(new Set(matchingContacts.map(c => c.userId)));
+    const now = new Date();
+    const recentThreshold = new Date(now.getTime() - 30 * 60 * 1000);
+    let accelerated = 0;
+    for (const userId of userIds) {
+      const open = await this.getOpenIncident(userId);
+      if (!open) continue;
+      if (!open.lastContactNotifiedAt || open.lastContactNotifiedAt < recentThreshold) {
+        continue;
+      }
+      await db.update(incidents)
+        .set({ nextActionAt: now })
+        .where(eq(incidents.id, open.id));
+      accelerated++;
+    }
+    return accelerated;
   }
 
   async isPhoneSmsOptedOut(phone: string): Promise<boolean> {
