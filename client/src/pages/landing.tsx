@@ -368,7 +368,7 @@ export default function LandingPage() {
             <div className="flex-1 flex flex-col justify-end md:justify-center md:block order-2 md:order-1 pt-2 md:pt-0">
               <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/15 rounded-full text-white text-xs font-medium mb-5">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Safety that never sleeps</span>
+                <span>Personal safety, check in, and SOS in one app</span>
               </div>
               <h1
                 className="text-[1.85rem] md:text-5xl lg:text-[3.4rem] leading-[1.1] font-bold tracking-tight mb-3 md:mb-5 text-center md:text-left"
@@ -377,8 +377,11 @@ export default function LandingPage() {
                 When you can't check in,{" "}
                 <span className="text-white/90">StillHere checks on you.</span>
               </h1>
-              <p className="text-[1rem] md:text-xl text-white/85 leading-relaxed mb-6 md:mb-8 text-center md:text-left">
+              <p className="text-[1rem] md:text-xl text-white/85 leading-relaxed mb-4 md:mb-5 text-center md:text-left">
                 One tap tells your people you're okay. If you don't respond, StillHere escalates. Notification, SMS, phone call. Then alerts your Safety Circle.
+              </p>
+              <p className="hidden md:block text-sm text-white/70 leading-relaxed mb-6 md:mb-8 text-left">
+                Built for families, seniors, solo livers, and lone workers. Daily safety check ins, panic SOS button, fall detection, live GPS location sharing, and a Safety Circle that gets clear next steps.
               </p>
 
               <div className="space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3">
@@ -605,12 +608,15 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
             {[
-              { icon: HomeIcon, title: "Living alone", body: "Peace of mind for you and the people who care.", color: "from-primary/10 to-primary/5 text-primary" },
-              { icon: Heart, title: "Elderly parents", body: "Daily reassurance without constant phone calls.", color: "from-rose-100 to-rose-50 dark:from-rose-900/20 dark:to-rose-900/10 text-rose-600 dark:text-rose-400" },
-              { icon: MoonStar, title: "Night walks", body: "Share your journey and alert your people if something feels wrong.", color: "from-violet-100 to-violet-50 dark:from-violet-900/20 dark:to-violet-900/10 text-violet-600 dark:text-violet-400" },
-              { icon: Car, title: "Driving", body: "Crash detection, trip context, and safety alerts.", color: "from-amber-100 to-amber-50 dark:from-amber-900/20 dark:to-amber-900/10 text-amber-600 dark:text-amber-400" },
-              { icon: Plane, title: "Traveling solo", body: "Your Safety Circle stays informed when you're away.", color: "from-cyan-100 to-cyan-50 dark:from-cyan-900/20 dark:to-cyan-900/10 text-cyan-600 dark:text-cyan-400" },
-              { icon: Stethoscope, title: "Health recovery", body: "Extra support after illness, surgery, or hospital discharge.", color: "from-emerald-100 to-emerald-50 dark:from-emerald-900/20 dark:to-emerald-900/10 text-emerald-600 dark:text-emerald-400" },
+              { icon: Users, title: "Family safety", body: "A family check in app that does more than show a map. Daily check ins, SOS, and shared places.", color: "from-primary/10 to-primary/5 text-primary" },
+              { icon: Heart, title: "Seniors and elderly parents", body: "GPS location, fall detection, and gentle daily check ins. Reassurance without constant phone calls.", color: "from-rose-100 to-rose-50 dark:from-rose-900/20 dark:to-rose-900/10 text-rose-600 dark:text-rose-400" },
+              { icon: HomeIcon, title: "Living alone", body: "A safety net for solo livers. If something happens, your people are alerted automatically.", color: "from-teal-100 to-teal-50 dark:from-teal-900/20 dark:to-teal-900/10 text-teal-600 dark:text-teal-400" },
+              { icon: ShieldCheck, title: "Lone worker safety", body: "A check in app for lone workers and field staff. Safety timer, SOS, and shift tracking.", color: "from-indigo-100 to-indigo-50 dark:from-indigo-900/20 dark:to-indigo-900/10 text-indigo-600 dark:text-indigo-400" },
+              { icon: MoonStar, title: "Night walks and late commute", body: "Share your walk home and alert your people if you stop or feel unsafe. Personal safety on your phone.", color: "from-violet-100 to-violet-50 dark:from-violet-900/20 dark:to-violet-900/10 text-violet-600 dark:text-violet-400" },
+              { icon: Car, title: "Driving safety", body: "Crash detection, live route, and auto SOS countdown. Drive with backup.", color: "from-amber-100 to-amber-50 dark:from-amber-900/20 dark:to-amber-900/10 text-amber-600 dark:text-amber-400" },
+              { icon: Plane, title: "Solo travel", body: "Your Safety Circle stays informed when you're away from home.", color: "from-cyan-100 to-cyan-50 dark:from-cyan-900/20 dark:to-cyan-900/10 text-cyan-600 dark:text-cyan-400" },
+              { icon: Stethoscope, title: "Recovery and post surgery", body: "Extra support after illness, surgery, or hospital discharge.", color: "from-emerald-100 to-emerald-50 dark:from-emerald-900/20 dark:to-emerald-900/10 text-emerald-600 dark:text-emerald-400" },
+              { icon: Shield, title: "Women's safety", body: "Discreet panic SOS, live location share, and a circle of trusted people one tap away.", color: "from-pink-100 to-pink-50 dark:from-pink-900/20 dark:to-pink-900/10 text-pink-600 dark:text-pink-400" },
             ].map((u) => (
               <div key={u.title} className="rounded-2xl bg-card border border-border p-5 md:p-6 hover-elevate">
                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${u.color} flex items-center justify-center mb-4`}>
@@ -643,15 +649,21 @@ export default function LandingPage() {
               { icon: Hand, title: "One tap check in", body: "Confirm you're okay in seconds.", color: "bg-primary/10 text-primary" },
               { icon: MessageCircle, title: "SMS check in", body: "Reply YES to check in without opening the app.", color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" },
               { icon: Phone, title: "Phone call check in", body: "Press 1 during a call to confirm you're safe.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
-              { icon: Users, title: "Safety Circle", body: "Choose the people who should be alerted.", color: "bg-rose-100 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400" },
-              { icon: Bell, title: "Smart escalation", body: "Notification, SMS, call, then Safety Circle alert.", color: "bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400" },
-              { icon: MapPin, title: "Live location", body: "Share your real-time location when needed.", color: "bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400" },
-              { icon: Footprints, title: "Safe Walk and Ride", body: "Share your trip and get help if you don't arrive.", color: "bg-teal-100 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400" },
-              { icon: Clock, title: "Safety Timer", body: "Set a timer for solo activities.", color: "bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400" },
-              { icon: Car, title: "Drive safety", body: "Crash detection and emergency SOS support.", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" },
-              { icon: BarChart3, title: "Safety Record", body: "Weekly safety summaries for you and your family.", color: "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400" },
-              { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, and fall detection from your wrist.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
-              { icon: Lock, title: "Privacy controls", body: "Choose precise, area-only, presence-only, or paused sharing.", color: "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300" },
+              { icon: AlertTriangle, title: "Panic SOS button", body: "One tap raises an alarm to your Safety Circle with location.", color: "bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400" },
+              { icon: Users, title: "Safety Circle", body: "Choose primary, backup, and support guardians who get alerted.", color: "bg-rose-100 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400" },
+              { icon: Bell, title: "Smart escalation", body: "Push, SMS, call, then Safety Circle. Each step in order.", color: "bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400" },
+              { icon: MapPin, title: "Live GPS location", body: "Share real time location when it matters and pause when it doesn't.", color: "bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400" },
+              { icon: Footprints, title: "Safe Walk and Safe Ride", body: "Share your trip and get help if you don't arrive on time.", color: "bg-teal-100 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400" },
+              { icon: Clock, title: "Safety Timer", body: "A dead man's switch for solo activities. Cancel before time runs out.", color: "bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400" },
+              { icon: Car, title: "Drive and crash detection", body: "Speedometer, live route, and auto SOS countdown after a crash.", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" },
+              { icon: Activity, title: "Fall detection", body: "If a fall is detected and you don't respond, StillHere starts an emergency flow.", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-500" },
+              { icon: Map, title: "Geofencing", body: "Get alerts when someone arrives at home, school, or work, or leaves a safe zone.", color: "bg-lime-100 dark:bg-lime-900/20 text-lime-600 dark:text-lime-400" },
+              { icon: Users, title: "Family Mode", body: "A map first family hub with live pins, shared places, and group chat.", color: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400" },
+              { icon: Eye, title: "Guardian Map", body: "One screen view of every person you watch. Color coded and live.", color: "bg-sky-100 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400" },
+              { icon: MoonStar, title: "Sleep protection", body: "Quiet hours so non emergency notifications don't wake you up.", color: "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400" },
+              { icon: BarChart3, title: "Weekly Safety Record", body: "A clear receipt of what was handled and what was resolved.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
+              { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, fall detection, and heart rate from your wrist.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
+              { icon: Lock, title: "Privacy controls", body: "Precise, area only, presence only, or paused sharing. You decide.", color: "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300" },
             ].map((f) => (
               <div key={f.title} className="rounded-xl bg-card border border-border p-5 hover-elevate" data-testid={`feature-${f.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
                 <div className={`w-10 h-10 rounded-lg ${f.color} flex items-center justify-center mb-3`}>
