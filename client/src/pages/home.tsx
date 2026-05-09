@@ -28,6 +28,7 @@ import { drivingMonitor } from "@/lib/driving-monitor";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
 import { AppDrawer } from "@/components/app-drawer";
+import { AppTour } from "@/components/app-tour";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -629,12 +630,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AppTour />
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="max-w-md mx-auto px-2 h-14 flex items-center justify-between">
-          <AppDrawer
-            userName={status?.user?.name}
-            onSosTap={() => setShowSosConfirm(true)}
-          />
+          <div data-tour="menu">
+            <AppDrawer
+              userName={status?.user?.name}
+              onSosTap={() => setShowSosConfirm(true)}
+            />
+          </div>
           <div className="flex items-center gap-1.5" data-testid="text-app-title">
             <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
             <span className="text-base font-semibold tracking-tight">StillHere</span>
@@ -705,6 +709,7 @@ export default function Home() {
             disabled={checkinMutation.isPending}
             className="w-44 h-44 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-600 text-white shadow-[0_12px_36px_-12px_rgba(34,197,94,0.55)] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 active:scale-[0.97] flex flex-col items-center justify-center mx-auto"
             data-testid="button-im-ok"
+            data-tour="checkin"
           >
             <Check className="h-12 w-12 mb-1.5" strokeWidth={3} />
             <span className="text-2xl font-bold tracking-wide">I'M OK</span>
@@ -725,7 +730,7 @@ export default function Home() {
           </Card>
         )}
 
-        <Card className="rounded-2xl shadow-sm" data-testid="card-next-checkin">
+        <Card className="rounded-2xl shadow-sm" data-testid="card-next-checkin" data-tour="next-checkin">
           <CardContent className="px-5 py-4 flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -769,6 +774,7 @@ export default function Home() {
             className="flex flex-col items-center text-center gap-2 py-3 px-1 rounded-2xl bg-green-50 dark:bg-green-950/30 transition-all duration-150 active:scale-95 active:bg-green-100 dark:active:bg-green-950/50"
             onClick={() => setLocation("/safe-walk")}
             data-testid="card-safe-walk"
+            data-tour="safewalk"
           >
             <div className="w-11 h-11 rounded-2xl bg-green-500 flex items-center justify-center">
               <Navigation className="h-5 w-5 text-white" />
@@ -790,6 +796,7 @@ export default function Home() {
             onClick={() => setShowSosConfirm(true)}
             disabled={sosMutation.isPending}
             data-testid="card-sos"
+            data-tour="sos"
           >
             <div className="w-11 h-11 rounded-2xl bg-red-500 flex items-center justify-center">
               <AlertTriangle className="h-5 w-5 text-white" />
