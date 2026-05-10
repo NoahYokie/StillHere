@@ -24,7 +24,7 @@ export const familyMemberStatusEnum = pgEnum("family_member_status", ["active", 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  phone: text("phone"),
+  phone: text("phone").unique(),
   timezone: text("timezone").notNull().default("Australia/Melbourne"),
   isPremium: boolean("is_premium").notNull().default(false),
   publicKey: text("public_key"),

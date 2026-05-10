@@ -365,28 +365,48 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const learningEnd = new Date();
     learningEnd.setDate(learningEnd.getDate() + 30);
-    const [user] = await db.insert(users).values({
-      ...insertUser,
-      learningModeUntil: learningEnd,
-    }).returning();
-    
-    await db.insert(settings).values({
-      userId: user.id,
-      checkinIntervalHours: 24,
-      graceMinutes: 15,
-      locationMode: "off",
-    });
-    
-    return user;
+    try {
+      const [user] = await db.insert(users).values({
+        ...insertUser,
+        learningModeUntil: learningEnd,
+      }).returning();
+
+      await db.insert(settings).values({
+        userId: user.id,
+        checkinIntervalHours: 24,
+        graceMinutes: 15,
+        locationMode: "off",
+      });
+
+      return user;
+    } catch (err: any) {
+      if (err?.code === "23505" && /users_phone_unique|users_phone_key/.test(err?.constraint || err?.detail || "")) {
+        const conflict: any = new Error("PHONE_ALREADY_REGISTERED");
+        conflict.code = "PHONE_ALREADY_REGISTERED";
+        conflict.status = 409;
+        throw conflict;
+      }
+      throw err;
+    }
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning();
-    return user;
+    try {
+      const [user] = await db
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, id))
+        .returning();
+      return user;
+    } catch (err: any) {
+      if (err?.code === "23505" && /users_phone_unique|users_phone_key/.test(err?.constraint || err?.detail || "")) {
+        const conflict: any = new Error("PHONE_ALREADY_REGISTERED");
+        conflict.code = "PHONE_ALREADY_REGISTERED";
+        conflict.status = 409;
+        throw conflict;
+      }
+      throw err;
+    }
   }
 
   async recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number, batt?: number, chg?: boolean, net?: string): Promise<void> {

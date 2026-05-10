@@ -399,26 +399,48 @@ export async function verifyOtp(phone: string, code: string): Promise<{
   let needsSetup = false;
   
   if (!user) {
-    // Create new user with phone only (name will be set in setup)
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        name: "",
-        phone: normalizedPhone,
-        timezone: "Australia/Melbourne",
-      })
-      .returning();
-    user = newUser;
-    isNewUser = true;
-    needsSetup = true;
-    
-    // Create default settings
-    await db.insert(settings).values({
-      userId: user.id,
-      checkinIntervalHours: 24,
-      graceMinutes: 15,
-      locationMode: "off",
-    });
+    // Create new user with phone only (name will be set in setup).
+    // Race-safe: if a parallel verifyOtp for the same phone wins the insert
+    // first, our INSERT hits the users.phone UNIQUE constraint (Postgres
+    // SQLSTATE 23505). In that case we re-select the row that won the race
+    // instead of returning a duplicate-account error to the user.
+    try {
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          name: "",
+          phone: normalizedPhone,
+          timezone: "Australia/Melbourne",
+        })
+        .returning();
+      user = newUser;
+      isNewUser = true;
+      needsSetup = true;
+
+      // Create default settings
+      await db.insert(settings).values({
+        userId: user.id,
+        checkinIntervalHours: 24,
+        graceMinutes: 15,
+        locationMode: "off",
+      });
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        const [existing] = await db
+          .select()
+          .from(users)
+          .where(eq(users.phone, normalizedPhone))
+          .limit(1);
+        if (!existing) {
+          console.error("[AUTH] Race-condition recovery failed for phone ***" + normalizedPhone.slice(-4));
+          return { success: false };
+        }
+        user = existing;
+        needsSetup = !user.name || user.name.trim() === "";
+      } else {
+        throw err;
+      }
+    }
   } else {
     // Check if user needs setup (name not set)
     needsSetup = !user.name || user.name.trim() === "";
