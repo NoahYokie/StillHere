@@ -7,6 +7,45 @@ StillHere is a safety check-in application designed to provide a crucial safety 
 - I prefer a transparent development process; please explain major decisions.
 - Focus on delivering core features effectively before adding complex enhancements.
 - Ensure the user interface remains intuitive and simple.
+- No em-dashes in user-facing copy or chat replies.
+
+### Pre-App-Store-Submission Backlog (revisit AFTER Codex audit fixes)
+These are App Store risks that Codex did not include in its priority list but
+must be resolved before tapping "Submit for Review" in App Store Connect.
+Order = my recommended order of attack once Codex items are done.
+
+1. Misleading emergency claims (HIGHEST legal risk).
+   - Audit landing page, onboarding, and in-app copy for words like
+     "emergency response", "automatic emergency notifications",
+     "crash detection", "safety net" that overstate what the app
+     guarantees. Apple guideline 1.4.1 + civil liability exposure.
+   - Add a "Limitations of Service" screen the user must scroll through
+     during signup (SMS is best-effort, not 911, no SLA).
+   - Replace "we will notify your contacts" with "we will attempt to
+     notify your contacts" everywhere.
+
+2. iOS background "Always" location justification.
+   - Re-read the pre-permission education screen wording against
+     Apple's current bar for `NSLocationAlwaysAndWhenInUseUsageDescription`.
+     Generic wording = automatic rejection.
+
+3. Children / minors (COPPA + Apple Kids category rules).
+   - Family Mode can be used to track under-13s. Currently no parental
+     consent flow, no age gate. Either add one or explicitly forbid
+     under-13 accounts in the ToS and signup.
+
+4. Privacy nutrition label vs actual data retention.
+   - `locationDataRetentionDays` defaults to 30. The App Store Connect
+     "Data linked to you" section MUST say the same thing exactly.
+     Mismatch = rejection.
+
+5. SMS / Twilio honesty pass.
+   - Anywhere copy implies guaranteed SMS delivery, soften to
+     "best-effort". Carriers drop messages; we have no SLA.
+
+(Codex's own remaining priorities, for reference, in their order:
+ location privacy verification → App Store permission strings →
+ misleading emergency claims. We will finish those first.)
 
 ### System Architecture
 
