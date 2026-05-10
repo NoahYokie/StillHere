@@ -1,6 +1,7 @@
 import { getCurrentPosition } from "./location-service";
 import { Capacitor } from "@capacitor/core";
 import { Device } from "@capacitor/device";
+import { isNativeTrackingAllowed } from "./tracking-policy-cache";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = 300_000;
@@ -10,9 +11,6 @@ let consecutiveFailures = 0;
 let currentIntervalMs = DEFAULT_INTERVAL_MS;
 
 async function getBatteryInfo(): Promise<{ level: number; charging: boolean } | null> {
-  // On native iOS / Android (Capacitor) use the Device plugin, which surfaces
-  // the real OS battery level. Safari blocks the web Battery API, so the
-  // Capacitor path is the only way to get accurate readings on iPhone.
   if (Capacitor.isNativePlatform()) {
     try {
       const info = await Device.getBatteryInfo();
@@ -24,7 +22,6 @@ async function getBatteryInfo(): Promise<{ level: number; charging: boolean } | 
       }
     } catch {}
   }
-  // Web fallback (Chrome/Edge/Android browser support this; Safari does not).
   try {
     if ("getBattery" in navigator) {
       const battery = await (navigator as any).getBattery();
@@ -71,7 +68,15 @@ async function sendHeartbeat(): Promise<void> {
       body.tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     } catch {}
 
-    if (cached && (Date.now() - cached.timestamp) < STALE_THRESHOLD_MS) {
+    // Defense-in-depth: only attach lat/lng/acc if the cached tracking policy
+    // says native tracking is allowed. Server still strips these fields when
+    // the policy denies, but the client cooperates as a first line of defense.
+    const trackingAllowed = isNativeTrackingAllowed();
+    if (
+      trackingAllowed &&
+      cached &&
+      (Date.now() - cached.timestamp) < STALE_THRESHOLD_MS
+    ) {
       body.lat = cached.lat;
       body.lng = cached.lng;
       body.acc = cached.accuracy;

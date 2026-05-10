@@ -48,6 +48,7 @@ import {
 } from "./push";
 import { emitToUser, isUserOnline } from "./socket";
 import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
+import { getTrackingPolicyForUser, emitTrackingPolicyChanged } from "./tracking-policy";
 
 // Helper to get userId from session
 // Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
@@ -240,6 +241,10 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     tokensRevoked: hadIncident,
     timestamp: new Date().toISOString(),
   }));
+
+  // Notify the user's connected clients that their tracking policy may have
+  // shifted (e.g. open incident closed → presence-mode user can stop GPS).
+  emitTrackingPolicyChanged(userId, "incident_resolved").catch(() => {});
 
   console.log(`[RESOLVE] Complete: ${user.name} confirmed safe via ${method}, incident=${hadIncident}`);
   return { resolved: true, hadIncident };
@@ -791,11 +796,27 @@ export async function registerRoutes(
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { lat, lng, acc, batt, chg, net, tz } = req.body || {};
+
+      // Compute server-side tracking policy. If native tracking is NOT
+      // allowed, strip lat/lng/acc from this heartbeat — even if the client
+      // sent them. Server is authoritative; the client cooperates as a first
+      // line of defense, but we never trust it.
+      const policy = await getTrackingPolicyForUser(userId);
+      let safeLat = typeof lat === "number" ? lat : undefined;
+      let safeLng = typeof lng === "number" ? lng : undefined;
+      let safeAcc = typeof acc === "number" ? acc : undefined;
+      if (!policy.nativeTrackingAllowed && (safeLat !== undefined || safeLng !== undefined)) {
+        console.warn(`[TRACKING_POLICY] heartbeat location stripped userId=${userId} reason=${policy.reason}`);
+        safeLat = undefined;
+        safeLng = undefined;
+        safeAcc = undefined;
+      }
+
       await storage.recordHeartbeat(
         userId,
-        typeof lat === "number" ? lat : undefined,
-        typeof lng === "number" ? lng : undefined,
-        typeof acc === "number" ? acc : undefined,
+        safeLat,
+        safeLng,
+        safeAcc,
         typeof batt === "number" ? batt : undefined,
         typeof chg === "boolean" ? chg : undefined,
         typeof net === "string" ? net : undefined,
@@ -1118,6 +1139,7 @@ export async function registerRoutes(
       // Create SOS incident and set safety state to concern
       let incident = await storage.createIncident(userId, "sos");
       await storage.updateSafetyState(userId, "concern", "SOS triggered");
+      emitTrackingPolicyChanged(userId, "sos_open").catch(() => {});
 
       // Auto-post into family chat with push fan-out (best-effort, never blocks SOS).
       // Done early so family is paged even if downstream contact escalation hits errors.
@@ -1135,13 +1157,21 @@ export async function registerRoutes(
         },
       ).catch(() => {});
 
-      // Snapshot moment-of-SOS location to user record so the emergency page has it immediately
+      // Snapshot moment-of-SOS location to user record so the emergency page
+      // has it immediately. The open SOS incident above grants a real safety
+      // purpose, so policy normally allows; only explicit paused/off settings
+      // will short-circuit the snapshot.
       if (hasLocation) {
-        await db.update(users).set({
-          lastLat: sosLat,
-          lastLng: sosLng,
-          lastLocationAt: new Date(),
-        }).where(eq(users.id, userId));
+        const sosPolicy = await getTrackingPolicyForUser(userId);
+        if (sosPolicy.nativeTrackingAllowed) {
+          await db.update(users).set({
+            lastLat: sosLat,
+            lastLng: sosLng,
+            lastLocationAt: new Date(),
+          }).where(eq(users.id, userId));
+        } else {
+          console.log(`[TRACKING_POLICY] SOS lat/lng snapshot stripped (policy deny)`);
+        }
       }
 
       // Get contacts sorted by priority
@@ -1234,7 +1264,7 @@ export async function registerRoutes(
       if (graceMinutes !== undefined && (typeof graceMinutes !== "number" || graceMinutes < 10 || graceMinutes > 30)) {
         return res.status(400).json({ error: "Grace period must be between 10 and 30 minutes" });
       }
-      if (locationMode !== undefined && !["off", "emergency_only", "both"].includes(locationMode)) {
+      if (locationMode !== undefined && !["off", "emergency_only", "on_shift_only", "both"].includes(locationMode)) {
         return res.status(400).json({ error: "Invalid location mode" });
       }
       if (reminderMode !== undefined && !["none", "one", "two"].includes(reminderMode)) {
@@ -1290,7 +1320,15 @@ export async function registerRoutes(
       }
       
       const settings = await storage.updateSettings(userId, updates);
-      res.json({ success: true, settings });
+      const policy = await getTrackingPolicyForUser(userId);
+      emitTrackingPolicyChanged(userId, "settings_update").catch(() => {});
+      res.json({
+        success: true,
+        settings,
+        nativeTrackingAllowed: policy.nativeTrackingAllowed,
+        heartbeatAllowed: policy.heartbeatAllowed,
+        reason: policy.reason,
+      });
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ error: "Failed to update settings" });
@@ -1309,7 +1347,15 @@ export async function registerRoutes(
       const settings = await storage.updateSettings(userId, {
         pauseUntil: pauseUntil ? new Date(pauseUntil) : null,
       });
-      res.json({ success: true, settings });
+      const policy = await getTrackingPolicyForUser(userId);
+      emitTrackingPolicyChanged(userId, "settings_pause").catch(() => {});
+      res.json({
+        success: true,
+        settings,
+        nativeTrackingAllowed: policy.nativeTrackingAllowed,
+        heartbeatAllowed: policy.heartbeatAllowed,
+        reason: policy.reason,
+      });
     } catch (error) {
       console.error("Error pausing alerts:", error);
       res.status(500).json({ error: "Failed to pause alerts" });
@@ -1325,7 +1371,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid sharing mode" });
       }
       const user = await storage.updateUser(userId, { sharingMode: mode } as any);
-      res.json({ success: true, sharingMode: user.sharingMode });
+      const policy = await getTrackingPolicyForUser(userId);
+      emitTrackingPolicyChanged(userId, "sharing_mode").catch(() => {});
+      res.json({
+        success: true,
+        sharingMode: user.sharingMode,
+        nativeTrackingAllowed: policy.nativeTrackingAllowed,
+        heartbeatAllowed: policy.heartbeatAllowed,
+        reason: policy.reason,
+      });
     } catch (error) {
       console.error("Error updating sharing mode:", error);
       res.status(500).json({ error: "Failed to update sharing mode" });
@@ -2330,12 +2384,21 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const { lat, lng, accuracy } = req.body;
-      
+
       const session = await storage.getActiveLocationSession(userId);
       if (!session) {
         return res.status(400).json({ error: "No active location session" });
       }
-      
+
+      // Tracking-policy gate: server is authoritative for coord persistence.
+      // The active emergency/safety location session is itself a real safety
+      // purpose, so this normally allows; only paused/off states will deny.
+      const luPolicy = await getTrackingPolicyForUser(userId);
+      if (!luPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] location/update rejected (no allowed policy)`);
+        return res.status(403).json({ error: "Tracking not allowed", policy: luPolicy });
+      }
+
       const updated = await storage.updateLocationSession(session.id, lat, lng, accuracy);
       res.json({ success: true, session: updated });
     } catch (error) {
@@ -2563,6 +2626,18 @@ export async function registerRoutes(
         theirContacts.some((c) => c.linkedUserId === currentUserId);
       if (!hasRelationship) {
         return res.status(403).json({ error: "Not authorized to share location with this user" });
+      }
+
+      // Tracking-policy gate: tapping "share live location" in chat is still
+      // an explicit foreground action, but if the user has turned sharing
+      // OFF or PAUSED, we honor that preference and refuse.
+      const csPolicy = await getTrackingPolicyForUser(currentUserId);
+      if (!csPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] chat share-location rejected (no allowed policy)`);
+        return res.status(403).json({
+          error: "Sharing is paused or location is off. Update your sharing settings to share.",
+          policy: csPolicy,
+        });
       }
 
       // Reuse the existing live-location infrastructure so the recipient can
@@ -2924,6 +2999,7 @@ export async function registerRoutes(
         if (!existingIncident) {
           await storage.createIncident(userId, "sos");
           await storage.updateSafetyState(userId, "concern", "SOS triggered from messages");
+          emitTrackingPolicyChanged(userId, "sos_msg_open").catch(() => {});
           notifyConcern(userId, userName, "sos").catch(() => {});
         }
       } catch (err: any) {
@@ -3058,10 +3134,23 @@ export async function registerRoutes(
       const existing = await storage.getActiveDriveSession(userId);
       if (existing) return res.status(400).json({ error: "Drive session already active", session: existing });
 
+      // Tracking-policy gate: starting a drive triggers native GPS, so we
+      // refuse if the user has paused or turned location off. Honoring this
+      // up front prevents the moment-of-start coordinates from being persisted.
+      const dPolicy = await getTrackingPolicyForUser(userId);
+      if (!dPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] drive/start rejected (no allowed policy)`);
+        return res.status(403).json({
+          error: "Sharing is paused or location is off. Update your settings to start drive safety.",
+          policy: dPolicy,
+        });
+      }
+
       const { lat, lng } = req.body || {};
       const validLat = lat !== undefined && isValidLat(lat) ? lat : undefined;
       const validLng = lng !== undefined && isValidLng(lng) ? lng : undefined;
       const session = await storage.createDriveSession(userId, validLat, validLng);
+      emitTrackingPolicyChanged(userId, "drive_start").catch(() => {});
       res.json(session);
     } catch (error) {
       console.error("Error starting drive session:", error);
@@ -3086,6 +3175,9 @@ export async function registerRoutes(
         ...(isValidLat(lat) && { endLat: lat }),
         ...(isValidLng(lng) && { endLng: lng }),
       });
+      // Emit AFTER endedAt is persisted, so the policy recompute sees the
+      // closed drive session and stops native tracking promptly.
+      emitTrackingPolicyChanged(userId, "drive_end").catch(() => {});
       res.json(updated);
     } catch (error) {
       console.error("Error ending drive session:", error);
@@ -3126,6 +3218,14 @@ export async function registerRoutes(
       }
 
       if (session && lat != null && lng != null) {
+        // Tracking-policy gate: only persist trip coords if policy allows.
+        // The active drive session itself is a real safety purpose, so this
+        // will normally allow; only paused/off/denied states will skip.
+        const dsPolicy = await getTrackingPolicyForUser(userId);
+        if (!dsPolicy.nativeTrackingAllowed) {
+          console.log(`[TRACKING_POLICY] drive/speed coord skipped (policy deny)`);
+          return res.json({ success: true, locationSkipped: true, policy: dsPolicy });
+        }
         const speedMps = speedKmh / 3.6;
         let activity = "stationary";
         if (speedMps >= 11) activity = "driving";
@@ -3191,6 +3291,7 @@ export async function registerRoutes(
 
       const incident = await storage.createIncident(userId, "sos");
       await storage.updateSafetyState(userId, "concern", "Crash detected");
+      emitTrackingPolicyChanged(userId, "crash_open").catch(() => {});
       notifyConcern(userId, user.name, "crash_detection").catch((err) => {
         console.error(`[CRASH] notifyConcern failed for ${user.name}:`, err?.message || err);
       });
@@ -4326,6 +4427,12 @@ export async function registerRoutes(
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { lat, lng, accuracy, sessionId } = req.body;
       if (lat == null || lng == null) return res.status(400).json({ error: "lat and lng required" });
+      // Tracking-policy gate: do not persist coords when policy denies.
+      const policy = await getTrackingPolicyForUser(userId);
+      if (!policy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] breadcrumb rejected for user (no allowed policy)`);
+        return res.status(403).json({ error: "Tracking not allowed", policy });
+      }
       const breadcrumb = await storage.saveBreadcrumb(userId, sessionId || null, lat, lng, accuracy || null);
       res.json(breadcrumb);
     } catch (error) {
@@ -4360,9 +4467,20 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      // Tracking-policy gate: starting a live share enables continuous GPS,
+      // so refuse if user has paused or turned location off.
+      const llsPolicy = await getTrackingPolicyForUser(userId);
+      if (!llsPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] live-location/start rejected (no allowed policy)`);
+        return res.status(403).json({
+          error: "Sharing is paused or location is off. Update your settings to start live sharing.",
+          policy: llsPolicy,
+        });
+      }
       const { durationMinutes } = req.body;
       const expiresAt = durationMinutes ? new Date(Date.now() + durationMinutes * 60 * 1000) : null;
       const share = await storage.startLiveLocationShare(userId, expiresAt);
+      emitTrackingPolicyChanged(userId, "live_share_start").catch(() => {});
       res.json(share);
     } catch (error) {
       res.status(500).json({ error: "Failed to start live location sharing" });
@@ -4374,6 +4492,7 @@ export async function registerRoutes(
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       await storage.stopLiveLocationShare(userId);
+      emitTrackingPolicyChanged(userId, "live_share_stop").catch(() => {});
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to stop live location sharing" });
@@ -4384,8 +4503,20 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const policy = await getTrackingPolicyForUser(userId);
       const share = await storage.getActiveLiveShare(userId);
-      res.json({ active: !!share, share: share || null });
+      res.json({
+        active: policy.active,
+        share: share || null,
+        nativeTrackingAllowed: policy.nativeTrackingAllowed,
+        heartbeatAllowed: policy.heartbeatAllowed,
+        sharingMode: policy.sharingMode,
+        locationMode: policy.locationMode,
+        activePurposes: policy.activePurposes,
+        sessions: policy.sessions,
+        graceWindowSeconds: policy.graceWindowSeconds,
+        reason: policy.reason,
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to get live location status" });
     }
@@ -4401,6 +4532,15 @@ export async function registerRoutes(
       if (share.expiresAt && new Date() > share.expiresAt) {
         await storage.stopLiveLocationShare(userId);
         return res.status(400).json({ error: "Live location session has expired" });
+      }
+
+      // Tracking-policy gate: server is authoritative. If the user has paused,
+      // turned location off, or otherwise lost a real safety purpose, refuse
+      // the coordinate write and tell the client to stop tracking.
+      const policy = await getTrackingPolicyForUser(userId);
+      if (!policy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] live-location/update rejected for user (no allowed policy)`);
+        return res.status(403).json({ error: "Tracking not allowed", policy });
       }
 
       const { lat, lng, accuracy, speed, heading, activity } = req.body;
@@ -4661,11 +4801,18 @@ export async function registerRoutes(
           }
         }
         if (lat != null && lng != null) {
-          const session = await storage.getActiveLocationSession(user.id);
-          if (session) {
-            await storage.updateLocationSession(session.id, lat, lng, 50);
+          // Even satellite devices respect the user's tracking policy for
+          // coordinate persistence. The check-in itself always lands.
+          const satPolicy = await getTrackingPolicyForUser(user.id);
+          if (satPolicy.nativeTrackingAllowed) {
+            const session = await storage.getActiveLocationSession(user.id);
+            if (session) {
+              await storage.updateLocationSession(session.id, lat, lng, 50);
+            }
+            await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+          } else {
+            console.log(`[TRACKING_POLICY] satellite checkin coords stripped (policy deny)`);
           }
-          await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
         }
         console.log(`[SATELLITE] Checkin from device ${deviceId} for user ${user.id}`);
         res.json({ ok: true, action: "checkin_recorded" });
@@ -4696,7 +4843,15 @@ export async function registerRoutes(
           });
         }
         if (lat != null && lng != null) {
-          await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+          // After createIncident above, the open SOS counts as a real safety
+          // purpose, so policy will normally allow. We still re-check to honor
+          // explicit paused/off settings.
+          const satSosPolicy = await getTrackingPolicyForUser(user.id);
+          if (satSosPolicy.nativeTrackingAllowed) {
+            await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+          } else {
+            console.log(`[TRACKING_POLICY] satellite SOS coords stripped (policy deny)`);
+          }
         }
         console.log(`[SATELLITE] SOS from device ${deviceId} for user ${user.id}`);
         res.json({ ok: true, action: "sos_triggered" });
@@ -5228,6 +5383,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "You already have an active safety timer" });
       }
       const timer = await storage.createSafetyTimer(userId, durationMinutes, note);
+      emitTrackingPolicyChanged(userId, "safety_timer_start").catch(() => {});
       res.json(timer);
     } catch (error) {
       console.error("Error starting safety timer:", error);
@@ -5251,6 +5407,7 @@ export async function registerRoutes(
       const timer = await storage.getActiveSafetyTimer(userId);
       if (!timer) return res.status(404).json({ error: "No active timer found" });
       await storage.updateSafetyTimer(timer.id, { status: "safe", resolvedAt: new Date() });
+      emitTrackingPolicyChanged(userId, "safety_timer_cancel").catch(() => {});
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to cancel timer" });
@@ -5284,6 +5441,11 @@ export async function registerRoutes(
       const { lat, lng, speed, activity } = req.body;
       const timer = await storage.getActiveSafetyTimer(userId);
       if (!timer) return res.status(404).json({ error: "No active timer" });
+      const stPolicy = await getTrackingPolicyForUser(userId);
+      if (!stPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] safety-timer/location rejected (no allowed policy)`);
+        return res.status(403).json({ error: "Tracking not allowed", policy: stPolicy });
+      }
       await storage.updateSafetyTimer(timer.id, {
         lastLat: lat,
         lastLng: lng,
@@ -5337,6 +5499,7 @@ export async function registerRoutes(
         note,
         arrivalRadiusMeters: arrivalRadiusMeters || 200,
       });
+      emitTrackingPolicyChanged(userId, "safe_walk_start").catch(() => {});
       res.json(walk);
     } catch (error) {
       console.error("Error starting safe walk:", error);
@@ -5360,6 +5523,7 @@ export async function registerRoutes(
       const walk = await storage.getActiveSafeWalk(userId);
       if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
       await storage.updateSafeWalk(walk.id, { status: "cancelled", resolvedAt: new Date() });
+      emitTrackingPolicyChanged(userId, "safe_walk_cancel").catch(() => {});
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to cancel walk" });
@@ -5372,6 +5536,7 @@ export async function registerRoutes(
       const walk = await storage.getActiveSafeWalk(userId);
       if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
       await storage.updateSafeWalk(walk.id, { status: "arrived", resolvedAt: new Date() });
+      emitTrackingPolicyChanged(userId, "safe_walk_arrived").catch(() => {});
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to mark arrival" });
@@ -5404,6 +5569,11 @@ export async function registerRoutes(
       const { lat, lng, speed, activity } = req.body;
       const walk = await storage.getActiveSafeWalk(userId);
       if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
+      const swPolicy = await getTrackingPolicyForUser(userId);
+      if (!swPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] safe-walk/location rejected (no allowed policy)`);
+        return res.status(403).json({ error: "Tracking not allowed", policy: swPolicy });
+      }
 
       await storage.updateSafeWalk(walk.id, {
         lastLat: lat,
@@ -5658,6 +5828,7 @@ export async function registerRoutes(
           await storage.updateIncident(incident.id, { wellnessCallStatus: "help" });
         }
         await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call. Needs help.");
+        emitTrackingPolicyChanged(user.id, "wellness_call_help").catch(() => {});
 
         // Fan out to ALL contacts in parallel (SMS + push)  -  the user audibly
         // confirmed they need help, so we don't wait for sequential escalation.
@@ -6157,6 +6328,7 @@ export async function registerRoutes(
 
           let incident = await storage.createIncident(user.id, "missed_checkin");
           await storage.updateSafetyState(user.id, "concern", "Missed check-in");
+          emitTrackingPolicyChanged(user.id, "missed_checkin_open").catch(() => {});
 
           const timeline = [...reminderHistory];
           timeline.push({ type: "push", time: timeStr, detail: "Push notification sent to user" });
@@ -6680,6 +6852,7 @@ export async function registerRoutes(
 
             const incident = await storage.createIncident(timer.userId, "sos");
             await storage.updateSafetyState(timer.userId, "concern", "Safety timer expired");
+            emitTrackingPolicyChanged(timer.userId, "safety_timer_escalated").catch(() => {});
             notifyConcern(timer.userId, user.name, "sos").catch((err) => {
               console.error(`[TIMER] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
@@ -6804,6 +6977,7 @@ export async function registerRoutes(
 
             const incident = await storage.createIncident(walk.userId, "sos");
             await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue  -  not responding");
+            emitTrackingPolicyChanged(walk.userId, "safe_walk_escalated").catch(() => {});
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
@@ -7177,8 +7351,21 @@ export async function registerRoutes(
       const overview = await storage.getFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
 
+      // Tracking-policy gate: this is a foreground "watch me" share button.
+      // If the user has explicitly paused or turned location off, refuse so
+      // sensitive coords don't leak past their stated preference.
+      const wmPolicy = await getTrackingPolicyForUser(userId);
+      if (!wmPolicy.nativeTrackingAllowed) {
+        console.log(`[TRACKING_POLICY] family/watch-me/start rejected (no allowed policy)`);
+        return res.status(403).json({
+          error: "Sharing is paused or location is off. Update your sharing settings to start.",
+          policy: wmPolicy,
+        });
+      }
+
       // 1) Update heartbeat so map pin refreshes immediately.
       await storage.recordHeartbeat(userId, lat, lng, accuracy);
+      emitTrackingPolicyChanged(userId, "watch_me_start").catch(() => {});
 
       // 2) Start a real live-location session for the chosen duration. The
       //    client will pump GPS updates via /api/live-location/update.
@@ -7274,6 +7461,12 @@ export async function registerRoutes(
         const isMinor = member.role === "teen" || member.role === "child";
         if (isSelf || (isAdmin && isMinor)) {
           updates.sharingMode = m;
+          // The member whose sharingMode is changing needs to re-evaluate their
+          // tracking policy immediately. Emit to that user (not the admin who
+          // initiated) so their device stops/starts native GPS.
+          if (member.userId) {
+            emitTrackingPolicyChanged(member.userId, "family_sharing_mode").catch(() => {});
+          }
         } else {
           return res.status(403).json({ error: "Only the member can change their sharing mode" });
         }
@@ -7382,10 +7575,20 @@ export async function registerRoutes(
       const me = await storage.getUser(userId);
       const myName = me?.name || "Family member";
 
-      const lat = req.body?.lat != null ? Number(req.body.lat) : null;
-      const lng = req.body?.lng != null ? Number(req.body.lng) : null;
-      if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
-        await storage.recordHeartbeat(userId, lat, lng).catch(() => {});
+      const rawLat = req.body?.lat != null ? Number(req.body.lat) : null;
+      const rawLng = req.body?.lng != null ? Number(req.body.lng) : null;
+      // Honor tracking policy: if denied, drop the coords but still send the
+      // pulse text so family knows the user is OK.
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (rawLat != null && rawLng != null && Number.isFinite(rawLat) && Number.isFinite(rawLng)) {
+        const pPolicy = await getTrackingPolicyForUser(userId);
+        if (pPolicy.nativeTrackingAllowed) {
+          lat = rawLat; lng = rawLng;
+          await storage.recordHeartbeat(userId, lat, lng).catch(() => {});
+        } else {
+          console.log(`[TRACKING_POLICY] family/pulse coords stripped (policy deny)`);
+        }
       }
 
       const msg = await storage.saveFamilyMessage({
@@ -7415,11 +7618,21 @@ export async function registerRoutes(
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
       const me = await storage.getUser(userId);
       const myName = me?.name || "Family member";
-      const lat = req.body?.lat != null ? Number(req.body.lat) : null;
-      const lng = req.body?.lng != null ? Number(req.body.lng) : null;
+      const rawLat = req.body?.lat != null ? Number(req.body.lat) : null;
+      const rawLng = req.body?.lng != null ? Number(req.body.lng) : null;
       const note = (req.body?.note || "").toString().trim().slice(0, 280);
-      if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
-        await storage.recordHeartbeat(userId, lat, lng).catch(() => {});
+      // Panic broadcast is critical: ALWAYS deliver the message, but honor
+      // tracking policy for coordinate persistence (if denied, drop coords).
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (rawLat != null && rawLng != null && Number.isFinite(rawLat) && Number.isFinite(rawLng)) {
+        const panicPolicy = await getTrackingPolicyForUser(userId);
+        if (panicPolicy.nativeTrackingAllowed) {
+          lat = rawLat; lng = rawLng;
+          await storage.recordHeartbeat(userId, lat, lng).catch(() => {});
+        } else {
+          console.log(`[TRACKING_POLICY] family/panic coords stripped (policy deny)`);
+        }
       }
       const body = note
         ? `${myName} needs help: ${note}`

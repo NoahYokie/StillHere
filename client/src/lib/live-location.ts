@@ -1,5 +1,16 @@
 import { apiRequest } from "./queryClient";
 import { subscribe as subscribeGps, subscribeError as subscribeGpsError, forceRefresh as forceGpsRefresh, getTrackingSource } from "./location-service";
+import {
+  refreshPolicy,
+  isNativeTrackingAllowed,
+  getCachedPolicy,
+  didJustFlipToAllowed,
+  consumeFlipMarker,
+  subscribePolicy,
+  applyPushedPolicy,
+  clearCachedPolicy,
+} from "./tracking-policy-cache";
+import { getSocket } from "./socket";
 
 type ActivityType = "stationary" | "walking" | "running" | "cycling" | "driving";
 
@@ -15,6 +26,9 @@ let gpsUnsubscribe: (() => void) | null = null;
 let gpsErrorUnsubscribe: (() => void) | null = null;
 let updateInterval: ReturnType<typeof setInterval> | null = null;
 let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+let policyPollInterval: ReturnType<typeof setInterval> | null = null;
+let policyUnsubscribe: (() => void) | null = null;
+let socketListenerInstalled = false;
 let lastSentTime = 0;
 let lastPosition: GeolocationPosition | null = null;
 let wakeLock: WakeLockSentinel | null = null;
@@ -29,6 +43,7 @@ const STATIONARY_SEND_INTERVAL_MS = 30000;
 const MOVING_SEND_INTERVAL_MS = 5000;
 const KEEPALIVE_CHECK_MS = 10000;
 const STALE_THRESHOLD_MS = 45000;
+const POLICY_POLL_MS = 60000;
 
 const SILENT_WAV_BASE64 = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
@@ -129,6 +144,12 @@ async function clearPersistentNotification() {
 }
 
 async function sendLocationUpdate(position: GeolocationPosition, force = false): Promise<void> {
+  // Defense-in-depth: refuse to upload coordinates if the cached policy
+  // says native tracking is no longer allowed. The server enforces too.
+  if (!isNativeTrackingAllowed()) {
+    return;
+  }
+
   const now = Date.now();
   const activity = detectActivityFromSpeed(position.coords.speed);
 
@@ -170,6 +191,52 @@ async function sendLocationUpdate(position: GeolocationPosition, force = false):
       onErrorCb?.(msg || "Failed to send location");
     }
   }
+}
+
+async function fireOneShotLocationUpdate(): Promise<void> {
+  // When the policy flips false → true (e.g. an incident opens for a
+  // presence-mode user), the watcher would otherwise stare at "Locating..."
+  // until BackgroundGeolocation fires its first sample. We grab one
+  // foreground point with a tight 5s timeout to close that gap.
+  try {
+    const Cap = (globalThis as any).Capacitor;
+    if (Cap?.isNativePlatform?.()) {
+      const geoMod: any = await import(/* @vite-ignore */ "@capacitor/geolocation" as any);
+      const Geolocation = geoMod?.Geolocation || geoMod?.default?.Geolocation;
+      if (Geolocation?.getCurrentPosition) {
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 5000 });
+        await sendLocationUpdate({
+          coords: {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            speed: pos.coords.speed ?? null,
+            heading: pos.coords.heading ?? null,
+            altitude: null,
+            altitudeAccuracy: null,
+          },
+          timestamp: pos.timestamp,
+        } as GeolocationPosition, true);
+        return;
+      }
+    }
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => resolve(), 5000);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            clearTimeout(timer);
+            sendLocationUpdate(pos, true).finally(() => resolve());
+          },
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
+        );
+      });
+    }
+  } catch {}
 }
 
 function startGpsSubscription() {
@@ -234,11 +301,98 @@ function startKeepAlive() {
   }, KEEPALIVE_CHECK_MS);
 }
 
-export function startLiveTracking(opts?: {
+/**
+ * Server-side tracking policy is the source of truth. This function refreshes
+ * the cached decision and either starts or stops native tracking accordingly.
+ *
+ * Called from:
+ *   - 60-second poll while live tracking is active
+ *   - visibilitychange / focus
+ *   - tracking-policy:changed socket event
+ */
+async function reconcileWithServerPolicy(): Promise<void> {
+  const before = isNativeTrackingAllowed();
+  const policy = await refreshPolicy();
+  const after = !!policy?.nativeTrackingAllowed;
+
+  if (after && !before) {
+    // Just got permission — fire one-shot mitigation if we have a flip marker
+    if (didJustFlipToAllowed()) {
+      consumeFlipMarker();
+      fireOneShotLocationUpdate().catch(() => {});
+    }
+  }
+
+  if (!after && gpsUnsubscribe !== null) {
+    // Lost permission mid-session. Stop native GPS within ~2 seconds.
+    console.log("[LiveLocation] Tracking policy revoked — stopping native GPS");
+    await stopLiveTracking();
+    onExpiredCb?.();
+  }
+}
+
+function startPolicyPolling() {
+  if (policyPollInterval) return;
+  policyPollInterval = setInterval(() => {
+    reconcileWithServerPolicy();
+  }, POLICY_POLL_MS);
+}
+
+function stopPolicyPolling() {
+  if (policyPollInterval) {
+    clearInterval(policyPollInterval);
+    policyPollInterval = null;
+  }
+}
+
+function installPolicySocketListener() {
+  if (socketListenerInstalled) return;
+  try {
+    const socket = getSocket();
+    socket.on("tracking-policy:changed", (payload: any) => {
+      try {
+        applyPushedPolicy({
+          nativeTrackingAllowed: !!payload?.nativeTrackingAllowed,
+          heartbeatAllowed: payload?.heartbeatAllowed,
+          reason: payload?.reason,
+        });
+        // Always re-fetch the full policy to be sure (covers any race
+        // between the lightweight push payload and the canonical state).
+        reconcileWithServerPolicy();
+      } catch {}
+    });
+    socketListenerInstalled = true;
+  } catch {
+    // socket may not be available yet; will retry on next startLiveTracking call
+  }
+}
+
+function installPolicySubscriber() {
+  if (policyUnsubscribe) return;
+  policyUnsubscribe = subscribePolicy((p) => {
+    if (!p?.nativeTrackingAllowed && gpsUnsubscribe !== null) {
+      // Cache says revoked — stop native GPS.
+      stopLiveTracking().then(() => onExpiredCb?.());
+    }
+  });
+}
+
+/**
+ * Server-authoritative gate. If the cached decision says no, refresh once;
+ * if still no, refuse to start. Fail closed.
+ */
+async function assertNativeTrackingAllowed(): Promise<boolean> {
+  const cached = getCachedPolicy();
+  if (cached && cached.nativeTrackingAllowed) return true;
+  const fresh = await refreshPolicy();
+  return !!fresh?.nativeTrackingAllowed;
+}
+
+export async function startLiveTrackingAsync(opts?: {
   onError?: (err: string) => void;
   onExpired?: () => void;
   onUpdate?: (position: GeolocationPosition, activity: ActivityType) => void;
-}): boolean {
+}): Promise<boolean> {
   if (typeof navigator === "undefined" || (!navigator.geolocation && typeof (globalThis as any).Capacitor === "undefined")) {
     opts?.onError?.("Geolocation is not supported by this device");
     return false;
@@ -247,6 +401,15 @@ export function startLiveTracking(opts?: {
   onErrorCb = opts?.onError || null;
   onExpiredCb = opts?.onExpired || null;
   lastSentTime = 0;
+
+  // Server policy gate. Fail closed if the server says no.
+  const allowed = await assertNativeTrackingAllowed();
+  if (!allowed) {
+    const reason = getCachedPolicy()?.reason || "no_active_session";
+    console.log(`[LiveLocation] Native tracking denied by server policy (reason=${reason})`);
+    opts?.onError?.("Location sharing is not currently allowed");
+    return false;
+  }
 
   if (opts?.onUpdate) {
     const updateFn: LocationListener = (data) => {
@@ -259,10 +422,29 @@ export function startLiveTracking(opts?: {
 
   ++trackingSessionId;
   startGpsSubscription();
+  startPolicyPolling();
+  installPolicySocketListener();
+  installPolicySubscriber();
   console.log(`[LiveLocation] Started via location-service (source=${getTrackingSource()})`);
 
   localStorage.setItem("liveLocationActive", "true");
   return true;
+}
+
+/**
+ * Backwards-compatible synchronous wrapper. Existing call sites use the
+ * boolean return for an immediate UX response — we kick off the async
+ * version and return true if the cached policy already approves, false
+ * otherwise. The async path will stop tracking if the server later denies.
+ */
+export function startLiveTracking(opts?: {
+  onError?: (err: string) => void;
+  onExpired?: () => void;
+  onUpdate?: (position: GeolocationPosition, activity: ActivityType) => void;
+}): boolean {
+  const optimistic = isNativeTrackingAllowed();
+  startLiveTrackingAsync(opts).catch(() => {});
+  return optimistic;
 }
 
 export async function stopLiveTracking(): Promise<void> {
@@ -283,6 +465,11 @@ export async function stopLiveTracking(): Promise<void> {
   if (keepAliveInterval) {
     clearInterval(keepAliveInterval);
     keepAliveInterval = null;
+  }
+  stopPolicyPolling();
+  if (policyUnsubscribe) {
+    policyUnsubscribe();
+    policyUnsubscribe = null;
   }
 
   lastPosition = null;
@@ -317,7 +504,13 @@ export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
   if (gpsUnsubscribe !== null) return true;
 
   const wasActive = localStorage.getItem("liveLocationActive") === "true";
-  if (!wasActive) return false;
+  if (!wasActive) {
+    // Even if we're not resuming live tracking, install the policy listener
+    // so the heartbeat client can receive policy push events.
+    installPolicySocketListener();
+    refreshPolicy().catch(() => {});
+    return false;
+  }
 
   try {
     const res = await fetch("/api/live-location/status", { credentials: "include" });
@@ -326,18 +519,27 @@ export async function resumeLiveTrackingIfNeeded(): Promise<boolean> {
         localStorage.removeItem("liveLocationActive");
         clearPersistentNotification();
         stopSilentAudio();
+        clearCachedPolicy();
       }
       return false;
     }
     const data = await res.json();
-    if (!data.active) {
+    // Update the cache with this fresh status response.
+    applyPushedPolicy({
+      nativeTrackingAllowed: !!data.nativeTrackingAllowed,
+      heartbeatAllowed: data.heartbeatAllowed !== false,
+      reason: data.reason,
+    });
+
+    if (!data.active || !data.nativeTrackingAllowed) {
       localStorage.removeItem("liveLocationActive");
       clearPersistentNotification();
       stopSilentAudio();
+      installPolicySocketListener();
       return false;
     }
 
-    return startLiveTracking({
+    return await startLiveTrackingAsync({
       onError: (err) => {
         if (err.toLowerCase().includes("denied") || err.toLowerCase().includes("permission")) {
           stopLiveTracking();
@@ -356,12 +558,16 @@ document.addEventListener("visibilitychange", () => {
     } else {
       lastSentTime = 0;
       forceGpsRefresh();
+      reconcileWithServerPolicy();
     }
     acquireWakeLock();
 
     if (silentAudioEl?.paused) {
       silentAudioEl.play().catch(() => {});
     }
+  } else if (document.visibilityState === "visible") {
+    // Page came back; refresh policy even when not actively tracking.
+    reconcileWithServerPolicy();
   }
 });
 
@@ -369,7 +575,11 @@ window.addEventListener("focus", () => {
   if (localStorage.getItem("liveLocationActive") === "true") {
     if (gpsUnsubscribe === null) {
       resumeLiveTrackingIfNeeded();
+    } else {
+      reconcileWithServerPolicy();
     }
+  } else {
+    reconcileWithServerPolicy();
   }
 });
 
