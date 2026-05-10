@@ -1,0 +1,209 @@
+Do not build yet. We are close, but I want the feature matrix fully locked first.
+
+  I accept your three pushbacks:
+
+  1. locationMode enum correction accepted.
+  Use the real enum:
+  - off
+  - emergency_only
+  - on_shift_only
+  - both
+
+  There is no normal.
+
+  2. Grace window accepted.
+  Use 5 minutes max OR 3 failed status polls, whichever comes first.
+
+  3. Server-side heartbeat enforcement accepted.
+  POST /api/heartbeat must strip/ignore lat/lng/accuracy when nativeTrackingAllowed=false. Client behavior alone is not enough.
+
+  I also accept the dual model:
+  - nativeTrackingAllowed controls native BackgroundGeolocation
+  - heartbeatAllowed controls non-location heartbeat/device status
+
+  Important rule:
+  Heartbeat can continue without GPS. Native GPS cannot.
+
+  Updated tracking policy:
+
+  Native background GPS is allowed only if:
+
+  A. User is authenticated
+  B. sharingMode is not paused
+  C. locationMode is not off
+  D. one of these is true:
+     - active liveShare
+     - active Safe Walk
+     - active Drive Safety
+     - active Safety Timer
+     - open incident / SOS
+     - locationMode is both
+     - locationMode is on_shift_only AND active shift exists
+
+  Native background GPS must stop if:
+
+  - unauthenticated
+  - 401 or 403
+  - sharingMode is paused
+  - locationMode is off
+  - locationMode is emergency_only with no active emergency/safety purpose
+  - locationMode is on_shift_only with no active shift
+  - no active purpose and locationMode is not both
+  - server says nativeTrackingAllowed=false
+
+  I agree emergency_only should not track during ordinary life.
+
+  I agree on_shift_only should not track off shift.
+
+  I agree both is the only mode that allows ongoing GPS outside a specific active session.
+
+  Mid-session re-evaluation:
+
+  I want both event-driven and periodic safeguards.
+
+  Reason:
+  Event-driven is fast, but periodic polling catches missed events.
+
+  Implement:
+
+  1. Settings mutation response
+  When sharingMode or locationMode changes, return:
+  - nativeTrackingAllowed
+  - heartbeatAllowed
+  - reason
+
+  Client must immediately stop native BackgroundGeolocation if nativeTrackingAllowed=false.
+
+  2. Socket event
+  Emit tracking-policy:changed when tracking permission changes because of:
+  - sharingMode change
+  - locationMode change
+  - incident opened/resolved
+  - Safe Walk started/stopped/expired
+  - Safety Timer started/stopped/expired
+  - Drive Safety started/stopped
+  - shift started/stopped
+
+  Client receiving this event must call assertNativeTrackingAllowed().
+
+  3. Periodic polling
+  While native tracking is active, poll /api/live-location/status every 60 seconds.
+
+  If denied, stop native tracking.
+
+  If network fails, use the 5 minute / 3 failed poll grace rule.
+
+  Grace rule:
+
+  - 401/403 always fail closed
+  - no cached prior approval = fail closed
+  - cached approval older than 5 minutes = fail closed
+  - more than 3 failed polls = fail closed
+  - successful approval refreshes the grace window
+  - repeated failures must not extend the window forever
+
+  Server architecture:
+
+  Create one central server-side helper:
+
+  getTrackingPolicyForUser(userId)
+
+  Use this helper for:
+  - GET /api/live-location/status
+  - POST /api/heartbeat location stripping
+  - settings mutation response
+  - socket tracking-policy:changed payload if practical
+  - any future route that needs to know whether native GPS is allowed
+
+  Do not duplicate the policy logic in many places.
+
+  Response shape:
+
+  {
+    "active": true,
+    "nativeTrackingAllowed": true,
+    "heartbeatAllowed": true,
+    "sharingMode": "precise|area|presence|paused",
+    "locationMode": "off|emergency_only|on_shift_only|both",
+    "activePurposes": [
+      "liveShare",
+      "safeWalk",
+      "driveSafety",
+      "safetyTimer",
+      "incident",
+      "activeShift",
+      "ongoingConsent"
+    ],
+    "sessions": {
+      "liveShare": { "active": false, "expiresAt": null },
+      "safeWalk": { "active": false, "expiresAt": null },
+      "driveSafety": { "active": false },
+      "safetyTimer": { "active": false, "expiresAt": null },
+      "incident": { "active": false, "reason": null },
+      "shift": { "active": false, "expiresAt": null }
+    },
+    "graceWindowSeconds": 300,
+    "reason": "ok|paused|location_off|emergency_only_no_incident|on_shift_only_off_shift|no_active_session|auth|expired|
+  server_error"
+  }
+
+  Before I authorize build, please answer these unresolved implementation details:
+
+  A. Where is active shift stored?
+  Which table, model, route, and status values define active shift?
+
+  B. What exactly counts as Drive Safety active?
+  Which table/status?
+  Does it expire automatically?
+
+  C. What exactly counts as Safe Walk active?
+  Which table/status?
+  Does expected arrival time expire it?
+  Does overdue Safe Walk still allow tracking?
+
+  D. What exactly counts as Safety Timer active?
+  Only status active and expiresAt > now?
+  Should grace_period count as active for native tracking?
+
+  E. What counts as incident active?
+  Any open incident?
+  Only SOS?
+  Only incidents where location is needed?
+
+  F. Where is POST /api/heartbeat implemented and what fields does it currently accept?
+
+  G. Are there any native BackgroundGeolocation.start() calls outside:
+  - client/src/lib/live-location.ts
+  - client/src/lib/location-service.ts
+
+  H. Which client settings mutation function updates sharingMode/locationMode, so we can stop native tracking immediately after the
+  user pauses?
+
+  Once you answer A through H, I will send final build authorization.
+
+  Simple explanation for you:
+
+  We are not letting Replit build yet because this is a sensitive feature.
+
+  The danger is this:
+
+  If we fix privacy too aggressively, we could break safety features.
+
+  If we preserve safety too loosely, we could accidentally track location when the user thinks tracking is off.
+
+  So the solution is:
+
+  - Server decides if GPS is allowed.
+  - App asks server before tracking.
+  - App checks again every 60 seconds while tracking.
+  - App stops immediately when user pauses location.
+  - Heartbeat can continue without GPS.
+  - Server strips GPS from heartbeat if GPS is not allowed.
+  - If internet drops, app only gets a short 5 minute safety grace period.
+  - Off means off.
+  - Paused means paused.
+  - Emergency only means no tracking unless there is an emergency/safety session.
+  - On shift only means no tracking unless the user is actively on shift.
+
+  We need Replit to answer details about shifts, Safe Walk, Drive Safety, Safety Timer, and incidents before final build
+  authorization.
