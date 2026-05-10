@@ -1,0 +1,116 @@
+You are performing a security audit of the StillHere codebase.
+
+  Do not make changes yet. Inspect the repository and answer the questions below with:
+  - finding
+  - risk level: critical / high / medium / low
+  - affected files and line references
+  - current behavior
+  - recommended fix
+  - whether the issue is exploitable from an unauthenticated user, authenticated user, emergency contact link, or admin/system
+  context
+
+  Focus especially on privacy, location, emergency contacts, authentication, payments, and safety alert flows.
+
+  QUESTIONS
+
+  1. Authentication and sessions
+  How does login work? Are one time codes, sessions, cookies, refresh tokens, and logout handled securely?
+  Check for token expiry, replay protection, brute force protection, session fixation, secure cookie flags, httpOnly, SameSite, and
+  CSRF risk.
+
+  2. Authorization
+  Can one user access another user’s check ins, location, contacts, alerts, safety records, family data, billing, or watcher links?
+  Inspect all API routes and database queries for missing user ownership checks.
+
+  3. Emergency contact links
+  How are watcher/emergency contact links generated, stored, validated, expired, and revoked?
+  Can links be guessed, reused forever, or used to access too much data?
+
+  4. Location privacy
+  When is location collected, stored, shared, and deleted?
+  Does the app ever track location when sharing is off?
+  Check live location, Safe Walk, Drive Safety, emergency alerts, geofences, and background location flows.
+
+  5. SOS and alert abuse
+  Can an attacker trigger SOS, alert contacts, pause alerts, resolve alerts, or spam emergency contacts without proper
+  authorization?
+  Check rate limits, idempotency, audit logs, and abuse protection.
+
+  6. SMS, email, push, and call abuse
+  Are notification endpoints protected from spam, enumeration, or cost abuse?
+  Check Twilio/email/push routes, retry logic, webhooks, and contact validation.
+
+  7. Data minimization
+  What sensitive data is stored?
+  Check phone numbers, names, contacts, location history, heart rate, drive data, check in history, alert timelines, emergency
+  notes, and billing IDs.
+  Is anything unnecessary stored or logged?
+
+  8. Secrets and environment variables
+  Are API keys, Stripe keys, Twilio credentials, JWT/session secrets, database URLs, RevenueCat keys, Apple/Google keys, or webhook
+  secrets hardcoded or exposed to the client?
+
+  9. Webhook security
+  Are Stripe, RevenueCat, Twilio, Apple, Google, or push notification webhooks verifying signatures?
+  Can fake webhook requests change billing status, alert status, or user state?
+
+  10. Payments and subscriptions
+  Can users unlock premium without paying?
+  Check Stripe and RevenueCat integration, entitlement verification, webhook handling, client trust, and server side checks.
+
+  11. Client trust
+  Does the backend trust client provided user IDs, contact IDs, location values, premium status, alert status, or family IDs?
+  Find endpoints where client input controls sensitive state.
+
+  12. Database security
+  Review schema and queries.
+  Are there missing unique constraints, foreign keys, indexes, ownership constraints, cascade deletes, or soft delete problems that
+  could leak data?
+
+  13. File uploads and media
+  If the app accepts uploads, are file type, size, storage permissions, and public access controlled?
+
+  14. CORS and headers
+  Review CORS, CSP, HSTS, X Frame Options, referrer policy, permissions policy, and other security headers.
+
+  15. Rate limiting
+  Which endpoints have rate limits?
+  Check login code requests, code verification, SOS, missed check in escalation, SMS/call sending, contact invites, location
+  updates, and webhook endpoints.
+
+  16. Logging and monitoring
+  Are sensitive values logged?
+  Check logs for phone numbers, codes, tokens, precise locations, auth headers, payment IDs, and emergency contact links.
+
+  17. Background jobs and schedulers
+  How are missed check ins, escalation, SMS fallback, phone calls, safety timers, drive sessions, geofences, and alerts scheduled?
+  Can jobs duplicate, skip, or run after being cancelled?
+
+  18. Mobile app permissions
+  Review iOS/Android/Capacitor permissions.
+  Are location, motion, contacts, notifications, health, and background permissions requested with accurate descriptions and only
+  when needed?
+
+  19. Apple Watch security
+  Review Watch app communication with phone/backend.
+  Can watch requests be forged? Are auth tokens stored securely? Are SOS/check in actions authenticated?
+
+  20. Privacy policy alignment
+  Compare actual behavior to visible privacy/trust copy.
+  Does the code match claims like location off by default, safety not surveillance, no continuous monitoring, and no automatic
+  emergency services contact?
+
+  21. Dependency risk
+  List outdated or risky dependencies, known vulnerabilities, and packages that touch auth, crypto, payments, SMS, location, or
+  storage.
+
+  22. Critical attack paths
+  Give the top 10 most realistic attack paths against StillHere, ranked by severity.
+
+  23. Fix priority
+  Create a prioritized remediation plan:
+  - must fix before launch
+  - should fix soon
+  - nice to have
+
+  Return a concise but complete security audit report. Do not speculate without pointing to code evidence.
