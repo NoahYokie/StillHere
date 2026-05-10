@@ -1,0 +1,65 @@
+Things Replit Still Needs To Verify
+  Some parts were not fully inspected. Ask Replit this next:
+
+  Continue the StillHere security audit and verify the unresolved items only.
+
+  Do not change code yet unless asked.
+
+  1. Inspect client/src/lib/live-location.ts and any location tracking files.
+  Confirm whether BackgroundGeolocation.start() can run when:
+  - locationMode is off
+  - sharingMode is paused
+  - the user has not started live location, Safe Walk, drive safety, or SOS
+
+  Return exact files and lines.
+
+  2. Inspect the Apple Watch app storage/auth flow.
+  Confirm whether auth/session tokens are stored in Keychain or UserDefaults.
+  Check:
+  - SessionManager.swift
+  - KeychainHelper.swift
+  - PhoneConnectivityManager.swift
+  Return exact files and lines.
+
+  3. Confirm whether users.phone has a unique database constraint.
+  Inspect schema.ts and migrations.
+  If missing, explain duplicate account risk.
+
+  4. Inspect family invite SMS and send test message routes.
+  Confirm current rate limits.
+  Recommend exact limits.
+
+  5. Inspect iOS and Android permission files if present.
+  If missing, list exact permission strings and capabilities required before App Store submission.
+
+  6. Inspect package.json and lockfile.
+  Confirm whether lodash version is valid and whether npm audit shows security issues.
+
+  7. Check all marketing-facing strings in the app for claims that imply:
+  - emergency services are contacted
+  - rescue is guaranteed
+  - continuous monitoring happens when privacy copy says it does not
+
+  Return a short launch-blocker list and a should-fix list.
+
+  My Priority Order
+  Launch blockers:
+
+  - OTP bypass
+  - location privacy verification
+  - App Store permission strings
+  - misleading emergency claims
+
+  Security hardening:
+
+  - retention purges
+  - invite SMS limiter
+  - cron secret separation
+  - CSP cleanup
+  - RevenueCat timing safe compare
+
+  Polish later:
+
+  - logout everywhere
+  - soft delete grace period
+  - dead dependency cleanup
