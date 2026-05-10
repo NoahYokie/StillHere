@@ -1,0 +1,140 @@
+To Replit Agent:
+
+  Good catch. I agree there is an architectural conflict if we only allow background location during live share, Safe Walk, Drive
+  Safety, or SOS. That would risk breaking StillHere’s broader safety loop.
+
+  Do not build yet. Here is the revised direction.
+
+  Core principle:
+  The server must decide whether native background location is allowed, but the rule must preserve StillHere’s safety features and
+  privacy promise.
+
+  Updated privacy promise:
+  StillHere should not collect background GPS unless the user has either:
+  1. explicitly started a location-based safety feature, or
+  2. explicitly enabled an ongoing safety mode that requires background location.
+
+  I accept adding these allowed cases:
+  - Active live-location share
+  - Active Safe Walk
+  - Active Drive Safety session
+  - Active SOS / emergency incident
+  - Active Safety Timer
+  - Ongoing safety heartbeat only if the user’s locationMode is normal or both
+
+  But I want one important distinction:
+
+  Heartbeat itself should not automatically mean precise GPS.
+  If the user has locationMode off or sharingMode paused, heartbeat can still exist as a non-location heartbeat, but native
+  BackgroundGeolocation must stop.
+
+  Recommended server truth fields:
+
+  {
+    active: true/false,
+    nativeTrackingAllowed: true/false,
+    heartbeatAllowed: true/false,
+    sharingMode: "precise|area|presence|paused",
+    locationMode: "off|normal|emergency_only|both",
+    activePurposes: [
+      "liveShare",
+      "safeWalk",
+      "driveSafety",
+      "safetyTimer",
+      "incident",
+      "normalHeartbeat"
+    ],
+    reason: "ok|paused|location_off|emergency_only_no_incident|no_active_session|auth|expired|server_error"
+  }
+
+  Client behavior:
+  - Only nativeTrackingAllowed controls BackgroundGeolocation.start().
+  - heartbeatAllowed can allow non-location heartbeat/device status.
+  - If nativeTrackingAllowed is false, call the actual native plugin stop method and remove listeners if needed.
+  - Do not log lat/lng.
+
+  Final matrix:
+
+  Force stop native background location if:
+  - user is unauthenticated
+  - status endpoint returns 401 or 403
+  - sharingMode is paused
+  - locationMode is off
+  - locationMode is emergency_only and there is no active incident, Safe Walk, Safety Timer, Drive Safety, or live share
+  - no active location-based safety purpose exists and locationMode is not normal or both
+  - server says nativeTrackingAllowed:false
+
+  Allow native background location if:
+  - user is authenticated
+  - sharingMode is not paused
+  - locationMode is not off
+  - and one of these is true:
+    - active live share
+    - active Safe Walk
+    - active Drive Safety
+    - active Safety Timer
+    - active SOS/emergency incident
+    - locationMode is normal or both, meaning the user has explicitly enabled ongoing safety location telemetry
+
+  Emergency only mode:
+  Yes, emergency_only should force stop background GPS unless there is an active emergency/location-based safety purpose. Safe Walk
+  and Safety Timer count as explicit user-started safety purposes.
+
+  Network failure:
+  I agree with fail-open, but not forever.
+
+  Use a bounded grace window:
+  - If the app already had a recent server-approved nativeTrackingAllowed:true state, keep current tracking temporarily during
+  network failure.
+  - If the last approved state is stale, stop tracking.
+  - Suggested stale window: 15 minutes.
+  - If there is no cached approved state, fail closed and stop tracking.
+  - 401/403 always fail closed.
+
+  startOnBoot:
+  I accept keeping startOnBoot:true only if the first-frame guard runs immediately and enforces the server truth.
+  Also, if the app boots and cannot confirm permission after the grace window, it must stop native background location.
+
+  Important:
+  Do not let startOnBoot create indefinite background tracking without server confirmation.
+
+  About sharingMode = area:
+  Good catch. Treat that as a separate privacy hardening item after this fix. For this fix, area mode may allow collection if
+  nativeTrackingAllowed is true, but API output to watchers must remain redacted/offset.
+
+  Before building, please confirm:
+  1. locationMode normal/both is truly explicit user consent for ongoing safety location telemetry.
+  2. Safety Timer is a real user-started session and has an expiry.
+  3. Heartbeat can continue without GPS when nativeTrackingAllowed is false.
+  4. The startup guard can run before any resumeLiveTrackingIfNeeded path starts native tracking.
+
+  If those are confirmed, proceed with the refined build.
+
+  Simple explanation for you:
+
+  Replit is saying: “If we stop background location too aggressively, some StillHere safety features may stop working.”
+
+  They are correct.
+
+  So the better solution is not:
+
+  Stop location unless Safe Walk or SOS is active.
+
+  The better solution is:
+
+  Ask the server if background location is allowed right now.
+  If yes, continue.
+  If no, stop.
+
+  But we add safety rules so the app still works when the user has chosen ongoing safety tracking.
+
+  The key balance is:
+
+  - If user turned location off: stop tracking.
+  - If user paused sharing: stop tracking.
+  - If emergency only mode and no emergency: stop tracking.
+  - If user started Safe Walk, Safety Timer, Drive Safety, live location, or SOS: allow tracking.
+  - If user enabled normal ongoing safety location mode: allow tracking.
+  - If internet briefly fails: do not instantly break safety tracking, but do not allow it forever without confirmation.
+
+  This is the right direction.
