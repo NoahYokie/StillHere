@@ -60,6 +60,12 @@ export const users = pgTable("users", {
   // cleared when they reply START/UNSTOP. Sends are short-circuited when true.
   smsOptedOut: boolean("sms_opted_out").notNull().default(false),
   smsOptedOutAt: timestamp("sms_opted_out_at"),
+  // Review-account flag. Set on the dedicated Apple/Play review user that
+  // logs in via the env-gated review login (NOT the normal OTP flow). When
+  // true: outbound SMS/push and emergency-contact escalation are suppressed
+  // so the reviewer can exercise every screen without paging real people.
+  // Real users always have this false.
+  isReviewAccount: boolean("is_review_account").notNull().default(false),
   // Last known location snapshot (mirrored from live-location updates and
   // SOS payloads). Used by emergency emails and watcher previews when no
   // active live share exists.

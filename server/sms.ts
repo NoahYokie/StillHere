@@ -79,6 +79,16 @@ export function isSmsConfigured(): boolean {
 
 export const isTwilioConfigured = isSmsConfigured;
 
+// Normalize a phone for review-account comparison. We can't import the
+// auth module's normalizePhone (circular import), so we do a permissive
+// strip of non-digits + leading "+" and compare suffixes.
+function isReviewPhone(to: string): boolean {
+  const reviewPhone = process.env.APPLE_REVIEW_PHONE;
+  if (!reviewPhone) return false;
+  const norm = (s: string) => s.replace(/[^\d+]/g, "").replace(/^\+/, "");
+  return norm(to) === norm(reviewPhone);
+}
+
 export async function sendSms(
   to: string,
   body: string
@@ -90,6 +100,14 @@ export async function sendSms(
   }
 
   const masked = `***${to.slice(-4)}`;
+
+  // Store-review safety net: never dispatch a real SMS to the dedicated
+  // review phone. Returns "success" so callers don't retry / fall back to
+  // voice or escalation paths.
+  if (isReviewPhone(to)) {
+    console.log(`[SMS] Skipped (review account) to ${masked}`);
+    return { success: true, messageId: "review-skip" };
+  }
 
   // In-app SMS opt-out check (in addition to Twilio's carrier-level STOP).
   // Lazy-imported to avoid circular dependency with storage. If the recipient

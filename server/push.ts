@@ -34,6 +34,20 @@ export async function sendPushNotification(
     return { sent: 0, failed: 0 };
   }
 
+  // Store-review safety net: never push to a review account, and never
+  // fan out to a review account's contacts. The DB lookup is cheap and
+  // fails open (real users still get pushed if the lookup throws).
+  try {
+    const { users } = await import("@shared/schema");
+    const row = await db.select({ rev: users.isReviewAccount }).from(users).where(eq(users.id, userId)).limit(1);
+    if (row[0]?.rev) {
+      console.log(`[PUSH] Skipped (review account) for user ${userId}: ${payload.title}`);
+      return { sent: 0, failed: 0 };
+    }
+  } catch (e: any) {
+    console.warn(`[PUSH] Review-flag lookup failed for ${userId}, sending anyway:`, e?.message || e);
+  }
+
   const subscriptions = await db
     .select()
     .from(pushSubscriptions)

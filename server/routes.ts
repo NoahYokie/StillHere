@@ -257,6 +257,21 @@ async function notifyContact(
   reason: "sos" | "missed_checkin",
   sendSmsFn: (phone: string, userName: string, link: string) => Promise<any>
 ): Promise<void> {
+  // Store-review safety net: if the SUBJECT user (the one in trouble) is the
+  // dedicated Apple/Play review account, never page real emergency contacts.
+  // The reviewer can still see the in-app SOS/concern UI; we simply don't
+  // dispatch SMS / email / push to anyone outside the review account itself.
+  // Fails open on lookup error so real users are never silently dropped.
+  try {
+    const subjectUser = await storage.getUser(contact.userId);
+    if (subjectUser?.isReviewAccount) {
+      console.log(`[NOTIFY] Skipped contact fan-out (review account subject ${contact.userId})`);
+      return;
+    }
+  } catch (e: any) {
+    console.warn(`[NOTIFY] Review-flag lookup failed for subject ${contact.userId}, dispatching anyway:`, e?.message || e);
+  }
+
   const normalizedPhone = normalizePhone(contact.phone);
   await sendSmsFn(normalizedPhone, userName, link);
   console.log(`[NOTIFY] Sent SMS to contact`);
@@ -352,12 +367,6 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Phone number is required" });
       }
 
-      const { normalizePhone } = await import("./auth");
-      const normalizedPhone = normalizePhone(phone);
-      if (normalizedPhone === "+15550001234") {
-        return res.json({ success: true, phone: normalizedPhone });
-      }
-      
       const result = await createOtp(phone);
       
       if (!result.success) {

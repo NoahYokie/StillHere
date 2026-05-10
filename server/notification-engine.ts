@@ -7,6 +7,20 @@ import { storage } from "./storage";
 
 export type RecipientRole = "SUBJECT" | "WATCHER";
 
+// Store-review safety net. When the subject of a notification is the
+// dedicated Apple/Play review account, suppress all watcher fan-out
+// (push + SMS) so the reviewer can exercise every screen without paging
+// real people. Fails open on lookup error: real users never get silently
+// dropped if the DB hiccups.
+async function isReviewSubject(userId: string): Promise<boolean> {
+  try {
+    const u = await storage.getUser(userId);
+    return !!u?.isReviewAccount;
+  } catch {
+    return false;
+  }
+}
+
 const cooldowns = new Map<string, number>();
 const COOLDOWN_MS = 2 * 60 * 1000;
 
@@ -139,6 +153,10 @@ export async function notifyConcern(
   userName: string,
   reason: "missed_checkin" | "sos" | "heartbeat_silence" | "crash_detection"
 ): Promise<void> {
+  if (await isReviewSubject(userId)) {
+    console.log(`[NOTIFY] Suppressed concern fan-out: ${reason} for review-account subject ${userId}`);
+    return;
+  }
   const isEmergency = reason === "sos" || reason === "crash_detection";
   const protectedUser = await storage.getUser(userId);
   if (!isEmergency && protectedUser && isUserInSleepHours(protectedUser)) {
@@ -256,6 +274,10 @@ export async function notifyRecovery(
   resolverName?: string,
   method?: string
 ): Promise<void> {
+  if (await isReviewSubject(userId)) {
+    console.log(`[NOTIFY] Suppressed recovery fan-out for review-account subject ${userId}`);
+    return;
+  }
   const watcherContacts = await storage.getContactsLinkedToUser(userId);
 
   const timeStr = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -352,6 +374,10 @@ export async function notifyArrival(
   userName: string,
   placeName: string | null
 ): Promise<void> {
+  if (await isReviewSubject(userId)) {
+    console.log(`[NOTIFY] Suppressed arrival fan-out for review-account subject ${userId}`);
+    return;
+  }
   const watcherContacts = await storage.getContactsLinkedToUser(userId);
 
   const body = placeName

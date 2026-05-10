@@ -16,6 +16,46 @@ const OTP_RATE_LIMIT_HOURLY = 15;
 const APP_ENV = process.env.APP_ENV || "staging";
 const WHITELIST_NUMBERS = (process.env.WHITELIST_NUMBERS || "").split(",").map(n => n.trim()).filter(Boolean);
 
+// ---------------------------------------------------------------------------
+// Apple / Google Play store review login.
+//
+// Store reviewers cannot receive SMS OTPs (no real SIM, no real number).
+// Instead we expose ONE dedicated review account whose login is gated by an
+// env flag so it can be killed instantly if the credentials ever leak. The
+// review user is marked isReviewAccount=true in the DB and never triggers
+// real outbound SMS, push, or contact escalation (see sms.ts / push.ts /
+// storage.getContacts).
+//
+// All three env vars must be present AND the flag must be exactly "true"
+// (string compare, not truthy) for the review login to be accepted. The
+// review code must be 8-10 digits to avoid collision with the 6-digit user
+// OTP space and is compared with crypto.timingSafeEqual.
+// ---------------------------------------------------------------------------
+const REVIEW_LOGIN_ENABLED = process.env.ENABLE_APPLE_REVIEW_LOGIN === "true";
+const REVIEW_LOGIN_PHONE_RAW = process.env.APPLE_REVIEW_PHONE || "";
+const REVIEW_LOGIN_CODE = process.env.APPLE_REVIEW_CODE || "";
+
+function isReviewLoginConfigured(): boolean {
+  if (!REVIEW_LOGIN_ENABLED) return false;
+  if (!REVIEW_LOGIN_PHONE_RAW || !REVIEW_LOGIN_CODE) return false;
+  if (!/^\d{8,10}$/.test(REVIEW_LOGIN_CODE)) return false;
+  return true;
+}
+
+function reviewCodeMatches(submitted: string): boolean {
+  if (!REVIEW_LOGIN_CODE) return false;
+  if (typeof submitted !== "string") return false;
+  if (!/^\d{8,10}$/.test(submitted)) return false;
+  const a = Buffer.from(submitted);
+  const b = Buffer.from(REVIEW_LOGIN_CODE);
+  if (a.length !== b.length) return false;
+  try {
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 // Generate 6-digit OTP using cryptographic randomness
 function generateOtp(): string {
   const bytes = randomBytes(4);
@@ -294,6 +334,19 @@ export async function createOtp(phone: string): Promise<{
 }> {
   const normalizedPhone = normalizePhone(phone);
   
+  // Store-review phone short-circuit: never send a real OTP SMS to the
+  // reviewer's number. The reviewer enters the static review code (which
+  // they were given by the listing) and is verified via the env-gated path
+  // in verifyOtp. We return success so the client UI can advance to the
+  // code-entry screen exactly like a real user.
+  if (
+    isReviewLoginConfigured() &&
+    normalizedPhone === normalizePhone(REVIEW_LOGIN_PHONE_RAW)
+  ) {
+    console.log(`[AUTH] Store review OTP request accepted (no SMS sent) for ***${normalizedPhone.slice(-4)}`);
+    return { success: true, phone: normalizedPhone };
+  }
+
   // Check country and whitelist
   const canSend = canSendOtp(normalizedPhone);
   if (!canSend.allowed) {
@@ -351,12 +404,26 @@ export async function verifyOtp(phone: string, code: string): Promise<{
   needsSetup?: boolean;
 }> {
   const normalizedPhone = normalizePhone(phone);
-  
-  const DEMO_PHONE = "+15550001234";
-  const DEMO_CODE = "123456";
-  const isDemoLogin = normalizedPhone === DEMO_PHONE && code === DEMO_CODE;
 
-  if (!isDemoLogin) {
+  // Env-gated store-review login. The review phone can ONLY authenticate
+  // when the flag is on AND the timing-safe code compare succeeds.
+  // Real-user OTP flow is unchanged.
+  let isReviewLogin = false;
+  if (
+    isReviewLoginConfigured() &&
+    normalizedPhone === normalizePhone(REVIEW_LOGIN_PHONE_RAW)
+  ) {
+    if (reviewCodeMatches(code)) {
+      isReviewLogin = true;
+      // Log the event but never the code.
+      console.log(`[AUTH] Store review login accepted for ***${normalizedPhone.slice(-4)}`);
+    } else {
+      console.warn(`[AUTH] Store review login REJECTED (bad code) for ***${normalizedPhone.slice(-4)}`);
+      return { success: false };
+    }
+  }
+
+  if (!isReviewLogin) {
     const hashedInput = hashOtp(code, normalizedPhone);
 
     const otpCandidates = await db
@@ -408,14 +475,15 @@ export async function verifyOtp(phone: string, code: string): Promise<{
       const [newUser] = await db
         .insert(users)
         .values({
-          name: "",
+          name: isReviewLogin ? "App Review" : "",
           phone: normalizedPhone,
           timezone: "Australia/Melbourne",
+          isReviewAccount: isReviewLogin,
         })
         .returning();
       user = newUser;
       isNewUser = true;
-      needsSetup = true;
+      needsSetup = !isReviewLogin;
 
       // Create default settings
       await db.insert(settings).values({
@@ -444,8 +512,23 @@ export async function verifyOtp(phone: string, code: string): Promise<{
   } else {
     // Check if user needs setup (name not set)
     needsSetup = !user.name || user.name.trim() === "";
+    // Self-heal: if a previously-created user matches the review phone but
+    // the review flag is off (e.g. the row pre-dates this feature), flip
+    // the flag on AND normalize their identity so the reviewer always lands
+    // in the same clean state (skip name-setup, name = "App Review"). Only
+    // when review login is the active code path.
+    if (isReviewLogin && !user.isReviewAccount) {
+      await db.update(users).set({
+        isReviewAccount: true,
+        name: "App Review",
+      }).where(eq(users.id, user.id));
+      user = { ...user, isReviewAccount: true, name: "App Review" };
+      needsSetup = false;
+    } else if (isReviewLogin) {
+      needsSetup = false;
+    }
   }
-  
+
   // Create session
   const sessionToken = generateSessionToken();
   const expiresAt = addDays(new Date(), SESSION_EXPIRY_DAYS);
