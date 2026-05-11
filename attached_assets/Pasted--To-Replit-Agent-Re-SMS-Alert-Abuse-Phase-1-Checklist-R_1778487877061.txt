@@ -1,0 +1,244 @@
+ To: Replit Agent
+
+  Re: SMS / Alert Abuse Phase 1 — Checklist Review, Two Required Adjustments
+
+  The direction is good. I agree with most of it.
+
+  Approved in principle:
+
+  outbound_send_log table
+  OUTBOUND_LOG_SECRET
+  strict Category-A limits
+  IP limits for non-urgent routes
+  keeping SOS in-memory anti-double-tap
+  logging push/email but not hard-gating them in Phase 1
+  wrapping voice call sites in place
+  leaving OTP, provider_alerts, voice extraction, and full push/email limits for Phase 2
+  db:push is acceptable because changes are additive only
+
+  Answers:
+
+  1. HMAC secret choice
+
+  Approved.
+
+  Use OUTBOUND_LOG_SECRET.
+
+  Production should fail closed at boot if OUTBOUND_LOG_SECRET is missing.
+
+  Dev can derive from SESSION_SECRET with a warning.
+
+  2. degradedDelivery boolean
+
+  Approved, but with one condition.
+
+  Add:
+
+  incidents.degradedDelivery boolean default false
+
+  Use it only when a real safety alert hit a provider ceiling or severe provider send failure.
+
+  Do not set it for ordinary dedupe.
+
+  Do not show scary copy.
+
+  Watcher copy should be restrained:
+
+  Some delivery channels may be delayed. StillHere is trying available channels.
+
+  3. Category-B 5-minute dedupe window
+
+  Mostly approved, but adjust the rule.
+
+  Current proposed rule:
+
+  same incidentId, channel, destinationHash, purpose within 5 minutes
+
+  This is fine for duplicate-loop prevention.
+
+  But I want one safety exception:
+
+  If the app is intentionally escalating to the same contact through the same channel as part of a later escalation step, or a
+  manual retry after visible failure, it must be allowed.
+
+  So use this rule:
+
+  Deduplicate Category-B sends only when:
+  same incidentId
+  same channel
+  same destinationHash
+  same purpose
+  same escalationStep or null escalationStep
+  status IN queued/sent/delivered
+  createdAt > now - 5 minutes
+
+  This means we need either:
+
+  A. Add escalationStep nullable integer/text to outbound_send_log
+
+  or
+
+  B. Include a dedupeKey text field that encodes purpose + incident + step + channel + destination
+
+  My preference:
+  Add dedupeKey text nullable.
+
+  For most sends:
+  dedupeKey = `${incidentId}:${purpose}:${channel}:${destinationHash}`
+
+  For escalation steps:
+  dedupeKey = `${incidentId}:${purpose}:${step}:${channel}:${destinationHash}`
+
+  For manual retry:
+  dedupeKey should include retry id or retry timestamp bucket so it is not blocked by an older attempt.
+
+  Reason:
+  We want to stop accidental duplicate loops, not block intentional escalation or retry behavior.
+
+  4. drive_crash exemption
+
+  Do not fully exempt drive_crash from dedupe.
+
+  Instead:
+
+  First crash/SOS send always allowed.
+  Further crash sends for the same incident/contact/channel/purpose should be deduped unless a new incident is created.
+
+  Reason:
+  A possible crash flow is safety-critical, but also high-risk for repeated sensor loops.
+
+  5. Category-B circuit breaker behavior
+
+  Need a wording correction.
+
+  You wrote:
+
+  Category B never blocked. Log critical, status='circuit_broken', continue with channel fallback.
+
+  Important distinction:
+
+  If SMS ceiling is hit, do not send SMS past the ceiling.
+
+  That channel is circuit-broken.
+
+  But do not block the incident and do not block other channels.
+
+  So the behavior should be:
+
+  Category B SMS over SMS ceiling:
+  do not send that SMS
+  record circuit_broken
+  try push/email/call fallback where appropriate
+  set incident.degradedDelivery=true
+
+  Category B call over call ceiling:
+  do not place that call
+  record circuit_broken
+  try SMS/push/email fallback where appropriate
+  set degradedDelivery=true
+
+  This protects cost/provider abuse while keeping safety flow alive.
+
+  6. Non-urgent limits
+
+  Approved as proposed:
+
+  family_invite:
+  5/hour, 20/day per user
+  1/30min per destination
+  10/hour, 40/day per IP
+
+  resend_invite:
+  shares family_invite buckets
+
+  test_broadcast:
+  3/hour, 10/day per user
+  1/10min per contact
+  6/hour per IP
+
+  contact_test:
+  10/hour, 30/day per user
+  1/10min destination
+  20/hour per IP
+
+  drill:
+  2/hour, 5/day per user
+  1/30min destination
+  4/hour per IP
+
+  Drill copy must clearly say:
+
+  [StillHere TEST]
+
+  and:
+
+  This is a drill, not a real alert.
+
+  7. Push/email in Phase 1
+
+  Approved:
+
+  log them
+  use them for per-incident duplicate visibility
+  do not hard-gate them in Phase 1
+
+  8. Voice call wrapping
+
+  Approved:
+
+  wrap in place
+  do not extract server/voice.ts yet
+
+  9. Production defaults
+
+  Approved with this version:
+
+  OUTBOUND_LOG_SECRET missing in production:
+  fail boot
+
+  MAX_OUTBOUND_SMS_PER_HOUR missing:
+  default 500, warn
+
+  MAX_OUTBOUND_CALLS_PER_HOUR missing:
+  default 100, warn
+
+  MAX_OUTBOUND_EMAILS_PER_HOUR missing:
+  default 2000, warn
+
+  Category A at ceiling:
+  429
+
+  Category B channel at ceiling:
+  do not send capped channel
+  record circuit_broken
+  try fallback channels
+  set degradedDelivery
+
+  10. Final request before build approval
+
+  Please return a final revised implementation checklist with these updates:
+
+  add dedupeKey or escalationStep logic
+  drive_crash not fully exempt, only first send always allowed
+  clarify Category-B circuit breaker does not send over the capped channel
+  confirm degradedDelivery copy
+  confirm exact schema changes including degradedDelivery and dedupeKey if chosen
+
+  No code changes yet.
+
+  Simple explanation for you:
+
+  Replit’s plan is good, but I spotted two things that needed tightening.
+
+  First: real safety alerts should not be blocked, but if Twilio SMS hits a global cap, the app should not keep sending SMS past
+  the cap. Instead it should:
+
+  - stop that capped channel
+  - record it
+  - try push/email/call instead
+  - show a quiet warning that some channels may be delayed
+
+  Second: the duplicate protection must not block a real later escalation step. So I asked them to add a dedupeKey or escalation
+  step logic. This lets us stop accidental duplicate loops without stopping intentional safety escalation.
+
+  If Replit accepts this, we’ll have a strong plan. Then you can approve the build.
