@@ -1,0 +1,217 @@
+To: Replit Agent
+
+  Re: SMS / Alert Abuse Phase 1 — In-App Channel and deliveryFailed
+
+  Good catch on in-app messaging.
+
+  I agree that in-app must be included, otherwise the outbound ledger is incomplete.
+
+  Decision 1 — in_app channel
+
+  Approved.
+
+  Add:
+
+  in_app
+
+  to outbound_channel.
+
+  Log in-app system alerts in outbound_send_log.
+
+  Use the same Category-B dedupe rule for in-app system alerts.
+
+  Do not cap in-app sends in Phase 1.
+
+  Reason:
+  It has no third-party provider cost and is an important fallback channel for online Safety Circle members.
+
+  Fallback order approved:
+
+  For SMS capped:
+  in_app → push → email
+
+  For Call capped:
+  in_app → push → email, and SMS only if SMS is not also capped and the flow expects SMS fallback
+
+  For Email capped:
+  in_app → push
+
+  For Push failure:
+  in_app still counts as a useful delivered channel if it succeeded
+
+  Decision 2 — deliveryFailed boolean
+
+  I agree in principle, but I want to narrow it.
+
+  Add:
+
+  incidents.deliveryFailed boolean default false
+
+  But only set deliveryFailed=true if ALL attempted channels for a real safety alert fail or are circuit-broken.
+
+  That means:
+
+  SMS failed or circuit-broken
+  Call failed or circuit-broken where applicable
+  Email failed or circuit-broken where applicable
+  Push failed where attempted
+  in_app failed where attempted
+
+  Do NOT set deliveryFailed=true just because one provider failed.
+  Do NOT set deliveryFailed=true for dedupe.
+  Do NOT set deliveryFailed=true while fallback channels are still being attempted.
+  Do NOT show scary UI copy automatically in Phase 1 unless the existing UI already has a safe place for it.
+
+  For Phase 1:
+  It is acceptable to store deliveryFailed but not prominently surface it yet.
+
+  If surfaced, wording must be restrained:
+
+  StillHere could not confirm delivery through available channels.
+
+  Do not say:
+  Emergency failed.
+  Help failed.
+  Nobody was contacted.
+  You are not protected.
+
+  Decision 3 — degradedDelivery
+
+  Approved as already agreed.
+
+  Set degradedDelivery=true when any important provider channel is delayed, capped, or failed, but at least one fallback path is
+  still being attempted or likely available.
+
+  Watcher/user copy:
+
+  Some delivery channels may be delayed. StillHere is trying available channels.
+
+  Decision 4 — schema
+
+  Approved with:
+
+  outbound_channel includes sms, call, email, push, in_app
+  outbound_purpose list as proposed
+  outbound_status list as proposed
+  outbound_send_log includes dedupeKey
+  incidents.degradedDelivery default false
+  incidents.deliveryFailed default false
+
+  All additive only.
+
+  Decision 5 — dedupeKey
+
+  Approved.
+
+  Use dedupeKey for Category-B dedupe.
+
+  Default:
+
+  incidentId:purpose:channel:destinationHash
+
+  Escalation step:
+
+  incidentId:purpose:channel:destinationHash:stepN
+
+  Manual retry:
+
+  incidentId:purpose:channel:destinationHash:retryUUID
+
+  Dedupe window:
+
+  5 minutes
+
+  Statuses counted:
+
+  queued
+  sent
+  delivered
+
+  Deduped sends should record status='deduped' and return success to caller.
+
+  Decision 6 — drive_crash
+
+  Approved.
+
+  Do not fully exempt.
+
+  First send for the crash incident fires.
+  Repeated same incident/contact/channel/purpose within 5 minutes dedupes.
+  New incident gets new sends.
+
+  Decision 7 — non-urgent limits
+
+  Approved as proposed.
+
+  Decision 8 — no feature reduction
+
+  Still required.
+
+  Do not reduce:
+
+  SOS
+  missed check-in
+  Safe Walk
+  Safety Timer
+  Drive Safety
+  possible crash alert
+  wellness urgent help
+  Safety Circle alerts
+  in-app messages
+  push/email fallback
+  contact escalation order
+  incident state transitions
+
+  Final request before founder approval
+
+  Please return one final “ready to build” checklist confirming:
+
+  1. in_app included
+  2. deliveryFailed narrowed as above
+  3. degradedDelivery copy confirmed
+  4. no hard cap on in_app in Phase 1
+  5. Category-B capped channel is not transmitted, but fallback continues
+  6. Group/phase remains additive only
+  7. db:push required and no destructive changes
+  8. exact verification list, including in-app fallback test
+
+  No code changes yet.
+
+  Simple explanation for you:
+
+  Replit remembered another important channel: in-app messages.
+
+  That means StillHere can alert someone inside the app through chat/inbox/system alerts, not just SMS, calls, push, or email.
+
+  I agree we should include it.
+
+  Why?
+
+  If SMS is capped or Twilio has a problem, StillHere can still try:
+
+  - in-app message
+  - push notification
+  - email
+
+  That makes the app more reliable, not weaker.
+
+  I also agreed to add two incident flags:
+
+  degradedDelivery
+  Means: some channels had problems, but StillHere is still trying other channels.
+
+  User-facing wording:
+
+  > Some delivery channels may be delayed. StillHere is trying available channels.
+
+  deliveryFailed
+  Means: every attempted channel failed or was blocked.
+
+  But I told Replit to be careful:
+
+  - do not set deliveryFailed too early
+  - do not set it for duplicate prevention
+  - do not scare users with dramatic language
+  - it can be stored quietly in Phase 1 and surfaced later only if needed
+
+  This is a good direction. It protects the business from SMS abuse while making StillHere more reliable through fallback channels.
