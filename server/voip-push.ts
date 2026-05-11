@@ -5,11 +5,26 @@ interface VoipPushPayload {
   callType: "video" | "audio";
 }
 
+// Phase-2 gate. The iOS PushKit/CallKit client wiring exists in
+// `client/src/lib/native-call.ts` but is NOT shipped for App Store launch:
+// the `capacitor-plugin-callkit-voip` pod is not installed, the `voip`
+// background mode is intentionally absent from capacitor.config.json, and
+// APNs VoIP credentials are not configured. Until all four blockers (plugin
+// install, voip background mode, APNs creds, Xcode VoIP capability) are
+// resolved, leave ENABLE_VOIP_PUSH unset so this code path is dormant. See
+// STORE_SUBMISSION.md → "Phase 2 — VoIP wake-up" for the full checklist.
+const VOIP_PUSH_ENABLED = process.env.ENABLE_VOIP_PUSH === "true";
+
 export async function sendVoipPush(
   token: string,
   platform: string,
   payload: VoipPushPayload
 ): Promise<boolean> {
+  if (!VOIP_PUSH_ENABLED) {
+    // Silent no-op for launch. The caller (server/socket.ts) already falls
+    // back to a normal web push so an offline receiver still gets notified.
+    return false;
+  }
   if (platform === "ios") {
     return sendAPNsVoipPush(token, payload);
   }
@@ -27,7 +42,9 @@ async function sendAPNsVoipPush(
   const apnsKeyId = process.env.APNS_KEY_ID;
   const apnsTeamId = process.env.APNS_TEAM_ID;
   const apnsKey = process.env.APNS_AUTH_KEY;
-  const bundleId = "com.stillhere.app";
+  // Must match capacitor.config.json `appId`. APNs `apns-topic` for VoIP
+  // pushes is `${bundleId}.voip`, and APNs rejects mismatched topics.
+  const bundleId = "com.daudabangoura.stillhere.app";
 
   if (!apnsKeyId || !apnsTeamId || !apnsKey) {
     console.log("[VOIP-PUSH] APNs not configured (APNS_KEY_ID, APNS_TEAM_ID, APNS_AUTH_KEY required). Skipping VoIP push.");

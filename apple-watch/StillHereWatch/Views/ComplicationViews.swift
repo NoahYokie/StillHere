@@ -26,7 +26,7 @@ struct ComplicationEntry: TimelineEntry {
 }
 
 struct ComplicationProvider: TimelineProvider {
-    private let sharedDefaults = UserDefaults(suiteName: "group.com.stillhere.app")
+    private let sharedDefaults = UserDefaults(suiteName: "group.com.daudabangoura.stillhere.app")
 
     func placeholder(in context: Context) -> ComplicationEntry {
         ComplicationEntry(date: Date(), isOverdue: false, hasIncident: false)

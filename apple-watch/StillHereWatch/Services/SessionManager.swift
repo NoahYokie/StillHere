@@ -16,7 +16,7 @@ class SessionManager: ObservableObject {
 
     private let tokenKeychainKey = "stillhere_auth_token"
     private let baseURLKeychainKey = "stillhere_base_url"
-    private let sharedDefaults = UserDefaults(suiteName: "group.com.stillhere.app")
+    private let sharedDefaults = UserDefaults(suiteName: "group.com.daudabangoura.stillhere.app")
     private static let allowedHosts = ["stillhere.health", "www.stillhere.health"]
 
     var baseURL: String {

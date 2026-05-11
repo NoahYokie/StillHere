@@ -29,10 +29,11 @@
       "resizeOnFullScreen": true
     },
     "BackgroundGeolocation": {
-      "locationAuthorizationRequest": "Always",
+      "_TODO_ALWAYS_ESCALATION": "App Store Phase 1 ships with WhenInUse only. Safe Walk, Safety Timer, Drive Safety, active Safety-Circle sharing, and SOS may require Always Location for reliable background updates. The app should request/escalate to Always at the moment the user enables one of those features (NOT upfront).",
+      "locationAuthorizationRequest": "WhenInUse",
       "backgroundPermissionRationale": {
-        "title": "StillHere needs background location",
-        "message": "StillHere monitors your safety even when the app is in the background. This ensures your emergency contacts can locate you if needed.",
+        "title": "Background location for safety features",
+        "message": "StillHere uses background location only while a safety feature you turned on is running, such as Safe Walk, Safety Timer, Drive Safety, an active SOS, or active sharing with your Safety Circle. We will attempt to share your location with the contacts you chose so they can reach you. Background location is off when you are not using one of these features.",
         "positiveAction": "Allow",
         "negativeAction": "Cancel"
       }
@@ -47,11 +48,10 @@
     "preferredContentMode": "mobile",
     "scheme": "stillhere",
     "infoPlist": {
-      "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses your location in the background to keep you safe. If you miss a check-in or need help, we can alert your trusted contacts with your location so they can reach you quickly.",
-      "NSLocationWhenInUseUsageDescription": "StillHere uses your location during check-ins, safety features, and maps so you and your trusted contacts can see where help may be needed.",
-      "NSLocationAlwaysUsageDescription": "Background location lets StillHere watch over you even when your phone is locked. This way, your trusted contacts are always just a tap away if something happens.",
-      "NSMotionUsageDescription": "StillHere uses motion sensors to detect possible falls or vehicle crashes and automatically alert your emergency contacts.",
-      "NSMicrophoneUsageDescription": "StillHere uses your microphone for voice calls with your trusted contacts so you can speak directly during a check-in or emergency.",
+      "NSLocationWhenInUseUsageDescription": "StillHere uses your location only when you choose to share it or when you start a safety feature like a check-in, Safe Walk, Safety Timer, Drive Safety, or SOS. Location sharing is off by default.",
+      "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses background location only when you turn on a feature that needs it, such as Safe Walk, Safety Timer, Drive Safety, active sharing with your Safety Circle, or an SOS in progress. If a check-in is missed or you trigger help, we will attempt to share your location with the contacts you chose so they can reach you. StillHere is not a continuous tracking app and does not collect location during calm time when you are in Presence mode or have sharing paused.",
+      "NSMotionUsageDescription": "StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are best-effort sensor signals, not medical-grade detection. If a possible event is detected we will attempt to notify your Safety Circle.",
+      "NSMicrophoneUsageDescription": "StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle.",
       "UIBackgroundModes": ["location", "fetch", "remote-notification"]
     }
   },

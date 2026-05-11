@@ -9,7 +9,7 @@
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
-    <string>com.stillhere.app.watchkitapp</string>
+    <string>com.daudabangoura.stillhere.app.watchkitapp</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -21,15 +21,15 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSMotionUsageDescription</key>
-    <string>StillHere uses motion sensors to detect falls and alert your emergency contacts automatically.</string>
+    <string>StillHere uses motion sensors to look for possible fall signals on your watch. These are best-effort sensor readings, not medical-grade detection.</string>
     <key>NSFallDetectionUsageDescription</key>
-    <string>StillHere monitors for fall events to automatically alert your emergency contacts if you need help.</string>
+    <string>StillHere uses watchOS fall sensing to look for possible fall events. If a possible fall is detected, we will attempt to notify the contacts in your Safety Circle. This is not a medical device.</string>
     <key>NSHealthShareUsageDescription</key>
-    <string>StillHere reads your heart rate to monitor your wellbeing and alert emergency contacts if an abnormal reading is detected.</string>
+    <string>StillHere reads heart-rate samples from HealthKit so you can see your reading inside the app. StillHere is not a medical device, does not diagnose, and does not detect health emergencies. Heart-rate data is used only for the in-app display and is not shared with anyone unless you choose to share it.</string>
     <key>WKApplication</key>
     <true/>
     <key>WKCompanionAppBundleIdentifier</key>
-    <string>com.stillhere.app</string>
+    <string>com.daudabangoura.stillhere.app</string>
     <key>WKWatchOnly</key>
     <false/>
 </dict>

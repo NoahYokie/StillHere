@@ -183,3 +183,89 @@ Add these three for mobile:
 6. Internal-test on Android the same way (License testers in Play Console)
 7. Submit your **first build** to TestFlight + Play Internal Testing
 8. Once Apple + Google approve the IAPs (often same day), submit the production release
+
+---
+
+## 5. Phase 1 (App Store launch) — iOS permission & privacy wording
+
+This pass replaced overclaiming permission strings, deleted a deprecated key,
+softened the background-location authorization request, fixed a Watch bundle
+ID mismatch, fixed an App Group identifier mismatch, gated PushKit/VoIP
+behind a Phase-2 flag, and aligned the APNs bundle ID with `appId`.
+
+### 5a. Manual Xcode capability checklist
+
+These cannot be set in `capacitor.config.json`; you must toggle them in
+Xcode -> Signing & Capabilities for each target before submission.
+
+**Phone target (StillHere)**
+- [ ] **Push Notifications** -- ON
+- [ ] **Background Modes** -- Location updates, Background fetch, Remote
+      notifications (do NOT turn on Voice over IP for launch -- see 5b)
+- [ ] **In-App Purchase** -- ON (RevenueCat pod already in `ios/App/Podfile`)
+- [ ] **App Groups** -- ON, group identifier
+      `group.com.daudabangoura.stillhere.app` (must match the watch target
+      and the strings in `apple-watch/StillHereWatch/Services/SessionManager.swift`
+      + `apple-watch/StillHereWatch/Views/ComplicationViews.swift`)
+- [ ] **HealthKit** -- OFF (the iPhone target does not read HealthKit;
+      only the Watch does)
+- [ ] **Sign in with Apple** -- SKIP (we use Passkey + phone OTP only)
+- [ ] **Associated Domains** -- SKIP
+
+**Watch target (StillHereWatch)**
+- [ ] **HealthKit** -- ON (entitlement already declared)
+- [ ] **App Groups** -- ON, same identifier
+      `group.com.daudabangoura.stillhere.app`
+- [ ] Bundle Identifier in Xcode signing: `com.daudabangoura.stillhere.app.watchkitapp`
+
+### 5b. Phase 2 -- VoIP wake-up (deferred, do NOT enable for launch)
+
+The iOS client has scaffolding for PushKit + CallKit
+(`client/src/lib/native-call.ts`), but four blockers prevent it from
+working today and we are intentionally NOT shipping it for launch:
+
+1. `capacitor-plugin-callkit-voip` is not in `ios/App/Podfile` /
+   `package.json`. The dynamic import in `native-call.ts:50` silently
+   fails on every iOS launch.
+2. `voip` is intentionally absent from `UIBackgroundModes` in
+   `capacitor.config.json` (declaring an unused background mode is an
+   App Review rejection trigger).
+3. APNs VoIP credentials (`APNS_KEY_ID`, `APNS_TEAM_ID`,
+   `APNS_AUTH_KEY`) are not set as secrets.
+4. The Voice over IP capability is not toggled in Xcode.
+
+Server-side, `server/voip-push.ts` is gated behind
+`ENABLE_VOIP_PUSH === "true"` and is a silent no-op until that env var
+is set. Offline receivers still get a normal web push via the existing
+fallback in `server/socket.ts`, so in-app voice calls remain functional
+for both-foreground users today.
+
+To turn VoIP on in Phase 2:
+1. Add `capacitor-plugin-callkit-voip` to dependencies and run
+   `npx cap sync ios`.
+2. Add `"voip"` to `UIBackgroundModes` in `capacitor.config.json`.
+3. Toggle Background Modes -> Voice over IP in Xcode.
+4. Generate an APNs Auth Key (.p8) in Apple Developer -> Keys, add the
+   three `APNS_*` secrets, set `ENABLE_VOIP_PUSH=true`.
+5. Re-validate `apns-topic` is `com.daudabangoura.stillhere.app.voip`
+   (already wired in `server/voip-push.ts`).
+
+### 5c. Background location -- Always escalation TODO
+
+Phase 1 sets `BackgroundGeolocation.locationAuthorizationRequest` to
+`"WhenInUse"` to avoid Apple's "Always upfront" rejection trigger.
+This is NOT a permanent reduction in functionality.
+
+Safe Walk, Safety Timer, Drive Safety, active Safety-Circle sharing, and
+SOS may need Always Location for reliable background updates while the
+phone is locked or the app is backgrounded. The app should request
+escalation to Always at the moment a user enables one of those features,
+not at first launch.
+
+Tracked locations:
+- `capacitor.config.json` -> `plugins.BackgroundGeolocation._TODO_ALWAYS_ESCALATION`
+- This file (5c)
+- Each feature start screen should call the BackgroundGeolocation plugin's
+  authorization-request API with the rationale string already in
+  `backgroundPermissionRationale.message` before starting tracking.
+
