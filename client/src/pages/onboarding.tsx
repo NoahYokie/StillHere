@@ -12,12 +12,12 @@ const screens = [
   },
   {
     title: "How it works",
-    body: "You check in by tapping \"I'm OK\"\n\nIf you don't respond, we notify your emergency contacts\n\nThey can check on you first",
+    body: "You check in by tapping \"I'm OK\"\n\nIf you don't respond, we attempt to reach your emergency contacts\n\nThey can check on you first",
     icon: Bell,
   },
   {
     title: "You stay in control",
-    body: "Location sharing is OFF by default\n\nYou choose who gets notified\n\nYou can pause alerts anytime",
+    body: "Location sharing is OFF by default\n\nYou choose who we try to reach\n\nYou can pause alerts anytime",
     icon: Shield,
   },
   {

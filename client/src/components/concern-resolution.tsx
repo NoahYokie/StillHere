@@ -160,7 +160,7 @@ export function ConcernTimelinePanel({ userId, isWatcher }: { userId: string; is
         <span className="text-sm font-medium text-red-700 dark:text-red-300" data-testid="text-concern-headline">
           {isWatcher
             ? `We're trying to reach ${data.userName.split(" ")[0]}`
-            : "Your contacts have been notified"}
+            : "We are attempting to reach your contacts"}
         </span>
       </div>
 

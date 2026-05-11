@@ -251,7 +251,7 @@ export async function sendSosAlert(
   userName: string,
   link: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere EMERGENCY\n\n${userName} has activated an emergency SOS and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
+  const body = `StillHere SOS Alert\n\n${userName} has activated an SOS in the StillHere app and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services. StillHere is not an emergency response service.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
   return sendSms(contactPhone, body);
 }
 
@@ -291,7 +291,7 @@ export async function sendContactRespondedNotification(
   userPhone: string,
   contactName: string
 ): Promise<SendSmsResult> {
-  const body = `StillHere Update\n\n${contactName} has received your alert and is checking on you. Help is on the way.`;
+  const body = `StillHere Update\n\n${contactName} has received your alert and is checking on you.`;
   return sendSms(userPhone, body);
 }
 

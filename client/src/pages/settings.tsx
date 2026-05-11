@@ -919,7 +919,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label htmlFor="fall-detection" className="text-sm font-medium">Fall detection</Label>
+                    <Label htmlFor="fall-detection" className="text-sm font-medium">Fall sensing</Label>
                     <p className="text-[11px] text-muted-foreground">60s countdown before SOS</p>
                   </div>
                   <Switch id="fall-detection" checked={fallDetection} onCheckedChange={async (checked) => {
@@ -947,7 +947,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="driving-safety" className="text-sm font-medium">Driving safety</Label>
-                      <p className="text-[11px] text-muted-foreground">Speed alerts and crash detection</p>
+                      <p className="text-[11px] text-muted-foreground">Speed alerts and possible crash alerts</p>
                     </div>
                     <Switch id="driving-safety" checked={drivingSafety} onCheckedChange={(checked) => { setDrivingSafety(checked); settingsMutation.mutate({ drivingSafety: checked }); }} data-testid="switch-driving-safety" />
                   </div>

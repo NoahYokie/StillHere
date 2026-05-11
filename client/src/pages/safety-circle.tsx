@@ -213,7 +213,7 @@ export default function SafetyCirclePage() {
             <FlowStep
               number={1}
               isLast={false}
-              title={`${primary?.name || "Your Primary Guardian"} is notified instantly`}
+              title={`We first attempt to reach ${primary?.name || "your Primary Guardian"}`}
               subtitle="We send an alert to your guardian."
             />
             <FlowStep

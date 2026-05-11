@@ -171,7 +171,7 @@ export default function SafetyCircleManagePage() {
             <CardContent className="p-3.5 flex items-center gap-2.5">
               <Info className="h-4 w-4 text-green-600 dark:text-green-500 shrink-0" />
               <p className="text-xs text-foreground leading-relaxed">
-                Guardians are notified in the order shown above.
+                We attempt to reach guardians in the order shown above. SMS delivery is best-effort and depends on carrier.
               </p>
             </CardContent>
           </Card>

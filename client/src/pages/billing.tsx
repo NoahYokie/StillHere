@@ -25,7 +25,7 @@ interface Product { id: string; name: string; description: string | null; prices
 const FEATURES = [
   "Unlimited Safety Circle contacts",
   "Live location sharing & geofencing",
-  "Crash & fall detection with auto-SOS",
+  "Possible crash alerts & fall sensing with auto-SOS",
   "Watcher dashboard & weekly Safety Record",
   "Family Mode group chat & places",
   "Wellness call + SMS check-in",
@@ -137,7 +137,7 @@ export default function BillingPage() {
           </div>
           <h2 className="text-2xl font-bold">StillHere Premium</h2>
           <p className="text-sm text-muted-foreground">
-            Keep the people you love covered around the clock.
+            Keep the people you love in your safety loop.
           </p>
         </div>
 

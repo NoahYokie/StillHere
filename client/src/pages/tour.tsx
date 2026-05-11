@@ -50,14 +50,14 @@ const tourSteps = [
   },
   {
     id: "alert",
-    title: "Contacts get notified",
+    title: "We attempt to reach your contacts",
     description: "Only after we've tried every option. Your contacts see a full timeline of what we tried, so they know the situation is real.",
     mockup: "alert",
   },
   {
     id: "sos",
     title: "Need help right now?",
-    description: "Tap the red \"I Need Help\" button anytime for an immediate alert to your contacts. No waiting.",
+    description: "Tap the red \"I Need Help\" button anytime to start the alert flow and immediately attempt to reach your contacts. No waiting.",
     mockup: "sos",
   },
   {
@@ -68,7 +68,7 @@ const tourSteps = [
   },
   {
     id: "contacts",
-    title: "Choose who gets notified",
+    title: "Choose who we try to reach",
     description: "Add your trusted people: family, friends, neighbours. They'll only hear from us if something's wrong.",
     mockup: "contacts",
   },
@@ -87,7 +87,7 @@ const tourSteps = [
   {
     id: "safetytimer",
     title: "Safety timer",
-    description: "Going hiking or swimming alone? Set a countdown. If you don't press \"I'm Safe\" before it expires, your contacts are alerted with your last known location.",
+    description: "Going hiking or swimming alone? Set a countdown. If you don't press \"I'm Safe\" before it expires, the alert flow attempts to reach your contacts with your last known location.",
     mockup: "safetytimer",
   },
   {
@@ -111,13 +111,13 @@ const tourSteps = [
   {
     id: "driving",
     title: "Driving safety",
-    description: "StillHere monitors your speed and detects crashes. If something happens, your contacts are alerted after a 60-second countdown.",
+    description: "StillHere monitors your speed and watches for possible crashes. If something happens, the alert flow attempts to reach your contacts after a 60-second countdown.",
     mockup: "driving",
   },
   {
     id: "watch",
     title: "Apple Watch companion",
-    description: "Check in, send SOS, and monitor your heart rate right from your wrist. Fall detection works even when your phone is across the room.",
+    description: "Check in, send SOS, and monitor your heart rate right from your wrist. Fall sensing works even when your phone is across the room.",
     mockup: "watch",
   },
   {
@@ -317,7 +317,7 @@ function SOSScreen() {
           </div>
         </div>
         <p className="text-[9px] text-gray-400 text-center">
-          Sends an immediate alert to all your contacts right away
+          Starts the alert flow and attempts to reach all your contacts right away
         </p>
       </div>
     </div>
@@ -356,7 +356,7 @@ function DiscreetScreen() {
           </div>
         </div>
         <p className="text-[8px] text-gray-400 text-center">
-          No confirmation, no sound. Your contacts are notified quietly.
+          No confirmation, no sound. We attempt to reach your contacts quietly.
         </p>
       </div>
     </div>
@@ -787,10 +787,10 @@ function DrivingScreen() {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
           <div className="flex items-center gap-2">
             <Shield className="h-3.5 w-3.5 text-amber-500" />
-            <p className="text-[9px] text-amber-700 font-medium">Crash detection active</p>
+            <p className="text-[9px] text-amber-700 font-medium">Possible crash alerts active</p>
           </div>
           <p className="text-[8px] text-amber-600 mt-1">
-            If a crash is detected, your contacts are alerted after 60 seconds
+            If a possible crash is detected, the alert flow attempts to reach your contacts after 60 seconds
           </p>
         </div>
         <div className="mt-auto bg-red-500 rounded-lg py-2 text-center">
@@ -834,7 +834,7 @@ function WatchScreen() {
       <div className="mt-4 space-y-1.5 text-center">
         <div className="flex items-center justify-center gap-1.5">
           <Activity className="h-3 w-3 text-orange-500" />
-          <p className="text-[9px] text-gray-600 font-medium">Fall detection active</p>
+          <p className="text-[9px] text-gray-600 font-medium">Fall sensing active</p>
         </div>
         <div className="flex items-center justify-center gap-1.5">
           <Heart className="h-3 w-3 text-red-500" />

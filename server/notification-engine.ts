@@ -103,7 +103,7 @@ export async function notifySubjectConfirmation(
 ): Promise<void> {
   let body: string;
   if (hadIncident) {
-    body = "You're checked in. Your watchers have been notified you're safe.";
+    body = "You're checked in. We let your watchers know you're safe.";
   } else if (method === "call") {
     body = "Got it. You're checked in by phone. We've let your contacts know.";
   } else if (method === "sms") {

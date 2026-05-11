@@ -121,7 +121,7 @@ export default function SatellitePage() {
                 <p className="text-sm text-muted-foreground">
                   Connect your satellite communicator (Garmin inReach, SPOT, etc.) to StillHere. 
                   When you're out of cell range, your device can send checkins and SOS alerts 
-                  through its satellite network, and we'll notify your emergency contacts just 
+                  through its satellite network, and we'll attempt to reach your emergency contacts just 
                   like a regular in-app alert.
                 </p>
               </div>

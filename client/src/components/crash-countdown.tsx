@@ -58,7 +58,7 @@ export default function CrashCountdown({ impactForce, onCancel, onConfirmSos }: 
       </div>
 
       <p className="text-white/70 text-sm mb-8">
-        Emergency contacts will be notified in {seconds} seconds
+        We will attempt to reach your emergency contacts in {seconds} seconds
       </p>
 
       <div className="flex flex-col gap-4 w-full max-w-xs">

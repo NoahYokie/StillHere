@@ -337,7 +337,7 @@ export async function sendCrashEmail(
   const speedInfo = speedKmh ? ` while travelling at about <strong>${Math.round(speedKmh)} km/h</strong>` : "";
   const subject = safeSubject(`Urgent: Possible crash detected for ${userName} (StillHere)`);
   const eventLine = `A possible vehicle crash has been detected for <strong>${safeName}</strong>${speedInfo}. Their phone reported a sudden impact and stopped moving.`;
-  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We notify you immediately when crash detection is triggered.`;
+  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We attempt to reach you when a possible crash is detected. StillHere is not an emergency response service.`;
 
   const enriched = await enrichContext(context);
   const body = renderEmail({

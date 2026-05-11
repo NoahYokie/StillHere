@@ -262,7 +262,7 @@ export function getUserContext(userId: string): UserContext {
 
   if (state.isTripping && state.tripStartedAt) {
     const activity = state.lastActivity;
-    let verb = "On the way";
+    let verb = "Heading out";
     if (activity === "driving") verb = "Driving";
     else if (activity === "walking") verb = "Heading out";
     else if (activity === "running") verb = "On a run";

@@ -29,7 +29,7 @@ function PhoneScreen({ stage }: { stage: Stage }) {
           <div className="bg-white rounded-xl px-3 md:px-4 py-2 md:py-3 shadow-sm border border-gray-100 text-center">
             <div className="flex items-center justify-center gap-1 mb-0.5">
               <ShieldCheck className="h-3 w-3 md:h-3.5 md:w-3.5 text-emerald-500" />
-              <p className="text-[9px] md:text-[11px] font-semibold text-emerald-700">You're Protected</p>
+              <p className="text-[9px] md:text-[11px] font-semibold text-emerald-700">Safety Circle ready</p>
             </div>
             <p className="text-[7px] md:text-[9px] text-gray-500">Sharing with 2 Guardians</p>
           </div>
@@ -187,8 +187,8 @@ function PhoneScreen({ stage }: { stage: Stage }) {
           </div>
         </div>
         <div className="mt-auto bg-emerald-50 border border-emerald-200 rounded-xl p-2 md:p-2.5">
-          <p className="text-[9px] md:text-[11px] font-semibold text-emerald-800">A calm, protected week.</p>
-          <p className="text-[7px] md:text-[9px] text-emerald-700 mt-0.5">StillHere kept watch. You stayed in control.</p>
+          <p className="text-[9px] md:text-[11px] font-semibold text-emerald-800">A calm, steady week.</p>
+          <p className="text-[7px] md:text-[9px] text-emerald-700 mt-0.5">StillHere watched the schedule. You stayed in control.</p>
         </div>
       </div>
     </div>
@@ -240,7 +240,7 @@ function WatchScreen({ stage }: { stage: Stage }) {
             <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-amber-500 flex items-center justify-center animate-pulse">
               <Activity className="h-4 w-4 md:h-5 md:w-5 text-white" />
             </div>
-            <p className="text-[6px] md:text-[7px] font-bold text-amber-400">Fall detected</p>
+            <p className="text-[6px] md:text-[7px] font-bold text-amber-400">Possible fall sensed</p>
             <p className="text-[5px] md:text-[6px] text-gray-400">Are you okay?</p>
           </div>
         )}
@@ -378,10 +378,10 @@ export default function LandingPage() {
                 <span className="text-white/90">StillHere checks on you.</span>
               </h1>
               <p className="text-[1rem] md:text-xl text-white/85 leading-relaxed mb-4 md:mb-5 text-center md:text-left">
-                One tap tells your people you're okay. If you don't respond, StillHere escalates. Notification, SMS, phone call. Then alerts your Safety Circle.
+                One tap tells your people you're okay. If you don't respond, StillHere escalates. Notification, SMS, phone call. Then attempts to reach your Safety Circle.
               </p>
               <p className="hidden md:block text-sm text-white/70 leading-relaxed mb-6 md:mb-8 text-left">
-                Built for families, seniors, solo livers, and lone workers. Daily safety check ins, panic SOS button, fall detection, live GPS location sharing, and a Safety Circle that gets clear next steps.
+                Built for families, seniors, solo livers, and lone workers. Daily safety check ins, panic SOS button, fall sensing, live GPS location sharing, and a Safety Circle that gets clear next steps.
               </p>
 
               <div className="space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3">
@@ -449,7 +449,7 @@ export default function LandingPage() {
                 <FloatingCard
                   icon={Users}
                   title="Automatic escalation"
-                  body="If we still can't reach you, your Safety Circle is alerted."
+                  body="If we still can't reach you, we attempt to reach your Safety Circle."
                   color="bg-violet-500"
                   className="-left-[230px] top-[155px]"
                 />
@@ -483,7 +483,7 @@ export default function LandingPage() {
         <div className="max-w-6xl md:mx-auto grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { icon: Bell, title: "Smart reminders", body: "Notification, SMS, and call. One step at a time.", color: "bg-primary" },
-            { icon: Users, title: "Automatic escalation", body: "Your Safety Circle is alerted if we still can't reach you.", color: "bg-violet-500" },
+            { icon: Users, title: "Automatic escalation", body: "We attempt to reach your Safety Circle if we still can't reach you.", color: "bg-violet-500" },
             { icon: MessageCircle, title: "Check in your way", body: "App, SMS reply, or phone call.", color: "bg-emerald-500" },
             { icon: ShieldCheck, title: "People you trust", body: "Your Safety Circle knows when action is needed.", color: "bg-rose-500" },
           ].map((c) => (
@@ -508,7 +508,7 @@ export default function LandingPage() {
             </div>
             <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">How StillHere works</h2>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              A complete safety loop that keeps trying before your people are alerted.
+              A complete safety loop that keeps trying before we attempt to reach your people.
             </p>
           </div>
 
@@ -519,7 +519,7 @@ export default function LandingPage() {
               { num: 2, title: "Missed check in detected", desc: "First, we notify you in the app.", icon: Bell, color: "bg-primary" },
               { num: 3, title: "SMS fallback", desc: "If you don't respond, we text you. Reply YES to check in.", icon: MessageCircle, color: "bg-primary" },
               { num: 4, title: "Phone call check in", desc: "Still no response? We call you. Press 1 to confirm you're okay.", icon: Phone, color: "bg-primary" },
-              { num: 5, title: "Safety Circle alerted", desc: "If we still can't reach you, your guardians are notified with clear next steps.", icon: Users, color: "bg-accent" },
+              { num: 5, title: "Safety Circle reached", desc: "If we still can't reach you, we attempt to reach your guardians with clear next steps.", icon: Users, color: "bg-accent" },
             ].map((s, i, arr) => (
               <div key={s.num} className="flex gap-4">
                 <div className="flex flex-col items-center">
@@ -544,7 +544,7 @@ export default function LandingPage() {
               { num: 2, title: "Missed check in detected", desc: "First, we notify you in the app.", icon: Bell, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
               { num: 3, title: "SMS fallback", desc: "If you don't respond, we text you. Reply YES to check in.", icon: MessageCircle, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
               { num: 4, title: "Phone call check in", desc: "Still no response? We call you. Press 1 to confirm you're okay.", icon: Phone, color: "bg-primary text-white", ring: "bg-primary/15 text-primary" },
-              { num: 5, title: "Safety Circle alerted", desc: "If we still can't reach you, your guardians are notified with clear next steps.", icon: Users, color: "bg-accent text-white", ring: "bg-accent/15 text-accent" },
+              { num: 5, title: "Safety Circle reached", desc: "If we still can't reach you, we attempt to reach your guardians with clear next steps.", icon: Users, color: "bg-accent text-white", ring: "bg-accent/15 text-accent" },
             ].map((s, i, arr) => (
               <div key={s.num} className="relative">
                 <div className="text-center">
@@ -609,11 +609,11 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
             {[
               { icon: Users, title: "Family safety", body: "A family check in app that does more than show a map. Daily check ins, SOS, and shared places.", color: "from-primary/10 to-primary/5 text-primary" },
-              { icon: Heart, title: "Seniors and elderly parents", body: "GPS location, fall detection, and gentle daily check ins. Reassurance without constant phone calls.", color: "from-rose-100 to-rose-50 dark:from-rose-900/20 dark:to-rose-900/10 text-rose-600 dark:text-rose-400" },
-              { icon: HomeIcon, title: "Living alone", body: "A safety net for solo livers. If something happens, your people are alerted automatically.", color: "from-teal-100 to-teal-50 dark:from-teal-900/20 dark:to-teal-900/10 text-teal-600 dark:text-teal-400" },
+              { icon: Heart, title: "Seniors and elderly parents", body: "GPS location, fall sensing, and gentle daily check ins. Reassurance without constant phone calls.", color: "from-rose-100 to-rose-50 dark:from-rose-900/20 dark:to-rose-900/10 text-rose-600 dark:text-rose-400" },
+              { icon: HomeIcon, title: "Living alone", body: "An extra safety loop for solo livers. If something happens, the alert flow attempts to reach your people automatically.", color: "from-teal-100 to-teal-50 dark:from-teal-900/20 dark:to-teal-900/10 text-teal-600 dark:text-teal-400" },
               { icon: ShieldCheck, title: "Lone worker safety", body: "A check in app for lone workers and field staff. Safety timer, SOS, and shift tracking.", color: "from-indigo-100 to-indigo-50 dark:from-indigo-900/20 dark:to-indigo-900/10 text-indigo-600 dark:text-indigo-400" },
               { icon: MoonStar, title: "Night walks and late commute", body: "Share your walk home and alert your people if you stop or feel unsafe. Personal safety on your phone.", color: "from-violet-100 to-violet-50 dark:from-violet-900/20 dark:to-violet-900/10 text-violet-600 dark:text-violet-400" },
-              { icon: Car, title: "Driving safety", body: "Crash detection, live route, and auto SOS countdown. Drive with backup.", color: "from-amber-100 to-amber-50 dark:from-amber-900/20 dark:to-amber-900/10 text-amber-600 dark:text-amber-400" },
+              { icon: Car, title: "Driving safety", body: "Possible crash alerts, live route, and auto SOS countdown. Drive with backup.", color: "from-amber-100 to-amber-50 dark:from-amber-900/20 dark:to-amber-900/10 text-amber-600 dark:text-amber-400" },
               { icon: Plane, title: "Solo travel", body: "Your Safety Circle stays informed when you're away from home.", color: "from-cyan-100 to-cyan-50 dark:from-cyan-900/20 dark:to-cyan-900/10 text-cyan-600 dark:text-cyan-400" },
               { icon: Stethoscope, title: "Recovery and post surgery", body: "Extra support after illness, surgery, or hospital discharge.", color: "from-emerald-100 to-emerald-50 dark:from-emerald-900/20 dark:to-emerald-900/10 text-emerald-600 dark:text-emerald-400" },
               { icon: Shield, title: "Women's safety", body: "Discreet panic SOS, live location share, and a circle of trusted people one tap away.", color: "from-pink-100 to-pink-50 dark:from-pink-900/20 dark:to-pink-900/10 text-pink-600 dark:text-pink-400" },
@@ -655,14 +655,14 @@ export default function LandingPage() {
               { icon: MapPin, title: "Live GPS location", body: "Share real time location when it matters and pause when it doesn't.", color: "bg-cyan-100 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400" },
               { icon: Footprints, title: "Safe Walk and Safe Ride", body: "Share your trip and get help if you don't arrive on time.", color: "bg-teal-100 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400" },
               { icon: Clock, title: "Safety Timer", body: "A dead man's switch for solo activities. Cancel before time runs out.", color: "bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400" },
-              { icon: Car, title: "Drive and crash detection", body: "Speedometer, live route, and auto SOS countdown after a crash.", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" },
-              { icon: Activity, title: "Fall detection", body: "If a fall is detected and you don't respond, StillHere starts an emergency flow.", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-500" },
+              { icon: Car, title: "Drive and possible crash alerts", body: "Speedometer, live route, and auto SOS countdown after a possible crash.", color: "bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400" },
+              { icon: Activity, title: "Fall sensing", body: "If a fall is sensed and you don't respond, StillHere starts the alert flow.", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-500" },
               { icon: Map, title: "Geofencing", body: "Get alerts when someone arrives at home, school, or work, or leaves a safe zone.", color: "bg-lime-100 dark:bg-lime-900/20 text-lime-600 dark:text-lime-400" },
               { icon: Users, title: "Family Mode", body: "A map first family hub with live pins, shared places, and group chat.", color: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400" },
               { icon: Eye, title: "Guardian Map", body: "One screen view of every person you watch. Color coded and live.", color: "bg-sky-100 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400" },
               { icon: MoonStar, title: "Sleep protection", body: "Quiet hours so non emergency notifications don't wake you up.", color: "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400" },
               { icon: BarChart3, title: "Weekly Safety Record", body: "A clear receipt of what was handled and what was resolved.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
-              { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, fall detection, and heart rate from your wrist.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
+              { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, fall sensing, and heart rate from your wrist.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
               { icon: Lock, title: "Privacy controls", body: "Precise, area only, presence only, or paused sharing. You decide.", color: "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300" },
             ].map((f) => (
               <div key={f.title} className="rounded-xl bg-card border border-border p-5 hover-elevate" data-testid={`feature-${f.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
@@ -693,7 +693,7 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
             {[
-              { icon: Activity, title: "Fall detection", body: "If a fall is detected and you don't respond, StillHere can start an emergency flow.", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-500" },
+              { icon: Activity, title: "Fall sensing", body: "If a fall is sensed and you don't respond, StillHere can start the alert flow.", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-500" },
               { icon: Hand, title: "Wrist check in", body: "Check in from your watch without reaching for your phone.", color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-500" },
               { icon: AlertTriangle, title: "SOS", body: "Trigger help quickly from your wrist.", color: "bg-red-100 dark:bg-red-900/30 text-red-500" },
               { icon: Heart, title: "Heart and health context", body: "Health signals can help your Safety Circle understand what's happening.", color: "bg-rose-100 dark:bg-rose-900/30 text-rose-500" },
@@ -714,7 +714,7 @@ export default function LandingPage() {
                 <Smartphone className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold mb-1 text-sm md:text-base">Phone only? You're still covered.</h3>
+                <h3 className="font-semibold mb-1 text-sm md:text-base">Phone only? The check in loop still works.</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   The full check in safety loop works without a smartwatch. Wearable features add an extra layer when you have one.
                 </p>
@@ -765,9 +765,9 @@ export default function LandingPage() {
           <div className="text-center mb-12 md:mb-14">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-full text-emerald-600 dark:text-emerald-400 text-xs font-medium mb-4">
               <Server className="h-3.5 w-3.5" />
-              <span>Always watching the clock</span>
+              <span>Server side schedule</span>
             </div>
-            <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">StillHere keeps watch even when your phone goes quiet</h2>
+            <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">StillHere checks your schedule even when your phone goes quiet</h2>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               If your phone dies, loses signal, or you miss a check in, StillHere follows your safety plan from the server.
             </p>

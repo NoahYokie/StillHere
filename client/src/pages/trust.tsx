@@ -19,7 +19,7 @@ export default function TrustPage() {
                 <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
                 <div>
                   <h1 className="text-xl font-semibold" data-testid="text-page-title">Trust & Safety</h1>
-                  <p className="text-sm opacity-90">How StillHere protects you</p>
+                  <p className="text-sm opacity-90">How StillHere supports you</p>
                 </div>
               </div>
             </div>
@@ -70,7 +70,7 @@ export default function TrustPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">*</span>
-                <span>If you don't respond, we notify your emergency contacts.</span>
+                <span>If you don't respond, we attempt to reach your emergency contacts.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">*</span>
@@ -128,7 +128,7 @@ export default function TrustPage() {
             <ul className="space-y-2 text-muted-foreground">
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">*</span>
-                <span>Emergency contacts are notified first, one by one in the order you set.</span>
+                <span>We attempt to reach your emergency contacts first, one by one in the order you set.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">*</span>
@@ -136,7 +136,7 @@ export default function TrustPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">*</span>
-                <span>Contacts are reached via SMS, push notifications, and email to make sure someone responds.</span>
+                <span>We try SMS, push notifications, and email so someone has a chance to respond. SMS delivery is best-effort and depends on carrier.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-1">*</span>

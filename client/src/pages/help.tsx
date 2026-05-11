@@ -10,7 +10,7 @@ const faqs = [
     questions: [
       {
         q: "What is StillHere?",
-        a: "StillHere is a safety checkin app designed for people who live alone, elderly individuals, and lone workers. You check in once a day to let your emergency contacts know you're okay. If you miss a checkin, your contacts are automatically notified so someone can check on you.",
+        a: "StillHere is a safety checkin app designed for people who live alone, elderly individuals, and lone workers. You check in once a day to let your emergency contacts know you're okay. If you miss a checkin, the app attempts to reach your contacts so someone can check on you. StillHere is not an emergency response service and SMS delivery is best-effort.",
       },
       {
         q: "How do I sign up?",
@@ -18,7 +18,7 @@ const faqs = [
       },
       {
         q: "Do my emergency contacts need the app?",
-        a: "No. Your contacts are notified by text message (SMS). They don't need a smartphone, the app, or even internet access. If they do have the app, they also get push notifications and access to a watcher dashboard with more details.",
+        a: "No. We attempt to reach your contacts by text message (SMS). They don't need a smartphone, the app, or even internet access. If they do have the app, they also get push notifications and access to a watcher dashboard with more details. SMS delivery is best-effort and depends on carrier.",
       },
     ],
   },
@@ -27,11 +27,11 @@ const faqs = [
     questions: [
       {
         q: "How does the checkin work?",
-        a: "Open the app and tap the green \"I'm OK\" button. That's it. Your contacts are notified that you're safe, and the system resets for the next day.",
+        a: "Open the app and tap the green \"I'm OK\" button. That's it. We let your contacts know you're safe, and the system resets for the next day.",
       },
       {
         q: "What happens if I forget to check in?",
-        a: "First, you'll get a reminder notification. If you still don't check in after a grace period, your emergency contacts are contacted one by one via SMS until someone responds.",
+        a: "First, you'll get a reminder notification. If you still don't check in after a grace period, we attempt to reach your emergency contacts one by one via SMS until someone responds.",
       },
       {
         q: "Can I check in by text message?",
@@ -43,15 +43,15 @@ const faqs = [
       },
       {
         q: "Can I pause checkins?",
-        a: "Yes. You can pause alerts anytime from Settings. Choose 2 hours, 6 hours, or until tomorrow morning. While paused, we won't send reminders or notify your contacts if you miss a checkin.",
+        a: "Yes. You can pause alerts anytime from Settings. Choose 2 hours, 6 hours, or until tomorrow morning. While paused, we won't send reminders or attempt to reach your contacts if you miss a checkin.",
       },
       {
         q: "What is the grace period?",
-        a: "After your checkin is due, we wait 10 to 30 minutes (you choose) before notifying your emergency contacts. This gives you extra time to respond if you're busy.",
+        a: "After your checkin is due, we wait 10 to 30 minutes (you choose) before attempting to reach your emergency contacts. This gives you extra time to respond if you're busy.",
       },
       {
         q: "How many reminders can I get?",
-        a: "You can choose none, one, or two reminders in Settings. We recommend at least one reminder so you have a chance to respond before your contacts are notified.",
+        a: "You can choose none, one, or two reminders in Settings. We recommend at least one reminder so you have a chance to respond before we attempt to reach your contacts.",
       },
     ],
   },
@@ -60,19 +60,19 @@ const faqs = [
     questions: [
       {
         q: "What is the SOS button?",
-        a: "The red \"I Need Help\" button on the home screen sends an immediate alert to all your emergency contacts. It asks for confirmation first to prevent accidental triggers.",
+        a: "The red \"I Need Help\" button on the home screen starts the alert flow and immediately attempts to reach all your emergency contacts. It asks for confirmation first to prevent accidental triggers. SMS delivery is best-effort and StillHere is not an emergency response service.",
       },
       {
         q: "What is the discreet SOS?",
         a: "If you're in a situation where you can't draw attention to what you're doing, hold the discreet SOS button for 3 seconds. It sends an alert silently with no confirmation dialog and no sound. Enable it in Settings.",
       },
       {
-        q: "How does fall detection work?",
-        a: "Fall detection uses your phone or smartwatch sensors to detect a sudden freefall followed by a hard impact, then stillness. If detected, a 60-second countdown starts. If you don't cancel it, an SOS is automatically sent to your contacts.",
+        q: "How does fall sensing work?",
+        a: "Fall sensing uses your phone or smartwatch sensors to look for a sudden freefall followed by a hard impact, then stillness. If a possible fall is detected, a 60-second countdown starts. If you don't cancel it, the SOS flow attempts to reach your contacts. This is a best-effort feature, not a guaranteed medical detector, and may miss some falls or trigger on non-fall motion.",
       },
       {
-        q: "Does fall detection work without a smartwatch?",
-        a: "Fall detection works on your phone using its accelerometer. However, a smartwatch provides more reliable detection because it's always on your body, even when your phone is across the room.",
+        q: "Does fall sensing work without a smartwatch?",
+        a: "Fall sensing works on your phone using its accelerometer. However, a smartwatch provides more reliable signals because it's always on your body, even when your phone is across the room.",
       },
     ],
   },
@@ -89,7 +89,7 @@ const faqs = [
       },
       {
         q: "What is geofencing?",
-        a: "You can set up safe zones (like home or work). If you leave a safe zone, your contacts are automatically notified. This is useful for people with memory concerns or caregivers monitoring loved ones.",
+        a: "You can set up safe zones (like home or work). If you leave a safe zone, we attempt to reach your contacts. This is useful for people with memory concerns or caregivers monitoring loved ones.",
       },
       {
         q: "Can my contacts see my location during an alert?",
@@ -102,7 +102,7 @@ const faqs = [
     questions: [
       {
         q: "How does driving safety work?",
-        a: "When enabled, StillHere monitors your speed using GPS during drive sessions. If it detects a sudden stop consistent with a crash, a 60-second countdown begins. If you don't cancel, all your contacts are alerted via SMS, push notifications, and email.",
+        a: "When enabled, StillHere monitors your speed using GPS during drive sessions. If it detects a sudden stop consistent with a possible crash, a 60-second countdown begins. If you don't cancel, the alert flow attempts to reach all your contacts via SMS, push notifications, and email. SMS delivery is best-effort and depends on carrier.",
       },
       {
         q: "Can I set a speed limit?",
@@ -136,7 +136,7 @@ const faqs = [
     questions: [
       {
         q: "Which smartwatches are supported?",
-        a: "StillHere has a companion app for Apple Watch with one-tap checkin, SOS, fall detection, and heart rate monitoring. Wear OS support is planned.",
+        a: "StillHere has a companion app for Apple Watch with one-tap checkin, SOS, fall sensing, and heart rate monitoring. Wear OS support is planned.",
       },
       {
         q: "What about heart rate monitoring?",

@@ -140,7 +140,7 @@ export default function DrivePage() {
         onSessionStarted: () => {
           setDriveActive(true);
           driveStartTimeRef.current = Date.now();
-          toast({ title: "Drive started", description: "Speed monitoring and crash detection active" });
+          toast({ title: "Drive started", description: "Speed monitoring and possible crash alerts active" });
         },
         onSessionEnded: () => {
           setDriveActive(false);
@@ -217,7 +217,7 @@ export default function DrivePage() {
                 <div>
                   <p className="font-medium text-amber-800 dark:text-amber-300 text-sm">Driving Safety is disabled</p>
                   <p className="text-xs text-amber-700/80 dark:text-amber-400/60 mt-1">
-                    Enable it in Settings to use speed monitoring and crash detection.
+                    Enable it in Settings to use speed monitoring and possible crash alerts.
                   </p>
                   <Button size="sm" variant="outline" className="mt-2" onClick={() => navigate("/settings")} data-testid="button-enable-driving">
                     Go to Settings
@@ -333,8 +333,8 @@ export default function DrivePage() {
               <CardContent className="pt-4 pb-4 flex items-center gap-3">
                 <Shield className="w-5 h-5 text-blue-500 flex-shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Crash detection active</p>
-                  <p className="text-xs text-muted-foreground">If a crash is detected, your emergency contacts will be notified automatically.</p>
+                  <p className="text-sm font-medium">Possible crash alerts active</p>
+                  <p className="text-xs text-muted-foreground">If a possible crash is detected, the alert flow attempts to reach your emergency contacts automatically. SMS delivery is best-effort.</p>
                 </div>
               </CardContent>
             </Card>
@@ -359,7 +359,7 @@ export default function DrivePage() {
                 </div>
                 <h2 className="text-xl font-semibold mb-2">Start a Drive</h2>
                 <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
-                  Monitor your speed, detect crashes, and track your route. Emergency contacts get notified instantly if something goes wrong.
+                  Monitor your speed, watch for possible crashes, and track your route. The alert flow attempts to reach your emergency contacts if something goes wrong.
                 </p>
 
                 <div className="grid grid-cols-3 gap-3 mb-6 text-center">
@@ -370,7 +370,7 @@ export default function DrivePage() {
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3">
                     <Zap className="w-5 h-5 text-red-500 mx-auto mb-1" />
-                    <p className="text-xs font-medium">Crash Detection</p>
+                    <p className="text-xs font-medium">Possible Crash Alerts</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">Auto SOS on impact</p>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3">

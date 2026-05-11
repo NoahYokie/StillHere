@@ -65,7 +65,7 @@ export function ProtectionPanel() {
               <p className="font-medium text-sm text-foreground" data-testid="text-protection-summary">
                 {watcherCount > 0
                   ? `You're sharing your safety with ${watcherCount} ${watcherCount === 1 ? "person" : "people"}`
-                  : "No one is watching over you yet"}
+                  : "No one is part of your Safety Circle yet"}
               </p>
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <ModeIcon className="h-3 w-3" />
@@ -250,7 +250,7 @@ export function SafetyDrillButton() {
     onSuccess: () => {
       toast({
         title: "Safety test started",
-        description: "Your Safety Circle has been notified. They'll be asked to confirm they're ready. This test ends automatically in 60 seconds.",
+        description: "We are attempting to reach your Safety Circle. They'll be asked to confirm they're ready. This test ends automatically in 60 seconds.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
     },

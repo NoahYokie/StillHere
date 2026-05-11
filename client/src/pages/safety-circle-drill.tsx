@@ -80,7 +80,7 @@ export default function SafetyCircleDrillPage() {
         window.history.replaceState({}, "", url.toString());
       }
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
-      toast({ title: "Drill started", description: "Your Safety Circle has been notified." });
+      toast({ title: "Drill started", description: "We are attempting to reach your Safety Circle." });
     },
     onError: (err: any) => {
       toast({ title: "Couldn't start drill", description: err.message || "Please try again.", variant: "destructive" });
@@ -221,7 +221,7 @@ function DrillResults({ drill, onRunAnother, onDone }: { drill: DrillState; onRu
         </h2>
         <p className="text-sm text-muted-foreground mt-1.5">
           {allResponded
-            ? "Your Safety Circle responded. You're protected."
+            ? "Your Safety Circle responded. They are ready."
             : `${drill.respondedCount} of ${drill.totalGuardians} responded so far`}
         </p>
       </section>

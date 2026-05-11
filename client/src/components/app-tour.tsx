@@ -33,7 +33,7 @@ const STEPS: TourStep[] = [
     id: "sos",
     selector: "[data-tour='sos']",
     title: "Need help right now?",
-    body: "The red SOS sends an immediate alert to your Safety Circle with your location. No waiting.",
+    body: "The red SOS starts the alert flow and immediately attempts to reach your Safety Circle with your location. No waiting.",
   },
   {
     id: "safewalk",
@@ -49,7 +49,7 @@ const STEPS: TourStep[] = [
   },
   {
     id: "done",
-    title: "You're protected.",
+    title: "Safety Circle ready.",
     body: "Add a guardian or two to your Safety Circle and you're set. Welcome to StillHere.",
   },
 ];

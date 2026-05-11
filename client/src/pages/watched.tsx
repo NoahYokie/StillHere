@@ -77,7 +77,7 @@ function ClaimButton({ incidentId, userId }: { incidentId: string; userId: strin
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
-      toast({ title: "You've got this", description: "Other guardians have been notified you're handling it." });
+      toast({ title: "You've got this", description: "We let other guardians know you're handling it." });
     },
     onError: (err: any) => {
       toast({ title: "Could not claim", description: err.message || "Someone else may already be handling this.", variant: "destructive" });
@@ -110,7 +110,7 @@ function DrillAcknowledgeButton({ drillId, userName, userId }: { drillId: string
     onSuccess: () => {
       setAcknowledged(true);
       queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
-      toast({ title: "You're ready", description: `${userName} has been notified that you've got their back.` });
+      toast({ title: "You're ready", description: `We let ${userName} know you've got their back.` });
     },
     onError: (err: any) => {
       const msg = err.message || "";
@@ -357,7 +357,7 @@ export default function WatchedPage() {
           <AlertDialogHeader>
             <AlertDialogTitle data-testid="text-optout-title">Stop watching {confirmOptOut?.userName}?</AlertDialogTitle>
             <AlertDialogDescription data-testid="text-optout-description">
-              You will no longer receive their safety alerts, missed checkin notifications, or SOS messages. {confirmOptOut?.userName} will be notified that you have removed yourself. This can be reversed within 30 days.
+              You will no longer receive their safety alerts, missed checkin notifications, or SOS messages. We will attempt to let {confirmOptOut?.userName} know that you have removed yourself. This can be reversed within 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -772,7 +772,7 @@ function NotificationToggle({ userId }: { userId: string }) {
     <div className="flex items-center justify-between mb-3 py-2 border-t border-border" data-testid={`notif-prefs-${userId}`}>
       <div>
         <p className="text-xs font-medium">Arrival notifications</p>
-        <p className="text-xs text-muted-foreground">Get notified when they arrive</p>
+        <p className="text-xs text-muted-foreground">We'll try to notify you when they arrive</p>
       </div>
       <Switch
         checked={data?.arrivalNotifications ?? true}

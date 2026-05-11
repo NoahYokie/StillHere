@@ -302,7 +302,7 @@ async function notifyContact(
 
   if (contact.linkedUserId) {
     await sendPushNotification(contact.linkedUserId, {
-      title: reason === "sos" ? `Emergency: ${userName} needs help` : `Safety Alert: ${userName} has not checked in`,
+      title: reason === "sos" ? `SOS from ${userName}` : `Safety Alert: ${userName} has not checked in`,
       body: reason === "sos"
         ? `${userName} has activated an emergency SOS and needs immediate assistance. Open the app to respond.`
         : `${userName} has not completed their scheduled safety checkin. Open the app to respond.`,
@@ -1274,7 +1274,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Auto checkin must be a boolean" });
       }
       if (fallDetection !== undefined && typeof fallDetection !== "boolean") {
-        return res.status(400).json({ error: "Fall detection must be a boolean" });
+        return res.status(400).json({ error: "Fall sensing must be a boolean" });
       }
       if (discreetSos !== undefined && typeof discreetSos !== "boolean") {
         return res.status(400).json({ error: "Discreet SOS must be a boolean" });
@@ -1938,8 +1938,8 @@ export async function registerRoutes(
           await db.update(users).set({ setupConfirmedAt: new Date() }).where(eq(users.id, userId));
           const primaryContact = savedContacts[0];
           await sendPushNotification(userId, {
-            title: "You're protected",
-            body: `${primaryContact.name} is now watching over you. You're all set.`,
+            title: "Safety Circle ready",
+            body: `${primaryContact.name} is now part of your Safety Circle. You're all set.`,
             url: "/",
             tag: "setup-confirmed",
           });
@@ -3754,7 +3754,7 @@ export async function registerRoutes(
         
         let replyMsg = `StillHere Confirmation\n\nHi ${escapeXml(user.name)}, your safety checkin has been recorded successfully.`;
         if (result.hadIncident && hasContacts) {
-          replyMsg += `\n\nYour emergency contact${contacts.length > 1 ? "s" : ""} (${escapeXml(contactNames)}) ${contacts.length > 1 ? "have" : "has"} been notified that you are safe. The alert has been resolved.`;
+          replyMsg += `\n\nWe attempted to let your emergency contact${contacts.length > 1 ? "s" : ""} (${escapeXml(contactNames)}) know that you are safe. The alert has been resolved.`;
         } else if (result.hadIncident) {
           replyMsg += `\n\nThe alert has been resolved.`;
         }
@@ -3788,10 +3788,10 @@ export async function registerRoutes(
             nextActionAt: addMinutes(new Date(), userSettings?.escalationMinutes || 20),
           });
         }
-        return res.type("text/xml").send('<Response><Message>SOS alert sent. Your emergency contacts are being notified.</Message></Response>');
+        return res.type("text/xml").send('<Response><Message>SOS alert sent. We are attempting to reach your emergency contacts now. SMS delivery is best-effort.</Message></Response>');
       }
       
-      return res.type("text/xml").send('<Response><Message>Reply YES to check in, or HELP for SOS. StillHere is watching over you.</Message></Response>');
+      return res.type("text/xml").send('<Response><Message>Reply YES to check in, or HELP for SOS. StillHere is part of your safety loop.</Message></Response>');
     } catch (error) {
       console.error("Error in SMS incoming webhook:", error);
       res.type("text/xml").send('<Response><Message>Something went wrong. Please try again.</Message></Response>');
@@ -5755,7 +5755,7 @@ export async function registerRoutes(
     <Pause length="3"/>
     <Say voice="Polly.Joanna-Neural">${calm("Take your time. Press 1 if you're safe. Press 2 if you need help.")}</Say>
   </Gather>
-  <Say voice="Polly.Joanna-Neural">${calm("No response was received. Your safety circle will be notified shortly. Take care.")}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("No response was received. We will attempt to reach your safety circle shortly. Take care.")}</Say>
   <Hangup/>
 </Response>`;
       res.type("text/xml").send(twiml);
@@ -5792,7 +5792,7 @@ export async function registerRoutes(
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm("Wonderful. Thank you for confirming.")}</Say>
   <Pause length="1"/>
-  <Say voice="Polly.Joanna-Neural">${calm("You are now checked in, and your safety circle has been notified that you are safe.")}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("You are now checked in, and we are letting your safety circle know that you are safe.")}</Say>
   <Pause length="1"/>
   <Say voice="Polly.Joanna-Neural">${calm("Take care, and have a lovely day.")}</Say>
   <Pause length="1"/>
@@ -5814,7 +5814,7 @@ export async function registerRoutes(
         if (incident?.wellnessCallStatus === "help") {
           console.log(`[WELLNESS CALL] Press 2 received but incident ${incident.id} already marked help. Ignoring duplicate.`);
           const twimlDup = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Polly.Joanna-Neural">${calm("We hear you. Help is on the way. We are right here with you.")}</Say><Pause length="2"/><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`;
+<Response><Say voice="Polly.Joanna-Neural">${calm("We hear you. We are reaching out to your safety circle right now. We are right here with you.")}</Say><Pause length="2"/><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`;
           return res.type("text/xml").send(twimlDup);
         }
 
@@ -5904,7 +5904,7 @@ export async function registerRoutes(
           const namesLine = notifiedNames.length > 0
             ? `${notifiedNames.slice(0, 3).join(", ")}${notifiedNames.length > 3 ? ` and ${notifiedNames.length - 3} more` : ""}`
             : "your safety circle";
-          const userSmsBody = `StillHere: We hear you. ${namesLine} ${notifiedNames.length === 1 ? "has" : "have"} been alerted and ${notifiedNames.length === 1 ? "is" : "are"} on the way.\n\nIf this is life-threatening, call ${emergency.number} now.\n\nYou are not alone. Stay safe.`;
+          const userSmsBody = `StillHere: We hear you. We are attempting to reach ${namesLine}.\n\nIf this is life-threatening, call ${emergency.number} now. StillHere is not an emergency response service.\n\nYou are not alone. Stay safe.`;
           sendSms(user.phone, userSmsBody).catch((err: any) => {
             console.error(`[WELLNESS CALL] User SMS failed:`, err?.message || err);
           });
@@ -5929,9 +5929,9 @@ export async function registerRoutes(
         const safeEmergency = escapeXml(emergency.number);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm(`We hear you, ${safeUserName}. You are not alone. Help is on the way right now.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We hear you, ${safeUserName}. You are not alone. We are reaching out to your safety circle right now.`)}</Say>
   <Pause length="1"/>
-  <Say voice="Polly.Joanna-Neural">${calm(`${notifiedIds.length} ${notifiedIds.length === 1 ? "person has" : "people have"} been alerted, including ${safePrimary}. We are also sending you a text message with their names.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We are attempting to reach ${notifiedIds.length} ${notifiedIds.length === 1 ? "person" : "people"}, including ${safePrimary}. We are also sending you a text message with their names.`)}</Say>
   <Pause length="1"/>
   <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="15">
     <Say voice="Polly.Joanna-Neural">${calm(`To be connected directly to ${safePrimary} right now, press 1.`)}</Say>
@@ -5967,7 +5967,7 @@ export async function registerRoutes(
       }
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Polly.Joanna-Neural">${calm("We didn't receive a response. Your safety circle will be notified shortly. Take care.")}</Say><Hangup/></Response>`;
+<Response><Say voice="Polly.Joanna-Neural">${calm("We didn't receive a response. We will attempt to reach your safety circle shortly. Take care.")}</Say><Hangup/></Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call gather:", error);
@@ -6251,7 +6251,7 @@ export async function registerRoutes(
       if (cycle >= 3) {
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm(`We need to end this call now so the line stays open for ${safePrimary}, but we are not leaving you. Your safety circle has been alerted, you have a text message from us, and we will check on you again very soon.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We need to end this call now so the line stays open for ${safePrimary}, but we are not leaving you. We have reached out to your safety circle, you have a text message from us, and we will check on you again very soon.`)}</Say>
   <Pause length="1"/>
   <Say voice="Polly.Joanna-Neural">${calm(`If you are in danger right now, please call ${safeEmergency}. You are not alone. Take care.`)}</Say>
   <Hangup/>
@@ -6261,8 +6261,8 @@ export async function registerRoutes(
 
       // Reassurance varies a little per cycle so it doesn't feel robotic
       const reassurance = cycle === 1
-        ? `We are still right here with you. ${safePrimary} has been alerted and is on the way.`
-        : `Hang in there. Your safety circle has been notified, and someone will reach you very soon.`;
+        ? `We are still right here with you. We are attempting to reach ${safePrimary} now.`
+        : `Hang in there. We are still trying to reach your safety circle.`;
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -6281,7 +6281,7 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error in wellness call comfort:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Polly.Joanna-Neural">${calm("You are not alone. Help is on the way. Take care.")}</Say><Hangup/></Response>`);
+<Response><Say voice="Polly.Joanna-Neural">${calm("You are not alone. We are reaching out to your safety circle. Take care.")}</Say><Hangup/></Response>`);
     }
   });
 

@@ -133,7 +133,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
   const nextContact = sortedContacts.find(c => !notifiedIds.includes(c.id));
   if (nextContact && !incident.userNotifiedNoResponseAt) {
     steps.push({
-      label: `${nextContact.name} will be notified if no response`,
+      label: `We'll attempt to reach ${nextContact.name} if no response`,
       done: false,
       icon: <Clock className="h-3.5 w-3.5" />,
     });
@@ -180,7 +180,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
 
             {steps.length === 0 && (
               <p className="text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
-                Your contacts are being notified.
+                We are attempting to reach your contacts.
               </p>
             )}
           </div>
@@ -422,10 +422,10 @@ export default function Home() {
       apiRequest("POST", "/api/sos", sosBody).then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
-          title: "Fall detected - SOS sent",
+          title: "Fall sensed - SOS sent",
           description: sosBody.lat != null
-            ? "Your emergency contacts have been alerted with your location."
-            : "Your emergency contacts have been alerted. Location unavailable, last known location used.",
+            ? "We attempted to reach your emergency contacts with your location."
+            : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
         });
         refreshLocationIfPermitted();
       }).catch(() => {});
@@ -455,8 +455,8 @@ export default function Home() {
           toast({
             title: "Discreet SOS sent",
             description: sosBody.lat != null
-              ? "Your emergency contacts have been alerted with your location."
-              : "Your emergency contacts have been alerted. Location unavailable, last known location used.",
+              ? "We attempted to reach your emergency contacts with your location."
+              : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
           });
           refreshLocationIfPermitted();
         }).catch(() => {});
@@ -515,7 +515,7 @@ export default function Home() {
       localStorage.setItem("stillhere_checkin_count", String(count + 1));
       toast({
         title: "Checked in",
-        description: "Your emergency contacts know you're okay.",
+        description: "We let your emergency contacts know you're okay.",
       });
     },
     onError: () => {
@@ -553,8 +553,8 @@ export default function Home() {
       toast({
         title: "Alert sent",
         description: cached
-          ? "Your emergency contacts were notified with your location."
-          : "Your emergency contacts were notified. Location unavailable, last known location used.",
+          ? "We attempted to reach your emergency contacts with your location."
+          : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
       });
 
       if (status?.settings?.locationMode !== "off") {
@@ -694,7 +694,7 @@ export default function Home() {
             <ShieldCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
           </div>
           <p className="text-base font-semibold text-foreground" data-testid="text-protected-status">
-            {guardianCount > 0 ? "You're Protected" : "Set up your Safety Circle"}
+            {guardianCount > 0 ? "Safety Circle ready" : "Set up your Safety Circle"}
           </p>
           <p className="text-sm text-muted-foreground mt-1" data-testid="text-guardian-count">
             {guardianCount > 0
@@ -836,7 +836,7 @@ export default function Home() {
           <AlertDialogHeader>
             <AlertDialogTitle>Send help alert?</AlertDialogTitle>
             <AlertDialogDescription>
-              We will notify your emergency contacts now.
+              We will attempt to reach your emergency contacts now.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -860,10 +860,10 @@ export default function Home() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-destructive" />
-              Fall detected
+              Possible fall sensed
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base">
-              It looks like you may have fallen. We'll alert your emergency contacts in{" "}
+              It looks like you may have fallen. We'll attempt to reach your emergency contacts in{" "}
               <span className="font-bold text-destructive text-lg">{fallCountdown}</span>{" "}
               seconds unless you dismiss this.
             </AlertDialogDescription>

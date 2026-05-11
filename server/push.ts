@@ -97,7 +97,7 @@ export async function sendReminderPush(userId: string, userName: string): Promis
 export async function sendSosConfirmationPush(userId: string): Promise<void> {
   await sendPushNotification(userId, {
     title: "Help alert sent",
-    body: "Your emergency contacts have been notified.",
+    body: "We attempted to reach your emergency contacts.",
     tag: "sos-confirmation",
   });
 }
@@ -106,7 +106,7 @@ export async function sendIncidentPush(userId: string, userName: string, reason:
   const title = reason === "sos" ? "Help request received" : "Missed checkin alert";
   const body = reason === "sos"
     ? `${userName} has requested help. Check the app for details.`
-    : `${userName} missed their checkin. Your contacts are being notified.`;
+    : `${userName} missed their checkin. We are attempting to reach your contacts.`;
 
   await sendPushNotification(userId, {
     title,

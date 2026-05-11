@@ -379,7 +379,7 @@ export default function FamilyPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/family/places"] });
-      toast({ title: "Place saved", description: "Family will be notified when anyone arrives or leaves." });
+      toast({ title: "Place saved", description: "We'll try to alert the family when anyone arrives or leaves." });
       setShowAddPlace(false);
       setNewPlace({ name: "", icon: "home", radius: 150 });
     },
@@ -417,7 +417,7 @@ export default function FamilyPage() {
           queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
         }
       }
-      toast({ title: `On the way to ${place.name}`, description: "Family is watching your location." });
+      toast({ title: `Heading to ${place.name}`, description: "Family can see your location." });
     } catch (e: any) {
       toast({ title: "Could not share", description: e?.message, variant: "destructive" });
     }
@@ -1450,8 +1450,8 @@ export default function FamilyPage() {
                 <li className="flex items-start gap-2">
                   <Activity className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                   <div>
-                    <strong>Crash &amp; Fall detection</strong>
-                    <p className="text-muted-foreground text-xs">Auto-alerts the family if a crash or fall is detected on a member's device.</p>
+                    <strong>Crash &amp; Fall sensing</strong>
+                    <p className="text-muted-foreground text-xs">Attempts to alert the family if a possible crash or fall is detected on a member's device.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">

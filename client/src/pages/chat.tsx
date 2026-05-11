@@ -461,7 +461,7 @@ export default function ChatPage() {
   async function handleMarkSafe() {
     if (!otherUserId) return;
     await postSystemMessage("system_safe", `${auth?.user?.name || "User"} confirmed they are safe.`);
-    toast({ title: "Marked safe", description: "Your circle has been notified." });
+    toast({ title: "Marked safe", description: "We let your circle know." });
   }
 
   async function handleTriggerSos() {

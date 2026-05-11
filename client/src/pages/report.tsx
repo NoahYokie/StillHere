@@ -234,7 +234,7 @@ export default function ReportPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Activity className="w-4 h-4 text-muted-foreground" />
-                    <span>Fall detection: {report.fallDetectionEnabled ? "Enabled" : "Disabled"}</span>
+                    <span>Fall sensing: {report.fallDetectionEnabled ? "Enabled" : "Disabled"}</span>
                   </div>
                 </div>
               </CardContent>

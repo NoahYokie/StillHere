@@ -23,7 +23,7 @@ export default function TermsOfServicePage() {
 
         <section>
           <h2 className="text-base font-semibold text-foreground mb-2">2. Description of Service</h2>
-          <p>StillHere is a personal safety checkin application that allows users to confirm their wellbeing on a daily schedule. If a checkin is missed, the App notifies designated emergency contacts. Additional features include SOS alerts, live location sharing, driving safety monitoring, fall detection, and heart rate monitoring.</p>
+          <p>StillHere is a personal safety checkin application that allows users to confirm their wellbeing on a daily schedule. If a checkin is missed, the App attempts to reach designated emergency contacts. Additional features include SOS alerts, live location sharing, driving safety monitoring, fall sensing, and heart rate monitoring.</p>
         </section>
 
         <section>
