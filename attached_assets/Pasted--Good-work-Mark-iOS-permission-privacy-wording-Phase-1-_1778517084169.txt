@@ -1,0 +1,121 @@
+ Good work. Mark iOS permission/privacy wording Phase 1 complete.
+
+  Next discussion item: Always Location escalation UX.
+
+  Do not code yet.
+
+  We need to design the safest way to request Always Location only when needed, without weakening background safety features and
+  without triggering App Store rejection.
+
+  Please audit current location permission flow and answer:
+
+  1. Where does the app currently request location permission?
+
+  List files/functions/buttons/routes.
+
+  2. Which features require reliable background location?
+
+  Confirm:
+
+  Safe Walk
+  Safety Timer
+  Drive Safety
+  active sharing
+  SOS
+  missed check-in incident location
+  active shift/on-shift mode
+
+  3. What happens today if the user only grants When In Use?
+
+  For each feature, explain:
+
+  works foreground only
+  works background unreliably
+  fails silently
+  shows warning
+  asks again
+
+  4. Does @transistorsoft/capacitor-background-geolocation support requesting Always after WhenInUse in the current setup?
+
+  If yes, show the API path.
+  If no, explain the required approach.
+
+  5. Proposed UX:
+
+  Before starting a background-location feature, show a calm explanation screen/modal:
+
+  “StillHere needs background location for this feature so your Safety Circle can receive updates if your phone locks or the app is
+  closed. You can change this later in Settings.”
+
+  Buttons:
+
+  Continue
+  Not now
+
+  If user taps Continue:
+  request/guide to Always permission.
+
+  If user taps Not now:
+  allow foreground-only use only if safe, or block the feature with a clear explanation if background location is required.
+
+  6. Feature behavior proposal:
+
+  For Safe Walk:
+  Require Always for full Safe Walk. If not granted, allow only foreground mode with clear warning, or do not start. Recommend
+  safest option.
+
+  For Drive Safety:
+  Likely require Always for reliable crash/route background tracking. Recommend safest option.
+
+  For Safety Timer:
+  If location is only needed at escalation, maybe WhenInUse is enough until escalation, but background reliability may require
+  Always. Recommend.
+
+  For active sharing:
+  Require Always if background sharing is enabled.
+
+  For SOS:
+  Do not block SOS if Always is not granted. Use best available location and continue.
+
+  For missed check-in:
+  Do not block incident. Use last known or request current location when app wakes.
+
+  7. We need App Store-safe wording.
+
+  Avoid:
+
+  tracking you
+  monitoring you
+  keeping you safe guaranteed
+
+  Use:
+
+  background location
+  safety feature you started
+  share updates with your Safety Circle
+  only while this feature is active
+  can be paused or turned off
+
+  8. Return proposed implementation plan.
+
+  Do not build yet.
+
+  Include:
+
+  files to change
+  UX copy
+  permission API calls
+  feature-by-feature behavior
+  fallback behavior if Always denied
+  test plan
+  App Store risk assessment
+
+  Simple explanation:
+
+  We fixed the wording. Now we need to make sure the actual feature still works.
+
+  Apple does not like apps asking for Always Location immediately. So now StillHere asks less aggressively.
+
+  But for safety features to work in the background, the app must ask for Always at the right moment.
+
+  That is the next thing to solve.
