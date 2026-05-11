@@ -25,12 +25,38 @@ export function getVapidPublicKey(): string {
   return VAPID_PUBLIC_KEY;
 }
 
+export interface PushNotificationOptions {
+  // Why this push is going out. Drives audit logging + circuit breaker.
+  // Defaults to "system_alert" so legacy callers still record an audit row.
+  purpose?: import("./outbound-policy").OutboundPurpose;
+  incidentId?: string | null;
+  dedupeKey?: string | null;
+}
+
 export async function sendPushNotification(
   userId: string,
-  payload: { title: string; body: string; url?: string; tag?: string }
+  payload: { title: string; body: string; url?: string; tag?: string },
+  options: PushNotificationOptions = {},
 ): Promise<{ sent: number; failed: number }> {
+  // Best-effort audit. Push is incident-driven and non-billable, so we do
+  // not gate on enforceSendPolicy; we only record the attempt + outcome so
+  // the global per-channel circuit breaker has data to work with.
+  const policy = await import("./outbound-policy");
+  const auditCtx: import("./outbound-policy").SendContext = {
+    channel: "push",
+    purpose: options.purpose || "system_alert",
+    destination: userId,
+    userId,
+    incidentId: options.incidentId ?? null,
+    dedupeKey: options.dedupeKey ?? null,
+  };
+  const recordOutcome = async (status: import("./outbound-policy").OutboundStatus, errorMessage?: string) => {
+    try { await policy.recordSendAttempt(auditCtx, status, { errorMessage }); } catch {}
+  };
+
   if (!configured) {
     console.log(`[PUSH] Not configured - would send to user ${userId}: ${payload.title}`);
+    await recordOutcome("provider_unconfigured", "vapid_missing");
     return { sent: 0, failed: 0 };
   }
 
@@ -42,6 +68,7 @@ export async function sendPushNotification(
     const row = await db.select({ rev: users.isReviewAccount }).from(users).where(eq(users.id, userId)).limit(1);
     if (row[0]?.rev) {
       console.log(`[PUSH] Skipped (review account) for user ${userId}: ${payload.title}`);
+      await recordOutcome("blocked_optout", "review_account");
       return { sent: 0, failed: 0 };
     }
   } catch (e: any) {
@@ -55,6 +82,11 @@ export async function sendPushNotification(
 
   let sent = 0;
   let failed = 0;
+
+  if (subscriptions.length === 0) {
+    await recordOutcome("failed", "no_subscriptions");
+    return { sent: 0, failed: 0 };
+  }
 
   for (const sub of subscriptions) {
     const pushSubscription = {
@@ -80,6 +112,12 @@ export async function sendPushNotification(
       }
       failed++;
     }
+  }
+
+  if (sent > 0) {
+    await recordOutcome("sent", failed > 0 ? `partial_failed=${failed}` : undefined);
+  } else {
+    await recordOutcome("failed", `all_subscriptions_failed=${failed}`);
   }
 
   return { sent, failed };

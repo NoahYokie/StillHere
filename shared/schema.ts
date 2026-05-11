@@ -19,6 +19,55 @@ export const circleRoleEnum = pgEnum("circle_role", ["primary", "backup", "suppo
 export const messageTypeEnum = pgEnum("message_type", ["user", "system_alert", "system_safe", "system_info"]);
 export const familyRoleEnum = pgEnum("family_role", ["admin", "adult", "teen", "child"]);
 export const familyMemberStatusEnum = pgEnum("family_member_status", ["active", "invited", "paused", "removed"]);
+// Outbound communication audit channels. `in_app` covers system_alert / system_safe
+// messages that are delivered through the chat / socket layer (no carrier cost,
+// but still spam-eligible if a buggy loop fires).
+export const outboundChannelEnum = pgEnum("outbound_channel", ["sms", "email", "push", "voice", "in_app"]);
+// Why we sent a message. Drives per-purpose limits + dedupe scoping.
+// Category A (strict per-user/IP/destination limits): otp, family_invite, contact_test,
+//   safety_drill, test_broadcast, marketing.
+// Category B (incident-driven, dedupe-only): sos_alert, missed_checkin_alert,
+//   wellness_call, escalation_alert, all_clear, contact_responded, no_response,
+//   handling_timeout, drive_crash, geofence, reminder, presence, system_alert.
+export const outboundPurposeEnum = pgEnum("outbound_purpose", [
+  "otp",
+  "family_invite",
+  "contact_test",
+  "safety_drill",
+  "test_broadcast",
+  "marketing",
+  "sos_alert",
+  "missed_checkin_alert",
+  "wellness_call",
+  "escalation_alert",
+  "all_clear",
+  "contact_responded",
+  "no_response",
+  "handling_timeout",
+  "drive_crash",
+  "geofence",
+  "reminder",
+  "presence",
+  "system_alert",
+  "drill_acknowledgement",
+  "concern",
+  "recovery",
+]);
+// Lifecycle of a single outbound attempt. `queued` = policy passed, send in flight.
+// `sent` = provider accepted (Twilio messageId returned, push accepted, etc).
+// `delivered` = provider callback confirmed delivery. `failed` = provider error.
+// `blocked_policy` = enforceSendPolicy refused (limit or duplicate).
+// `blocked_optout` = recipient opted out (carrier STOP or in-app flag).
+// `provider_unconfigured` = transport not wired (Twilio/VAPID/Resend missing).
+export const outboundStatusEnum = pgEnum("outbound_status", [
+  "queued",
+  "sent",
+  "delivered",
+  "failed",
+  "blocked_policy",
+  "blocked_optout",
+  "provider_unconfigured",
+]);
 
 // Users table
 export const users = pgTable("users", {
@@ -222,6 +271,18 @@ export const incidents = pgTable("incidents", {
   drillAcknowledgedByContactId: uuid("drill_acknowledged_by_contact_id").references(() => contacts.id),
   drillResponses: text("drill_responses").notNull().default("[]"),
   wellnessCallStatus: text("wellness_call_status"),
+  // Set true when the notification engine could not deliver via the
+  // primary intended channel (SMS or voice) due to a circuit-breaker /
+  // policy block / provider error and had to fall back to push, in-app,
+  // or email. The watcher UI can surface a soft warning ("Some delivery
+  // channels may be delayed"). Never used to alarm  -  it just means we
+  // routed around a degraded transport. See server/outbound-policy.ts.
+  degradedDelivery: boolean("degraded_delivery").notNull().default(false),
+  // Set true ONLY when every channel we attempted for this incident
+  // ultimately failed (no SMS, no push, no in-app, no email). Used by
+  // the resolution UI to flag "we could not reach anyone". Distinct from
+  // degradedDelivery (which means we found a working fallback).
+  deliveryFailed: boolean("delivery_failed").notNull().default(false),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),
@@ -987,6 +1048,58 @@ export const insertFamilyMemberSchema = createInsertSchema(familyMembers).omit({
 export const insertFamilyMessageSchema = createInsertSchema(familyMessages).omit({ id: true, createdAt: true });
 export const insertFamilyPlaceSchema = createInsertSchema(familyPlaces).omit({ id: true, createdAt: true });
 export const insertFamilyPlaceScheduleSchema = createInsertSchema(familyPlaceSchedules).omit({ id: true, createdAt: true, lastAlertedDate: true });
+
+// Per-attempt audit log for every outbound communication. One row per attempt
+// (queued/sent/delivered/failed/blocked). Used by:
+//   - server/outbound-policy.ts to enforce windowed user / IP / per-destination
+//     rate limits and Category-B dedupe.
+//   - back-office reporting (cost, abuse, deliverability).
+//
+// PII rules:
+//   * `destinationHash` is HMAC-SHA256(OUTBOUND_LOG_SECRET, normalizedDest).
+//     Phone numbers, emails, push endpoints and userIds are HASHED, never raw.
+//   * `dedupeKey` is caller-provided and may itself be a hash. Limit it to
+//     opaque tokens (e.g. `incident:<id>:sms` or `family_invite:<phoneHash>`).
+//
+// Retention: keep ~30 days for abuse/cost auditing; the daily privacy-cron
+// already deletes old rows by createdAt. Active incidents reference rows by
+// `dedupeKey` rather than by id, so deletion is safe.
+export const outboundSendLog = pgTable("outbound_send_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channel: outboundChannelEnum("channel").notNull(),
+  purpose: outboundPurposeEnum("purpose").notNull(),
+  status: outboundStatusEnum("status").notNull(),
+  // HMAC of the destination identifier (phone / email / push endpoint / userId).
+  destinationHash: text("destination_hash").notNull(),
+  // Optional grouping key for Category-B dedupe (e.g. `incident:<id>:sms`).
+  // When set, enforceSendPolicy collapses duplicate sends within a 5-min window.
+  dedupeKey: text("dedupe_key"),
+  // Originating user (the SUBJECT of the safety event), if known. Null for
+  // OTP / account-recovery / public webhook traffic.
+  userId: uuid("user_id"),
+  // Incident this send is part of, if applicable. Lets escalation queries
+  // reconstruct a per-incident delivery timeline without scanning all rows.
+  incidentId: uuid("incident_id"),
+  // Hashed source IP (Category-A IP-layer enforcement). Never the raw IP.
+  ipHash: text("ip_hash"),
+  // Provider-side identifier (Twilio messageSid, push endpoint id, etc).
+  providerId: text("provider_id"),
+  // Short error message when status='failed' / 'blocked_*'. Truncated to 500
+  // chars at write time. Never includes recipient PII.
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("outbound_log_dedupe_idx").on(table.dedupeKey, table.createdAt),
+  index("outbound_log_user_purpose_idx").on(table.userId, table.purpose, table.createdAt),
+  index("outbound_log_ip_purpose_idx").on(table.ipHash, table.purpose, table.createdAt),
+  index("outbound_log_dest_purpose_idx").on(table.destinationHash, table.purpose, table.createdAt),
+  index("outbound_log_channel_created_idx").on(table.channel, table.createdAt),
+  index("outbound_log_incident_idx").on(table.incidentId),
+]);
+
+export const insertOutboundSendLogSchema = createInsertSchema(outboundSendLog).omit({ id: true, createdAt: true });
+export type InsertOutboundSendLog = z.infer<typeof insertOutboundSendLogSchema>;
+export type OutboundSendLog = typeof outboundSendLog.$inferSelect;
 export type FamilyMessage = typeof familyMessages.$inferSelect;
 export type InsertFamilyMessage = z.infer<typeof insertFamilyMessageSchema>;
 export type FamilyPlace = typeof familyPlaces.$inferSelect;

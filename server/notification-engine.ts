@@ -73,16 +73,26 @@ async function deliverNotification(
   body: string,
   tag: string,
   url?: string,
-  smsFallback?: boolean
+  smsFallback?: boolean,
+  audit?: { purpose?: import("./outbound-policy").OutboundPurpose; incidentId?: string | null; dedupeKey?: string | null },
 ): Promise<{ sent: boolean; channel: "push" | "sms" | "push+sms" }> {
   try {
-    const pushResult = await sendPushNotification(userId, { title, body, tag, url });
+    const pushResult = await sendPushNotification(userId, { title, body, tag, url }, {
+      purpose: audit?.purpose || "system_alert",
+      incidentId: audit?.incidentId ?? null,
+      dedupeKey: audit?.dedupeKey ?? null,
+    });
     let channel: "push" | "sms" | "push+sms" = "push";
 
     if (smsFallback && pushResult.sent === 0 && isSmsConfigured()) {
       const user = await storage.getUser(userId);
       if (user?.phone) {
-        await sendSms(user.phone, `${title}\n${body}`);
+        await sendSms(user.phone, `${title}\n${body}`, {
+          purpose: audit?.purpose || "system_alert",
+          userId,
+          incidentId: audit?.incidentId ?? null,
+          dedupeKey: audit?.dedupeKey ? `${audit.dedupeKey}:sms` : null,
+        });
         channel = "sms";
       }
     } else if (smsFallback && pushResult.sent > 0) {
@@ -119,7 +129,8 @@ export async function notifySubjectConfirmation(
       body,
       `subject-confirm-${Date.now()}`,
       "/",
-      false
+      false,
+      { purpose: "recovery", dedupeKey: `subject_confirm:${userId}:${Math.floor(Date.now()/60000)}` },
     );
     logMessage({
       event: "SUBJECT_CONFIRMATION",
@@ -249,7 +260,8 @@ export async function notifyConcern(
         reasonText,
         `concern-${userId}`,
         "/watched",
-        true
+        true,
+        { purpose: "concern", dedupeKey: `concern:${userId}:${reason}:${contact.linkedUserId}` },
       );
       if (result.sent) {
         markSent(key);
@@ -351,7 +363,8 @@ export async function notifyRecovery(
         body,
         `recovery-${userId}`,
         "/watched",
-        true
+        true,
+        { purpose: "recovery", dedupeKey: `recovery:${userId}:${contact.linkedUserId}` },
       );
       if (result.sent) {
         markSent(key);
@@ -435,7 +448,8 @@ export async function notifyArrival(
         body,
         `arrival-${userId}`,
         "/watched",
-        false
+        false,
+        { purpose: "presence", dedupeKey: `arrival:${userId}:${placeName || "_"}:${contact.linkedUserId}` },
       );
       if (result.sent) {
         markSent(key);

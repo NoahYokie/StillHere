@@ -89,13 +89,47 @@ function isReviewPhone(to: string): boolean {
   return norm(to) === norm(reviewPhone);
 }
 
+export interface SendSmsOptions {
+  // Why this SMS is going out. Drives policy + audit. Required for new code.
+  // Legacy callers that don't pass it default to "system_alert".
+  purpose?: import("./outbound-policy").OutboundPurpose;
+  userId?: string | null;
+  incidentId?: string | null;
+  ipAddress?: string | null;
+  // Caller-supplied dedupeKey for Category-B traffic. When set, two sends
+  // with the same key within 5 minutes are collapsed.
+  dedupeKey?: string | null;
+}
+
 export async function sendSms(
   to: string,
-  body: string
+  body: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
+  const purpose = options.purpose || "system_alert";
+  const policy = await import("./outbound-policy");
+  const ctx: import("./outbound-policy").SendContext = {
+    channel: "sms",
+    purpose,
+    destination: to,
+    userId: options.userId ?? null,
+    incidentId: options.incidentId ?? null,
+    ipAddress: options.ipAddress ?? null,
+    dedupeKey: options.dedupeKey ?? null,
+  };
+
+  const decision = await policy.enforceSendPolicy(ctx);
+  if (!decision.allowed) {
+    const masked = `***${to.slice(-4)}`;
+    console.warn(`[SMS] Blocked by policy (${decision.reason}) to ${masked} purpose=${purpose}`);
+    return { success: false, error: `policy:${decision.reason}` };
+  }
+  const attemptId = decision.attemptId;
+
   const c = getClient();
   if (!c) {
     console.warn("[SMS] Twilio not configured, skipping SMS");
+    await policy.markSendProviderResult(attemptId, "provider_unconfigured", { errorMessage: "Twilio not configured" });
     return { success: false, error: "Twilio not configured" };
   }
 
@@ -106,6 +140,7 @@ export async function sendSms(
   // voice or escalation paths.
   if (isReviewPhone(to)) {
     console.log(`[SMS] Skipped (review account) to ${masked}`);
+    await policy.markSendProviderResult(attemptId, "blocked_optout", { errorMessage: "review_account" });
     return { success: true, messageId: "review-skip" };
   }
 
@@ -119,6 +154,7 @@ export async function sendSms(
     const { storage } = await import("./storage");
     if (await storage.isPhoneSmsOptedOut(to)) {
       console.log(`[SMS] Skipped (opted out): ${masked}`);
+      await policy.markSendProviderResult(attemptId, "blocked_optout", { errorMessage: "opted_out" });
       return { success: false, error: "Recipient opted out of SMS" };
     }
   } catch (err) {
@@ -155,14 +191,27 @@ export async function sendSms(
     }
   };
 
+  // Wrap each provider attempt with audit-log finalization.
+  const finalizeSuccess = async (sid: string) => {
+    await policy.markSendProviderResult(attemptId, "sent", { providerId: sid });
+  };
+  const finalizeFailure = async (msg: string) => {
+    await policy.markSendProviderResult(attemptId, "failed", { errorMessage: msg });
+  };
+  const finalizeOptOut = async () => {
+    await policy.markSendProviderResult(attemptId, "blocked_optout", { errorMessage: "carrier_opted_out" });
+  };
+
   if (messagingServiceSid) {
     try {
       const message = await c.messages.create({ to, body, messagingServiceSid, statusCallback });
       console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
+      await finalizeSuccess(message.sid);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
       await backsyncOptOut(error);
       if (isOptedOutError(error)) {
+        await finalizeOptOut();
         return { success: false, error: "Recipient opted out of SMS" };
       }
       console.warn(`[SMS] Messaging service failed for ${masked}: ${error.message}, trying fallback`);
@@ -170,16 +219,20 @@ export async function sendSms(
         try {
           const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
           console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
+          await finalizeSuccess(message.sid);
           return { success: true, messageId: message.sid };
         } catch (fallbackError: any) {
           await backsyncOptOut(fallbackError);
           if (isOptedOutError(fallbackError)) {
+            await finalizeOptOut();
             return { success: false, error: "Recipient opted out of SMS" };
           }
           console.error(`[SMS] Phone fallback also failed for ${masked}:`, fallbackError.message);
+          await finalizeFailure(fallbackError.message);
           return { success: false, error: fallbackError.message };
         }
       }
+      await finalizeFailure(error.message);
       return { success: false, error: error.message };
     }
   }
@@ -188,10 +241,12 @@ export async function sendSms(
     try {
       const message = await c.messages.create({ to, body, from: alphaSender, statusCallback });
       console.log(`[SMS] Sent to ${masked} via alpha sender "${alphaSender}": ${message.sid}`);
+      await finalizeSuccess(message.sid);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
       await backsyncOptOut(error);
       if (isOptedOutError(error)) {
+        await finalizeOptOut();
         return { success: false, error: "Recipient opted out of SMS" };
       }
       console.warn(`[SMS] Alpha sender "${alphaSender}" failed for ${masked}: ${error.message}, trying phone fallback`);
@@ -199,16 +254,20 @@ export async function sendSms(
         try {
           const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
           console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
+          await finalizeSuccess(message.sid);
           return { success: true, messageId: message.sid };
         } catch (fallbackError: any) {
           await backsyncOptOut(fallbackError);
           if (isOptedOutError(fallbackError)) {
+            await finalizeOptOut();
             return { success: false, error: "Recipient opted out of SMS" };
           }
           console.error(`[SMS] Phone fallback also failed for ${masked}:`, fallbackError.message);
+          await finalizeFailure(fallbackError.message);
           return { success: false, error: fallbackError.message };
         }
       }
+      await finalizeFailure(error.message);
       return { success: false, error: error.message };
     }
   }
@@ -217,56 +276,68 @@ export async function sendSms(
     try {
       const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
       console.log(`[SMS] Sent to ${masked} via phone number: ${message.sid}`);
+      await finalizeSuccess(message.sid);
       return { success: true, messageId: message.sid };
     } catch (error: any) {
       await backsyncOptOut(error);
       if (isOptedOutError(error)) {
+        await finalizeOptOut();
         return { success: false, error: "Recipient opted out of SMS" };
       }
       console.error(`[SMS] Failed to send to ${masked}:`, error.message);
+      await finalizeFailure(error.message);
       return { success: false, error: error.message };
     }
   }
 
   console.warn("[SMS] No sender configured");
+  await policy.markSendProviderResult(attemptId, "provider_unconfigured", { errorMessage: "no_sender" });
   return { success: false, error: "No sender configured" };
 }
 
-export async function sendOtpSms(phone: string, code: string): Promise<SendSmsResult> {
+export async function sendOtpSms(
+  phone: string,
+  code: string,
+  options: SendSmsOptions = {},
+): Promise<SendSmsResult> {
   const body = `Your StillHere verification code is: ${code}\n\nThis code expires in 10 minutes. If you did not request this, please ignore this message.`;
-  return sendSms(phone, body);
+  return sendSms(phone, body, { purpose: "otp", ...options });
 }
 
 export async function sendMissedCheckinAlert(
   contactPhone: string,
   userName: string,
-  link: string
+  link: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call. None received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you are unable to reach them, please contact your local emergency services.`;
-  return sendSms(contactPhone, body);
+  return sendSms(contactPhone, body, { purpose: "missed_checkin_alert", ...options });
 }
 
 export async function sendSosAlert(
   contactPhone: string,
   userName: string,
-  link: string
+  link: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const body = `StillHere SOS Alert\n\n${userName} has activated an SOS in the StillHere app and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services. StillHere is not an emergency response service.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
-  return sendSms(contactPhone, body);
+  return sendSms(contactPhone, body, { purpose: "sos_alert", ...options });
 }
 
 export async function sendTestMessage(
   contactPhone: string,
-  userName: string
+  userName: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const body = `StillHere Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is only a test. No action is needed.\n\nIn a real alert, you will receive a message with a secure link to view their status and location. For the fullest experience (live location, push alerts, and one-tap response), install the StillHere app.`;
-  return sendSms(contactPhone, body);
+  return sendSms(contactPhone, body, { purpose: "contact_test", ...options });
 }
 
 export async function sendReminderSms(
   userPhone: string,
   link: string,
-  smsCheckinEnabled: boolean = false
+  smsCheckinEnabled: boolean = false,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   let body = `StillHere Check-in Reminder\n\nYou haven't completed your safety check-in yet.`;
   if (smsCheckinEnabled) {
@@ -274,54 +345,59 @@ export async function sendReminderSms(
   } else {
     body += `\n\nPlease open the app to check in. If you don't have the app handy, you can also check in from this link:\n${link}`;
   }
-  return sendSms(userPhone, body);
+  return sendSms(userPhone, body, { purpose: "reminder", ...options });
 }
 
 export async function sendAllClearNotification(
   contactPhone: string,
   userName: string,
-  link: string
+  link: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const body = `StillHere All Clear\n\n${userName} confirmed they are safe at ${timeLabel}. No action is needed.\n\nView their status in the StillHere app, or from any browser:\n${link}`;
-  return sendSms(contactPhone, body);
+  return sendSms(contactPhone, body, { purpose: "all_clear", ...options });
 }
 
 export async function sendContactRespondedNotification(
   userPhone: string,
-  contactName: string
+  contactName: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const body = `StillHere Update\n\n${contactName} has received your alert and is checking on you.`;
-  return sendSms(userPhone, body);
+  return sendSms(userPhone, body, { purpose: "contact_responded", ...options });
 }
 
 export async function sendEscalationAlert(
   contactPhone: string,
   userName: string,
   link: string,
-  reason: "sos" | "missed_checkin"
+  reason: "sos" | "missed_checkin",
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const reasonText = reason === "sos"
     ? "activated an emergency SOS"
     : "has not responded to a safety check-in";
   const body = `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
-  return sendSms(contactPhone, body);
+  return sendSms(contactPhone, body, { purpose: "escalation_alert", ...options });
 }
 
 export async function sendNoResponseNotification(
-  userPhone: string
+  userPhone: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const body = `StillHere Update\n\nWe are still attempting to reach your emergency contacts. No one has responded yet.\n\nIf you are in immediate danger, please call your local emergency number (e.g. 000, 911, 999, 112).`;
-  return sendSms(userPhone, body);
+  return sendSms(userPhone, body, { purpose: "no_response", ...options });
 }
 
 export async function sendHandlingTimeoutAlert(
   contactPhone: string,
   userName: string,
-  link: string
+  link: string,
+  options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
   const body = `StillHere Follow-Up\n\n${userName}'s safety alert is still active and needs your attention.\n\nPlease confirm whether you have been able to reach them. Open the StillHere app for one-tap response, or use this link from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
-  return sendSms(contactPhone, body);
+  return sendSms(contactPhone, body, { purpose: "handling_timeout", ...options });
 }
 
 export async function getTurnCredentials(): Promise<RTCIceServer[]> {

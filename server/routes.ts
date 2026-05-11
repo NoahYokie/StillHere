@@ -1585,6 +1585,26 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
+      // Per-user (2/h, 5/d) and per-IP (4/h) drill limit, plus a 30-minute
+      // per-user cooldown. Enforced via the outbound policy so it survives
+      // restarts and applies across all process replicas.
+      const policy = await import("./outbound-policy");
+      const drillDecision = await policy.enforceSendPolicy({
+        channel: "push",
+        purpose: "safety_drill",
+        destination: `user:${userId}`,
+        userId,
+        ipAddress: req.ip,
+        dedupeKey: `drill:${userId}:${Math.floor(Date.now() / (30 * 60 * 1000))}`,
+      });
+      if (!drillDecision.allowed) {
+        return res.status(429).json({
+          error: "You ran a drill recently. Please wait a bit before running another.",
+          reason: drillDecision.reason,
+          retryAfterSeconds: drillDecision.retryAfterSeconds,
+        });
+      }
+
       const existingOpen = await storage.getOpenIncident(userId);
       if (existingOpen && !existingOpen.isDrill) {
         return res.status(400).json({ error: "Your Safety Circle is currently responding to an active alert. Please wait until it's resolved before running a test." });
@@ -1605,11 +1625,11 @@ export async function registerRoutes(
       for (const wc of watcherContacts) {
         if (wc.linkedUserId && wc.linkedUserId !== userId) {
           await sendPushNotification(wc.linkedUserId, {
-            title: `${user.name} is testing their Safety Circle`,
-            body: `${user.name} wants to make sure you're ready. Tap to confirm you've got their back.`,
+            title: `[StillHere TEST] ${user.name} is testing their Safety Circle`,
+            body: `This is a drill, not a real alert. ${user.name} wants to make sure you're ready. Tap to confirm you've got their back.`,
             url: `/watched?drill=${drill.id}`,
             tag: `drill-${drill.id}`,
-          });
+          }, { purpose: "safety_drill", incidentId: drill.id, dedupeKey: `drill:${drill.id}:${wc.linkedUserId}` });
         }
       }
 
@@ -2041,20 +2061,48 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      
+
+      // Per-user / per-IP test broadcast limit (Category-A). Enforced via the
+      // outbound policy so it survives restarts and applies across all
+      // process replicas. Uses a synthetic "user-test-broadcast" destination
+      // (the user themselves) so the per-destination cooldown blocks rapid
+      // re-fires from the same user without affecting per-contact dedupe.
+      const policy = await import("./outbound-policy");
+      const broadcastDecision = await policy.enforceSendPolicy({
+        channel: "sms",
+        purpose: "test_broadcast",
+        destination: `user:${userId}`,
+        userId,
+        ipAddress: req.ip,
+        dedupeKey: `test_broadcast:${userId}:${Math.floor(Date.now() / (10 * 60 * 1000))}`,
+      });
+      if (!broadcastDecision.allowed) {
+        return res.status(429).json({
+          error: "You've run the safety test too recently. Please wait before trying again.",
+          reason: broadcastDecision.reason,
+          retryAfterSeconds: broadcastDecision.retryAfterSeconds,
+        });
+      }
+
       // Create test incident
       const incident = await storage.createIncident(userId, "test");
-      
+
       // Get contacts
       const contacts = await storage.getContacts(userId);
-      
+
       // Get user
       const user = await storage.getUser(userId);
-      
-      // Send test SMS to all contacts in parallel
+
+      // Send test SMS to all contacts in parallel. Each individual SMS still
+      // flows through enforceSendPolicy with purpose=contact_test, so a
+      // single contact whose number was tested 10 minutes ago is auto-skipped.
       console.log("\n[TEST] Sending test notifications...");
-      await Promise.all(contacts.map(contact => 
-        sendTestMessage(contact.phone, user?.name || "User")
+      await Promise.all(contacts.map(contact =>
+        sendTestMessage(contact.phone, user?.name || "User", {
+          userId,
+          ipAddress: req.ip,
+          dedupeKey: `contact_test:${userId}:${contact.id}`,
+        })
       ));
       console.log("[TEST] Notifications sent\n");
       
@@ -3357,7 +3405,11 @@ export async function registerRoutes(
           const crashMsg = `CRASH ALERT from ${user.name}! A possible vehicle crash has been detected. ${speedKmh ? `Speed at impact: ${Math.round(speedKmh)} km/h. ` : ""}Please check on them immediately: ${link}`;
 
           if (isTwilioConfigured()) {
-            await sendSms(normalizedPhone, crashMsg);
+            await sendSms(normalizedPhone, crashMsg, {
+              purpose: "drive_crash",
+              userId: user.id,
+              dedupeKey: `crash:${user.id}:${contact.id}`,
+            });
           }
 
           if (contact.email) {
@@ -5937,7 +5989,11 @@ export async function registerRoutes(
             ? `${notifiedNames.slice(0, 3).join(", ")}${notifiedNames.length > 3 ? ` and ${notifiedNames.length - 3} more` : ""}`
             : "your safety circle";
           const userSmsBody = `StillHere: We hear you. We are attempting to reach ${namesLine}.\n\nIf this is life-threatening, call ${emergency.number} now. StillHere is not an emergency response service.\n\nYou are not alone. Stay safe.`;
-          sendSms(user.phone, userSmsBody).catch((err: any) => {
+          sendSms(user.phone, userSmsBody, {
+            purpose: "no_response",
+            userId: user.id,
+            dedupeKey: `wellness:${user.id}:user_sms`,
+          }).catch((err: any) => {
             console.error(`[WELLNESS CALL] User SMS failed:`, err?.message || err);
           });
         }
@@ -6524,8 +6580,32 @@ export async function registerRoutes(
           }));
 
           if (wellnessCallEnabled && user.phone) {
+            const voicePolicy = await import("./outbound-policy");
+            let voiceAttemptId: string | undefined;
             try {
               console.log(`[ESCALATION] Step 3/3: Calling ${user.name} (***${user.phone.slice(-4)})`);
+              // Voice is the most expensive channel — gate it through the
+              // outbound policy with a per-incident dedupe key so a stuck
+              // escalation worker can't dial the same person twice. Note:
+              // wellness_call is safety-critical, so the policy will allow
+              // the send even when the channel ceiling is breached but
+              // returns degraded:true so we can flip degradedDelivery.
+              const voiceDecision = await voicePolicy.enforceSendPolicy({
+                channel: "voice",
+                purpose: "wellness_call",
+                destination: user.phone,
+                userId: user.id,
+                incidentId: incident.id,
+                dedupeKey: `wellness_call:${incident.id}`,
+              });
+              voiceAttemptId = voiceDecision.attemptId;
+              if (voiceDecision.degraded) {
+                await storage.updateIncident(incident.id, { degradedDelivery: true });
+              }
+              if (!voiceDecision.allowed) {
+                console.warn(`[ESCALATION] Wellness call blocked by policy (${voiceDecision.reason}) for ${user.name}`);
+                existingTimeline.push({ type: "call_failed", time: timeStr, detail: `Wellness call blocked by policy: ${voiceDecision.reason}` });
+              } else {
               const twilio = (await import("twilio")).default;
               const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
               const callResult = await client.calls.create({
@@ -6534,6 +6614,7 @@ export async function registerRoutes(
                 url: `${baseUrl}/api/wellness-call/respond`,
                 method: "POST",
               });
+              await voicePolicy.markSendProviderResult(voiceAttemptId, "sent", { providerId: callResult.sid });
               existingTimeline.push({ type: "call", time: timeStr, detail: "Wellness call placed" });
               console.log(`[ESCALATION] Call placed (SID: ${callResult.sid})`);
 
@@ -6554,10 +6635,15 @@ export async function registerRoutes(
               });
               escalations++;
               continue;
+              }
             } catch (err: any) {
               const callError = err?.message || "unknown error";
               existingTimeline.push({ type: "call_failed", time: timeStr, detail: `Wellness call failed: ${callError}` });
               console.error(`[ESCALATION] Wellness call FAILED for ${user.name}: ${callError}  -  falling through to contacts`);
+              try {
+                await voicePolicy.markSendProviderResult(voiceAttemptId, "failed", { errorMessage: callError });
+                await storage.updateIncident(incident.id, { degradedDelivery: true });
+              } catch {}
             }
           } else {
             const reasons = [];
@@ -6903,7 +6989,8 @@ export async function registerRoutes(
               if (contact.phone) {
                 try {
                   await sendSms(contact.phone,
-                    `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                    `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`,
+                    { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safety_timer:${timer.id}:${contact.id}` }
                   );
                 } catch (err: any) {
                   console.error(`[TIMER] SMS to ${contact.name} (***${contact.phone.slice(-4)}) failed:`, err?.message || err);
@@ -6960,23 +7047,14 @@ export async function registerRoutes(
           const destInfo = w.destinationName ? ` to ${w.destinationName}` : "";
 
           try {
-            const subs = await storage.getPushSubscriptions(w.userId);
-            for (const sub of subs) {
-              try {
-                const webpush = (await import("web-push")).default;
-                await webpush.sendNotification(
-                  { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                  JSON.stringify({
-                    title: "Are you OK?",
-                    body: `You haven't arrived${destInfo} yet. Tap "I've Arrived" or extend your time.`,
-                    tag: "safe-walk-overdue",
-                    data: { url: "/safe-walk" },
-                  })
-                );
-              } catch (err: any) {
-                console.error(`[SAFE-WALK] Push notification failed for ${u.name}:`, err?.message || err);
-              }
-            }
+            // Route through sendPushNotification so the policy + audit log
+            // captures every safe-walk overdue push (purpose=missed_checkin_alert).
+            await sendPushNotification(w.userId, {
+              title: "Are you OK?",
+              body: `You haven't arrived${destInfo} yet. Tap "I've Arrived" or extend your time.`,
+              tag: "safe-walk-overdue",
+              url: "/safe-walk",
+            }, { purpose: "missed_checkin_alert", incidentId: null, dedupeKey: `safe_walk_overdue:${w.id}` });
             console.log(`[CRON] Sent push notification to ${u.name}  -  safe walk overdue`);
           } catch (err: any) {
             console.error(`[SAFE-WALK] Push notification batch failed for ${u.name}:`, err?.message || err);
@@ -6985,7 +7063,8 @@ export async function registerRoutes(
           if (u.phone && isTwilioConfigured()) {
             try {
               await sendSms(u.phone,
-                `StillHere: You haven't arrived${destInfo} yet. Are you OK? Open the app to confirm you're safe, or reply YES to this message.`
+                `StillHere: You haven't arrived${destInfo} yet. Are you OK? Open the app to confirm you're safe, or reply YES to this message.`,
+                { purpose: "reminder", userId: u.id, dedupeKey: `safe_walk:${w.id}:user_check` }
               );
               console.log(`[CRON] Sent SMS to ${u.name}  -  safe walk overdue`);
             } catch (err: any) {
@@ -7031,7 +7110,8 @@ export async function registerRoutes(
               if (contact.phone) {
                 try {
                   await sendSms(contact.phone,
-                    `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                    `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`,
+                    { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safe_walk:${walk.id}:${contact.id}` }
                   );
                 } catch (err: any) {
                   console.error(`[SAFE-WALK] Escalation SMS to ${contact.name} (***${contact.phone.slice(-4)}) failed:`, err?.message || err);
@@ -7258,11 +7338,6 @@ export async function registerRoutes(
       const maskedPhone = `***${phone.slice(-4)}`;
       let deduped = false;
       try {
-        const last = familyInviteSmsCache.get(phone) || 0;
-        if (Date.now() - last < FAMILY_INVITE_SMS_WINDOW_MS) {
-          deduped = true;
-          console.log(`[INVITE] SMS skipped (deduped) ${maskedPhone}`);
-        } else {
           const inviter = await storage.getUser(userId);
           const inviterName = inviter?.name || "Someone you trust";
           const baseUrl = getBaseUrl();
@@ -7271,19 +7346,28 @@ export async function registerRoutes(
             ? `${inviterName} added you to their StillHere Family.\nOpen the app to view and accept.`
             : `${inviterName} added you to their StillHere Family for safety.\nJoin here: ${baseUrl}\nYou'll be able to share safety updates and stay connected.`;
           if (isTwilioConfigured()) {
-            familyInviteSmsCache.set(phone, Date.now());
-            sendSms(phone, body)
-              .then((r) => {
-                if (r.success) console.log(`[INVITE] SMS sent to ${maskedPhone}`);
-                else console.warn(`[INVITE] SMS send failed ${maskedPhone}: ${r.error}`);
-              })
-              .catch((err) =>
-                console.warn(`[INVITE] SMS send threw ${maskedPhone}:`, err?.message || "unknown"),
-              );
+            // The outbound policy enforces per-user/IP/destination Category-A
+            // limits AND a 30-minute per-destination cooldown for family
+            // invites. We await the result so we can return `deduped:true`
+            // to the client (matching the previous in-mem cache contract)
+            // when the policy soft-skips a repeat invite.
+            const inviteResult = await sendSms(phone, body, {
+              purpose: "family_invite",
+              userId,
+              ipAddress: req.ip,
+              dedupeKey: `family_invite:${overview.family.id}:${phone}`,
+            });
+            if (inviteResult.success) {
+              console.log(`[INVITE] SMS sent to ${maskedPhone}`);
+            } else if (inviteResult.error?.startsWith("policy:")) {
+              deduped = true;
+              console.log(`[INVITE] SMS suppressed by policy (${inviteResult.error}) ${maskedPhone}`);
+            } else {
+              console.warn(`[INVITE] SMS send failed ${maskedPhone}: ${inviteResult.error}`);
+            }
           } else {
             console.warn(`[INVITE] SMS skipped (Twilio not configured) ${maskedPhone}`);
           }
-        }
       } catch (smsErr: any) {
         console.warn("[INVITE] SMS prep failed:", smsErr?.message || "unknown");
       }
@@ -7295,10 +7379,9 @@ export async function registerRoutes(
     }
   });
 
-  // 5-minute SMS dedupe cache for family invites  -  prevents spam from
-  // repeat-click and re-invite flows. Keyed by normalized phone.
-  const familyInviteSmsCache = new Map<string, number>();
-  const FAMILY_INVITE_SMS_WINDOW_MS = 5 * 60 * 1000;
+  // (Family invite dedupe is now enforced server-wide by enforceSendPolicy
+  // in server/outbound-policy.ts via the family_invite Category-A rule:
+  // 30-minute per-destination cooldown + per-user/IP hourly + daily caps.)
 
   // "Watch over me while I'm here"  -  starts a real live-location session
   // (continuous GPS share for a chosen duration) and tells every family member

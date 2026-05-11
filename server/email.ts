@@ -272,11 +272,42 @@ async function enrichContext(context?: EmailContext): Promise<EmailContext | und
   return { ...context, address: address || null };
 }
 
-export async function sendEmail(to: string, subject: string, body: string): Promise<SendEmailResult> {
+export interface SendEmailOptions {
+  // Why this email is going out. Drives audit + global circuit breaker.
+  // Defaults to "system_alert" so legacy callers still record an audit row.
+  purpose?: import("./outbound-policy").OutboundPurpose;
+  userId?: string | null;
+  incidentId?: string | null;
+  dedupeKey?: string | null;
+}
+
+export async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  options: SendEmailOptions = {},
+): Promise<SendEmailResult> {
   const masked = to.replace(/(.{2}).*(@.*)/, "$1***$2");
+
+  // Best-effort audit: emails are incident-driven and we never want a logging
+  // failure to drop a safety email, so we record outcome only.
+  const policy = await import("./outbound-policy");
+  const auditCtx: import("./outbound-policy").SendContext = {
+    channel: "email",
+    purpose: options.purpose || "system_alert",
+    destination: to,
+    userId: options.userId ?? null,
+    incidentId: options.incidentId ?? null,
+    dedupeKey: options.dedupeKey ?? null,
+  };
+  const recordOutcome = async (status: import("./outbound-policy").OutboundStatus, errorMessage?: string, providerId?: string) => {
+    try { await policy.recordSendAttempt(auditCtx, status, { errorMessage, providerId }); } catch {}
+  };
+
   const client = getResend();
   if (!client) {
     console.log(`[EMAIL] (dry-run, RESEND_API_KEY not set) to=${masked} subject="${subject}" (${body.length} chars)`);
+    await recordOutcome("provider_unconfigured", "resend_missing");
     return { success: true };
   }
   try {
@@ -288,12 +319,15 @@ export async function sendEmail(to: string, subject: string, body: string): Prom
     });
     if (error) {
       console.error(`[EMAIL] send failed to=${masked}:`, error.message || error);
+      await recordOutcome("failed", error.message || String(error));
       return { success: false, error: error.message || String(error) };
     }
     console.log(`[EMAIL] sent to=${masked} id=${data?.id} subject="${subject}"`);
+    await recordOutcome("sent", undefined, data?.id);
     return { success: true };
   } catch (err: any) {
     console.error(`[EMAIL] send threw to=${masked}:`, err?.message || err);
+    await recordOutcome("failed", err?.message || String(err));
     return { success: false, error: err?.message || String(err) };
   }
 }
