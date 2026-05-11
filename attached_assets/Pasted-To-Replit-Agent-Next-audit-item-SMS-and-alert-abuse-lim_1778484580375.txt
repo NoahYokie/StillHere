@@ -1,0 +1,190 @@
+To: Replit Agent
+
+  Next audit item: SMS and alert abuse limits.
+
+  Do not build yet.
+
+  We need to reduce SMS, invite, test-message, and alert abuse risk without reducing StillHere’s real safety features.
+
+  Goal:
+  Prevent a bad user, broken client, bot, or accidental loop from creating large outbound SMS/call/email costs or spamming
+  contacts.
+
+  But do NOT weaken:
+
+  SOS
+  missed check-in escalation
+  Safety Circle alerts
+  Safe Walk escalation
+  Safety Timer escalation
+  Drive Safety / possible crash alert
+  real urgent safety notifications
+
+  Known prior findings:
+
+  1. POST /api/family/invite
+  Only global apiLimiter.
+  There is a 5-minute in-memory dedupe by phone, but it resets on restart.
+  No per-user cap on distinct invited numbers.
+
+  Recommended earlier:
+  5 invites per user per hour
+  20 invites per user per 24 hours
+  1 SMS per destination phone per 30 minutes
+  Use DB-backed or durable dedupe, not only in-memory.
+
+  2. POST /api/test
+  Only global apiLimiter.
+  Sends test SMS to every contact on the user’s account.
+  A user with many contacts could generate many outbound SMS.
+
+  Recommended earlier:
+  3 test runs per user per hour
+  10 test runs per user per 24 hours
+
+  3. Need global provider spend backstop
+  A configurable Twilio/global outbound ceiling would prevent runaway abuse if a route is missed.
+
+  Example:
+  MAX_OUTBOUND_SMS_PER_HOUR
+  MAX_OUTBOUND_CALLS_PER_HOUR
+  hard cut or fail-closed for non-emergency sends.
+
+  Important:
+  Emergency sends should be treated differently from non-emergency sends.
+
+  We need separate categories:
+
+  Category A — Non-urgent / user-controlled / abuse-prone
+  These should be strictly rate-limited:
+
+  family invites
+  test messages
+  dry runs
+  manual contact test
+  resend invite
+  non-urgent reminders if any
+  marketing-like or onboarding SMS if any
+
+  Category B — Real safety alerts
+  These must remain reliable:
+
+  SOS
+  missed check-in escalation
+  Safe Walk overdue/escalated
+  Safety Timer escalated
+  Drive crash / possible crash alert
+  wellness call urgent help
+  active incident contact notifications
+
+  For Category B:
+  Do not block real safety notifications just because the user used test messages earlier.
+
+  But still protect against loops:
+
+  dedupe same incident + same contact + same channel
+  per-incident send ledger
+  cooldown for repeated sends to the same contact within same incident
+  global provider circuit breaker only for clear runaway, with logging
+
+  Questions before designing the fix:
+
+  1. Which exact routes currently send outbound SMS, calls, push, or email?
+
+  Please list:
+  file path
+  route/function
+  channel used: SMS / call / push / email
+  whether it is user-triggered non-urgent or real safety alert
+  current limiter if any
+
+  2. Is there already an outbound message log table?
+
+  For example:
+  sms logs
+  notification logs
+  message attempts
+  incident contact attempts
+  Twilio status logs
+
+  If yes, can we use it for durable rate limits and dedupe?
+
+  If no, propose the smallest durable table needed.
+
+  3. How are safety alert sends currently deduped?
+
+  For SOS, missed check-in, Safe Walk, Safety Timer, Drive crash:
+  do we already prevent sending the same contact repeated SMS for the same incident?
+
+  4. Does sendSms() know the purpose of the message?
+
+  For example:
+  invite
+  test
+  sos
+  missed_checkin
+  safe_walk
+  safety_timer
+  drive_crash
+  wellness_call
+
+  If not, should we add a purpose parameter so limits can be policy-based?
+
+  5. Are outbound calls handled through the same helper path as SMS, or separate?
+
+  If separate, list the call sender functions and current rate limits.
+
+  6. What should happen when a non-urgent send is rate-limited?
+
+  Preferred:
+  Return 429 with a friendly message.
+
+  Example:
+  “Please wait before sending another invite.”
+
+  Do not silently fail.
+
+  7. What should happen when a real safety alert hits a global circuit breaker?
+
+  Preferred:
+  Do not quietly drop.
+  Log high severity.
+  Return/send visible fallback warning where appropriate.
+  Still allow push/email if SMS/call provider is capped.
+  Do not block the incident itself.
+
+  8. Are Twilio status callbacks already stored?
+
+  If yes, can we use delivery status to avoid repeated sends?
+  If no, this is optional, not required for this pass.
+
+  Please return an audit and proposed policy matrix before coding.
+
+  Do not change code yet.
+
+  Simple version:
+
+  We are asking Replit to map every place StillHere sends SMS/calls/emails/push.
+
+  Then we split them into two groups:
+
+  Non-urgent sends
+  These can be heavily limited:
+
+  - family invites
+  - test messages
+  - dry runs
+  - resend invites
+  - contact test messages
+
+  Real safety sends
+  These must stay strong:
+
+  - SOS
+  - missed check-in
+  - Safe Walk escalation
+  - Safety Timer escalation
+  - Drive crash alert
+  - urgent wellness help
+
+  The goal is not to weaken safety. The goal is to stop someone abusing the app to spam numbers or run up Twilio costs.
