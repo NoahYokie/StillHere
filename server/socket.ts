@@ -242,6 +242,31 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           return;
         }
 
+        // Phase 1.1: dedupe rapid-fire call invites to the same contact.
+        // Uses the outbound-policy 5-minute dedupe window. This does NOT
+        // gate emergency Twilio voice escalation (that path lives in
+        // routes.ts and uses the `wellness_call`/`escalation_alert`
+        // purpose); it only stops a user (or a glitchy client retry loop)
+        // from re-spamming `call:initiate` for the same receiver.
+        try {
+          const policy = await import("./outbound-policy");
+          const dec = await policy.enforceSendPolicy({
+            channel: "in_app",
+            purpose: "system_alert",
+            destination: data.receiverId,
+            userId,
+            incidentId: null,
+            dedupeKey: `call_invite:${userId}:${data.receiverId}`,
+          });
+          if (!dec.allowed && dec.reason === "duplicate") {
+            console.log(`[CALL] Dedupe-collapsed repeat invite ${userId} -> ${data.receiverId}`);
+            if (callback) callback({ success: false, error: "Please wait a moment before calling again" });
+            return;
+          }
+        } catch (e: any) {
+          console.warn(`[CALL] policy check failed, allowing call: ${e?.message || e}`);
+        }
+
         const call = await storage.createCall(userId, data.receiverId, callType);
         activeCallPairs.set(pairKey, call.id);
 

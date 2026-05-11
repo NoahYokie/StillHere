@@ -54,6 +54,29 @@ export async function sendPushNotification(
     try { await policy.recordSendAttempt(auditCtx, status, { errorMessage }); } catch {}
   };
 
+  // Phase 1.1: dedupe-loop protection for push as well. We don't gate on
+  // the full enforceSendPolicy (push is non-billable + incident-driven), but
+  // when a dedupeKey is supplied we collapse repeated identical sends in the
+  // 5-min window so a worker loop can't spam the same notification.
+  if (options.dedupeKey) {
+    try {
+      const dec = await policy.enforceSendPolicy(auditCtx);
+      if (dec.degraded && options.incidentId) {
+        const { storage } = await import("./storage");
+        await storage.updateIncident(options.incidentId, { degradedDelivery: true });
+      }
+      if (!dec.allowed && dec.reason === "duplicate") {
+        console.log(`[PUSH] Deduped (loop) user=${userId} key=${options.dedupeKey}`);
+        return { sent: 0, failed: 0 };
+      }
+      // For non-duplicate "not allowed" results (e.g. channel cap), keep the
+      // legacy log-only behavior — push has no billable cost and the
+      // incident already has degradedDelivery flagged above when relevant.
+    } catch (e: any) {
+      console.warn(`[PUSH] policy check failed, sending anyway: ${e?.message || e}`);
+    }
+  }
+
   if (!configured) {
     console.log(`[PUSH] Not configured - would send to user ${userId}: ${payload.title}`);
     await recordOutcome("provider_unconfigured", "vapid_missing");

@@ -55,7 +55,8 @@ export type OutboundStatus =
   | "failed"
   | "blocked_policy"
   | "blocked_optout"
-  | "provider_unconfigured";
+  | "provider_unconfigured"
+  | "deduped";
 
 export interface SendContext {
   channel: OutboundChannel;
@@ -316,46 +317,14 @@ async function enforceSendPolicyInner(ctx: SendContext): Promise<PolicyDecision>
   const ipHash = hashIp(ctx.ipAddress);
   const safety = isSafetyCritical(ctx.purpose);
 
-  // 1. Channel circuit breaker (global hourly ceiling).
-  const ceiling = GLOBAL_CEILING_PER_HOUR[ctx.channel];
-  let degraded = false;
-  if (ceiling > 0) {
-    const used = await countRecent({
-      channel: ctx.channel,
-      sinceMs: 60 * 60 * 1000,
-      countableStatuses: ["queued", "sent", "delivered"],
-    });
-    if (used >= ceiling) {
-      if (safety) {
-        // Safety MUST NEVER be denied. Record the breach for ops dashboards
-        // and tell the caller to mark degradedDelivery + fan out to fallback
-        // channels, but allow the send through.
-        console.warn(`[outbound-policy] channel_ceiling exceeded (safety override) channel=${ctx.channel} purpose=${ctx.purpose} used=${used}/${ceiling}`);
-        degraded = true;
-      } else {
-        await writeAttempt({
-          channel: ctx.channel, purpose: ctx.purpose, status: "blocked_policy",
-          destinationHash, dedupeKey: ctx.dedupeKey, userId: ctx.userId, incidentId: ctx.incidentId,
-          ipHash, errorMessage: `channel_ceiling:${ctx.channel}:${used}/${ceiling}`,
-        });
-        return { allowed: false, reason: "channel_circuit_broken", retryAfterSeconds: 600 };
-      }
-    }
-  }
-
-  // Safety bypass: skip Cat-A and Cat-B gates entirely. We still write the
-  // queued audit row below so cost/abuse reporting stays accurate.
-  if (safety) {
-    const attemptId = await writeAttempt({
-      channel: ctx.channel, purpose: ctx.purpose, status: "queued",
-      destinationHash, dedupeKey: ctx.dedupeKey, userId: ctx.userId, incidentId: ctx.incidentId,
-      ipHash, errorMessage: degraded ? "safety_override_circuit_breaker" : null,
-    });
-    return { allowed: true, degraded, attemptId: attemptId ?? undefined };
-  }
-
-  // 2. Category-B dedupe (5-min window on the same dedupeKey).
-  if (!isCategoryA(ctx.purpose) && ctx.dedupeKey) {
+  // 1. Duplicate-loop dedupe FIRST. Phase 1.1: this runs ahead of the safety
+  // bypass so that worker loops, sensor loops, and restart loops cannot
+  // accidentally fan out the same SOS/missed-checkin/wellness alert dozens of
+  // times in 5 minutes. The first real safety alert always wins; the second
+  // attempt with the same dedupeKey is recorded as `deduped` and silently
+  // collapsed. Cat-A traffic (otp, family_invite, etc.) skips this gate
+  // because it has its own dedicated per-destination cooldowns.
+  if (ctx.dedupeKey && !isCategoryA(ctx.purpose)) {
     const dup = await countRecent({
       dedupeKey: ctx.dedupeKey,
       sinceMs: DEDUPE_WINDOW_MS,
@@ -363,12 +332,59 @@ async function enforceSendPolicyInner(ctx: SendContext): Promise<PolicyDecision>
     });
     if (dup > 0) {
       await writeAttempt({
-        channel: ctx.channel, purpose: ctx.purpose, status: "blocked_policy",
+        channel: ctx.channel, purpose: ctx.purpose, status: "deduped",
         destinationHash, dedupeKey: ctx.dedupeKey, userId: ctx.userId, incidentId: ctx.incidentId,
         ipHash, errorMessage: "duplicate_dedupe_window",
       });
+      // Soft-skip. Caller treats this as "not a delivery failure" and does
+      // NOT fall back to other channels (the original send is already in
+      // flight or has already happened within the last 5 minutes).
       return { allowed: false, reason: "duplicate", retryAfterSeconds: Math.ceil(DEDUPE_WINDOW_MS / 1000) };
     }
+  }
+
+  // 2. Channel circuit breaker (global hourly ceiling).
+  const ceiling = GLOBAL_CEILING_PER_HOUR[ctx.channel];
+  if (ceiling > 0) {
+    const used = await countRecent({
+      channel: ctx.channel,
+      sinceMs: 60 * 60 * 1000,
+      countableStatuses: ["queued", "sent", "delivered"],
+    });
+    if (used >= ceiling) {
+      // Phase 1.1: even safety-critical sends do NOT transmit over a capped
+      // channel. We return allowed=false + degraded=true so the caller can
+      // (a) flip incidents.degradedDelivery and (b) fan out to a fallback
+      // channel (push -> sms -> email -> in_app, whichever the caller
+      // supports). The incident itself is never blocked, only this channel.
+      await writeAttempt({
+        channel: ctx.channel, purpose: ctx.purpose,
+        status: safety ? "deduped" : "blocked_policy",
+        destinationHash, dedupeKey: ctx.dedupeKey, userId: ctx.userId, incidentId: ctx.incidentId,
+        ipHash, errorMessage: `channel_ceiling:${ctx.channel}:${used}/${ceiling}`,
+      });
+      if (safety) {
+        console.warn(`[outbound-policy] channel_ceiling exceeded (safety degraded fallback) channel=${ctx.channel} purpose=${ctx.purpose} used=${used}/${ceiling}`);
+      }
+      return {
+        allowed: false,
+        degraded: true,
+        reason: "channel_circuit_broken",
+        retryAfterSeconds: 600,
+      };
+    }
+  }
+
+  // Safety bypass: skip Cat-A and Cat-B gates entirely (dedupe already ran
+  // above). We still write the queued audit row so cost/abuse reporting
+  // stays accurate.
+  if (safety) {
+    const attemptId = await writeAttempt({
+      channel: ctx.channel, purpose: ctx.purpose, status: "queued",
+      destinationHash, dedupeKey: ctx.dedupeKey, userId: ctx.userId, incidentId: ctx.incidentId,
+      ipHash,
+    });
+    return { allowed: true, attemptId: attemptId ?? undefined };
   }
 
   // 3. Category-A per-user / per-IP / per-destination limits.

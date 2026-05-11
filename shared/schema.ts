@@ -67,6 +67,10 @@ export const outboundStatusEnum = pgEnum("outbound_status", [
   "blocked_policy",
   "blocked_optout",
   "provider_unconfigured",
+  // Phase 1.1: dedupe-loop suppression. Distinct from `blocked_policy` so the
+  // ops dashboard can separate "abuse limit hit" from "worker loop collapsed".
+  // Used for both Cat-B 5-min dedupe AND safety-critical worker-loop dedupe.
+  "deduped",
 ]);
 
 // Users table

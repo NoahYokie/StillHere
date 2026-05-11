@@ -1,0 +1,187 @@
+To: Replit Agent
+
+  Re: Phase 1.1 Required — Safety Dedupe and Call Coverage
+
+  Thank you for the honest read.
+
+  Phase 1 is not fully closed yet.
+
+  Status should be:
+
+  Phase 1 implemented, code-review verified, but production acceptance blocked until Phase 1.1 fixes safety duplicate-loop
+  protection and degraded delivery propagation.
+
+  Do not broaden scope.
+
+  Do not change feature behavior.
+
+  Do not weaken SOS, missed check-in, Safe Walk, Safety Timer, Drive Safety, wellness call, in-app alert, push/email fallback,
+  contact escalation order, or incident state transitions.
+
+  Build Phase 1.1 only.
+
+  Required fixes:
+
+  1. Safety dedupe before safety bypass
+
+  In server/outbound-policy.ts:
+
+  Move duplicate-loop dedupe before the safety bypass.
+
+  For safety-critical sends:
+
+  First real alert always sends.
+
+  Do not apply Category-A user/IP/destination limits.
+
+  But if the same dedupeKey exists within 5 minutes with status queued, sent, or delivered:
+
+  do not transmit again
+  write an outbound_send_log row with status='deduped'
+  errorCode or errorMessage='duplicate_dedupe_window'
+  return allowed=false, reason='duplicate'
+
+  Caller should treat this as a soft skip, not failure.
+
+  This must apply to:
+
+  SOS
+  Drive crash
+  missed check-in escalation
+  Safe Walk escalation
+  Safety Timer escalation
+  wellness urgent help
+  recovery/all-clear
+  concern alerts
+  in-app system alerts
+  push
+  email
+  SMS
+  calls
+
+  2. Channel ceiling behavior for safety
+
+  For safety sends, if SMS/call/email channel ceiling is hit:
+
+  do not transmit over that capped channel
+  write circuit_broken
+  return degraded=true
+  attempt fallback channels where the call site supports fallback
+  set incidents.degradedDelivery=true
+
+  Do not block the incident itself.
+
+  3. degradedDelivery propagation
+
+  Wire result.degraded into all real-safety call sites where incidentId is available.
+
+  If a safety send returns degraded=true:
+
+  set incidents.degradedDelivery=true
+
+  This should include:
+
+  SOS
+  Drive crash
+  missed check-in
+  Safe Walk
+  Safety Timer
+  wellness call
+  escalation worker
+  call paths
+  SMS paths
+  push/email fallback paths where applicable
+
+  4. deliveryFailed writer
+
+  Add deliveryFailed=true only when every attempted channel for that alert failed, was circuit_broken, or could not be sent.
+
+  Do not set deliveryFailed for:
+
+  dedupe
+  single-channel failure while fallback is still possible
+  temporary degraded delivery
+  successful in-app delivery
+  successful push/email fallback
+
+  If deliveryFailed logic is too risky for Phase 1.1, leave the column unused and report it as Phase 2.
+
+  Do not half-implement scary failure states.
+
+  5. Built-in app call option
+
+  Please audit the in-app calling feature separately from Twilio outbound calls.
+
+  Questions:
+
+  Does in-app call create outbound provider cost?
+  Does it notify contacts through push/in-app/system_alert?
+  Can it be spammed repeatedly by a user?
+  Is there already a per-contact or per-user rate limit?
+  Does it create Socket.IO events or call invite rows?
+
+  For Phase 1.1:
+
+  At minimum, log and dedupe repeated in-app call invites using outbound_send_log with channel='in_app' or a specific purpose if
+  appropriate.
+
+  Do not block emergency call functionality, but prevent obvious repeated call-invite spam to the same contact.
+
+  6. Regression tests required
+
+  Add explicit tests for:
+
+  A. SOS duplicate safety send:
+  same incident, same destination, same channel, same dedupeKey within 5 min
+  first sends
+  second dedupes
+  no second provider send
+
+  B. Drive crash duplicate:
+  first sends
+  second dedupes
+  new incident sends again
+
+  C. Missed check-in worker loop:
+  running worker twice does not duplicate same alert
+
+  D. Safety Timer escalation loop:
+  same dedupe behavior
+
+  E. Safe Walk escalation loop:
+  same dedupe behavior
+
+  F. SMS channel ceiling:
+  safety SMS over cap does not transmit SMS
+  fallback attempted
+  degradedDelivery=true
+
+  G. In-app alert fallback:
+  if SMS capped, in-app/push fallback still works
+
+  H. In-app call invite spam:
+  repeated call invite to same contact is deduped or rate-limited as appropriate
+
+  I. deliveryFailed:
+  only set true when every attempted channel fails or is circuit_broken
+  or confirm deliveryFailed remains unused in Phase 1.1
+
+  7. Verification report required
+
+  After build, report:
+
+  files changed
+  exact logic changed in outbound-policy.ts
+  all safety purposes covered
+  built-in in-app call audit result
+  test results
+  TypeScript result
+  confirmation no safety feature was removed or reduced
+  remaining Phase 2 items
+
+  Proceed with Phase 1.1 only.
+  Do not start unrelated work.
+
+  My recommendation: approve this Phase 1.1 fix.
+
+  This is not a feature change. This is closing the hole Replit found in their own implementation.

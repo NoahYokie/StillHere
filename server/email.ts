@@ -304,6 +304,25 @@ export async function sendEmail(
     try { await policy.recordSendAttempt(auditCtx, status, { errorMessage, providerId }); } catch {}
   };
 
+  // Phase 1.1: dedupe-loop protection for email. When the caller supplies a
+  // dedupeKey (worker / sensor loops should always do so), collapse repeats
+  // inside the 5-min window and propagate degraded state to the incident.
+  if (options.dedupeKey) {
+    try {
+      const dec = await policy.enforceSendPolicy(auditCtx);
+      if (dec.degraded && options.incidentId) {
+        const { storage } = await import("./storage");
+        await storage.updateIncident(options.incidentId, { degradedDelivery: true });
+      }
+      if (!dec.allowed && dec.reason === "duplicate") {
+        console.log(`[EMAIL] Deduped (loop) to=${masked} key=${options.dedupeKey}`);
+        return { success: true };
+      }
+    } catch (e: any) {
+      console.warn(`[EMAIL] policy check failed, sending anyway: ${e?.message || e}`);
+    }
+  }
+
   const client = getResend();
   if (!client) {
     console.log(`[EMAIL] (dry-run, RESEND_API_KEY not set) to=${masked} subject="${subject}" (${body.length} chars)`);

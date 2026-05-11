@@ -119,6 +119,17 @@ export async function sendSms(
   };
 
   const decision = await policy.enforceSendPolicy(ctx);
+  // Phase 1.1: when policy reports a degraded channel for a safety-critical
+  // send tied to an incident, flip incidents.degradedDelivery so the watcher
+  // UI surfaces the partial delivery state.
+  if (decision.degraded && options.incidentId) {
+    try {
+      const { storage } = await import("./storage");
+      await storage.updateIncident(options.incidentId, { degradedDelivery: true });
+    } catch (e: any) {
+      console.warn(`[SMS] Failed to mark incident ${options.incidentId} degraded: ${e?.message || e}`);
+    }
+  }
   if (!decision.allowed) {
     const masked = `***${to.slice(-4)}`;
     console.warn(`[SMS] Blocked by policy (${decision.reason}) to ${masked} purpose=${purpose}`);
