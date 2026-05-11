@@ -52,6 +52,8 @@ import SafetyCircleGuardianViewPage from "@/pages/safety-circle-guardian-view";
 import SafetyCircleDrillPage from "@/pages/safety-circle-drill";
 import FamilyPage from "@/pages/family";
 import BillingPage from "@/pages/billing";
+import LimitationsPage from "@/pages/limitations";
+import { LimitationsGate } from "@/lib/limitations-gate";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -273,6 +275,11 @@ function Router() {
           <BillingPage />
         </RequireAuth>
       </Route>
+      <Route path="/limitations">
+        <RequireAuth>
+          <LimitationsPage />
+        </RequireAuth>
+      </Route>
       <Route path="/tour" component={TourPage} />
       <Route path="/help" component={HelpPage} />
       <Route path="/trust" component={TrustPage} />
@@ -344,6 +351,7 @@ function App() {
             <NotificationBanner />
             <RatingPrompt />
             <CapacitorInit />
+            <LimitationsGate />
             <Router />
           </AuthProvider>
         </TooltipProvider>

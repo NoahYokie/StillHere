@@ -6,6 +6,7 @@ interface AuthUser {
   id: string;
   name: string;
   phone: string;
+  acknowledgedLimitationsAt?: string | null;
 }
 
 interface AuthState {
@@ -13,6 +14,8 @@ interface AuthState {
   userId?: string;
   user?: AuthUser;
   needsSetup?: boolean;
+  acknowledgedLimitationsAt?: string | null;
+  hasActiveSafetyEvent?: boolean;
 }
 
 interface AuthContextValue {

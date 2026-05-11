@@ -166,6 +166,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
+  markLimitationsAcknowledged(userId: string): Promise<User>;
+  hasActiveSafetyEvent(userId: string): Promise<boolean>;
   recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number, batt?: number, chg?: boolean, net?: string): Promise<void>;
   updateSafetyState(userId: string, newState: string, reason: string): Promise<void>;
   getStaleActiveUsers(thresholdSeconds: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]>;
@@ -407,6 +409,81 @@ export class DatabaseStorage implements IStorage {
       }
       throw err;
     }
+  }
+
+  async markLimitationsAcknowledged(userId: string): Promise<User> {
+    // Idempotent: only set the timestamp the first time. Re-acknowledging
+    // does not overwrite the original acknowledgement time.
+    const existing = await this.getUser(userId);
+    if (existing?.acknowledgedLimitationsAt) {
+      return existing;
+    }
+    const [user] = await db
+      .update(users)
+      .set({ acknowledgedLimitationsAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async hasActiveSafetyEvent(userId: string): Promise<boolean> {
+    // Returns true if the user is currently inside any urgent safety flow
+    // that the Limitations gate must not interrupt: open incident (incl.
+    // missed-checkin concern, SOS, drill), Safety Timer in any non-terminal
+    // status (active / grace_period / escalated), Safe Walk in any
+    // non-terminal status (active / overdue / escalated), active Drive
+    // Safety session (no endedAt; crash countdown lives within an active
+    // drive session). Also true when the server-side safety-state engine
+    // has the user in `concern` (missed check-in concern flow).
+    try {
+      const incident = await this.getOpenIncident(userId);
+      if (incident) return true;
+    } catch {}
+    try {
+      const [timer] = await db
+        .select({ id: safetyTimers.id })
+        .from(safetyTimers)
+        .where(and(
+          eq(safetyTimers.userId, userId),
+          or(
+            eq(safetyTimers.status, "active"),
+            eq(safetyTimers.status, "grace_period"),
+            eq(safetyTimers.status, "escalated"),
+          ),
+        ))
+        .limit(1);
+      if (timer) return true;
+    } catch {}
+    try {
+      const [walk] = await db
+        .select({ id: safeWalks.id })
+        .from(safeWalks)
+        .where(and(
+          eq(safeWalks.userId, userId),
+          or(
+            eq(safeWalks.status, "active"),
+            eq(safeWalks.status, "overdue"),
+            eq(safeWalks.status, "escalated"),
+          ),
+        ))
+        .limit(1);
+      if (walk) return true;
+    } catch {}
+    try {
+      const drive = await this.getActiveDriveSession(userId);
+      if (drive) return true;
+    } catch {}
+    // Conservative fallback: if the server-side safety-state engine has
+    // moved this user out of `active` (i.e. `concern` or any other urgent
+    // posture), treat that as an active safety event. This catches missed
+    // check-in concern flows even before an incident row is created.
+    try {
+      const u = await this.getUser(userId);
+      if (u && u.safetyState && u.safetyState !== "active" && u.safetyState !== "quiet") {
+        return true;
+      }
+    } catch {}
+    return false;
   }
 
   async recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number, batt?: number, chg?: boolean, net?: string): Promise<void> {

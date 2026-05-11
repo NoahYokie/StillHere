@@ -463,7 +463,18 @@ export async function registerRoutes(
       
       const user = (req as any).user;
       const needsSetup = !user?.name || user.name.trim() === "";
-      
+
+      // hasActiveSafetyEvent lets the client suppress the Limitations of
+      // Service gate while the user is mid-incident. Best-effort: if the
+      // lookup fails we default to true (fail-safe: never trap a user who
+      // might actually be in a safety flow).
+      let hasActiveSafetyEvent = true;
+      try {
+        hasActiveSafetyEvent = await storage.hasActiveSafetyEvent(userId);
+      } catch (err) {
+        console.warn("[AUTH ME] hasActiveSafetyEvent lookup failed:", (err as any)?.message || err);
+      }
+
       res.json({
         authenticated: true,
         userId,
@@ -471,8 +482,11 @@ export async function registerRoutes(
           id: user.id,
           name: user.name,
           phone: user.phone,
+          acknowledgedLimitationsAt: user.acknowledgedLimitationsAt ?? null,
         },
         needsSetup,
+        acknowledgedLimitationsAt: user.acknowledgedLimitationsAt ?? null,
+        hasActiveSafetyEvent,
       });
     } catch (error) {
       console.error("Error getting auth status:", error);
@@ -480,6 +494,24 @@ export async function registerRoutes(
     }
   });
   
+  // Limitations of Service acknowledgement. Idempotent: subsequent calls
+  // are a no-op and return the original acknowledgement timestamp. Does NOT
+  // touch any safety feature, contact, incident, or setting.
+  app.post("/api/limitations/acknowledge", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const user = await storage.markLimitationsAcknowledged(userId);
+      res.json({
+        success: true,
+        acknowledgedLimitationsAt: user.acknowledgedLimitationsAt,
+      });
+    } catch (error) {
+      console.error("Error acknowledging limitations:", error);
+      res.status(500).json({ error: "Failed to record acknowledgement" });
+    }
+  });
+
   // Logout
   app.post("/api/auth/logout", async (req, res) => {
     try {

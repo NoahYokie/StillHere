@@ -328,6 +328,27 @@ export default function TrustPage() {
           </CardContent>
         </Card>
 
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              What StillHere is, and what it isn't
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-3">
+              The honest limits of this service: what we do, what we do not do, and what alert delivery actually depends on.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/limitations?reread=1")}
+              data-testid="button-open-limitations"
+            >
+              Read the limits of this service
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

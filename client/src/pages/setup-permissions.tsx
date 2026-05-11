@@ -76,7 +76,19 @@ export default function SetupPermissionsPage() {
     setCurrentStep((prev) => prev + 1);
   }, [step]);
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
+    // After contact + permission setup, route to the Limitations of Service
+    // screen if the user has not yet acknowledged it. The gate component
+    // also enforces this, but redirecting here keeps onboarding linear.
+    try {
+      const me = await fetch("/api/auth/me", { credentials: "include" }).then((r) => r.json());
+      if (me?.authenticated && !me?.acknowledgedLimitationsAt) {
+        setLocation("/limitations");
+        return;
+      }
+    } catch {
+      // If the fetch fails the gate will catch it later.
+    }
     setLocation("/");
   };
 

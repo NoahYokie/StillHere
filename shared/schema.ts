@@ -72,6 +72,12 @@ export const users = pgTable("users", {
   lastLat: doublePrecision("last_lat"),
   lastLng: doublePrecision("last_lng"),
   lastLocationAt: timestamp("last_location_at"),
+  // Set when the user has read and acknowledged the Limitations of Service
+  // screen ("What StillHere is, and what it isn't"). Null until they tap
+  // Continue. Used as a calm-time gate before main app use; never blocks
+  // urgent safety flows (SOS, active incident, Safe Walk, Safety Timer,
+  // Drive Safety, etc).
+  acknowledgedLimitationsAt: timestamp("acknowledged_limitations_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
