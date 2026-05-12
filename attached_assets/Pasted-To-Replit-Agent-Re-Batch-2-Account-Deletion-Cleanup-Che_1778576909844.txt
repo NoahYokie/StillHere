@@ -1,0 +1,125 @@
+To: Replit Agent
+
+  Re: Batch 2 Account Deletion Cleanup — Checklist Response
+
+  Good catch on the OTP/SMS policy bug. That fix was necessary and accepted.
+
+  For Batch 2, the account deletion plan is approved in principle with one adjustment.
+
+  Answers to open questions:
+
+  A. REVENUECAT_PROJECT_ID
+
+  Request REVENUECAT_PROJECT_ID as a Replit Secret.
+
+  Do not derive or guess it.
+
+  Also request/confirm REVENUECAT_SECRET_API_KEY if it is not already present.
+
+  Never print either secret.
+
+  B. Passkey challenges
+
+  Deleting the user row and FK-cascaded passkeys should be sufficient only if all passkey/challenge rows are linked by FK.
+
+  Please grep/verify temporary passkey challenge tables or in-memory challenge stores.
+
+  If any persistent passkey challenge rows exist and are not cascade-deleted, delete them during account deletion.
+
+  C. outbound_send_log purge
+
+  Hard delete outbound_send_log rows for the user.
+
+  Do not keep aggregate counters in Batch 2.
+
+  Privacy deletion should be clean and simple.
+
+  D. Retry policy
+
+  24 attempts with max 1-hour backoff is approved.
+
+  One required adjustment:
+
+  Do not make processor cleanup cron-only.
+
+  Use this sequence:
+
+  1. Read processor IDs into memory.
+  2. Insert processor_cleanup_queue row with all needed steps.
+     If queue insert fails, abort deletion and return 500.
+  3. Attempt processor cleanup inline with short timeouts:
+     - Stripe subscription cancel
+     - Stripe customer delete
+     - RevenueCat delete
+     - outbound_send_log purge
+  4. For each successful inline step, mark/remove that step from the queue.
+  5. For each failed or timed-out step, keep it in steps_remaining for cron retry.
+  6. Revoke all sessions.
+  7. Delete Postgres user and cascade app data.
+  8. Clear current session cookie.
+  9. Return 200 with processorWarnings if any processor step is still pending.
+
+  Reason:
+  Account deletion should not be blocked by Stripe/RevenueCat, but billing cancellation should be attempted immediately so a user
+  is not charged while waiting for cron.
+
+  If implementing inline cleanup with safe timeouts is too complex for Batch 2, explain why and propose the safest minimal
+  alternative.
+
+  Other requirements:
+
+  Stripe:
+  - stripe.subscriptions.cancel if subscription exists and is active.
+  - stripe.customers.del after subscription cancel or if no subscription.
+  - resource_missing counts as success.
+  - no automatic refunds.
+
+  RevenueCat:
+  - use v2 DELETE /projects/{project_id}/customers/{customer_id}
+  - customer_id = StillHere user id
+  - 404 counts as success
+  - 423/429/5xx retry
+
+  Queue:
+  processor_cleanup_queue with:
+  id
+  user_id
+  user_phone_last4
+  stripe_customer_id
+  stripe_subscription_id
+  revenuecat_app_user_id
+  steps_remaining
+  attempts
+  last_error
+  next_attempt_at
+  created_at
+  completed_at
+
+  Drainer:
+  - inside existing /api/cron/tick
+  - process up to 25 due rows
+  - exponential backoff
+  - after 24 failed attempts, log manual intervention needed
+  - prune completed rows older than 90 days
+
+  Account deletion dialog copy approved with one small change:
+
+  Use:
+  “Delete your StillHere account?
+  This permanently deletes your profile, Safety Circle, check-in history, location history, messages, and settings. We will also
+  attempt to cancel your StillHere Premium subscription and remove your billing profile from our payment processors.
+  Apple, Google, Stripe, RevenueCat, and your bank may keep records of past transactions for tax and legal reasons. This is outside
+  our control.
+  You will be signed out of all devices. This cannot be undone.”
+
+  Tests approved, with one more required test:
+
+  Inline cleanup success:
+  processor steps succeed inline, queue row is completed or left with no steps_remaining, user is deleted.
+
+  Inline cleanup partial failure:
+  successful steps removed from queue, failed steps remain for cron retry, user is deleted, response includes processorWarnings.
+
+  Do not start Batch 3 or Batch 4.
+
+  Return final Batch 2 checklist if anything changed materially, otherwise proceed only after founder approval.
