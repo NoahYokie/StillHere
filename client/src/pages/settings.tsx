@@ -407,14 +407,28 @@ export default function SettingsPage() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("DELETE", "/api/account");
+      const res = await apiRequest("DELETE", "/api/account");
+      return res.json() as Promise<{ success: boolean; processorWarnings?: string[] }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.clear();
+      const warnings = data?.processorWarnings ?? [];
+      if (warnings.length > 0) {
+        toast({
+          title: "Account deleted",
+          description: `We will keep retrying cleanup for: ${warnings.join(", ")}.`,
+        });
+      } else {
+        toast({ title: "Account deleted" });
+      }
       setLocation("/auth");
     },
     onError: () => {
-      toast({ title: "Error", variant: "destructive" });
+      toast({
+        title: "Could not delete account",
+        description: "Something went wrong. Please try again or contact support.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -1270,16 +1284,51 @@ export default function SettingsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showDeleteAccount} onOpenChange={setShowDeleteAccount}>
+      <AlertDialog
+        open={showDeleteAccount}
+        onOpenChange={(open) => {
+          if (deleteAccountMutation.isPending) return;
+          setShowDeleteAccount(open);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone. All your data, contacts, checkin history, and settings will be permanently deleted.</AlertDialogDescription>
+            <AlertDialogTitle>Delete your StillHere account?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 text-left">
+              <span className="block">
+                This permanently deletes your profile, Safety Circle, check-in history,
+                location history, messages, and settings. We will also attempt to cancel
+                your StillHere Premium subscription and remove your billing profile from
+                our payment processors.
+              </span>
+              <span className="block">
+                Apple, Google, Stripe, RevenueCat, and your bank may keep records of past
+                transactions for tax and legal reasons. This is outside our control.
+              </span>
+              <span className="block">
+                You will be signed out of all devices. This cannot be undone.
+              </span>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-delete-account-cancel">Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { deleteAccountMutation.mutate(); setShowDeleteAccount(false); }} data-testid="button-delete-account-confirm">
-              {deleteAccountMutation.isPending ? "Deleting..." : "Delete Account"}
+            <AlertDialogCancel
+              disabled={deleteAccountMutation.isPending}
+              data-testid="button-delete-account-cancel"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAccountMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                deleteAccountMutation.mutate(undefined, {
+                  onSettled: () => setShowDeleteAccount(false),
+                });
+              }}
+              data-testid="button-delete-account-confirm"
+            >
+              {deleteAccountMutation.isPending ? "Deleting account..." : "Delete account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

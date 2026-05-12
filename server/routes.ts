@@ -49,6 +49,7 @@ import {
 import { emitToUser, isUserOnline } from "./socket";
 import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
 import { getTrackingPolicyForUser, emitTrackingPolicyChanged } from "./tracking-policy";
+import { deleteUserAccount, drainProcessorCleanupQueue } from "./accountDeletion";
 
 // Helper to get userId from session
 // Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
@@ -636,14 +637,36 @@ export async function registerRoutes(
       if (!session) return res.status(401).json({ error: "Not authenticated" });
       const user = session.user;
 
-      await db.delete(users).where(eq(users.id, user.id));
+      // Inline-then-cron hybrid. Inserts processor_cleanup_queue row, runs
+      // each processor step inline with a 4s timeout, revokes all sessions,
+      // clears the in-memory passkey reg challenge, deletes the user row.
+      // Failed/timed-out steps stay in the queue for the cron drainer.
+      const result = await deleteUserAccount({
+        userId: user.id,
+        challengeStore,
+      });
 
-      await deleteSession(sessionToken);
+      // Always clear THIS request's session cookie too (revoke-all already
+      // killed the row, this just removes the client-side cookie).
       clearSessionCookie(res);
 
-      console.log(`[AUTH] Account deleted for user ***${user.phone?.slice(-4) ?? "????"}`);
-      res.json({ success: true });
-    } catch (error) {
+      res.json({
+        success: true,
+        processorWarnings: result.processorWarnings,
+      });
+    } catch (error: any) {
+      const code = error?.message;
+      if (code === "user_not_found") {
+        clearSessionCookie(res);
+        return res.status(404).json({ error: "Account not found" });
+      }
+      if (code === "queue_insert_failed") {
+        console.error("[AUTH] Account deletion aborted: queue insert failed");
+        return res.status(500).json({ error: "Failed to delete account" });
+      }
+      if (code === "delete_in_progress") {
+        return res.status(409).json({ error: "Account deletion already in progress" });
+      }
       console.error("Error deleting account:", error);
       res.status(500).json({ error: "Failed to delete account" });
     }
@@ -7434,8 +7457,18 @@ export async function registerRoutes(
         console.error("[CRON] Family place schedule check failed:", err);
       }
 
+      // Batch 2: drain processor cleanup queue (Stripe / RevenueCat / outbound
+      // log purge) for accounts deleted since the last tick. Bounded work,
+      // never throws -- failures stay queued for the next tick.
+      let processorCleanup = { processed: 0, succeeded: 0, stillFailing: 0, abandoned: 0, pruned: 0 };
+      try {
+        processorCleanup = await drainProcessorCleanupQueue();
+      } catch (err) {
+        console.error("[CRON] processor cleanup drain failed:", err);
+      }
+
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts, processorCleanup });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);

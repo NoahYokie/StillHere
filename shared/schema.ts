@@ -1114,6 +1114,34 @@ export const outboundSendLog = pgTable("outbound_send_log", {
 export const insertOutboundSendLogSchema = createInsertSchema(outboundSendLog).omit({ id: true, createdAt: true });
 export type InsertOutboundSendLog = z.infer<typeof insertOutboundSendLogSchema>;
 export type OutboundSendLog = typeof outboundSendLog.$inferSelect;
+
+// Processor cleanup queue (Batch 2: account deletion).
+// One row per account-deletion event. The user row is gone by the time this is
+// inserted (or moments after) so userId is a SNAPSHOT, not a foreign key, and
+// the row carries the snapshot of processor IDs we need to retry calls. Steps
+// that succeed inline are removed from `stepsRemaining`. Cron drainer retries
+// any remaining steps with exponential backoff; rows are pruned 90 days after
+// completion. Step keys: 'stripe_sub_cancel', 'stripe_customer_del',
+// 'revenuecat_delete', 'outbound_log_purge'.
+export const processorCleanupQueue = pgTable("processor_cleanup_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stepsRemaining: text("steps_remaining").array().notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  lastError: text("last_error"),
+  nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("proc_cleanup_next_attempt_idx").on(table.nextAttemptAt, table.completedAt),
+  index("proc_cleanup_user_idx").on(table.userId),
+  index("proc_cleanup_completed_idx").on(table.completedAt),
+]);
+
+export type ProcessorCleanupQueueRow = typeof processorCleanupQueue.$inferSelect;
 export type FamilyMessage = typeof familyMessages.$inferSelect;
 export type InsertFamilyMessage = z.infer<typeof insertFamilyMessageSchema>;
 export type FamilyPlace = typeof familyPlaces.$inferSelect;
