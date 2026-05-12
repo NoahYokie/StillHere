@@ -1,0 +1,188 @@
+To: Replit Agent
+
+  Re: Privacy Nutrition Label Audit — Founder Direction Before Code
+
+  Good audit. I agree with your high-risk findings.
+
+  Do not code yet.
+
+  I want to resolve the high-risk items first before final App Store Connect answers.
+
+  Decisions and follow-up questions:
+
+  1. Heart-rate data
+
+  This is the biggest blocker.
+
+  Current problem:
+  The Watch permission string says heart rate is used only for in-app display and not shared unless the user chooses.
+
+  But the server stores heart_rate_readings and heart_rate_alerts and may notify watchers.
+
+  Before we choose final behavior, please answer:
+
+  A. Are heart-rate readings uploaded automatically from the Watch to the server?
+  B. Are heart-rate alerts to watchers automatic, or only user-enabled?
+  C. Can the user turn heart-rate sharing/alerts off?
+  D. Are heart-rate thresholds user-configurable?
+  E. Are heart-rate readings visible to Safety Circle members by default?
+  F. What app screen explains this to the user before upload/sharing?
+
+  My preferred launch-safe direction:
+
+  For v1, avoid automatic heart-rate emergency/watcher alerts unless the user explicitly opts in.
+
+  Keep heart-rate readings as a user-facing Watch/app feature if needed, but do not frame it as abnormal-health detection.
+
+  Safer wording direction:
+
+  “StillHere can read heart-rate samples from HealthKit so you can view them in the app. If you choose to enable heart-rate
+  sharing, readings may be saved to your StillHere account and shown to your Safety Circle during safety features. StillHere is not
+  a medical device, does not diagnose, and does not detect health emergencies.”
+
+  But if we keep automatic watcher alerts, the privacy/permission wording must say that clearly.
+
+  Please propose the safest v1 path:
+  Option A: keep server upload + opt-in sharing, rewrite wording
+  Option B: disable watcher heart-rate alerts for launch
+  Option C: keep heart rate on device only for launch
+
+  2. Account deletion with Stripe and RevenueCat
+
+  I agree this is high priority.
+
+  Please audit current DELETE /api/account behavior and propose the smallest safe fix.
+
+  Preferred behavior:
+
+  On account deletion:
+  cancel active Stripe subscription if present
+  delete or anonymize Stripe customer if possible
+  call RevenueCat delete/subscriber deletion endpoint if available
+  delete Postgres user and cascade data as today
+  return a clear result even if one processor deletion fails
+
+  Important:
+  Do not leave the user unable to delete the account because Stripe/RevenueCat API temporarily fails.
+
+  Instead:
+  mark deletion pending or log processor cleanup failure for retry.
+
+  Please return a plan before coding.
+
+  3. COPPA / under-13
+
+  For v1, I recommend we do NOT support under-13 users.
+
+  Please propose the simplest App Store-safe approach:
+
+  Add age gate during signup:
+  “I confirm I am 13 or older.”
+
+  If under 13:
+  block account creation with:
+  “StillHere is not available for users under 13.”
+
+  Family Mode:
+  Do not present StillHere as a child-tracking app.
+  If child/teen roles exist internally, do not market them for v1.
+  If needed, rename user-facing role labels to safer non-age labels:
+  Family member
+  Trusted person
+  Dependent
+  Member
+
+  Question:
+  Can we keep existing schema roles internally but block under-13 account creation and avoid child-focused marketing?
+
+  4. Presence / Paused location collection
+
+  Replit flagged this:
+
+  The iOS string says StillHere does not collect location during calm time when Presence mode or Paused is active.
+
+  Please verify server behavior after the tracking-policy fix.
+
+  Question:
+  Can heartbeat or location update endpoints still write users.lastHeartbeatLat/Lng/Acc or users.lastLat/Lng while sharingMode is
+  presence or paused?
+
+  If yes, propose a fix:
+  When sharingMode is presence or paused and no active safety purpose exists:
+  do not store new precise lat/lng from heartbeat/location updates.
+  Allow non-location heartbeat fields to continue.
+
+  This must not break SOS, missed check-in, Safe Walk, Drive Safety, Safety Timer, active sharing, or active incident location.
+
+  5. App Store Privacy Label
+
+  I agree with these likely answers:
+
+  Tracking:
+  No
+
+  Contact Info:
+  Name, Phone Number, Email Address if contact emails are kept
+
+  Health and Fitness:
+  Health, only if heart rate is uploaded or stored
+
+  Location:
+  Precise Location, linked to user, App Functionality
+
+  User Content:
+  Other User Content, because chat/messages are stored
+
+  Identifiers:
+  User ID
+
+  Purchases:
+  Purchase History
+
+  Usage Data:
+  Product Interaction
+
+  Diagnostics:
+  Other Diagnostic Data
+
+  Other Data:
+  battery/network heartbeat, motion event results, safety telemetry
+
+  Please prepare final App Store Connect answer sheet only after we resolve heart rate, account deletion, COPPA, and Presence/
+  Paused collection.
+
+  6. Retention
+
+  Please propose a Phase 2 privacy-retention pass for:
+
+  heart_rate_readings
+  heart_rate_alerts
+  outbound_send_log
+  error_reports
+  otp_codes
+  otp_rate_limits
+  location history
+
+  But do not code retention yet unless we approve it.
+
+  7. Do not code yet
+
+  Please respond with:
+
+  A. Heart-rate behavior truth table and safest launch recommendation
+  B. Account deletion processor cleanup plan
+  C. COPPA / age gate plan
+  D. Presence/Paused location collection verification
+  E. Any code changes you recommend before App Store privacy label submission
+
+  My recommendation for you:
+
+  Approve the direction only after Replit answers those questions.
+
+  The three things I would not submit without fixing are:
+
+  1. heart-rate mismatch
+  2. account deletion not cleaning Stripe/RevenueCat
+  3. under-13/COPPA story
+
+  Those are the real App Store risks now.
