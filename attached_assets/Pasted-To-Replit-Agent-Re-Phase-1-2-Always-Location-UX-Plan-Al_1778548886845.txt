@@ -1,0 +1,144 @@
+To: Replit Agent
+
+  Re: Phase 1.2 Always Location UX Plan — Almost Approved, Two Refinements Needed
+
+  The per-feature behavior table is approved in principle:
+
+  Safe Walk:
+  allow degraded mode with persistent warning if only WhenInUse.
+
+  Safety Timer:
+  never block.
+
+  Drive Safety:
+  require Always.
+
+  Active sharing precise:
+  require Always.
+
+  Active sharing area:
+  allow degraded mode with persistent warning.
+
+  Presence:
+  no Always prompt.
+
+  Paused:
+  no prompt.
+
+  SOS:
+  never block.
+
+  Missed check-in:
+  never block.
+
+  I also agree with:
+
+  background-location-sheet
+  background-location-warning-banner
+  provider change subscription
+  settings upgrade button
+  local device-only asked-already flags
+  no server-side authorization level storage
+  no Android in this pass
+  STORE_SUBMISSION.md update
+
+  But before build approval, I need two refinements answered.
+
+  Refinement 1 — BG.start at app launch
+
+  Your sequence says:
+
+  [App launch]
+  BG.ready(...)
+  BG.start()
+
+  Please confirm whether StillHere currently calls BG.start() at app launch, or only when a feature subscribes to location.
+
+  For App Store privacy, preferred behavior is:
+
+  BG.ready() may configure the plugin.
+  BG.start() should only run when a location feature actually needs it.
+
+  Do not start native background tracking at normal app launch just to be ready.
+
+  If current architecture requires BG.start() early because heartbeat/location-policy depends on it, explain exactly why and
+  propose the least invasive change.
+
+  Target behavior:
+
+  Presence mode calm time:
+  no native GPS start.
+
+  Paused mode:
+  no native GPS start.
+
+  Location off:
+  no native GPS start.
+
+  Normal app open with no active safety feature:
+  no native GPS start.
+
+  Feature start:
+  BG.start only after permission flow and tracking policy allow it.
+
+  Please answer this clearly before coding.
+
+  Refinement 2 — modal orchestration
+
+  Do not make a plain utility function secretly render UI.
+
+  Instead of requestAlwaysForFeature() rendering the modal internally, use a React-safe pattern.
+
+  Preferred:
+
+  Create:
+
+  client/src/components/background-location-provider.tsx
+
+  or a hook like:
+
+  useBackgroundLocationEscalation()
+
+  The provider owns:
+
+  modal state
+  current feature
+  Continue / Not now / Open Settings handlers
+  Promise resolver if needed
+
+  Feature pages can call:
+
+  const { requestAlwaysForFeature } = useBackgroundLocationEscalation();
+
+  Then the modal is rendered once at app level through React.
+
+  This avoids utility-level UI side effects and makes testing easier.
+
+  Please update the implementation plan to use a provider/hook pattern rather than hidden rendering inside escalate-always.ts.
+
+  Additional answers:
+
+  The 3 intentionally NOT items are accepted:
+
+  No server-side location authorization storage.
+  No Android changes.
+  Pre-permission education screen rewording can be handled in the next misleading-claims copy pass.
+
+  STORE_SUBMISSION.md should document both:
+
+  the per-feature behavior table
+  and the blocked-card behavior for Drive Safety / Precise Sharing
+
+  Before coding, return the revised plan answering:
+
+  1. Does BG.start happen today at app launch or only after a location subscriber?
+  2. What exact change will prevent native GPS from starting in calm time?
+  3. How will the provider/hook modal orchestration work?
+  4. What files change after adding the provider/hook?
+  5. Does this still preserve SOS, missed check-in, heartbeat, and tracking-policy behavior?
+
+  No code changes yet.
+
+  My recommendation:
+
+  If Replit answers those two points cleanly, then approve the build.
