@@ -19,6 +19,12 @@ function getResend(): Resend | null {
 export interface SendEmailResult {
   success: boolean;
   error?: string;
+  // True when sendEmail "succeeded" without actually contacting a provider —
+  // dev-mode dry-runs (no RESEND_API_KEY) and policy-deduped repeats. Callers
+  // that need to know whether bytes actually left the building (e.g. the
+  // notifyContact fallback summary used to flip incidents.deliveryFailed /
+  // incidents.degradedDelivery) MUST treat dryRun:true as non-delivery.
+  dryRun?: boolean;
 }
 
 export interface EmailContext {
@@ -316,7 +322,7 @@ export async function sendEmail(
       }
       if (!dec.allowed && dec.reason === "duplicate") {
         console.log(`[EMAIL] Deduped (loop) to=${masked} key=${options.dedupeKey}`);
-        return { success: true };
+        return { success: true, dryRun: true };
       }
     } catch (e: any) {
       console.warn(`[EMAIL] policy check failed, sending anyway: ${e?.message || e}`);
@@ -327,7 +333,7 @@ export async function sendEmail(
   if (!client) {
     console.log(`[EMAIL] (dry-run, RESEND_API_KEY not set) to=${masked} subject="${subject}" (${body.length} chars)`);
     await recordOutcome("provider_unconfigured", "resend_missing");
-    return { success: true };
+    return { success: true, dryRun: true };
   }
   try {
     const { data, error } = await client.emails.send({
@@ -357,6 +363,7 @@ export async function sendEmergencyEmail(
   link: string,
   reason: "sos" | "missed_checkin",
   context?: EmailContext,
+  options: SendEmailOptions = {},
 ): Promise<SendEmailResult> {
   const issos = reason === "sos";
   const safeName = esc(userName);
@@ -376,7 +383,10 @@ export async function sendEmergencyEmail(
     ctaUrl: link, ctaLabel: "View live location",
     whyReceiving, emergencyHint: true, context: enriched,
   });
-  return sendEmail(contactEmail, subject, body);
+  return sendEmail(contactEmail, subject, body, {
+    purpose: issos ? "sos_alert" : "missed_checkin_alert",
+    ...options,
+  });
 }
 
 export async function sendCrashEmail(

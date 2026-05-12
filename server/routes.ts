@@ -255,60 +255,121 @@ function isValidEmail(value: string | null | undefined): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+interface NotifyContactSummary {
+  attempted: string[];
+  delivered: string[];
+  smsAttempted: boolean;
+  smsDelivered: boolean;
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null },
   userName: string,
   link: string,
   reason: "sos" | "missed_checkin",
-  sendSmsFn: (phone: string, userName: string, link: string) => Promise<any>
-): Promise<void> {
+  sendSmsFn: (
+    phone: string,
+    userName: string,
+    link: string,
+    options?: { userId?: string | null; incidentId?: string | null; ipAddress?: string | null; dedupeKey?: string | null },
+  ) => Promise<{ success: boolean; error?: string } | any>,
+  audit?: { incidentId?: string | null; ipAddress?: string | null },
+): Promise<NotifyContactSummary> {
+  const summary: NotifyContactSummary = { attempted: [], delivered: [], smsAttempted: false, smsDelivered: false };
+  const incidentId = audit?.incidentId ?? null;
+  const ipAddress = audit?.ipAddress ?? null;
+
   // Store-review safety net: if the SUBJECT user (the one in trouble) is the
   // dedicated Apple/Play review account, never page real emergency contacts.
-  // The reviewer can still see the in-app SOS/concern UI; we simply don't
-  // dispatch SMS / email / push to anyone outside the review account itself.
-  // Fails open on lookup error so real users are never silently dropped.
   try {
     const subjectUser = await storage.getUser(contact.userId);
     if (subjectUser?.isReviewAccount) {
       console.log(`[NOTIFY] Skipped contact fan-out (review account subject ${contact.userId})`);
-      return;
+      return summary;
     }
   } catch (e: any) {
     console.warn(`[NOTIFY] Review-flag lookup failed for subject ${contact.userId}, dispatching anyway:`, e?.message || e);
   }
 
+  // Channel 1: SMS
   const normalizedPhone = normalizePhone(contact.phone);
-  await sendSmsFn(normalizedPhone, userName, link);
-  console.log(`[NOTIFY] Sent SMS to contact`);
+  summary.attempted.push("sms");
+  summary.smsAttempted = true;
+  try {
+    const smsRes = await sendSmsFn(normalizedPhone, userName, link, {
+      userId: contact.userId,
+      incidentId,
+      ipAddress,
+      dedupeKey: incidentId ? `contact_alert:${incidentId}:${contact.id}` : null,
+    });
+    if (smsRes && smsRes.success) {
+      summary.delivered.push("sms");
+      summary.smsDelivered = true;
+      console.log(`[NOTIFY] Sent SMS to contact`);
+    } else {
+      console.warn(`[NOTIFY] SMS not delivered to contact ${contact.id}: ${smsRes?.error || "unknown"}`);
+    }
+  } catch (e: any) {
+    console.error(`[NOTIFY] SMS threw for contact ${contact.id}:`, e?.message || e);
+  }
 
+  // Channel 2: Email
   const cleanEmail = isValidEmail(contact.email) ? contact.email!.trim() : null;
   if (contact.email && !cleanEmail) {
     console.warn(`[NOTIFY] Skipping email for contact ${contact.id} — value in email field is not a valid email address`);
   }
   if (cleanEmail) {
+    summary.attempted.push("email");
     try {
       const subjectUser = await storage.getUser(contact.userId);
-      await sendEmergencyEmail(contact.email!.trim(), userName, link, reason, {
+      const emailRes = await sendEmergencyEmail(cleanEmail, userName, link, reason, {
         lat: subjectUser?.lastLat ?? null,
         lng: subjectUser?.lastLng ?? null,
         locationAt: subjectUser?.lastLocationAt ?? null,
         timezone: subjectUser?.timezone ?? null,
+      }, {
+        userId: contact.userId,
+        incidentId,
+        dedupeKey: incidentId ? `contact_email:${incidentId}:${contact.id}` : null,
       });
-      console.log(`[NOTIFY] Also sent email to contact`);
+      // Strict: only count actual provider-confirmed deliveries. Dev dry-runs
+      // (no RESEND_API_KEY) and policy-deduped sends return success:true with
+      // dryRun:true; treating those as delivered would suppress
+      // incidents.deliveryFailed when the contact in fact got nothing.
+      if (emailRes && (emailRes as any).success === true && !(emailRes as any).dryRun) {
+        summary.delivered.push("email");
+        console.log(`[NOTIFY] Also sent email to contact`);
+      }
     } catch (e) {
       console.error(`[NOTIFY] Email failed:`, e);
     }
   }
 
+  // Channels 3 + 4: Push + in-app message (linked-user only)
   if (contact.linkedUserId) {
-    await sendPushNotification(contact.linkedUserId, {
-      title: reason === "sos" ? `SOS from ${userName}` : `Safety Alert: ${userName} has not checked in`,
-      body: reason === "sos"
-        ? `${userName} has activated an emergency SOS and needs immediate assistance. Open the app to respond.`
-        : `${userName} has not completed their scheduled safety checkin. Open the app to respond.`,
-      url: "/watched",
-      tag: "emergency-alert",
-    });
+    summary.attempted.push("push");
+    try {
+      const pushRes = await sendPushNotification(contact.linkedUserId, {
+        title: reason === "sos" ? `SOS from ${userName}` : `Safety Alert: ${userName} has not checked in`,
+        body: reason === "sos"
+          ? `${userName} has activated an emergency SOS and needs immediate assistance. Open the app to respond.`
+          : `${userName} has not completed their scheduled safety checkin. Open the app to respond.`,
+        url: "/watched",
+        tag: "emergency-alert",
+      }, {
+        purpose: reason === "sos" ? "sos_alert" : "missed_checkin_alert",
+        incidentId,
+        dedupeKey: incidentId ? `contact_push:${incidentId}:${contact.linkedUserId}` : null,
+      });
+      if (pushRes && pushRes.sent > 0) {
+        summary.delivered.push("push");
+        console.log(`[NOTIFY] Also sent push notification to contact (in-app user)`);
+      }
+    } catch (err: any) {
+      console.error(`[NOTIFY] Push to linked contact ${contact.name} failed:`, err?.message || err);
+    }
+
+    summary.attempted.push("in_app");
     try {
       const alertContent = reason === "sos"
         ? `${userName} has activated an emergency SOS. Please check on them immediately.`
@@ -319,11 +380,45 @@ async function notifyContact(
         userName,
         reason,
       });
+      summary.delivered.push("in_app");
     } catch (err: any) {
-      console.error(`[NOTIFY] Push/message to linked contact ${contact.name} failed:`, err?.message || err);
+      console.error(`[NOTIFY] In-app message to linked contact ${contact.name} failed:`, err?.message || err);
     }
-    console.log(`[NOTIFY] Also sent push notification to contact (in-app user)`);
   }
+
+  // Flip incident flags: degradedDelivery if SMS attempted but only fallbacks
+  // succeeded; deliveryFailed if every attempted channel failed. Never throws
+  // — a flag-update failure must not block a safety event.
+  //
+  // Multi-contact semantics (intentional UNION at incident level):
+  //   - deliveryFailed=true on the incident means at least one contact got
+  //     nothing through any channel.
+  //   - degradedDelivery=true on the incident means at least one contact
+  //     required a fallback for delivery to succeed.
+  // These can both be true on the same incident when different contacts had
+  // different fates (e.g. contact A unreachable, contact B reached only by
+  // push). At the per-contact decision below they remain mutually exclusive.
+  if (incidentId) {
+    try {
+      const allFailed = summary.attempted.length > 0 && summary.delivered.length === 0;
+      const smsBackedByFallback = summary.smsAttempted && !summary.smsDelivered && summary.delivered.length > 0;
+      const patch: any = {};
+      if (allFailed) patch.deliveryFailed = true;
+      if (smsBackedByFallback) patch.degradedDelivery = true;
+      if (Object.keys(patch).length > 0) {
+        await storage.updateIncident(incidentId, patch);
+        if (allFailed) {
+          console.warn(`[NOTIFY] All channels failed for contact ${contact.id} on incident ${incidentId}; deliveryFailed=true`);
+        } else if (smsBackedByFallback) {
+          console.log(`[NOTIFY] SMS unavailable for contact ${contact.id} on incident ${incidentId}; delivered via ${summary.delivered.join("/")}; degradedDelivery=true`);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[NOTIFY] Could not update incident delivery flags: ${e?.message || e}`);
+    }
+  }
+
+  return summary;
 }
 
 export async function registerRoutes(
@@ -1234,7 +1329,7 @@ export async function registerRoutes(
         if (token) {
           const link = `${baseUrl}/emergency/${token.token}`;
           console.log(`[SOS] Alerting Contact #${firstContact.priority}`);
-          await notifyContact(firstContact, user?.name || "User", link, "sos", sendSosAlert);
+          await notifyContact(firstContact, user?.name || "User", link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
           console.log("[SOS] Alert sent\n");
         }
       }
@@ -2444,7 +2539,7 @@ export async function registerRoutes(
           console.log(`[ESCALATION] Re-notifying Contact #${firstContact.priority}`);
           const reason = data.incident!.reason as "sos" | "missed_checkin";
           const smsFn = reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-          await notifyContact(firstContact, data.user.name, link, reason, smsFn);
+          await notifyContact(firstContact, data.user.name, link, reason, smsFn, { incidentId: data.incident!.id, ipAddress: req.ip });
           console.log("[ESCALATION] Contact re-notified, escalation will continue via cron\n");
         }
       }
@@ -3860,7 +3955,7 @@ export async function registerRoutes(
             const tok = tokens.find(t => t.contact.id === first.id);
             if (tok) {
               const link = `${baseUrl}/emergency/${tok.token}`;
-              await notifyContact(first, user.name, link, "sos", sendSosAlert);
+              await notifyContact(first, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
             }
           }
           await storage.updateIncident(incident.id, {
@@ -4913,7 +5008,7 @@ export async function registerRoutes(
             const tok = tokens.find(t => t.contact.id === first.id);
             if (tok) {
               const link = `${baseUrl}/emergency/${tok.token}`;
-              await notifyContact(first, user.name, link, "sos", sendSosAlert);
+              await notifyContact(first, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
             }
           }
           const userSettings = await storage.getSettings(user.id);
@@ -5927,7 +6022,7 @@ export async function registerRoutes(
           if (!tok) return;
           const link = `${sosBaseUrl}/emergency/${tok.token}`;
           try {
-            await notifyContact(contact, user.name, link, "sos", sendSosAlert);
+            await notifyContact(contact, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
             notifiedIds.push(contact.id);
           } catch (err: any) {
             console.error(`[WELLNESS CALL] SOS notify failed for contact ${contact.id}:`, err?.message || err);
@@ -6660,7 +6755,7 @@ export async function registerRoutes(
               const link = `${baseUrl}/emergency/${token.token}`;
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-              await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
+              await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
               existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted  -  emergency contact notified: ${firstContact.name}` });
             }
           }
@@ -6688,7 +6783,7 @@ export async function registerRoutes(
               const link = `${baseUrl}/emergency/${token.token}`;
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-              await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
+              await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
               existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted  -  emergency contact notified: ${firstContact.name}` });
             }
           }
@@ -6737,7 +6832,7 @@ export async function registerRoutes(
               const link = `${baseUrl}/emergency/${token.token}`;
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: nextSequential.name, reason: incident.reason, userId: user.id, step: `escalation_contact_${notifiedIds.length + 1}`, timestamp: timeStr }));
               const reason = incident.reason as "sos" | "missed_checkin";
-              await notifyContact(nextSequential, user.name, link, reason, (p, n, l) => sendEscalationAlert(p, n, l, reason));
+              await notifyContact(nextSequential, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
             }
             existingTimeline.push({ type: "contact_escalation", time: timeStr, detail: `Escalated to: ${nextSequential.name}` });
             notifiedIds.push(nextSequential.id);
@@ -6764,7 +6859,7 @@ export async function registerRoutes(
               if (token) {
                 const link = `${baseUrl}/emergency/${token.token}`;
                 const reason = incident.reason as "sos" | "missed_checkin";
-                await notifyContact(contact, user.name, link, reason, (p, n, l) => sendEscalationAlert(p, n, l, reason));
+                await notifyContact(contact, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
               }
               notifiedIds.push(contact.id);
             }
@@ -6813,7 +6908,7 @@ export async function registerRoutes(
               if (token) {
                 const link = `${baseUrl}/emergency/${token.token}`;
                 const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-                await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn);
+                await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
                 existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name} (legacy recovery)` });
               }
             }
