@@ -19,7 +19,7 @@
 //   * Channel circuit-breaker (global ceiling for the past hour).
 
 import { createHmac } from "crypto";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { outboundSendLog } from "@shared/schema";
 
@@ -233,7 +233,13 @@ async function countRecent(opts: {
   // window is collapsed.
   const statuses = opts.countableStatuses ?? ["queued", "sent", "delivered"];
   if (statuses.length > 0) {
-    conditions.push(sql`${outboundSendLog.status} = ANY(${statuses}::outbound_status[])`);
+    // Use Drizzle's inArray (emits `status IN ($1,$2,...)`). The previous
+    // `ANY(${statuses}::outbound_status[])` form expanded the JS array into
+    // a record `($1,$2,$3)` and then tried to cast a record to an array,
+    // which Postgres rejects with "cannot cast type record to outbound_status[]".
+    // That bug fail-closed every OTP because enforceSendPolicy treated the
+    // datastore error as `policy_unavailable`.
+    conditions.push(inArray(outboundSendLog.status, statuses));
   }
   // NOTE: errors propagate. enforceSendPolicy() decides per-purpose whether
   // to fail-open (safety) or fail-closed (Cat-A / Cat-B abuse controls).
