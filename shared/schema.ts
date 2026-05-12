@@ -1251,7 +1251,8 @@ export interface ReportData {
   missedCheckins: number;
   complianceRate: number;
   incidents: { date: string; reason: string; resolved: boolean; duration: string | null }[];
-  heartRateSummary: { avgBpm: number; minBpm: number; maxBpm: number; alerts: number } | null;
+  // Omitted entirely when the user has not opted in to heart-rate monitoring.
+  heartRateSummary?: { avgBpm: number; minBpm: number; maxBpm: number; alerts: number };
   drivingSummary: { totalDrives: number; totalDistanceKm: number; topSpeedKmh: number; speedingEvents: number; crashEvents: number } | null;
   locationEnabled: boolean;
   fallDetectionEnabled: boolean;

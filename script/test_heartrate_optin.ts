@@ -136,6 +136,47 @@ async function main() {
     await expect("alerts forced off", cfg.alerts === false, "alerts should not survive monitoring being disabled");
   }
 
+  // ---------- Scenario 4b: batch alert evaluation (not just last reading) ----------
+  {
+    console.log("\nScenario 4b: alert fires for an early high in the batch");
+    const u = await makeUser("batchalert");
+    await storage.setUserHeartRateConfig(u.id, { monitoring: true, alerts: true });
+
+    // Mirror the route: scan ALL validated readings, dedupe by active alert.
+    const ingestBatch = async (userId: string, bpms: number[]) => {
+      const validated = bpms.map(bpm => ({ bpm, recordedAt: new Date(), source: "watch" }));
+      await storage.saveHeartRateReadings(userId, validated);
+      const cfg = await storage.getUserHeartRateConfig(userId);
+      if (!cfg.alerts) return;
+      const existing = await storage.getActiveHeartRateAlerts(userId);
+      let hasHigh = existing.some(a => a.alertType === "high");
+      let hasLow = existing.some(a => a.alertType === "low");
+      for (const r of validated) {
+        if (!hasHigh && r.bpm > 120) {
+          await storage.createHeartRateAlert(userId, "high", r.bpm);
+          hasHigh = true;
+        } else if (!hasLow && r.bpm < 40) {
+          await storage.createHeartRateAlert(userId, "low", r.bpm);
+          hasLow = true;
+        }
+        if (hasHigh && hasLow) break;
+      }
+    };
+
+    // Earlier sample is HIGH, latest is normal. Old code (last-only) would
+    // miss this; new code MUST create the HIGH alert.
+    await ingestBatch(u.id, [72, 145, 80]);
+    let alerts = await db.select().from(heartRateAlerts).where(eq(heartRateAlerts.userId, u.id));
+    await expect("HIGH alert from earlier-in-batch reading", alerts.some(a => a.alertType === "high"), `got ${JSON.stringify(alerts.map(a => a.alertType))}`);
+
+    // Same batch should produce both HIGH and LOW if both crossed.
+    const u2 = await makeUser("batchboth");
+    await storage.setUserHeartRateConfig(u2.id, { monitoring: true, alerts: true });
+    await ingestBatch(u2.id, [72, 35, 130, 78]);
+    alerts = await db.select().from(heartRateAlerts).where(eq(heartRateAlerts.userId, u2.id));
+    await expect("both HIGH and LOW from one batch", alerts.length === 2 && alerts.some(a => a.alertType === "high") && alerts.some(a => a.alertType === "low"), `got ${JSON.stringify(alerts.map(a => a.alertType))}`);
+  }
+
   // ---------- Scenario 5: weekly report omits HR when monitoring=false ----------
   {
     console.log("\nScenario 5: weekly report omits HR when monitoring=false");

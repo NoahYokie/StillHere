@@ -2346,23 +2346,31 @@ export async function registerRoutes(
 
       const saved = await storage.saveHeartRateReadings(result.userId, validated);
 
-      const latestBpm = validated[validated.length - 1].bpm;
-      let alert = null;
+      // Evaluate the WHOLE batch for threshold crossings, not just the
+      // newest sample. Watch payloads can include several readings recorded
+      // since the last sync, and an earlier high/low spike must still page
+      // the Safety Circle. Existing-active-alert dedupe still applies, so
+      // one batch creates at most one HIGH and one LOW alert.
+      let alert: { alertType: string } | null = null;
       if (hrCfg.alerts) {
-        if (latestBpm > 120) {
-          const existing = await storage.getActiveHeartRateAlerts(result.userId);
-          const hasHighAlert = existing.some(a => a.alertType === "high");
-          if (!hasHighAlert) {
-            alert = await storage.createHeartRateAlert(result.userId, "high", latestBpm);
-            console.log(`[HeartRate] HIGH alert for user (bpm: ${latestBpm})`);
+        const existing = await storage.getActiveHeartRateAlerts(result.userId);
+        let hasHighAlert = existing.some(a => a.alertType === "high");
+        let hasLowAlert = existing.some(a => a.alertType === "low");
+        for (const r of validated) {
+          if (!hasHighAlert && r.bpm > 120) {
+            const created = await storage.createHeartRateAlert(result.userId, "high", r.bpm);
+            console.log(`[HeartRate] HIGH alert for user (bpm: ${r.bpm})`);
+            alert = created;
+            hasHighAlert = true;
+          } else if (!hasLowAlert && r.bpm < 40) {
+            const created = await storage.createHeartRateAlert(result.userId, "low", r.bpm);
+            console.log(`[HeartRate] LOW alert for user (bpm: ${r.bpm})`);
+            // Don't overwrite a previously created HIGH alert in `alert`,
+            // surface whichever was created first in the response.
+            if (!alert) alert = created;
+            hasLowAlert = true;
           }
-        } else if (latestBpm < 40) {
-          const existing = await storage.getActiveHeartRateAlerts(result.userId);
-          const hasLowAlert = existing.some(a => a.alertType === "low");
-          if (!hasLowAlert) {
-            alert = await storage.createHeartRateAlert(result.userId, "low", latestBpm);
-            console.log(`[HeartRate] LOW alert for user (bpm: ${latestBpm})`);
-          }
+          if (hasHighAlert && hasLowAlert) break;
         }
       }
 
@@ -5614,7 +5622,9 @@ export async function registerRoutes(
             ? `${Math.round((i.resolvedAt.getTime() - i.startedAt.getTime()) / 60000)} min`
             : null,
         })),
-        heartRateSummary,
+        // Omit `heartRateSummary` entirely (not even the key) when the user
+        // has not opted in to monitoring. The frontend treats it as optional.
+        ...(heartRateSummary ? { heartRateSummary } : {}),
         drivingSummary,
         locationEnabled: userSettings?.locationMode !== "off",
         fallDetectionEnabled: userSettings?.fallDetection || false,

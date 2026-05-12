@@ -117,7 +117,7 @@ const tourSteps = [
   {
     id: "watch",
     title: "Apple Watch companion",
-    description: "Check in, send SOS, and view your heart rate right from your wrist. Fall sensing works even when your phone is across the room.",
+    description: "Check in and send SOS right from your wrist. Fall sensing works even when your phone is across the room. Heart rate view is off by default and can be turned on in Settings. StillHere is not a medical device.",
     mockup: "watch",
   },
   {
@@ -838,7 +838,7 @@ function WatchScreen() {
         </div>
         <div className="flex items-center justify-center gap-1.5">
           <Heart className="h-3 w-3 text-red-500" />
-          <p className="text-[9px] text-gray-600 font-medium">Heart rate monitoring</p>
+          <p className="text-[9px] text-gray-600 font-medium">Heart rate (opt-in)</p>
         </div>
         <div className="flex items-center justify-center gap-1.5">
           <Watch className="h-3 w-3 text-cyan-500" />
