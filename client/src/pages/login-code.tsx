@@ -19,13 +19,14 @@ export default function LoginCodePage() {
   const [showPasskeySetup, setShowPasskeySetup] = useState(false);
   const [loginResult, setLoginResult] = useState<any>(null);
   const [resendCooldown, setResendCooldown] = useState(60);
-  // COPPA / age gate (Batch 3). Required for new users; ignored by server
-  // for returning users. We always show the checkbox here because we cannot
-  // tell ahead of time whether this phone belongs to a new or returning
-  // account without leaking enumeration. One tap; no friction for returning
-  // users beyond a single check.
+  // COPPA / age gate (Batch 3, UX-corrected). The age-gate step is shown
+  // ONLY when the server tells us this phone is a brand-new account
+  // (response: age_gate_required). Returning users never see the checkbox.
+  // The server keeps the OTP unused on age_gate_required, so the user can
+  // re-submit the same code from the age-gate screen without a re-send.
+  const [showAgeGate, setShowAgeGate] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
-  const [ageGateError, setAgeGateError] = useState(false);
+  const [ageGateRefused, setAgeGateRefused] = useState(false);
 
   const params = new URLSearchParams(search);
   const phone = params.get("phone") || "";
@@ -46,11 +47,16 @@ export default function LoginCodePage() {
 
   const verifyCodeMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/verify-code", { phone, code, ageConfirmed });
+      // Only send ageConfirmed once the user has actually checked the box on
+      // the age-gate screen. For routine logins we omit the field entirely.
+      const body: { phone: string; code: string; ageConfirmed?: boolean } = { phone, code };
+      if (showAgeGate && ageConfirmed) body.ageConfirmed = true;
+      const res = await apiRequest("POST", "/api/auth/verify-code", body);
       return res.json();
     },
     onSuccess: async (data: any) => {
-      setAgeGateError(false);
+      setShowAgeGate(false);
+      setAgeGateRefused(false);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLoginResult(data);
 
@@ -74,14 +80,16 @@ export default function LoginCodePage() {
     },
     onError: (error: Error) => {
       // apiRequest serialises non-2xx as "<status>: <body>". Detect the COPPA
-      // gate response so we can show the dedicated message rather than the
-      // generic "code didn't work" toast.
+      // gate response and switch to the age-gate step. Importantly, we keep
+      // the entered code so the user can confirm and resubmit without
+      // requesting a new SMS (the server leaves the OTP unused on this
+      // response).
       try {
         const jsonStr = error.message.replace(/^\d+:\s*/, "");
         const parsed = JSON.parse(jsonStr);
         if (parsed?.error === "age_gate_required") {
-          setAgeGateError(true);
-          setCode("");
+          setShowAgeGate(true);
+          setAgeGateRefused(false);
           return;
         }
       } catch {}
@@ -156,16 +164,24 @@ export default function LoginCodePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.length === 6 && ageConfirmed) {
-      verifyCodeMutation.mutate();
-    }
+    if (code.length !== 6) return;
+    if (showAgeGate && !ageConfirmed) return;
+    verifyCodeMutation.mutate();
   };
 
+  // Auto-submit on the FIRST step only (full 6-digit code entered). On the
+  // age-gate step the user must explicitly tap Continue after checking the
+  // box, so we do not auto-submit there.
   useEffect(() => {
-    if (code.length === 6 && ageConfirmed && !verifyCodeMutation.isPending && !showPasskeySetup) {
+    if (
+      code.length === 6 &&
+      !showAgeGate &&
+      !verifyCodeMutation.isPending &&
+      !showPasskeySetup
+    ) {
       verifyCodeMutation.mutate();
     }
-  }, [code, ageConfirmed]);
+  }, [code, showAgeGate]);
 
   const formatPhone = (p: string) => {
     if (p.startsWith("+61")) {
@@ -222,81 +238,109 @@ export default function LoginCodePage() {
           <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
             <Heart className="h-8 w-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl" data-testid="text-code-title">Enter code</CardTitle>
+          <CardTitle className="text-2xl" data-testid="text-code-title">
+            {showAgeGate ? "Before you continue" : "Enter code"}
+          </CardTitle>
           <CardDescription>
-            We sent a 6-digit code to {formatPhone(phone)}.
+            {showAgeGate
+              ? "Confirm your age to finish creating your StillHere account."
+              : `We sent a 6-digit code to ${formatPhone(phone)}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex justify-center">
-              <InputOTP
-                maxLength={6}
-                value={code}
-                onChange={setCode}
-                data-testid="input-otp"
+          {!showAgeGate ? (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="flex justify-center">
+                <InputOTP
+                  maxLength={6}
+                  value={code}
+                  onChange={setCode}
+                  data-testid="input-otp"
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={code.length !== 6 || verifyCodeMutation.isPending}
+                data-testid="button-verify"
               >
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                </InputOTPGroup>
-              </InputOTP>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/40 p-3">
-              <Checkbox
-                id="age-confirm"
-                checked={ageConfirmed}
-                onCheckedChange={(v) => {
-                  setAgeConfirmed(v === true);
-                  if (v === true) setAgeGateError(false);
-                }}
-                className="mt-0.5"
-                data-testid="checkbox-age-confirm"
+                {verifyCodeMutation.isPending ? "Verifying..." : "Continue"}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/40 p-3">
+                <Checkbox
+                  id="age-confirm"
+                  checked={ageConfirmed}
+                  onCheckedChange={(v) => {
+                    setAgeConfirmed(v === true);
+                    if (v === true) setAgeGateRefused(false);
+                  }}
+                  className="mt-0.5"
+                  data-testid="checkbox-age-confirm"
+                />
+                <label
+                  htmlFor="age-confirm"
+                  className="text-sm leading-relaxed text-foreground cursor-pointer select-none"
+                >
+                  I confirm I am 13 or older.
+                </label>
+              </div>
+              {ageGateRefused && (
+                <p
+                  className="text-sm text-destructive text-center"
+                  data-testid="text-age-gate-error"
+                >
+                  StillHere is not available for users under 13.
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={!ageConfirmed || verifyCodeMutation.isPending}
+                data-testid="button-age-confirm-continue"
+              >
+                {verifyCodeMutation.isPending ? "Creating account..." : "Continue"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setAgeGateRefused(true)}
+                className="block w-full text-sm text-muted-foreground hover:underline text-center"
+                data-testid="button-age-decline"
+              >
+                I'm under 13
+              </button>
+            </form>
+          )}
+          {!showAgeGate && (
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <button
+                onClick={() => resendMutation.mutate()}
+                disabled={resendMutation.isPending || resendCooldown > 0}
+                className="text-sm text-primary hover:underline disabled:opacity-50"
+                data-testid="button-resend"
+              >
+                {resendMutation.isPending ? "Sending..." : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
+              </button>
+              <BackButton
+                to="/login"
+                label="Change number"
+                testId="button-change-number"
               />
-              <label
-                htmlFor="age-confirm"
-                className="text-sm leading-relaxed text-foreground cursor-pointer select-none"
-              >
-                I confirm I am 13 or older.
-              </label>
             </div>
-            {ageGateError && (
-              <p
-                className="text-sm text-destructive text-center"
-                data-testid="text-age-gate-error"
-              >
-                StillHere is not available for users under 13.
-              </p>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={code.length !== 6 || !ageConfirmed || verifyCodeMutation.isPending}
-              data-testid="button-verify"
-            >
-              {verifyCodeMutation.isPending ? "Verifying..." : "Continue"}
-            </Button>
-          </form>
-          <div className="mt-6 flex flex-col items-center gap-3">
-            <button
-              onClick={() => resendMutation.mutate()}
-              disabled={resendMutation.isPending || resendCooldown > 0}
-              className="text-sm text-primary hover:underline disabled:opacity-50"
-              data-testid="button-resend"
-            >
-              {resendMutation.isPending ? "Sending..." : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
-            </button>
-            <BackButton
-              to="/login"
-              label="Change number"
-              testId="button-change-number"
-            />
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

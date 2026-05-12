@@ -430,6 +430,8 @@ export async function verifyOtp(phone: string, code: string, opts?: { ageConfirm
     }
   }
 
+  let otpRowId: string | null = null;
+
   if (!isReviewLogin) {
     const hashedInput = hashOtp(code, normalizedPhone);
 
@@ -459,7 +461,12 @@ export async function verifyOtp(phone: string, code: string, opts?: { ageConfirm
       return { success: false };
     }
 
-    await db.update(otpCodes).set({ used: true }).where(eq(otpCodes.id, otp.id));
+    // IMPORTANT (Batch 3 UX correction): we do NOT mark the OTP used yet.
+    // If this turns out to be a new user without age confirmation, we want
+    // them to re-submit the same code on the age-gate screen without having
+    // to request a new SMS. We mark the OTP used only after we know we're
+    // proceeding to issue a session.
+    otpRowId = otp.id;
   }
   
   // Find or create user by phone
@@ -477,6 +484,9 @@ export async function verifyOtp(phone: string, code: string, opts?: { ageConfirm
     // BEFORE we create the row. The store-review login is exempt because it
     // is an internal account, not a real signup. No DB write happens; under-13
     // phones leave zero footprint.
+    //
+    // The OTP is intentionally LEFT UNUSED here so the user can complete the
+    // age-gate step and re-submit the same code (no re-send required).
     if (!isReviewLogin && opts?.ageConfirmed !== true) {
       return { success: false, error: "age_gate_required" };
     }
@@ -543,6 +553,13 @@ export async function verifyOtp(phone: string, code: string, opts?: { ageConfirm
     } else if (isReviewLogin) {
       needsSetup = false;
     }
+  }
+
+  // We're definitely issuing a session now. Burn the OTP so it can't be
+  // re-used. (Skipped for review login because that path doesn't use a real
+  // otpCodes row.)
+  if (otpRowId) {
+    await db.update(otpCodes).set({ used: true }).where(eq(otpCodes.id, otpRowId));
   }
 
   // Create session

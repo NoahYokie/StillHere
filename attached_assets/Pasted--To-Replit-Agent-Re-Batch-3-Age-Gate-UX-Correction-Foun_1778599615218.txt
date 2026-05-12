@@ -1,0 +1,136 @@
+ To: Replit Agent
+
+  Re: Batch 3 Age Gate UX Correction
+
+  Founder is right to push back.
+
+  Do not show the 13+ checkbox on every login.
+
+  Top apps generally handle age confirmation at signup/account creation, not every routine login. Returning users should not have
+  to reconfirm age every time they enter an OTP.
+
+  Current issue:
+  client/src/pages/login-code.tsx always shows the 13+ checkbox and requires it to enable Continue.
+
+  This is bad UX.
+
+  Please revise Batch 3 behavior:
+
+  1. Existing users
+
+  Existing user enters phone number.
+  Existing user receives OTP.
+  Existing user enters OTP.
+  Login succeeds.
+
+  No 13+ checkbox.
+  No extra tap.
+  No age gate prompt.
+
+  2. New users
+
+  New phone number receives OTP.
+  User enters OTP.
+  Server verifies OTP.
+  If phone number does not belong to an existing user and ageConfirmed is missing, server returns:
+
+  400 age_gate_required
+
+  No user row is created.
+  No session cookie is issued.
+  OTP must not be consumed or marked used yet, or the server must issue a short-lived age-gate continuation token.
+
+  Client then shows the age gate:
+
+  “I confirm I am 13 or older.”
+
+  If user confirms:
+  client completes signup using the same valid OTP or age-gate token.
+  server creates user with ageGateAcceptedAt = now()
+  session issued.
+
+  If user does not confirm:
+  show:
+  “StillHere is not available for users under 13.”
+
+  3. Anti-enumeration
+
+  Do not reveal whether a phone number exists at the send-code step.
+
+  It is acceptable to show age_gate_required only after a correct OTP has been entered, because the person has access to that phone
+  number.
+
+  4. Server logic
+
+  Preferred:
+
+  Move age gate check into verifyOtp after OTP is verified and before createUser.
+
+  If new user and ageConfirmed !== true:
+  return age_gate_required
+  do not create user
+  do not mark OTP used unless you provide a continuation token that allows the age-confirmed signup without sending a new OTP.
+
+  Avoid:
+  creating user row then deleting it.
+
+  5. Client logic
+
+  Remove always-visible checkbox from routine OTP login.
+
+  Show the age gate only after server returns age_gate_required.
+
+  This can be a second step/screen:
+
+  Title:
+  Before you continue
+
+  Checkbox:
+  I confirm I am 13 or older.
+
+  Error if not checked:
+  StillHere is not available for users under 13.
+
+  6. Tests to update
+
+  Update tests to verify:
+
+  Existing user login:
+  no ageConfirmed required
+  login succeeds
+
+  New user without age confirmation:
+  correct OTP returns age_gate_required
+  no user row created
+  no session cookie
+
+  New user with age confirmation:
+  account created
+  ageGateAcceptedAt populated
+  session cookie issued
+
+  OTP behavior:
+  age_gate_required must not force the user to request a new OTP unless absolutely necessary
+
+  Forced client bypass:
+  if a new user calls verify-code without ageConfirmed, server blocks account creation
+
+  7. Keep the rest of Batch 3
+
+  Keep:
+  ageGateAcceptedAt column
+  Family Mode child/teen lockout
+  Terms/Privacy copy
+  App Store age-rating docs
+  existing child/teen rows display as Member
+
+  Only fix the login UX.
+
+  After implementing, report:
+
+  files changed
+  new login/signup flow
+  OTP handling details
+  updated tests
+  TypeScript result
+  confirmation existing users are not forced to check 13+ every login

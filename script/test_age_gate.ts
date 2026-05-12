@@ -1,15 +1,16 @@
 // Batch 3 / COPPA age-gate test harness.
 //
 // Covers:
-//   T1 new-user signup with ageConfirmed: true   -> success, ageGateAcceptedAt set
-//   T2 new-user signup with ageConfirmed: false  -> 400 age_gate_required, NO user row created
-//   T3 new-user signup with ageConfirmed omitted -> 400 age_gate_required, NO user row created
-//   T4 returning user login (existing row)       -> succeeds without ageConfirmed
-//   T5 POST /api/family/invite role: "teen"      -> 400 role_not_supported
-//   T6 POST /api/family/invite role: "child"     -> 400 role_not_supported
-//   T7 PATCH /api/family/member/:id role: "teen" -> 400 role_not_supported
-//   T8 storage.inviteFamilyMember role: "teen"   -> throws (defense-in-depth)
-//   T9 pre-existing row with role: "child"       -> survives reads (no crash)
+//   T1  new-user signup with ageConfirmed: true   -> success, ageGateAcceptedAt set
+//   T2  new-user signup with ageConfirmed: false  -> age_gate_required, NO user row, OTP NOT consumed,
+//                                                    same code resubmitted with ageConfirmed:true succeeds
+//   T3  new-user signup with ageConfirmed omitted -> age_gate_required, NO user row, OTP NOT consumed
+//   T4  returning user login (existing row)       -> succeeds with ageConfirmed omitted entirely
+//   T5  storage.inviteFamilyMember role: "teen"   -> throws role_not_supported
+//   T6  storage.inviteFamilyMember role: "child"  -> throws role_not_supported
+//   T7  storage.updateFamilyMember teen / child   -> throws role_not_supported
+//   T9  pre-existing row with role: "child"       -> survives reads (no crash)
+//   T10 OTP cannot be reused after a successful   -> verifyOtp with same code returns failure
 //
 // Tests directly exercise verifyOtp, the storage layer, and HTTP routes via
 // supertest-like fetch against the running dev server. We use the OTP test
@@ -75,9 +76,9 @@ async function main() {
     if (u) await db.delete(users).where(eq(users.id, u.id));
   }
 
-  // ---------- T2: new-user signup with ageConfirmed: false ----------
+  // ---------- T2: new-user with ageConfirmed:false -> blocked, OTP preserved, resubmit succeeds ----------
   {
-    console.log("\nT2 new-user with ageConfirmed: false");
+    console.log("\nT2 new-user with ageConfirmed: false (UX-corrected: OTP preserved for resubmit)");
     const phone = randomPhone();
     const code = await seedOtp(phone);
     const r = await verifyOtp(phone, code, { ageConfirmed: false });
@@ -86,9 +87,30 @@ async function main() {
     expect("T2 no sessionToken issued", !r.sessionToken);
     const rows = await db.select().from(users).where(eq(users.phone, phone));
     expect("T2 NO user row created", rows.length === 0, `found ${rows.length} rows`);
+
+    // Critical UX-correction assertion: the OTP row must still be unused so
+    // the user can confirm age and submit the same code without a re-send.
+    const otpRows = await db.select().from(otpCodes).where(eq(otpCodes.phone, phone));
+    const stillUnused = otpRows.find((o) => !o.used);
+    expect("T2 OTP NOT consumed by age_gate_required", !!stillUnused, `otps=${JSON.stringify(otpRows.map(o => ({ used: o.used })))}`);
+
+    // Now resubmit the SAME code with ageConfirmed:true. Should succeed.
+    const r2 = await verifyOtp(phone, code, { ageConfirmed: true });
+    expect("T2 resubmit with ageConfirmed:true succeeds", r2.success === true, JSON.stringify(r2));
+    expect("T2 resubmit creates user", r2.isNewUser === true);
+    expect("T2 resubmit issues sessionToken", !!r2.sessionToken);
+    const [u] = await db.select().from(users).where(eq(users.phone, phone));
+    expect("T2 resubmit user row created", !!u);
+    expect("T2 resubmit ageGateAcceptedAt populated", !!u?.ageGateAcceptedAt);
+
+    // After successful signup the OTP must be marked used.
+    const otpAfter = await db.select().from(otpCodes).where(eq(otpCodes.phone, phone));
+    expect("T2 post-success OTP marked used", otpAfter.every((o) => o.used === true));
+
+    if (u) await db.delete(users).where(eq(users.id, u.id));
   }
 
-  // ---------- T3: new-user signup with ageConfirmed omitted ----------
+  // ---------- T3: new-user with ageConfirmed omitted -> blocked, OTP preserved ----------
   {
     console.log("\nT3 new-user with ageConfirmed omitted (undefined)");
     const phone = randomPhone();
@@ -98,11 +120,13 @@ async function main() {
     expect("T3 error code is age_gate_required", r.error === "age_gate_required");
     const rows = await db.select().from(users).where(eq(users.phone, phone));
     expect("T3 NO user row created", rows.length === 0);
+    const otpRows = await db.select().from(otpCodes).where(eq(otpCodes.phone, phone));
+    expect("T3 OTP NOT consumed", otpRows.some((o) => !o.used));
   }
 
-  // ---------- T4: returning user login (no ageConfirmed required) ----------
+  // ---------- T4: returning user login WITHOUT passing ageConfirmed at all ----------
   {
-    console.log("\nT4 returning user login without ageConfirmed");
+    console.log("\nT4 returning user login (ageConfirmed omitted entirely)");
     const phone = randomPhone();
     // Pre-create the user row directly (simulating a pre-Batch-3 account).
     const [pre] = await db.insert(users).values({
@@ -112,13 +136,17 @@ async function main() {
       // ageGateAcceptedAt deliberately NULL to model legacy users.
     }).returning();
     const code = await seedOtp(phone);
-    // Pass ageConfirmed = false explicitly to prove returning users are NOT gated.
-    const r = await verifyOtp(phone, code, { ageConfirmed: false });
-    expect("T4 success despite ageConfirmed:false", r.success === true, JSON.stringify(r));
+    // Routine login: no opts at all, mirroring the new client's behavior
+    // when there is no age-gate prompt visible.
+    const r = await verifyOtp(phone, code);
+    expect("T4 success without opts", r.success === true, JSON.stringify(r));
     expect("T4 isNewUser is false", r.isNewUser === false);
     expect("T4 sessionToken issued", !!r.sessionToken);
     const [after] = await db.select().from(users).where(eq(users.id, pre.id));
     expect("T4 ageGateAcceptedAt NOT backfilled", after?.ageGateAcceptedAt == null);
+    // OTP is consumed on a successful returning-user login.
+    const otpRows = await db.select().from(otpCodes).where(eq(otpCodes.phone, phone));
+    expect("T4 OTP marked used after returning-user success", otpRows.every((o) => o.used === true));
     await db.delete(users).where(eq(users.id, pre.id));
   }
 
@@ -200,6 +228,19 @@ async function main() {
     await db.delete(familyMembers).where(eq(familyMembers.id, legacy.id));
     await db.delete(families).where(eq(families.id, fam.id));
     await db.delete(users).where(eq(users.id, admin.id));
+  }
+
+  // ---------- T10: an OTP cannot be reused once consumed by a real success ----------
+  {
+    console.log("\nT10 OTP cannot be reused after successful signup");
+    const phone = randomPhone();
+    const code = await seedOtp(phone);
+    const r1 = await verifyOtp(phone, code, { ageConfirmed: true });
+    expect("T10 first verify succeeds", r1.success === true);
+    const r2 = await verifyOtp(phone, code, { ageConfirmed: true });
+    expect("T10 second verify with same code fails", r2.success === false, JSON.stringify(r2));
+    const [u] = await db.select().from(users).where(eq(users.phone, phone));
+    if (u) await db.delete(users).where(eq(users.id, u.id));
   }
 
   console.log("\n========================================");
