@@ -5541,7 +5541,7 @@ export async function registerRoutes(
       if (currentlyOff) {
         summaryTone = "concern";
         if (unresolvedIncidents.length > 0) {
-          summary = `${watchedName} has an alert that hasn't been resolved yet this week. You've been kept informed. If you haven't already, reach out to make sure they're safe.`;
+          summary = `${watchedName} has an alert that hasn't been resolved yet this week. You were notified through the configured channels. If you haven't already, reach out to make sure they're safe.`;
         } else if (safetyConcernNow || heartbeatStale) {
           summary = `${watchedName}'s phone hasn't checked in for a while, so their safety status couldn't be confirmed right now. It might be worth a quick call or message to make sure they're okay.`;
         } else {
