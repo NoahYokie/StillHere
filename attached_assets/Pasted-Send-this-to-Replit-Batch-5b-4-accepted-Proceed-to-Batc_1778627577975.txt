@@ -1,0 +1,99 @@
+Send this to Replit:
+
+  Batch 5b.4 accepted.
+
+  Proceed to Batch 5b.1: Marketing surfaces copy sweep.
+
+  Scope:
+  landing page
+  tour page
+  help page
+
+  Use the audit recommendations already provided.
+
+  Approved changes:
+
+  A. client/src/pages/landing.tsx
+
+  A1:
+  "Powerful tools. Simple to use. Always by your side."
+  →
+  "Powerful tools. Simple to use. Designed for everyday safety."
+
+  A2:
+  "Sleep protection. Quiet hours so non emergency notifications don't wake you up."
+  →
+  "Quiet hours. Non emergency notifications won't wake you up."
+
+  A3:
+  "Emergency unlock. Precise location can unlock during a real concern so your people can help."
+  →
+  "Precise location during alerts. When a real concern is active, precise location can be shared so your people can help."
+
+  A4:
+  "OFFLINE / SERVER MONITORING"
+  and
+  "Server side monitoring. Your check in schedule is watched from the cloud."
+  →
+  "Server-side check-in tracking. Your check-in schedule is tracked on our servers, so missed check-ins are still detected if your
+  phone is offline."
+
+  A5:
+  "Receipt of protection"
+  →
+  "Weekly safety record"
+
+  A6:
+  "A weekly Safety Record for peace of mind"
+  →
+  "A weekly Safety Record"
+
+  A7:
+  "Simple pricing. Serious peace of mind."
+  →
+  "Simple pricing. Built for everyday safety."
+
+  A8:
+  "SOS is there when you need it. StillHere also protects you when you forget, lose signal, or can't respond."
+  →
+  "SOS is there when you need it. StillHere also follows up when you forget, lose signal, or can't respond."
+
+  B. client/src/pages/tour.tsx
+
+  C1:
+  "Driving safety. StillHere monitors your speed and watches for possible crashes. If something happens, the alert flow attempts to
+  reach your contacts after a 60-second countdown."
+  →
+  "Driving safety. StillHere tracks your speed and looks for possible crashes during drive sessions. If something is detected, the
+  alert flow attempts to reach your contacts after a 60-second countdown."
+
+  C. client/src/pages/help.tsx
+
+  E2:
+  "caregivers monitoring loved ones"
+  →
+  "caregivers staying connected with loved ones"
+
+  E3:
+  "When enabled, StillHere monitors your speed using GPS during drive sessions. If it detects a sudden stop consistent with a
+  possible crash..."
+  →
+  "When enabled, StillHere tracks your speed using GPS during drive sessions. If it sees a sudden stop consistent with a possible
+  crash..."
+
+  E5:
+  "checkin monitoring and alerts will be paused"
+  →
+  "checkin tracking and alerts will be paused"
+
+  Do not change product behavior.
+  Do not touch notification/SMS/email surfaces yet.
+  Do not start Batch 5b.2.
+
+  After implementation, report:
+
+  files changed
+  exact strings changed
+  TypeScript result
+  build result if run
+  remaining marketing copy risks

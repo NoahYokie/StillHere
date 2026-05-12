@@ -89,7 +89,7 @@ const faqs = [
       },
       {
         q: "What is geofencing?",
-        a: "You can set up safe zones (like home or work). If you leave a safe zone, we attempt to reach your contacts. This is useful for people with memory concerns or caregivers monitoring loved ones.",
+        a: "You can set up safe zones (like home or work). If you leave a safe zone, we attempt to reach your contacts. This is useful for people with memory concerns or caregivers staying connected with loved ones.",
       },
       {
         q: "Can my contacts see my location during an alert?",
@@ -102,7 +102,7 @@ const faqs = [
     questions: [
       {
         q: "How does driving safety work?",
-        a: "When enabled, StillHere monitors your speed using GPS during drive sessions. If it detects a sudden stop consistent with a possible crash, a 60-second countdown begins. If you don't cancel, the alert flow attempts to reach all your contacts via SMS, push notifications, and email. SMS delivery is best-effort and depends on carrier.",
+        a: "When enabled, StillHere tracks your speed using GPS during drive sessions. If it sees a sudden stop consistent with a possible crash, a 60-second countdown begins. If you don't cancel, the alert flow attempts to reach all your contacts via SMS, push notifications, and email. SMS delivery is best-effort and depends on carrier.",
       },
       {
         q: "Can I set a speed limit?",
@@ -186,7 +186,7 @@ const faqs = [
       },
       {
         q: "What happens when my trial ends?",
-        a: "You'll be prompted to choose a plan. If you don't subscribe, your account stays active but checkin monitoring and alerts will be paused until you subscribe.",
+        a: "You'll be prompted to choose a plan. If you don't subscribe, your account stays active but checkin tracking and alerts will be paused until you subscribe.",
       },
     ],
   },

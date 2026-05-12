@@ -582,7 +582,7 @@ export default function LandingPage() {
             {[
               { title: "Not just tracking", body: "Location helps, but knowing someone is okay matters more.", icon: MapPin, color: "bg-primary/10 text-primary" },
               { title: "Not just reminders", body: "If you miss one, StillHere keeps trying before escalating.", icon: Bell, color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
-              { title: "Not just SOS", body: "SOS is there when you need it. StillHere also protects you when you forget, lose signal, or can't respond.", icon: ShieldCheck, color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" },
+              { title: "Not just SOS", body: "SOS is there when you need it. StillHere also follows up when you forget, lose signal, or can't respond.", icon: ShieldCheck, color: "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" },
             ].map((c) => (
               <div key={c.title} className="rounded-2xl bg-card border border-border p-6 md:p-7 hover-elevate">
                 <div className={`w-12 h-12 rounded-xl ${c.color} flex items-center justify-center mb-4`}>
@@ -640,7 +640,7 @@ export default function LandingPage() {
             </div>
             <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">Everything you need to stay safe</h2>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Powerful tools. Simple to use. Always by your side.
+              Powerful tools. Simple to use. Designed for everyday safety.
             </p>
           </div>
 
@@ -660,7 +660,7 @@ export default function LandingPage() {
               { icon: Map, title: "Geofencing", body: "Get alerts when someone arrives at home, school, or work, or leaves a safe zone.", color: "bg-lime-100 dark:bg-lime-900/20 text-lime-600 dark:text-lime-400" },
               { icon: Users, title: "Family Mode", body: "A map first family hub with live pins, shared places, and group chat.", color: "bg-purple-100 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400" },
               { icon: Eye, title: "Guardian Map", body: "One screen view of every person you watch. Color coded and live.", color: "bg-sky-100 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400" },
-              { icon: MoonStar, title: "Sleep protection", body: "Quiet hours so non emergency notifications don't wake you up.", color: "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400" },
+              { icon: MoonStar, title: "Quiet hours", body: "Non emergency notifications won't wake you up.", color: "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400" },
               { icon: BarChart3, title: "Weekly Safety Record", body: "A clear receipt of what was handled and what was resolved.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
               { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, and fall sensing from your wrist. Optional heart rate view if you opt in.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
               { icon: Lock, title: "Privacy controls", body: "Precise, area only, presence only, or paused sharing. You decide.", color: "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300" },
@@ -742,7 +742,7 @@ export default function LandingPage() {
             {[
               { icon: Lock, title: "You control sharing", body: "Choose precise location, general area, presence only, or paused sharing." },
               { icon: Eye, title: "See what they see", body: "Preview exactly what your guardian can see." },
-              { icon: ShieldCheck, title: "Emergency unlock", body: "Precise location can unlock during a real concern so your people can help." },
+              { icon: ShieldCheck, title: "Precise location during alerts", body: "When a real concern is active, precise location can be shared so your people can help." },
               { icon: EyeOff, title: "No selling your data", body: "Your safety information is not sold." },
               { icon: Users, title: "Only your people", body: "Your Safety Circle sees only what you choose to share." },
               { icon: Pause, title: "Pause anytime", body: "Pause sharing whenever you want with one tap." },
@@ -759,7 +759,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* OFFLINE / SERVER MONITORING */}
+      {/* SERVER-SIDE CHECK-IN TRACKING */}
       <section className="px-6 py-16 md:py-24 bg-background">
         <div className="max-w-6xl md:mx-auto">
           <div className="text-center mb-12 md:mb-14">
@@ -775,7 +775,7 @@ export default function LandingPage() {
 
           <div className="md:grid md:grid-cols-3 md:gap-5 space-y-4 md:space-y-0">
             {[
-              { icon: Server, title: "Server side monitoring", body: "Your check in schedule is watched from the cloud.", color: "bg-primary/10 text-primary" },
+              { icon: Server, title: "Server-side check-in tracking", body: "Your check-in schedule is tracked on our servers, so missed check-ins are still detected if your phone is offline.", color: "bg-primary/10 text-primary" },
               { icon: Smartphone, title: "Phone off? We still act.", body: "If you don't check in, StillHere starts the reminder flow automatically.", color: "bg-amber-100 dark:bg-amber-900/30 text-amber-500" },
               { icon: MessageCircle, title: "SMS alerts, not just apps", body: "Your Safety Circle can be reached by text when it matters.", color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500" },
             ].map((c) => (
@@ -862,9 +862,9 @@ export default function LandingPage() {
           <div className="text-center mb-12 md:mb-14">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-100 dark:bg-violet-900/30 rounded-full text-violet-600 dark:text-violet-400 text-xs font-medium mb-4">
               <BarChart3 className="h-3.5 w-3.5" />
-              <span>Receipt of protection</span>
+              <span>Weekly safety record</span>
             </div>
-            <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">A weekly Safety Record for peace of mind</h2>
+            <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">A weekly Safety Record</h2>
             <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               See what StillHere handled, what was resolved, and when your Safety Circle was ready.
             </p>
@@ -894,7 +894,7 @@ export default function LandingPage() {
               <Sparkles className="h-3.5 w-3.5" />
               <span>Simple pricing</span>
             </div>
-            <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">Simple pricing. Serious peace of mind.</h2>
+            <h2 className="text-2xl md:text-4xl font-bold mb-3 tracking-tight">Simple pricing. Built for everyday safety.</h2>
             <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
               Start free. Cancel anytime.
             </p>

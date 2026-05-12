@@ -111,7 +111,7 @@ const tourSteps = [
   {
     id: "driving",
     title: "Driving safety",
-    description: "StillHere monitors your speed and watches for possible crashes. If something happens, the alert flow attempts to reach your contacts after a 60-second countdown.",
+    description: "StillHere tracks your speed and looks for possible crashes during drive sessions. If something is detected, the alert flow attempts to reach your contacts after a 60-second countdown.",
     mockup: "driving",
   },
   {
