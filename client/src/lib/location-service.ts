@@ -205,10 +205,15 @@ class LocationService {
         },
         enableHeadless: true,
         stopTimeout: 5,
-        locationAuthorizationRequest: "Always",
+        // Phase 1 (App Store launch): request WhenInUse only. The full
+        // "ask for Always at the moment a background-needing feature
+        // starts" escalation UX is a separate, approved follow-up task
+        // and must NOT be built into this file. See STORE_SUBMISSION.md
+        // section 5c for the escalation plan.
+        locationAuthorizationRequest: "WhenInUse",
         backgroundPermissionRationale: {
-          title: "StillHere needs background location",
-          message: "StillHere monitors your safety even when the app is in the background. This ensures your emergency contacts can locate you if needed.",
+          title: "Background location for safety features",
+          message: "StillHere uses background location only while a safety feature you turned on is running, such as Safe Walk, Safety Timer, Drive Safety, an active SOS, or active sharing with your Safety Circle. We will attempt to share your location with the contacts you chose so they can reach you. Background location is off when you are not using one of these features.",
           positiveAction: "Allow",
           negativeAction: "Cancel",
         },
