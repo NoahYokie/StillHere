@@ -22,7 +22,7 @@ const modeLabels: Record<string, { label: string; desc: string; icon: any }> = {
   precise: { label: "Precise location", desc: "Your exact location and safety status", icon: MapPin },
   area: { label: "Area only", desc: "Your general area and safety status", icon: Radio },
   presence: { label: "Presence only", desc: "Only your safety status, no location", icon: Eye },
-  paused: { label: "Sharing paused", desc: "Location sharing is paused", icon: Pause },
+  paused: { label: "Sharing paused", desc: "Normal location updates are off. If you send an SOS, StillHere may attempt to include your location.", icon: Pause },
 };
 
 export function ProtectionPanel() {

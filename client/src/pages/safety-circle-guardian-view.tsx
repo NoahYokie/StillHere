@@ -33,7 +33,7 @@ const privacyNote: Record<string, string> = {
   precise: "They can see your precise location while sharing is on.",
   area: "They can see your general area, not your exact location.",
   presence: "They can see your safety status, not your location.",
-  paused: "They cannot see your location while sharing is paused.",
+  paused: "They cannot see your location while sharing is paused. If you send an SOS, StillHere may attempt to include your location with that SOS.",
 };
 
 export default function SafetyCircleGuardianViewPage() {

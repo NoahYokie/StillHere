@@ -347,12 +347,12 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // T6e: BEHAVIORAL CHECK - paused + open SOS incident
-  //      Per spec: "If paused blocks SOS location entirely, flag it before
-  //      changing code." This is a flag-only test, not a fix.
+  // T6e: paused + open SOS incident -> SOS-only override allows tracking.
+  //      Per product decision: a user-triggered SOS is a new intentional
+  //      safety action and may attempt to include location.
   // -------------------------------------------------------------------------
   {
-    console.log("\nT6e behavioral: paused + open SOS incident (flag-only, no code change)");
+    console.log("\nT6e positive: paused + open SOS incident (SOS-only override)");
     const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
     try {
       await db.insert(incidents).values({
@@ -363,16 +363,158 @@ async function main() {
         isDrill: false,
       });
       const p = await getTrackingPolicyForUser(u.id);
-      // Document the actual behavior. Current code returns paused hard-stop
-      // BEFORE checking real safety purpose.
-      expect("T6e paused HARD-STOPS even with open SOS (current behavior)", p.nativeTrackingAllowed === false, `reason=${p.reason}`);
-      expect("T6e reason still 'paused'", p.reason === "paused");
-      // Heartbeat coords still stripped.
+      expect("T6e paused YIELDS to open SOS", p.nativeTrackingAllowed === true, `reason=${p.reason}`);
+      expect("T6e reason === 'ok'", p.reason === "ok");
+      expect("T6e activePurposes includes incident", p.activePurposes.includes("incident"));
+      expect("T6e sharingMode still reflected as paused", p.sharingMode === "paused");
       const hb = await post("/api/heartbeat", u.cookie, { ...COORDS, batt: 0.4 });
       expect("T6e heartbeat 200", hb.status === 200);
       const [uRow] = await db.select().from(users).where(eq(users.id, u.id));
-      expect("T6e heartbeat coords STRIPPED on paused+SOS", uRow.lastHeartbeatLat == null);
-      console.log("  NOTE: paused+open-SOS currently blocks location entirely. See report for product decision.");
+      expect("T6e heartbeat coords PRESERVED on paused+SOS", uRow.lastHeartbeatLat === COORDS.lat, `got=${uRow.lastHeartbeatLat}`);
+    } finally { await cleanupUser(u.id); }
+  }
+
+  // -------------------------------------------------------------------------
+  // T6g: negative - paused + open missed_checkin incident does NOT override.
+  // -------------------------------------------------------------------------
+  {
+    console.log("\nT6g negative: paused + open missed_checkin incident (no override)");
+    const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
+    try {
+      await db.insert(incidents).values({
+        userId: u.id,
+        reason: "missed_checkin",
+        status: "open",
+        startedAt: new Date(),
+        isDrill: false,
+      });
+      const p = await getTrackingPolicyForUser(u.id);
+      expect("T6g paused still blocks on missed_checkin", p.nativeTrackingAllowed === false, `reason=${p.reason}`);
+      expect("T6g reason === 'paused'", p.reason === "paused");
+      const hb = await post("/api/heartbeat", u.cookie, { ...COORDS, batt: 0.5 });
+      const [uRow] = await db.select().from(users).where(eq(users.id, u.id));
+      expect("T6g heartbeat 200", hb.status === 200);
+      expect("T6g heartbeat coords STRIPPED on paused+missed_checkin", uRow.lastHeartbeatLat == null);
+      const swl = await post("/api/safe-walk/location", u.cookie, COORDS);
+      expect("T6g /safe-walk/location denied", swl.status === 403 || swl.status === 404);
+    } finally { await cleanupUser(u.id); }
+  }
+
+  // -------------------------------------------------------------------------
+  // T6h: negative - paused + active SafeWalk does NOT override.
+  // -------------------------------------------------------------------------
+  {
+    console.log("\nT6h negative: paused + active SafeWalk (no override)");
+    const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
+    try {
+      await db.insert(safeWalks).values({
+        userId: u.id,
+        destinationLat: -37.81,
+        destinationLng: 144.97,
+        destinationName: "Test Dest",
+        destinationType: "pin",
+        expectedArrivalAt: new Date(Date.now() + 30 * 60_000),
+        arrivalRadiusMeters: 200,
+        status: "active",
+      });
+      const p = await getTrackingPolicyForUser(u.id);
+      expect("T6h paused still blocks despite active SafeWalk", p.nativeTrackingAllowed === false, `reason=${p.reason}`);
+      expect("T6h reason === 'paused'", p.reason === "paused");
+      const swl = await post("/api/safe-walk/location", u.cookie, { lat: -37.811, lng: 144.962, speed: 1.5 });
+      expect("T6h /safe-walk/location denied", swl.status === 403, `status=${swl.status}`);
+      const hb = await post("/api/heartbeat", u.cookie, { ...COORDS, batt: 0.5 });
+      const [uRow] = await db.select().from(users).where(eq(users.id, u.id));
+      expect("T6h heartbeat 200", hb.status === 200);
+      expect("T6h heartbeat coords STRIPPED on paused+SafeWalk", uRow.lastHeartbeatLat == null);
+    } finally { await cleanupUser(u.id); }
+  }
+
+  // -------------------------------------------------------------------------
+  // T6i: negative - paused + active Drive session does NOT override.
+  // -------------------------------------------------------------------------
+  {
+    console.log("\nT6i negative: paused + active Drive session (no override)");
+    const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
+    try {
+      await db.insert(driveSessions).values({
+        userId: u.id,
+        startedAt: new Date(),
+      });
+      const p = await getTrackingPolicyForUser(u.id);
+      expect("T6i paused still blocks despite active Drive", p.nativeTrackingAllowed === false, `reason=${p.reason}`);
+      expect("T6i reason === 'paused'", p.reason === "paused");
+      const lu = await post("/api/location/update", u.cookie, COORDS);
+      expect("T6i /location/update denied", lu.status === 403 || lu.status === 400, `status=${lu.status}`);
+    } finally { await cleanupUser(u.id); }
+  }
+
+  // -------------------------------------------------------------------------
+  // T6j: negative - paused + active SafetyTimer does NOT override.
+  // -------------------------------------------------------------------------
+  {
+    console.log("\nT6j negative: paused + active SafetyTimer (no override)");
+    const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
+    try {
+      await db.insert(safetyTimers).values({
+        userId: u.id,
+        durationMinutes: 30,
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+        status: "active",
+        activity: "test",
+      });
+      const p = await getTrackingPolicyForUser(u.id);
+      expect("T6j paused still blocks despite active SafetyTimer", p.nativeTrackingAllowed === false, `reason=${p.reason}`);
+      expect("T6j reason === 'paused'", p.reason === "paused");
+      const stl = await post("/api/safety-timer/location", u.cookie, COORDS);
+      expect("T6j /safety-timer/location denied", stl.status === 403, `status=${stl.status}`);
+    } finally { await cleanupUser(u.id); }
+  }
+
+  // -------------------------------------------------------------------------
+  // T6k: negative - paused + DRILL SOS incident does NOT override.
+  //      Drills must never collect location, even with paused-SOS override.
+  // -------------------------------------------------------------------------
+  {
+    console.log("\nT6k negative: paused + drill SOS incident (no override)");
+    const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
+    try {
+      await db.insert(incidents).values({
+        userId: u.id,
+        reason: "sos",
+        status: "open",
+        startedAt: new Date(),
+        isDrill: true,
+      });
+      const p = await getTrackingPolicyForUser(u.id);
+      expect("T6k paused blocks for DRILL SOS", p.nativeTrackingAllowed === false, `reason=${p.reason}`);
+      expect("T6k reason === 'paused'", p.reason === "paused");
+      const hb = await post("/api/heartbeat", u.cookie, { ...COORDS, batt: 0.5 });
+      expect("T6k heartbeat 200", hb.status === 200);
+      const [uRow] = await db.select().from(users).where(eq(users.id, u.id));
+      expect("T6k heartbeat coords STRIPPED on paused+drill-SOS", uRow.lastHeartbeatLat == null);
+    } finally { await cleanupUser(u.id); }
+  }
+
+  // -------------------------------------------------------------------------
+  // T6l: scope - paused + open SOS allows /api/location/breadcrumb.
+  //      Per spec wording (nativeTrackingAllowed=true during active SOS),
+  //      coordinate routes that gate on this boolean accept writes. This
+  //      test documents the scope so any future product decision to narrow
+  //      it (purpose-aware route gating) will fail loudly.
+  // -------------------------------------------------------------------------
+  {
+    console.log("\nT6l scope: paused + open SOS allows breadcrumb writes");
+    const u = await makeUser({ sharingMode: "paused", locationMode: "both" });
+    try {
+      await db.insert(incidents).values({
+        userId: u.id,
+        reason: "sos",
+        status: "open",
+        startedAt: new Date(),
+        isDrill: false,
+      });
+      const bc = await post("/api/location/breadcrumb", u.cookie, COORDS);
+      expect("T6l /api/location/breadcrumb accepted on paused+SOS", bc.status === 200, `status=${bc.status}`);
     } finally { await cleanupUser(u.id); }
   }
 

@@ -283,10 +283,32 @@ export async function getTrackingPolicyForUser(userId: string | null | undefined
       incidentActive ||
       emergencySessionActive;
 
+    // SOS-only override: a user-triggered SOS is a new intentional safety
+    // action, so we attempt to include location with that SOS even if the
+    // user has paused normal sharing. Other safety purposes (missed_checkin,
+    // safe walk, safety timer, drive, live share, emergency session) do NOT
+    // override paused; the user must explicitly resume sharing or start a
+    // new allowed feature flow.
+    const sosIncidentActive =
+      incidentActive && incidentRow && (incidentRow as any).reason === "sos";
+
     // -------- Apply policy matrix --------
 
     // Hard stops first
     if (sharingMode === "paused") {
+      if (sosIncidentActive) {
+        return {
+          active: true,
+          nativeTrackingAllowed: true,
+          heartbeatAllowed,
+          sharingMode,
+          locationMode,
+          activePurposes: ["incident"],
+          sessions,
+          graceWindowSeconds: GRACE_WINDOW_SECONDS,
+          reason: "ok",
+        };
+      }
       return {
         ...emptyPolicy(sharingMode, locationMode, "paused", heartbeatAllowed),
         sessions,
