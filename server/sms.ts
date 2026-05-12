@@ -340,7 +340,7 @@ export async function sendTestMessage(
   userName: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is only a test. No action is needed.\n\nIn a real alert, you will receive a message with a secure link to view their status and location. For the fullest experience (live location, push alerts, and one-tap response), install the StillHere app.`;
+  const body = `StillHere Test Message\n\n${userName} has added you as an emergency contact on StillHere, a personal safety app.\n\nThis is only a test. No action is needed.\n\nIn a real alert, we will attempt to send a message with a secure link to view their status and location. For the fullest experience (live location, push alerts, and one-tap response), install the StillHere app.`;
   return sendSms(contactPhone, body, { purpose: "contact_test", ...options });
 }
 
@@ -375,7 +375,7 @@ export async function sendContactRespondedNotification(
   contactName: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere Update\n\n${contactName} has received your alert and is checking on you.`;
+  const body = `StillHere Update\n\n${contactName} acknowledged your alert and may be checking on you.`;
   return sendSms(userPhone, body, { purpose: "contact_responded", ...options });
 }
 

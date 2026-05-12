@@ -253,7 +253,7 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
             <strong style="color:#334155;">Why am I receiving this?</strong> ${whyReceiving}
           </p>
           <p style="margin:0;font-size:11px;line-height:1.55;color:#94a3b8;">
-            StillHere only emails you when a real safety event is detected. Your details are never shared. Reply STOP to be removed, or ask <strong>${safeName}</strong> to remove you in their app.
+            StillHere only emails you about a possible safety event, a report you signed up for, or when someone in your Safety Circle asks for help. Your details are never shared. Reply STOP to be removed, or ask <strong>${safeName}</strong> to remove you in their app.
           </p>
         </td></tr>
 
@@ -373,9 +373,9 @@ export async function sendEmergencyEmail(
     : `Safety alert: ${userName} missed a check in (StillHere)`);
   const title = issos ? "Emergency SOS activated" : "Missed safety check in";
   const eventLine = issos
-    ? `<strong>${safeName}</strong> just activated an emergency SOS. We are contacting their Safety Circle right now by app, SMS, phone call, and email.`
-    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check in. We are contacting their Safety Circle right now by app, SMS, phone call, and email.`;
-  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to notify you the moment a safety event is detected.`;
+    ? `<strong>${safeName}</strong> just activated an emergency SOS. We are attempting to reach their Safety Circle now through app, SMS, phone call, and email.`
+    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check in. We are attempting to reach their Safety Circle now through app, SMS, phone call, and email.`;
+  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to attempt to reach you when a possible safety event is detected. StillHere is not an emergency response service.`;
 
   const enriched = await enrichContext(context);
   const body = renderEmail({
@@ -421,7 +421,7 @@ export async function sendGeofenceEmail(
   const safeName = esc(userName);
   const safeZone = esc(zoneName);
   const subject = safeSubject(`${userName} left "${zoneName}" (StillHere)`);
-  const eventLine = `<strong>${safeName}</strong> has left their <strong>"${safeZone}"</strong> zone. This may not indicate an emergency. You're being notified because ${safeName} set up location monitoring for this zone.`;
+  const eventLine = `<strong>${safeName}</strong> has left their <strong>"${safeZone}"</strong> zone. This may not indicate an emergency. You're being notified because ${safeName} set up zone alerts for this place.`;
   const whyReceiving = `${safeName} added you as a trusted contact and enabled zone notifications for <strong>"${safeZone}"</strong>. Only zone exits are shared, never live coordinates.`;
 
   const enriched = await enrichContext(context);

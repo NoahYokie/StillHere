@@ -113,13 +113,13 @@ export async function notifySubjectConfirmation(
 ): Promise<void> {
   let body: string;
   if (hadIncident) {
-    body = "You're checked in. We let your watchers know you're safe.";
+    body = "You're checked in. Your check-in update was sent to your Safety Circle.";
   } else if (method === "call") {
-    body = "Got it. You're checked in by phone. We've let your contacts know.";
+    body = "Got it. You're checked in by phone. Your check-in update was sent to your Safety Circle.";
   } else if (method === "sms") {
-    body = "Got it. You're checked in by SMS. We've let your contacts know.";
+    body = "Got it. You're checked in by SMS. Your check-in update was sent to your Safety Circle.";
   } else {
-    body = "You're checked in. Your contacts know you're safe.";
+    body = "You're checked in. Your check-in update was sent to your Safety Circle.";
   }
 
   try {
@@ -395,7 +395,7 @@ export async function notifyArrival(
 
   const body = placeName
     ? `${userName} arrived at ${placeName}`
-    : `${userName} arrived safely`;
+    : `${userName} arrived`;
 
   const notifiedIdentities = new Set<string>();
 
@@ -444,7 +444,7 @@ export async function notifyArrival(
 
       const result = await deliverNotification(
         contact.linkedUserId,
-        placeName ? `Arrived at ${placeName}` : "Arrived safely",
+        placeName ? `Arrived at ${placeName}` : "Arrived",
         body,
         `arrival-${userId}`,
         "/watched",

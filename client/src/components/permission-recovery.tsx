@@ -50,10 +50,10 @@ export function PermissionRecoveryCard() {
             <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-300" data-testid="text-recovery-title">
-                Your protection settings may be limited
+                Some StillHere settings need attention
               </p>
               <p className="text-xs text-amber-700/70 dark:text-amber-400/60 mt-0.5">
-                Some permissions need updating for full safety coverage.
+                Some permissions are off, which limits what StillHere can do for you.
               </p>
               <Button
                 variant="ghost"
@@ -87,7 +87,7 @@ export function PermissionRecoveryCard() {
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-              Update your protection settings
+              Update your StillHere permissions
             </p>
           </div>
           <Button
@@ -137,7 +137,7 @@ export function PermissionRecoveryCard() {
               <div className="flex-1">
                 <p className="text-sm font-medium text-foreground">Notifications</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Notifications let StillHere remind you to check in and keep your contacts informed.
+                  Notifications let StillHere reach you and try to alert your contacts when something needs attention.
                 </p>
                 {health.notifications === "denied" ? (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
