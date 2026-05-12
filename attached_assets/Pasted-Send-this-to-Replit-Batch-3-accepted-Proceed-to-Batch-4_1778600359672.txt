@@ -1,0 +1,71 @@
+Send this to Replit:
+
+  Batch 3 accepted.
+
+  Proceed to Batch 4: Presence/Paused location regression tests.
+
+  Do not change product behavior unless a test reveals a real bug.
+
+  Goal:
+  Verify that StillHere does not collect or store precise location during calm time when sharingMode is presence or paused, while
+  still allowing location during real safety events.
+
+  Test requirements:
+
+  1. sharingMode = presence, no active safety purpose:
+  getTrackingPolicyForUser(userId).nativeTrackingAllowed === false
+  reason should indicate presence/no active purpose.
+
+  2. sharingMode = paused:
+  getTrackingPolicyForUser(userId).nativeTrackingAllowed === false
+
+  3. Coordinate write endpoints with presence/no active purpose:
+  POST coordinate-bearing payloads to:
+  - /api/heartbeat
+  - /api/location/update
+  - /api/live-location/update
+  - /api/safety-timer/location
+  - /api/safe-walk/location
+  - /api/location/breadcrumb
+
+  Assert:
+  they either return 403 or strip/persist null coordinates.
+  No precise lat/lng stored.
+
+  4. Coordinate write endpoints with paused:
+  same assertions as above.
+
+  5. Non-location heartbeat still works:
+  presence/no active purpose can still update:
+  battery
+  network
+  timezone
+  device status
+  but not lat/lng/accuracy.
+
+  6. Active safety purpose positive controls:
+  With active Safe Walk, /api/safe-walk/location accepts and persists location.
+  With active Safety Timer, /api/safety-timer/location accepts and persists location if policy allows.
+  With active Drive/SOS/open incident, location can be stored as intended.
+  With presence + open SOS incident, location snapshot is allowed.
+  With paused + open SOS incident, confirm expected behavior. If paused blocks SOS location entirely, flag it before changing code.
+
+  7. Do not break:
+  SOS
+  missed check-in
+  Safe Walk
+  Safety Timer
+  Drive Safety
+  active sharing
+  heartbeat non-location fields
+
+  8. Add tests and report:
+  files changed
+  test file name
+  test results
+  any failed endpoint
+  whether code change was required
+  TypeScript result
+  final privacy-label implication
+
+  Do not start SEO or any other task yet.
