@@ -39,7 +39,7 @@
       }
     },
     "Geolocation": {
-      "iosLocationPermission": "always"
+      "iosLocationPermission": "whenInUse"
     }
   },
   "ios": {
