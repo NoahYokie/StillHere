@@ -106,7 +106,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
                 {contactName} acknowledged your alert
               </p>
               <p className="text-sm text-blue-700/80 dark:text-blue-300/60 mt-1" data-testid="text-banner-detail">
-                They've seen your alert and will reach out soon.
+                They've opened your alert.
               </p>
             </div>
           </div>
