@@ -1,0 +1,113 @@
+Send this to Replit:
+
+  Proceed to discussion for Phase 1.2: Always Location escalation UX.
+
+  Do not code yet.
+
+  I agree with the hotfix and now want the full escalation UX planned.
+
+  Use this feature behavior as the proposed baseline:
+
+  1. Safe Walk
+  If Always granted:
+  full background tracking.
+
+  If only When In Use:
+  allow Safe Walk to start, but show a persistent visible warning:
+  “Background location is limited. Your Safety Circle may see a stale location if your phone locks.”
+
+  If denied:
+  block start and show Open Settings.
+
+  2. Safety Timer
+  Never block.
+
+  If Always granted:
+  normal behavior.
+
+  If only When In Use or denied:
+  allow timer to start and show:
+  “Your timer will still run. If it ends while your phone is locked, StillHere may only have your last known location.”
+
+  3. Drive Safety
+  Require Always.
+
+  If Always is not granted:
+  do not start Drive Safety.
+
+  Show:
+  “Drive Safety needs background location to work while your phone is locked or in your car. Set Location to Always to use this
+  feature.”
+
+  Reason:
+  degraded crash/drive sensing creates false confidence.
+
+  4. Active sharing
+
+  For sharingMode precise:
+  Require Always for background sharing.
+  If not granted, do not enable precise active sharing.
+  Show:
+  “Precise sharing needs background location so your Safety Circle can keep seeing updates if your phone locks.”
+
+  For sharingMode area:
+  Allow with warning if only When In Use.
+  Show:
+  “Area sharing may pause while your phone is locked unless background location is allowed.”
+
+  For sharingMode presence:
+  No Always prompt.
+
+  For sharingMode paused:
+  No prompt.
+
+  5. SOS
+  Never block.
+
+  Use best available location.
+  If no location is available, still send SOS.
+
+  6. Missed check-in
+  Never block.
+
+  Use last known location if available.
+  If not available, alert still fires.
+
+  7. Pre-permission sheet copy
+
+  Before the iOS Always prompt, show:
+
+  Title:
+  Background location for [Feature name]
+
+  Body:
+  StillHere needs background location while [Feature name] is running so your Safety Circle can still receive updates if your phone
+  locks or you switch apps.
+
+  StillHere only uses background location while a safety feature you started is active. You can pause or turn it off at any time in
+  Settings.
+
+  Buttons:
+  Continue
+  Not now
+
+  If the user already denied Always once:
+  Continue becomes:
+  Open Settings
+
+  8. Please return final implementation plan before coding.
+
+  Include:
+
+  files to change
+  new components/helpers
+  permission API calls
+  how you will store “asked already” flags
+  how warnings persist during active features
+  how provider changes are detected
+  how Drive Safety blocking works
+  how active sharing precise/area behavior works
+  test plan
+  risk assessment
+
+  No code changes yet.
