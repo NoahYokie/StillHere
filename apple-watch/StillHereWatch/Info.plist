@@ -25,7 +25,7 @@
     <key>NSFallDetectionUsageDescription</key>
     <string>StillHere uses watchOS fall sensing to look for possible fall events. If a possible fall is detected, we will attempt to notify the contacts in your Safety Circle. This is not a medical device.</string>
     <key>NSHealthShareUsageDescription</key>
-    <string>StillHere reads heart-rate samples from HealthKit so you can see your reading inside the app. StillHere is not a medical device, does not diagnose, and does not detect health emergencies. Heart-rate data is used only for the in-app display and is not shared with anyone unless you choose to share it.</string>
+    <string>StillHere can read heart-rate samples from HealthKit if you turn on Heart rate in the StillHere app. If you also turn on heart-rate alerts, readings above 120 BPM or below 40 BPM may be saved to your StillHere account and shared with your Safety Circle. StillHere is not a medical device, does not diagnose, and does not detect health emergencies.</string>
     <key>WKApplication</key>
     <true/>
     <key>WKCompanionAppBundleIdentifier</key>
