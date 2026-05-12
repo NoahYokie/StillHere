@@ -63,7 +63,9 @@ export default function PrivacyPolicyPage() {
 
         <section>
           <h2 className="text-base font-semibold text-foreground mb-2">Data Retention</h2>
-          <p>Your data is retained as long as your account is active. Checkin history and location data are retained for the duration of your account. If you delete your account, all personal data is permanently removed within 30 days.</p>
+          <p>Your account data is retained as long as your account is active.</p>
+          <p className="mt-2">StillHere stores location data only when location sharing or a safety feature is active. Location history is retained according to your location retention setting, with 30 days as the default. Location tied to an open safety incident may be kept while the incident is active. Deleting your account removes your StillHere location history from our active database.</p>
+          <p className="mt-2">If you delete your account, all personal data is permanently removed within 30 days.</p>
         </section>
 
         <section>

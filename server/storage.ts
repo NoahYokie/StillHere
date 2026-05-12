@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { eq, desc, and, ne, gt, gte, lt, or, isNull, isNotNull } from "drizzle-orm";
+import { eq, desc, and, ne, gt, gte, lt, or, isNull, isNotNull, inArray } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -19,6 +19,7 @@ import {
   geofences,
   locationBreadcrumbs,
   satelliteDevices,
+  contextEvents,
   smsDeliveryLogs,
   type SmsDeliveryLog,
   type User,
@@ -929,10 +930,34 @@ export class DatabaseStorage implements IStorage {
     return c.length > 0;
   }
 
-  async cleanupExpiredLocationData(): Promise<{ pointsDeleted: number; sharesDeleted: number; usersProcessed: number }> {
-    // Privacy retention: delete historical location data older than each
-    // user's configured retention window (default 30d). NEVER touches active
-    // live tracking sessions - only ended/historical rows are removed.
+  async cleanupExpiredLocationData(): Promise<{
+    pointsDeleted: number;
+    sharesDeleted: number;
+    breadcrumbsDeleted: number;
+    tripPointsDeleted: number;
+    contextEventsDeleted: number;
+    speedAlertsDeleted: number;
+    checkinCoordsNulled: number;
+    driveSessionCoordsNulled: number;
+    safetyTimerCoordsNulled: number;
+    safeWalkCoordsNulled: number;
+    usersProcessed: number;
+  }> {
+    // Privacy retention (Batch 5a): the single source of truth for honoring
+    // the user's locationDataRetentionDays setting. For every coord-bearing
+    // historical table we either delete the row or NULL out the precise
+    // coordinate fields once the row is older than the user's cutoff.
+    //
+    // NEVER touched, regardless of age:
+    //   - geofences, familyPlaces (user-saved places, not history)
+    //   - safeWalks.destinationLat/Lng (part of the trip definition)
+    //   - any active session: live shares with active=true, safetyTimers in
+    //     'active'/'grace_period', safeWalks in 'active'/'overdue',
+    //     driveSessions with endedAt IS NULL
+    //   - users.lastHeartbeatLat/Lng, settings.lastLat/Lng (current state,
+    //     overwritten on every write, not history)
+    //
+    // Per-user iteration honors each user's own retention window.
     const allUsers = await db.select({
       id: users.id,
       retentionDays: users.locationDataRetentionDays,
@@ -940,16 +965,22 @@ export class DatabaseStorage implements IStorage {
 
     let pointsDeleted = 0;
     let sharesDeleted = 0;
+    let breadcrumbsDeleted = 0;
+    let tripPointsDeleted = 0;
+    let contextEventsDeleted = 0;
+    let speedAlertsDeleted = 0;
+    let checkinCoordsNulled = 0;
+    let driveSessionCoordsNulled = 0;
+    let safetyTimerCoordsNulled = 0;
+    let safeWalkCoordsNulled = 0;
 
     for (const u of allUsers) {
       const days = Math.max(1, u.retentionDays || 30);
       const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-      // 1. Delete historical breadcrumb points older than cutoff for this user.
-      //    Safe even for currently-active shares: we only drop points whose
-      //    recordedAt is before the cutoff. Recent points (within retention)
-      //    and any point belonging to an active session that's newer than the
-      //    cutoff are preserved.
+      // 1. liveLocationPoints: delete rows older than cutoff. Active sessions
+      //    are protected because only points whose recordedAt < cutoff are
+      //    removed; recent points keep being written by an active session.
       const deletedPoints = await db.delete(liveLocationPoints).where(
         and(
           eq(liveLocationPoints.userId, u.id),
@@ -958,10 +989,9 @@ export class DatabaseStorage implements IStorage {
       ).returning({ id: liveLocationPoints.id });
       pointsDeleted += deletedPoints.length;
 
-      // 2. Delete share rows that are NO LONGER ACTIVE and whose lastUpdatedAt
-      //    is older than the cutoff. The active=true guard is the safety rule:
-      //    a still-active live tracking session cannot be deleted regardless
-      //    of age. Cascade on share_id will also clean any straggler points.
+      // 2. liveLocationShares: delete rows that are NO LONGER ACTIVE and
+      //    whose lastUpdatedAt is older than cutoff. active=true is the
+      //    safety guard.
       const deletedShares = await db.delete(liveLocationShares).where(
         and(
           eq(liveLocationShares.userId, u.id),
@@ -970,9 +1000,142 @@ export class DatabaseStorage implements IStorage {
         ),
       ).returning({ id: liveLocationShares.id });
       sharesDeleted += deletedShares.length;
+
+      // 3. locationBreadcrumbs: delete rows older than cutoff for this user.
+      const deletedBreadcrumbs = await db.delete(locationBreadcrumbs).where(
+        and(
+          eq(locationBreadcrumbs.userId, u.id),
+          lt(locationBreadcrumbs.recordedAt, cutoff),
+        ),
+      ).returning({ id: locationBreadcrumbs.id });
+      breadcrumbsDeleted += deletedBreadcrumbs.length;
+
+      // 4. tripPoints: delete rows older than cutoff. tripPoints.tripId/tripType
+      //    is a soft reference (no FK) to safetyTimers / safeWalks /
+      //    driveSessions, so deleting points does not break parent rows.
+      //    Active-session protection: recent points written by a still-active
+      //    timer/walk/drive will be newer than cutoff and therefore preserved.
+      const deletedTripPoints = await db.delete(tripPoints).where(
+        and(
+          eq(tripPoints.userId, u.id),
+          lt(tripPoints.recordedAt, cutoff),
+        ),
+      ).returning({ id: tripPoints.id });
+      tripPointsDeleted += deletedTripPoints.length;
+
+      // 5. contextEvents (D3): delete rows older than cutoff. Each event is a
+      //    coord-anchored dwell/trip start/end with no value once the coord
+      //    must be removed.
+      const deletedContextEvents = await db.delete(contextEvents).where(
+        and(
+          eq(contextEvents.userId, u.id),
+          lt(contextEvents.createdAt, cutoff),
+        ),
+      ).returning({ id: contextEvents.id });
+      contextEventsDeleted += deletedContextEvents.length;
+
+      // 6. speedAlerts (D3): delete rows older than cutoff.
+      const deletedSpeedAlerts = await db.delete(speedAlerts).where(
+        and(
+          eq(speedAlerts.userId, u.id),
+          lt(speedAlerts.createdAt, cutoff),
+        ),
+      ).returning({ id: speedAlerts.id });
+      speedAlertsDeleted += deletedSpeedAlerts.length;
+
+      // 7. checkins (D2-A): preserve the row metadata so the safety audit
+      //    trail is intact, but NULL the coord pair on rows older than cutoff.
+      //    The "any-coord-present" guard catches partial-coordinate rows
+      //    (lat-only or lng-only) so no precise component is ever retained
+      //    past the retention window.
+      const nulledCheckins = await db.update(checkins).set({
+        lat: null,
+        lng: null,
+      }).where(
+        and(
+          eq(checkins.userId, u.id),
+          lt(checkins.createdAt, cutoff),
+          or(isNotNull(checkins.lat), isNotNull(checkins.lng)),
+        ),
+      ).returning({ id: checkins.id });
+      checkinCoordsNulled += nulledCheckins.length;
+
+      // 8. driveSessions (D1-A + D4-Yes): only ENDED sessions older than cutoff
+      //    get their coord fields NULLed. endedAt IS NULL = still active =
+      //    untouched. Row metadata (speed, distance, crashDetected) preserved
+      //    for the weekly receipt-of-protection report. Any-coord-present
+      //    guard covers all four lat/lng components so partial-coordinate
+      //    rows are not skipped.
+      const nulledDrives = await db.update(driveSessions).set({
+        startLat: null,
+        startLng: null,
+        endLat: null,
+        endLng: null,
+      }).where(
+        and(
+          eq(driveSessions.userId, u.id),
+          isNotNull(driveSessions.endedAt),
+          lt(driveSessions.endedAt, cutoff),
+          or(
+            isNotNull(driveSessions.startLat),
+            isNotNull(driveSessions.startLng),
+            isNotNull(driveSessions.endLat),
+            isNotNull(driveSessions.endLng),
+          ),
+        ),
+      ).returning({ id: driveSessions.id });
+      driveSessionCoordsNulled += nulledDrives.length;
+
+      // 9. safetyTimers (D1-A + D4-Yes): only ENDED timers (status in safe /
+      //    cancelled / escalated) with resolvedAt older than cutoff get
+      //    lastLat/Lng NULLed. Active and grace_period timers are untouched.
+      const nulledTimers = await db.update(safetyTimers).set({
+        lastLat: null,
+        lastLng: null,
+      }).where(
+        and(
+          eq(safetyTimers.userId, u.id),
+          inArray(safetyTimers.status, ["safe", "cancelled", "escalated"]),
+          isNotNull(safetyTimers.resolvedAt),
+          lt(safetyTimers.resolvedAt, cutoff),
+          or(isNotNull(safetyTimers.lastLat), isNotNull(safetyTimers.lastLng)),
+        ),
+      ).returning({ id: safetyTimers.id });
+      safetyTimerCoordsNulled += nulledTimers.length;
+
+      // 10. safeWalks (D1-A + D4-Yes): only ENDED walks (status in arrived /
+      //     cancelled / escalated) with resolvedAt older than cutoff get
+      //     lastLat/Lng NULLed. destinationLat/Lng is preserved (it is the
+      //     trip definition, not a history breadcrumb). Active and overdue
+      //     walks are untouched.
+      const nulledWalks = await db.update(safeWalks).set({
+        lastLat: null,
+        lastLng: null,
+      }).where(
+        and(
+          eq(safeWalks.userId, u.id),
+          inArray(safeWalks.status, ["arrived", "cancelled", "escalated"]),
+          isNotNull(safeWalks.resolvedAt),
+          lt(safeWalks.resolvedAt, cutoff),
+          or(isNotNull(safeWalks.lastLat), isNotNull(safeWalks.lastLng)),
+        ),
+      ).returning({ id: safeWalks.id });
+      safeWalkCoordsNulled += nulledWalks.length;
     }
 
-    return { pointsDeleted, sharesDeleted, usersProcessed: allUsers.length };
+    return {
+      pointsDeleted,
+      sharesDeleted,
+      breadcrumbsDeleted,
+      tripPointsDeleted,
+      contextEventsDeleted,
+      speedAlertsDeleted,
+      checkinCoordsNulled,
+      driveSessionCoordsNulled,
+      safetyTimerCoordsNulled,
+      safeWalkCoordsNulled,
+      usersProcessed: allUsers.length,
+    };
   }
 
   async getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string } | undefined> {

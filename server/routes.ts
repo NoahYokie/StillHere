@@ -7174,7 +7174,7 @@ export async function registerRoutes(
         if (Date.now() - lastRunMs >= TWENTY_FOUR_HOURS_MS) {
           (global as any).__lastLocationCleanupAt = Date.now();
           const result = await storage.cleanupExpiredLocationData();
-          console.log(`[CRON][retention] location cleanup: users=${result.usersProcessed} points=${result.pointsDeleted} shares=${result.sharesDeleted}`);
+          console.log(`[CRON][retention] location cleanup: users=${result.usersProcessed} points=${result.pointsDeleted} shares=${result.sharesDeleted} breadcrumbs=${result.breadcrumbsDeleted} tripPoints=${result.tripPointsDeleted} contextEvents=${result.contextEventsDeleted} speedAlerts=${result.speedAlertsDeleted} checkinCoordsNulled=${result.checkinCoordsNulled} driveCoordsNulled=${result.driveSessionCoordsNulled} timerCoordsNulled=${result.safetyTimerCoordsNulled} walkCoordsNulled=${result.safeWalkCoordsNulled}`);
         }
       } catch (err: any) {
         console.error("[CRON][retention] location cleanup failed:", err?.message || err);
