@@ -1,0 +1,75 @@
+Send this to Replit:
+
+  Report audit accepted.
+
+  Do not remove any report surfaces.
+
+  Approve small Batch 5b-report-polish before the broader copy sweep.
+
+  Scope:
+
+  1. Weekly Safety Report period selector
+
+  Add day / week / fortnight / month selector to R1 User Weekly Safety Report if technically simple.
+
+  If this is more than a small change, defer it and report why.
+
+  2. Drive Report retention placeholder
+
+  On R5 Drive Report expanded card, if route/trail/start/end location details are unavailable because coordinates were pruned,
+  show:
+
+  Route details no longer available
+
+  Map and address details are kept only for the length of your location retention window. The drive summary above is preserved for
+  your safety record.
+
+  Do not break aggregate drive stats.
+
+  3. Report language softening
+
+  Replace risky report phrases:
+
+  “StillHere — Your safety, always watched over”
+  →
+  “Your StillHere safety summary”
+
+  “this is exactly what peace of mind looks like”
+  →
+  “this is what a steady week looks like”
+
+  “The system worked exactly as it should — catching the small things so nothing gets missed”
+  →
+  “The system flagged moments worth checking and your contacts were notified as configured.”
+
+  “Your safety network stepped in when it mattered most.”
+  →
+  “Your safety network was contacted as configured.”
+
+  “There’s an alert that hasn’t been resolved yet this week. Your contacts have been kept informed.”
+  →
+  “There’s an alert that hasn’t been resolved yet this week. Your contacts were notified through the configured channels.”
+
+  Also remove any em-dashes in these report strings.
+
+  4. Do not touch:
+
+  incidents
+  incident timeline
+  family reports
+  watcher reports
+  weekly email reports
+  drive metrics
+  check-in metadata
+  Safety Circle visibility
+
+  5. Tests / verification:
+
+  Confirm reports still render.
+  Confirm 4-week/month report still works.
+  Confirm old drive with pruned coords shows placeholder.
+  Confirm no report-critical metadata was removed.
+  TypeScript clean.
+
+  After this small report polish, stop and report.
+  Do not start broad Batch 5b emergency-copy sweep yet.

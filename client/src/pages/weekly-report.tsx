@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Shield, ShieldCheck, ShieldAlert, AlertTriangle, Clock, MapPin, CheckCircle2 } from "lucide-react";
+import { Shield, ShieldCheck, ShieldAlert, AlertTriangle, Clock, MapPin, CheckCircle2 } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TimelineItem {
   text: string;
   time: string;
 }
+
+type ReportPeriod = "day" | "week" | "fortnight" | "month";
 
 interface WeeklyReport {
   summaryTone: "good" | "mixed" | "concern";
@@ -15,6 +19,9 @@ interface WeeklyReport {
   timeline: TimelineItem[];
   weekStart: string;
   weekEnd: string;
+  periodStart?: string;
+  periodEnd?: string;
+  period?: ReportPeriod;
   totalCheckins: number;
 }
 
@@ -67,11 +74,31 @@ function getTimelineColor(text: string) {
   return "text-gray-500";
 }
 
+const PERIOD_LABELS: Record<ReportPeriod, { short: string; heading: string }> = {
+  day: { short: "Last 24 hours", heading: "Today" },
+  week: { short: "Last 7 days", heading: "This Week" },
+  fortnight: { short: "Last 14 days", heading: "Last 2 Weeks" },
+  month: { short: "Last 30 days", heading: "This Month" },
+};
+
+const TIMELINE_HEADING: Record<ReportPeriod, string> = {
+  day: "Today",
+  week: "This Week",
+  fortnight: "Last 2 Weeks",
+  month: "This Month",
+};
+
 export default function WeeklyReportPage() {
   const [, navigate] = useLocation();
+  const [period, setPeriod] = useState<ReportPeriod>("week");
 
   const { data: report, isLoading } = useQuery<WeeklyReport>({
-    queryKey: ["/api/reports/weekly"],
+    queryKey: ["/api/reports/weekly", period],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports/weekly?period=${period}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load safety report");
+      return res.json();
+    },
   });
 
   if (isLoading) {
@@ -98,10 +125,21 @@ export default function WeeklyReportPage() {
 
   const tone = toneConfig[report.summaryTone];
   const ToneIcon = tone.icon;
+  const activePeriod: ReportPeriod = (report.period as ReportPeriod) || period;
 
-  const weekStart = new Date(report.weekStart);
-  const weekEnd = new Date(report.weekEnd);
-  const dateRange = `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  const rangeStartIso = report.periodStart || report.weekStart;
+  const rangeEndIso = report.periodEnd || report.weekEnd;
+  const rangeStart = new Date(rangeStartIso);
+  const rangeEnd = new Date(rangeEndIso);
+  const dateRange = `${rangeStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} to ${rangeEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+
+  const totalLabel = activePeriod === "day"
+    ? "Total check-ins today"
+    : activePeriod === "week"
+      ? "Total check-ins this week"
+      : activePeriod === "fortnight"
+        ? "Total check-ins (last 14 days)"
+        : "Total check-ins this month";
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -110,7 +148,7 @@ export default function WeeklyReportPage() {
           <BackButton to="/" />
           <div>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white" data-testid="text-page-title">
-              Weekly Safety Report
+              Safety Report
             </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400" data-testid="text-date-range">{dateRange}</p>
           </div>
@@ -118,6 +156,21 @@ export default function WeeklyReportPage() {
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4 pb-8">
+        <div className="flex items-center gap-2">
+          <Select value={period} onValueChange={(v) => setPeriod(v as ReportPeriod)}>
+            <SelectTrigger className="w-[170px]" data-testid="select-period">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="day">{PERIOD_LABELS.day.short}</SelectItem>
+              <SelectItem value="week">{PERIOD_LABELS.week.short}</SelectItem>
+              <SelectItem value="fortnight">{PERIOD_LABELS.fortnight.short}</SelectItem>
+              <SelectItem value="month">{PERIOD_LABELS.month.short}</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{PERIOD_LABELS[activePeriod].heading}</span>
+        </div>
+
         <div className={`rounded-2xl border ${tone.border} ${tone.bg} p-6`} data-testid="card-summary">
           <div className="flex items-start gap-4">
             <div className={`p-3 rounded-xl ${tone.iconBg} shrink-0`}>
@@ -138,7 +191,7 @@ export default function WeeklyReportPage() {
         </div>
 
         <div className={`rounded-2xl ${tone.barBg} border ${tone.border} px-5 py-3 flex items-center justify-between`}>
-          <span className="text-sm text-gray-600 dark:text-gray-400">Total check-ins this week</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">{totalLabel}</span>
           <span className={`text-xl font-bold ${tone.accent}`} data-testid="text-checkin-count">
             {report.totalCheckins}
           </span>
@@ -147,7 +200,7 @@ export default function WeeklyReportPage() {
         {report.timeline.length > 0 && (
           <div className="space-y-1 pt-2">
             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1 mb-3" data-testid="text-timeline-title">
-              This Week
+              {TIMELINE_HEADING[activePeriod]}
             </h2>
             <div className="space-y-0">
               {report.timeline.map((item, i) => {
@@ -184,7 +237,7 @@ export default function WeeklyReportPage() {
           <div className="text-center py-8 space-y-2">
             <CheckCircle2 className="w-10 h-10 text-emerald-300 dark:text-emerald-700 mx-auto" />
             <p className="text-sm text-gray-400 dark:text-gray-500">
-              A quiet week, no events to report
+              No events to report in this period
             </p>
           </div>
         )}
@@ -193,7 +246,7 @@ export default function WeeklyReportPage() {
           <div className="flex items-center justify-center gap-1.5">
             <img src={logoPath} alt="StillHere" className="h-5 w-5 object-contain" />
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              StillHere - Your safety, always watched over
+              Your StillHere safety summary
             </p>
           </div>
         </div>

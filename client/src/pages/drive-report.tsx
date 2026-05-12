@@ -185,6 +185,18 @@ function DriveCard({ drive, isWatcher }: { drive: DriveDetail; isWatcher: boolea
               )}
             </div>
 
+            {!mapCenter && mapPoints.length === 0 && drive.startLat == null && drive.startLng == null && drive.endLat == null && drive.endLng == null && (
+              <div
+                className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-4 space-y-1.5"
+                data-testid={`text-route-pruned-${drive.id}`}
+              >
+                <p className="text-sm font-medium text-foreground">Route details no longer available</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Map and address details are kept only for the length of your location retention window. The drive summary above is preserved for your safety record.
+                </p>
+              </div>
+            )}
+
             {mapCenter && mapPoints.length > 0 && (
               <div className="space-y-2">
                 {!showReplay ? (

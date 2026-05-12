@@ -5192,8 +5192,23 @@ export async function registerRoutes(
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
+      // Accept the same period vocabulary as R4 watcher report and R5 drive
+      // report so all surfaces use one mental model. Default = week.
+      const periodParam = (req.query.period as string) || "week";
       const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      let from: Date;
+      switch (periodParam) {
+        case "day": from = new Date(now.getTime() - 86400000); break;
+        case "fortnight": from = new Date(now.getTime() - 14 * 86400000); break;
+        case "month": from = new Date(now.getTime() - 30 * 86400000); break;
+        case "week":
+        default: from = new Date(now.getTime() - 7 * 86400000); break;
+      }
+      // Local alias kept for readability; the rest of this handler still
+      // refers to "week" because the response shape and timeline copy
+      // ("This Week") were the original product framing. The window itself
+      // honors `from`, so day/fortnight/month all aggregate correctly.
+      const weekAgo = from;
 
       const weekIncidents = await db
         .select()
@@ -5324,7 +5339,7 @@ export async function registerRoutes(
         summaryTone = "concern";
         if (unresolvedIncidents.length > 0) {
           summary =
-            "There's an alert that hasn't been resolved yet this week. Your contacts have been kept informed. Tap I'm OK as soon as you can so they know you're safe.";
+            "There's an alert that hasn't been resolved yet this week. Your contacts were notified through the configured channels. Tap I'm OK as soon as you can so they know you're safe.";
         } else if (safetyConcernNow || heartbeatStale) {
           summary =
             "Your phone hasn't checked in for a while, so your safety status couldn't be confirmed right now. Open the app and tap I'm OK to let your Safety Circle know you're alright.";
@@ -5335,15 +5350,15 @@ export async function registerRoutes(
       } else if (totalIncidents === 0) {
         summaryTone = "good";
         summary =
-          "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up  -  this is exactly what peace of mind looks like.";
+          "Everything looked steady this week. Check-ins were consistent and no concerns were raised. Keep it up. This is what a steady week looks like.";
       } else if (totalIncidents <= 2 && unresolvedIncidents.length === 0 && slowResolutions.length === 0) {
         summaryTone = "mixed";
         summary =
-          "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay. The system worked exactly as it should  -  catching the small things so nothing gets missed.";
+          "There were a few moments this week where we checked in a little closer. Each time, everything turned out okay. The system flagged moments worth checking and your contacts were notified as configured.";
       } else {
         summaryTone = "concern";
         summary =
-          "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases. Your safety network stepped in when it mattered most.";
+          "This week had a few moments that needed attention. While everything was eventually resolved, it took a bit longer than usual in some cases. Your safety network was contacted as configured.";
       }
 
       const timeline = deduped.map(({ text, time }) => ({ text, time }));
@@ -5352,8 +5367,14 @@ export async function registerRoutes(
         summaryTone,
         summary,
         timeline,
+        // weekStart / weekEnd kept for backward compatibility with older
+        // clients. periodStart / periodEnd / period are the new canonical
+        // fields the client renders against once it knows about them.
         weekStart: weekAgo.toISOString(),
         weekEnd: now.toISOString(),
+        periodStart: weekAgo.toISOString(),
+        periodEnd: now.toISOString(),
+        period: periodParam === "day" || periodParam === "fortnight" || periodParam === "month" ? periodParam : "week",
         totalCheckins: weekCheckins.length,
       });
     } catch (error) {
