@@ -1,0 +1,68 @@
+Send this to Replit:
+
+  Audit accepted.
+
+  Proceed with Batch 5b.3 first: iOS Info.plist / iOS build guide permission wording.
+
+  Reason:
+  These are the highest App Store rejection risk.
+
+  Scope:
+
+  1. Verify actual iOS permission strings
+
+  Check whether the real iOS plist exists at:
+
+  ios/App/App/Info.plist
+
+  or whether permissions are only coming from:
+
+  capacitor.config.json
+  ios-app-store/IOS_BUILD_GUIDE.md
+
+  Report exactly which file controls the shipped iOS permission strings.
+
+  2. Replace risky iOS permission wording if present anywhere shipped or documented:
+
+  NSLocationAlwaysAndWhenInUseUsageDescription
+
+  Use:
+  “StillHere uses background location only when you turn on a feature that needs it, such as Safe Walk, Safety Timer, Drive Safety,
+  active sharing with your Safety Circle, or an SOS in progress. If a check-in is missed or you trigger help, we will attempt to
+  share your location with the contacts you chose so they can reach you. StillHere is not a continuous tracking app and does not
+  collect location during calm time when you are in Presence mode or have sharing paused.”
+
+  NSLocationAlwaysUsageDescription
+
+  If still present:
+  delete it if deprecated and unused.
+  If required by a generated plist, use same safe wording as above.
+
+  NSMotionUsageDescription
+
+  Use:
+  “StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are
+  best-effort sensor signals, not medical-grade detection. If a possible event is detected, we will attempt to notify your Safety
+  Circle.”
+
+  3. Verify microphone string is safe.
+
+  Expected:
+  “StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle.”
+
+  4. Verify HealthKit Watch string is safe and already updated.
+
+  5. Update IOS_BUILD_GUIDE.md only if it is still used as submission documentation.
+
+  6. Do not change product behavior.
+
+  7. Do not start 5b.1 or 5b.2 yet.
+
+  After Batch 5b.3, report:
+
+  files changed
+  which file controls shipped permission strings
+  exact final iOS permission strings
+  whether deprecated NSLocationAlwaysUsageDescription still exists
+  TypeScript result if relevant
+  remaining App Store permission risks

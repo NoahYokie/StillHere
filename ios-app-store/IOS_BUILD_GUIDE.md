@@ -49,16 +49,17 @@ Open `ios/App/App/Info.plist` in Xcode and add these required privacy descriptio
 
 | Key | Value |
 |-----|-------|
-| NSLocationWhenInUseUsageDescription | StillHere uses your location during check-ins, safety features, and maps so you and your trusted contacts can see where help may be needed. |
-| NSLocationAlwaysAndWhenInUseUsageDescription | StillHere uses your location in the background to keep you safe. If you miss a check-in or need help, we can alert your trusted contacts with your location so they can reach you quickly. |
-| NSLocationAlwaysUsageDescription | Background location lets StillHere watch over you even when your phone is locked. This way, your trusted contacts are always just a tap away if something happens. |
-| NSMotionUsageDescription | StillHere uses motion sensors to detect possible falls or vehicle crashes and automatically alert your emergency contacts. |
-| NSMicrophoneUsageDescription | StillHere uses your microphone for voice calls with your trusted contacts so you can speak directly during a check-in or emergency. |
+| NSLocationWhenInUseUsageDescription | StillHere uses your location only when you choose to share it or when you start a safety feature like a check-in, Safe Walk, Safety Timer, Drive Safety, or SOS. Location sharing is off by default. |
+| NSLocationAlwaysAndWhenInUseUsageDescription | StillHere uses background location only when you turn on a feature that needs it, such as Safe Walk, Safety Timer, Drive Safety, active sharing with your Safety Circle, or an SOS in progress. If a check-in is missed or you trigger help, we will attempt to share your location with the contacts you chose so they can reach you. StillHere is not a continuous tracking app and does not collect location during calm time when you are in Presence mode or have sharing paused. |
+| NSMotionUsageDescription | StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are best-effort sensor signals, not medical-grade detection. If a possible event is detected we will attempt to notify your Safety Circle. |
+| NSMicrophoneUsageDescription | StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle. |
 
 Notes:
+- **NSLocationAlwaysUsageDescription:** deprecated by Apple (iOS 11+). Intentionally not set. Do not re-add it. `NSLocationAlwaysAndWhenInUseUsageDescription` is the correct key for background location.
 - **Camera:** not requested. StillHere voice calls are audio-only (no video). Do not add `NSCameraUsageDescription` unless a video calling feature ships, otherwise Apple will flag the unused permission.
 - **Contacts:** not requested. Emergency contacts are entered manually inside the app; iOS Contacts are never imported. Do not add `NSContactsUsageDescription`.
 - **Notifications:** there is no `NSUserNotificationsUsageDescription` key. The system push prompt is not customizable. The in-app pre-permission education screen is what Apple recommends, and it is already implemented.
+- **HealthKit (Watch):** `NSHealthShareUsageDescription` lives in the watchOS target (`apple-watch/StillHereWatch/Info.plist`), not in the iOS app. It is gated behind the user opting in to "Read heart rate from my Apple Watch" in Settings.
 
 ## Step 6: Configure Xcode Project
 
