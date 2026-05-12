@@ -10,6 +10,7 @@ import { Navigation, MapPin, Home, Briefcase, Search, CheckCircle2, Clock, Footp
 import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
 
 function formatCountdown(ms: number): string {
@@ -91,6 +92,7 @@ const EXTEND_OPTIONS = [
 export default function SafeWalkPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
   const [destinationType, setDestinationType] = useState<"saved" | "address" | "pin">("saved");
   const [selectedGeofence, setSelectedGeofence] = useState<Geofence | null>(null);
   const [addressQuery, setAddressQuery] = useState("");
@@ -180,6 +182,19 @@ export default function SafeWalkPage() {
   const startMutation = useMutation({
     mutationFn: async () => {
       if (!destinationCoords) throw new Error("No destination");
+      // Phase 1.2: Safe Walk works at WhenInUse, but we ask for Always so the
+      // walk keeps reporting if the screen locks. NEVER block on this; if the
+      // user declines or only grants WhenInUse, we still start and post a
+      // persistent warning banner.
+      const outcome = await escalation.requestAlwaysForFeature("safe_walk");
+      if (!outcome.granted) {
+        escalation.setActiveWarning({
+          feature: "safe_walk",
+          message: "Safe Walk is running with limited background access. Updates may pause when your phone locks. Tap Upgrade to switch to Always.",
+        });
+      } else {
+        escalation.setActiveWarning(null);
+      }
       return apiRequest("POST", "/api/safe-walk/start", {
         destinationLat: destinationCoords.lat,
         destinationLng: destinationCoords.lng,

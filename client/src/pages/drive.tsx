@@ -10,6 +10,7 @@ import { Car, Gauge, MapPin, Clock, AlertTriangle, History, Play, Square, Shield
 import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import { drivingMonitor } from "@/lib/driving-monitor";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import CrashCountdown from "@/components/crash-countdown";
 import GoogleMap from "@/components/google-map";
 import type { DriveSession, SpeedAlert, TripPoint, UserStatus } from "@shared/schema";
@@ -40,6 +41,7 @@ function formatSessionDuration(start: string, end: string | null) {
 export default function DrivePage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
   const [driveActive, setDriveActive] = useState(false);
   const [driveStarting, setDriveStarting] = useState(false);
   const [currentSpeed, setCurrentSpeed] = useState(0);
@@ -117,6 +119,31 @@ export default function DrivePage() {
     if (driveStarting || driveActive) return;
     setDriveStarting(true);
     try {
+      // Phase 1.2: Drive Safety REQUIRES Always so crash detection and live
+      // route can keep running with the screen off. Block start if denied.
+      const outcome = await escalation.requestAlwaysForFeature("drive");
+      if (!outcome.granted) {
+        setDriveStarting(false);
+        if (outcome.blocked) {
+          toast({
+            title: "Background location required",
+            description: "Drive Safety needs Always location so crash alerts work with the screen off. Open Settings to enable it.",
+            variant: "destructive",
+          });
+        } else if (outcome.degraded) {
+          toast({
+            title: "Background location required",
+            description: "Drive Safety needs Always location, not just While Using. Tap the location row in Settings to upgrade.",
+            variant: "destructive",
+          });
+        } else if (outcome.dismissed) {
+          toast({
+            title: "Drive not started",
+            description: "Background location is required for Drive Safety.",
+          });
+        }
+        return;
+      }
       await drivingMonitor.start({
         onSpeedUpdate: (speed, limit) => {
           setCurrentSpeed(speed);
@@ -156,7 +183,7 @@ export default function DrivePage() {
     } finally {
       setDriveStarting(false);
     }
-  }, [driveStarting, driveActive, configuredSpeedLimit, toast]);
+  }, [driveStarting, driveActive, configuredSpeedLimit, toast, escalation]);
 
   const stopDrive = useCallback(async () => {
     await drivingMonitor.stop();

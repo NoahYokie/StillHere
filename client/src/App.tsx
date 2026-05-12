@@ -9,6 +9,7 @@ import { NotificationBanner } from "@/components/notification-banner";
 import { initNativeCall, isNativePlatform } from "@/lib/native-call";
 import { initCapacitorPlugins, isNative } from "@/lib/capacitor";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { BackgroundLocationProvider } from "@/components/background-location-provider";
 import { RatingPrompt } from "@/components/rating-prompt";
 import { initErrorReporter } from "@/lib/error-reporter";
 import { resumeLiveTrackingIfNeeded } from "@/lib/live-location";
@@ -346,13 +347,15 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
-            <Toaster />
-            <IncomingCallOverlay />
-            <NotificationBanner />
-            <RatingPrompt />
-            <CapacitorInit />
-            <LimitationsGate />
-            <Router />
+            <BackgroundLocationProvider>
+              <Toaster />
+              <IncomingCallOverlay />
+              <NotificationBanner />
+              <RatingPrompt />
+              <CapacitorInit />
+              <LimitationsGate />
+              <Router />
+            </BackgroundLocationProvider>
           </AuthProvider>
         </TooltipProvider>
       </QueryClientProvider>

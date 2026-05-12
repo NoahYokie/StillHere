@@ -10,6 +10,7 @@ import { Shield, Clock, MapPin, Plus, X } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import type { SafetyTimer, TripPoint } from "@shared/schema";
 
 const DURATION_PRESETS = [
@@ -45,6 +46,7 @@ function getActivityFromSpeed(speedMps: number | null): string {
 export default function SafetyTimerPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
   const [selectedDuration, setSelectedDuration] = useState(60);
   const [customDuration, setCustomDuration] = useState("");
   const [showCustom, setShowCustom] = useState(false);
@@ -67,6 +69,19 @@ export default function SafetyTimerPage() {
   const startMutation = useMutation({
     mutationFn: async () => {
       const duration = showCustom ? parseInt(customDuration) : selectedDuration;
+      // Phase 1.2: Safety Timer NEVER blocks. We ask for Always so the
+      // countdown can post location updates if the screen locks, but if the
+      // user only grants WhenInUse (or declines) we still start the timer
+      // and post a persistent warning that location updates may be paused.
+      const outcome = await escalation.requestAlwaysForFeature("safety_timer");
+      if (!outcome.granted) {
+        escalation.setActiveWarning({
+          feature: "safety_timer",
+          message: "Safety Timer is running, but background location is limited. Your last known location will be used if the timer runs out.",
+        });
+      } else {
+        escalation.setActiveWarning(null);
+      }
       return apiRequest("POST", "/api/safety-timer/start", { durationMinutes: duration, note: note || undefined });
     },
     onSuccess: () => {

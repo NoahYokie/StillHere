@@ -155,6 +155,15 @@ class LocationService {
   private async startNativeBackgroundWatch(): Promise<boolean> {
     if (!this.nativePlugin || !this.nativeReady) return false;
 
+    // Phase 1.2 gate: native background tracking only runs after a feature
+    // page has explicitly received Always authorization from the user.
+    // Without the gate flipped on, fall through to the foreground capacitor /
+    // browser path so the app still functions but never claims background.
+    if (!nativeBackgroundAllowed) {
+      console.log("[GPS] Native background watch suppressed (Always not granted yet)");
+      return false;
+    }
+
     try {
       const BG = this.nativePlugin;
       const isHighAccuracy = this.desiredMode() === "high_accuracy";
@@ -210,7 +219,10 @@ class LocationService {
         // starts" escalation UX is a separate, approved follow-up task
         // and must NOT be built into this file. See STORE_SUBMISSION.md
         // section 5c for the escalation plan.
-        locationAuthorizationRequest: "WhenInUse",
+        // Phase 1.2: by the time we reach this code, the gate above has
+        // confirmed the user already granted Always via our pre-permission
+        // sheet. Asking for Always here makes the plugin internally consistent.
+        locationAuthorizationRequest: "Always",
         backgroundPermissionRationale: {
           title: "Background location for safety features",
           message: "StillHere uses background location only while a safety feature you turned on is running, such as Safe Walk, Safety Timer, Drive Safety, an active SOS, or active sharing with your Safety Circle. We will attempt to share your location with the contacts you chose so they can reach you. Background location is off when you are not using one of these features.",
@@ -229,6 +241,24 @@ class LocationService {
     } catch (err: any) {
       console.log(`[GPS] Native background tracking failed to start: ${err?.message || err}`);
       return false;
+    }
+  }
+
+  /**
+   * Public hook for `setNativeBackgroundAllowed(false)`. Tears down only the
+   * native BG plugin; foreground subscribers fall back to capacitor/browser
+   * watch on the next restart.
+   */
+  async handleNativeBackgroundRevoked(): Promise<void> {
+    if (!this.nativeStarted) return;
+    console.log("[GPS] Always authorization revoked; stopping native BG plugin");
+    await this.stopNativeBackgroundWatch();
+    // After stopping native, no watch is active by definition. If there are
+    // still subscribers (e.g. an in-progress Safe Walk or Safety Timer), we
+    // must immediately start a foreground fallback so they don't lose
+    // location updates.
+    if (this.subscribers.size > 0) {
+      this.startWatch();
     }
   }
 
@@ -544,6 +574,29 @@ class LocationService {
       }, 10000);
     });
   }
+}
+
+/**
+ * Phase 1.2 gate. Toggled by BackgroundLocationProvider when Always
+ * authorization is granted (true) or revoked (false). When false, the native
+ * BackgroundGeolocation plugin is NOT started; the service falls back to
+ * Capacitor or browser geolocation. This prevents claiming background usage
+ * before the user has explicitly opted in.
+ */
+let nativeBackgroundAllowed = false;
+
+export function setNativeBackgroundAllowed(allowed: boolean): void {
+  const previous = nativeBackgroundAllowed;
+  nativeBackgroundAllowed = allowed;
+  if (previous && !allowed) {
+    // Tear down the native plugin so we don't keep collecting in background
+    // after the user revoked Always.
+    locationService.handleNativeBackgroundRevoked();
+  }
+}
+
+export function isNativeBackgroundAllowed(): boolean {
+  return nativeBackgroundAllowed;
 }
 
 export const locationService = new LocationService();

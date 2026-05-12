@@ -250,22 +250,73 @@ To turn VoIP on in Phase 2:
 5. Re-validate `apns-topic` is `com.daudabangoura.stillhere.app.voip`
    (already wired in `server/voip-push.ts`).
 
-### 5c. Background location -- Always escalation TODO
+### 5c. Background location -- Always escalation (Phase 1.2 BUILT)
 
-Phase 1 sets `BackgroundGeolocation.locationAuthorizationRequest` to
-`"WhenInUse"` to avoid Apple's "Always upfront" rejection trigger.
-This is NOT a permanent reduction in functionality.
+Phase 1.2 ships an at-the-moment escalation flow. The app launches with
+WhenInUse only; Always is requested the first time the user starts a
+feature that genuinely needs background location, with a pre-permission
+sheet explaining why.
 
-Safe Walk, Safety Timer, Drive Safety, active Safety-Circle sharing, and
-SOS may need Always Location for reliable background updates while the
-phone is locked or the app is backgrounded. The app should request
-escalation to Always at the moment a user enables one of those features,
-not at first launch.
+**Architecture:**
+- `client/src/lib/escalate-always.ts` -- pure utility for reading the
+  current iOS authorization level, requesting Always via the
+  `@transistorsoft/capacitor-background-geolocation` plugin, and storing
+  per-feature "asked already" flags in localStorage.
+- `client/src/components/background-location-provider.tsx` -- React
+  provider that owns the modal sheet, the persistent warning banner, and
+  the `useBackgroundLocationEscalation()` hook. Mounted in
+  `client/src/App.tsx` inside `AuthProvider`.
+- `client/src/lib/location-service.ts` -- exports
+  `setNativeBackgroundAllowed(boolean)`. The native
+  BackgroundGeolocation plugin is NOT started until this gate flips
+  true. Until then, the service falls back to Capacitor or browser
+  geolocation, so the app still works for foreground use without ever
+  claiming a background capability the user didn't grant.
 
-Tracked locations:
-- `capacitor.config.json` -> `plugins.BackgroundGeolocation._TODO_ALWAYS_ESCALATION`
-- This file (5c)
-- Each feature start screen should call the BackgroundGeolocation plugin's
-  authorization-request API with the rationale string already in
-  `backgroundPermissionRationale.message` before starting tracking.
+**Per-feature behavior (matches spec):**
+
+| Feature | Authorization required | If user only grants WhenInUse | If user denies / dismisses |
+|---|---|---|---|
+| Drive Safety | Always (REQUIRED) | Block start, show toast, don't start drive | Block start, show toast |
+| Precise sharing | Always (REQUIRED) | Revert mode change, show toast | Revert mode change, show toast |
+| Safe Walk | Always preferred, WhenInUse OK | Start walk + persistent warning banner | Start walk + persistent warning banner |
+| Area sharing | Always preferred, WhenInUse OK | Apply mode + persistent warning banner | Apply mode + persistent warning banner |
+| Safety Timer | Always preferred, NEVER block | Start timer + persistent warning banner | Start timer + persistent warning banner |
+| SOS | Never block, never prompt | (no change) | (no change) |
+| Missed check-in resolution | Never block, never prompt | (no change) | (no change) |
+| Presence / Paused sharing | Not needed | (no prompt) | (no prompt) |
+
+**Pre-permission sheet copy:**
+- Title: `Background location for [Feature name]`
+- Body: explains lock-screen / app-switch behavior and that StillHere
+  only uses background location while a feature the user started is
+  active.
+- Primary action: `Continue` (triggers OS prompt) OR `Open Settings`
+  (when iOS will not show the prompt again because the user previously
+  denied or only granted WhenInUse).
+- Secondary action: `Not now` (always available).
+
+**Settings entry point:**
+- `client/src/pages/settings.tsx` Safety Health card shows
+  `Upgrade to Always` next to the Location row whenever the OS reports
+  WhenInUse. One tap re-enters the same provider flow.
+
+**Plugin authorization request:**
+- `BG.ready({ locationAuthorizationRequest: "Always" })` is now safe
+  because we only hit that code path AFTER the user accepted Always
+  through our pre-permission sheet.
+
+**Provider-state observation:**
+- The provider subscribes to `BG.onProviderChange` so changes the user
+  makes in iOS Settings while StillHere is open are mirrored back into
+  the gate within ~1 second. The provider also re-checks on
+  `visibilitychange` for when the app returns from Settings.
+
+**Hard guarantees the build preserves:**
+- SOS, missed check-in handling, Safety Timer start, and emergency
+  incident creation never block on this prompt and never call
+  `requestAlwaysForFeature` in a path that would refuse to proceed.
+- The native `BackgroundGeolocation.start()` call only runs after
+  (a) a feature subscribed to the location service AND (b) the
+  Always-gate is true. There is no app-launch BG.start.
 

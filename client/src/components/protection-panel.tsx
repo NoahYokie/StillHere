@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Shield, Eye, EyeOff, MapPin, Radio, Pause, ChevronDown, ChevronUp, Users, Moon, Beaker } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 
 interface ProtectionData {
   sharingMode: "precise" | "area" | "presence" | "paused";
@@ -27,6 +28,7 @@ const modeLabels: Record<string, { label: string; desc: string; icon: any }> = {
 export function ProtectionPanel() {
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
 
   const { data: protection, isLoading } = useQuery<ProtectionData>({
     queryKey: ["/api/my-protection"],
@@ -42,6 +44,37 @@ export function ProtectionPanel() {
       toast({ title: "Updated", description: "Your sharing preference has been saved." });
     },
   });
+
+  // Phase 1.2: precise sharing REQUIRES Always; revert if not granted.
+  // Area sharing works at WhenInUse but warn the user that updates may pause.
+  // Presence and Paused never need location and skip the prompt.
+  const handleModeChange = async (mode: "precise" | "area" | "presence" | "paused") => {
+    if (mode === "precise") {
+      const outcome = await escalation.requestAlwaysForFeature("share_precise");
+      if (!outcome.granted) {
+        toast({
+          title: "Background location required",
+          description: "Precise sharing needs Always location so updates keep flowing when your phone locks. Try Area mode or open Settings to upgrade.",
+          variant: "destructive",
+        });
+        return;
+      }
+      escalation.setActiveWarning(null);
+    } else if (mode === "area") {
+      const outcome = await escalation.requestAlwaysForFeature("share_area");
+      if (!outcome.granted) {
+        escalation.setActiveWarning({
+          feature: "share_area",
+          message: "Area sharing is on, but updates may pause when the app is in the background. Tap Upgrade to switch to Always.",
+        });
+      } else {
+        escalation.setActiveWarning(null);
+      }
+    } else {
+      escalation.setActiveWarning(null);
+    }
+    modeMutation.mutate(mode);
+  };
 
   if (isLoading || !protection) return null;
 
@@ -119,7 +152,7 @@ export function ProtectionPanel() {
                           ? "bg-primary/10 border border-primary/30 text-primary font-medium"
                           : "bg-muted/50 hover:bg-muted text-muted-foreground"
                       }`}
-                      onClick={() => modeMutation.mutate(mode)}
+                      onClick={() => handleModeChange(mode)}
                       disabled={modeMutation.isPending}
                       data-testid={`button-mode-${mode}`}
                     >

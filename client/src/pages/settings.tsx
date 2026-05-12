@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted, isPermissionMarkedEnabled, clearPermissionIntent } from "@/lib/permissions";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -59,6 +60,26 @@ function SafetyHealthCard() {
   const health = usePermissionHealth();
   const [fixing, setFixing] = useState(false);
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
+
+  // Phase 1.2: when location is at WhenInUse only, expose a one-tap path
+  // to upgrade to Always. Uses the escalation provider so the same modal
+  // copy/path is used everywhere.
+  const upgradeToAlways = async () => {
+    setFixing(true);
+    const outcome = await escalation.requestAlwaysForFeature("share_precise");
+    health.refresh();
+    setFixing(false);
+    if (outcome.granted) {
+      toast({ title: "Background location enabled" });
+    } else if (outcome.blocked) {
+      toast({
+        title: "Open Settings to allow Always",
+        description: "iOS will not show the prompt again. Open Settings > StillHere > Location and choose Always.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const disablePermission = (key: "location" | "notifications" | "motion", label: string) => {
     clearPermissionIntent(key);
@@ -156,11 +177,11 @@ function SafetyHealthCard() {
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={item.fix}
+                  onClick={item.partial && item.key === "location" ? upgradeToAlways : item.fix}
                   disabled={fixing}
                   data-testid={`button-fix-${item.key}`}
                 >
-                  {item.partial ? "Update" : "Enable"}
+                  {item.partial ? (item.key === "location" ? "Upgrade to Always" : "Update") : "Enable"}
                 </Button>
               )}
               {item.ok && !item.partial && (
