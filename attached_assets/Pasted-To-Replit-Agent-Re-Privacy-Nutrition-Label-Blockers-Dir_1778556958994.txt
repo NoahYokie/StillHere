@@ -1,0 +1,192 @@
+To: Replit Agent
+
+  Re: Privacy Nutrition Label Blockers — Direction Locked, No Code Yet
+
+  Good audit. I agree with the priority order and most of your recommendations.
+
+  Before founder build approval, I want the final plan adjusted as follows.
+
+  1. Heart rate direction
+
+  Approve Option A modified.
+
+  Do not remove heart rate entirely.
+
+  But for v1, heart-rate monitoring and heart-rate alerts must be explicit opt-in.
+
+  Approved behavior:
+
+  users.heartRateMonitoringEnabled default false
+  users.heartRateAlertsEnabled default false
+
+  If heartRateMonitoringEnabled=false:
+  Watch should not upload heart-rate samples.
+  Server /api/heartrate should accept the request but save nothing and return disabled:true.
+  Weekly reports should not include HR data.
+
+  If heartRateMonitoringEnabled=true:
+  server may save readings.
+
+  If heartRateAlertsEnabled=true:
+  server may create heart_rate_alerts when thresholds are crossed.
+
+  If heartRateAlertsEnabled=false:
+  server must not create alert rows.
+
+  Watch should fetch the user's HR setting before starting monitoring.
+  Do not start the Watch workout / HealthKit query automatically if monitoring is disabled.
+
+  Permission wording must be honest:
+
+  StillHere can read heart-rate samples from HealthKit so you can view them in the app and, if you choose, include them in your
+  safety report. If you turn on heart-rate alerts in Settings, readings above 120 BPM or below 40 BPM may be saved to your
+  StillHere account and shared with your Safety Circle. StillHere is not a medical device, does not diagnose, and does not detect
+  health emergencies.
+
+  Also update help copy:
+
+  “If you turn on heart-rate alerts in Settings…”
+
+  Do not say automatic HR alerts unless the user opted in.
+
+  No medical claims.
+
+  Thresholds can stay 120/40 for v1, but label them as StillHere alert thresholds, not medical thresholds.
+
+  2. Account deletion
+
+  Approve the processor cleanup plan in principle.
+
+  But before coding, verify the exact current RevenueCat delete subscriber endpoint and required auth header against the version
+  used in this repo.
+
+  Implement:
+
+  Stripe:
+  cancel active subscription if present
+  delete Stripe customer if possible
+  do not issue refunds automatically
+
+  RevenueCat:
+  delete subscriber/app user if supported by current API
+  404 counts as success
+  5xx queues retry
+
+  StillHere database:
+  purge outbound_send_log rows for userId before deleting user
+  delete Postgres user and cascade as today
+  clear current session
+  revoke all sessions if storage method exists or add it
+
+  Processor failure:
+  must not stop account deletion.
+  enqueue pending_processor_cleanup row.
+  return success with processorWarnings.
+
+  Add pending_processor_cleanup table only if needed for reliable retry. If you can implement a simpler durable retry with existing
+  job infrastructure, propose it.
+
+  Update delete confirmation copy with the wording you proposed, but avoid saying every billing record will be fully deleted if
+  Stripe/Apple/Google retain invoices for tax/legal reasons.
+
+  Use:
+
+  “Your subscription will be cancelled where possible. Some past billing records may be retained by payment providers as required
+  by law.”
+
+  3. COPPA / under 13
+
+  Approve v1 direction:
+
+  StillHere is for users 13 and older.
+  Do not support under-13 users in v1.
+  Do not build parental consent flow in v1.
+
+  Use:
+
+  users.ageGateAcceptedAt timestamp nullable
+
+  Do NOT store date of birth.
+
+  Signup flow:
+  Add “I confirm I am 13 or older.”
+
+  If user does not confirm, block signup.
+
+  Important:
+  Do NOT say:
+  “Please ask an adult to set up an account on your behalf.”
+
+  That sounds like under-13 usage is still allowed indirectly.
+
+  Use:
+  “StillHere is not available for users under 13.”
+
+  Family Mode:
+  Keep child/teen enum values internally.
+  Hide child and teen from UI for v1.
+  Server rejects new child/teen role creation and role transitions.
+  Existing child/teen rows display as “Member.”
+  Do not market StillHere as a child tracking app.
+
+  Terms/Privacy:
+  Add:
+  “StillHere is intended for users 13 and older. We do not knowingly collect personal information from children under 13. If we
+  learn we have, we will delete the account and associated data.”
+
+  4. Presence / Paused location collection
+
+  Accept your finding that tracking-policy gates mostly protect this.
+
+  Before final privacy label:
+
+  Spot-check /api/location/breadcrumb.
+  If missing gate, add it.
+
+  Add regression tests:
+  sharingMode=presence with no active purpose cannot store precise lat/lng
+  sharingMode=paused cannot store precise lat/lng
+  heartbeat still stores non-location fields
+  SOS/active safety purpose can still store location
+  Safe Walk/Drive/Safety Timer active purpose still works
+
+  5. App Store Privacy Label
+
+  Do not finalize App Store Connect answers until these are implemented and verified:
+
+  heart-rate opt-in
+  account deletion processor cleanup
+  age gate / under-13 block
+  Presence/Paused coordinate tests
+
+  6. Build packaging
+
+  This is a large set of changes.
+
+  Do not implement as one giant unreviewable blob.
+
+  Proposed build order:
+
+  Batch 1:
+  Heart-rate opt-in and wording fixes.
+
+  Batch 2:
+  Account deletion processor cleanup.
+
+  Batch 3:
+  Age gate and Family Mode under-13 lockout.
+
+  Batch 4:
+  Presence/Paused breadcrumb spot-check and regression tests.
+
+  After each batch:
+  report files changed
+  schema changes
+  db:push result if any
+  TypeScript/test results
+  behavior verification
+  remaining risks
+
+  No code changes yet.
+
+  Please return the final implementation checklist split into these four batches.
