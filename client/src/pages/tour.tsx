@@ -117,7 +117,7 @@ const tourSteps = [
   {
     id: "watch",
     title: "Apple Watch companion",
-    description: "Check in, send SOS, and monitor your heart rate right from your wrist. Fall sensing works even when your phone is across the room.",
+    description: "Check in, send SOS, and view your heart rate right from your wrist. Fall sensing works even when your phone is across the room.",
     mockup: "watch",
   },
   {

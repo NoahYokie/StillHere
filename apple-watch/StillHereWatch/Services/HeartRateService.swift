@@ -33,8 +33,58 @@ class HeartRateService: ObservableObject {
         HKHealthStore.isHealthDataAvailable()
     }
 
+    // Cached server-side opt-in config. Both default false. We refresh this
+    // on every Watch foreground so toggling the iPhone Settings switch
+    // propagates within seconds.
+    @Published var serverMonitoringEnabled: Bool = false
+    @Published var serverAlertsEnabled: Bool = false
+
+    struct HeartRateConfig {
+        let monitoring: Bool
+        let alerts: Bool
+        let highBpm: Int
+        let lowBpm: Int
+    }
+
+    func fetchConfig() async -> HeartRateConfig? {
+        let token = SessionManager.shared.authToken
+        guard !token.isEmpty else { return nil }
+        let baseURL = SessionManager.shared.baseURL
+        guard let url = URL(string: "\(baseURL)/api/heartrate/config") else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 10
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return nil }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            let monitoring = (json["monitoring"] as? Bool) ?? false
+            let alerts = (json["alerts"] as? Bool) ?? false
+            let high = (json["highBpm"] as? Int) ?? 120
+            let low = (json["lowBpm"] as? Int) ?? 40
+            await MainActor.run {
+                self.serverMonitoringEnabled = monitoring
+                self.serverAlertsEnabled = alerts
+            }
+            return HeartRateConfig(monitoring: monitoring, alerts: alerts, highBpm: high, lowBpm: low)
+        } catch {
+            print("[HeartRate] Config fetch failed: \(error)")
+            return nil
+        }
+    }
+
     func requestAuthorization() async -> Bool {
         guard isAvailable else { return false }
+
+        // Privacy Nutrition Label gate: never ask the user for HealthKit
+        // access until they have flipped the iPhone Settings switch on.
+        // This keeps the App Store reviewer's first-launch experience
+        // free of any HealthKit prompt unless the user explicitly opted in.
+        let cfg = await fetchConfig()
+        guard let cfg = cfg, cfg.monitoring else {
+            isAuthorized = false
+            return false
+        }
 
         let typesToRead: Set<HKObjectType> = [heartRateType]
         let typesToWrite: Set<HKSampleType> = [
@@ -55,6 +105,9 @@ class HeartRateService: ObservableObject {
 
     func startMonitoring() {
         guard isAvailable, isAuthorized, !isMonitoring else { return }
+        // Final pre-flight: if monitoring was toggled off on the iPhone since
+        // the user last granted HealthKit, do not start a workout session.
+        guard serverMonitoringEnabled else { return }
 
         startWorkoutSession()
     }

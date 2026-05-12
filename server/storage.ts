@@ -269,6 +269,8 @@ export interface IStorage {
   deletePasskey(id: string, userId: string): Promise<void>;
 
   // Heart Rate
+  getUserHeartRateConfig(userId: string): Promise<{ monitoring: boolean; alerts: boolean }>;
+  setUserHeartRateConfig(userId: string, config: { monitoring?: boolean; alerts?: boolean }): Promise<{ monitoring: boolean; alerts: boolean }>;
   saveHeartRateReadings(userId: string, readings: { bpm: number; recordedAt: Date; source?: string }[]): Promise<HeartRateReading[]>;
   getLatestHeartRate(userId: string): Promise<HeartRateReading | undefined>;
   getHeartRateHistory(userId: string, hours?: number): Promise<HeartRateReading[]>;
@@ -1834,8 +1836,42 @@ export class DatabaseStorage implements IStorage {
     await db.delete(passkeys).where(and(eq(passkeys.id, id), eq(passkeys.userId, userId)));
   }
 
+  async getUserHeartRateConfig(userId: string): Promise<{ monitoring: boolean; alerts: boolean }> {
+    const [row] = await db
+      .select({
+        monitoring: users.heartRateMonitoringEnabled,
+        alerts: users.heartRateAlertsEnabled,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!row) return { monitoring: false, alerts: false };
+    return { monitoring: !!row.monitoring, alerts: !!row.alerts };
+  }
+
+  async setUserHeartRateConfig(
+    userId: string,
+    config: { monitoring?: boolean; alerts?: boolean },
+  ): Promise<{ monitoring: boolean; alerts: boolean }> {
+    const updates: Record<string, any> = {};
+    if (config.monitoring !== undefined) updates.heartRateMonitoringEnabled = config.monitoring;
+    if (config.alerts !== undefined) updates.heartRateAlertsEnabled = config.alerts;
+    // Invariant: alerts cannot be on if monitoring is being turned off in this
+    // same call. We force alerts=false alongside monitoring=false so a stale
+    // alerts=true value can never resurrect after the user reopens monitoring.
+    if (config.monitoring === false) updates.heartRateAlertsEnabled = false;
+    if (Object.keys(updates).length > 0) {
+      await db.update(users).set(updates).where(eq(users.id, userId));
+    }
+    return this.getUserHeartRateConfig(userId);
+  }
+
   async saveHeartRateReadings(userId: string, readings: { bpm: number; recordedAt: Date; source?: string }[]): Promise<HeartRateReading[]> {
     if (readings.length === 0) return [];
+    // Defense in depth: even if a route forgets to gate, never persist HR
+    // samples for a user who has not opted in to monitoring.
+    const cfg = await this.getUserHeartRateConfig(userId);
+    if (!cfg.monitoring) return [];
     const values = readings.map(r => ({
       userId,
       bpm: r.bpm,

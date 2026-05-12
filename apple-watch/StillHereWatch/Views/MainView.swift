@@ -24,10 +24,18 @@ struct MainView: View {
                     fallDetection.startMonitoring()
                 }
                 Task {
+                    // Heart rate is opt-in (App Store Privacy Nutrition Label).
+                    // Refresh server config first so toggling on the iPhone
+                    // propagates within seconds. Only request HealthKit and
+                    // start a workout session if the user has opted in via
+                    // iPhone Settings > Heart rate.
                     if heartRate.isAvailable {
-                        let authorized = await heartRate.requestAuthorization()
-                        if authorized {
-                            heartRate.startMonitoring()
+                        let cfg = await heartRate.fetchConfig()
+                        if let cfg = cfg, cfg.monitoring {
+                            let authorized = await heartRate.requestAuthorization()
+                            if authorized {
+                                heartRate.startMonitoring()
+                            }
                         }
                     }
                 }
@@ -42,6 +50,7 @@ struct MainView: View {
 
                 checkinButton
 
+                heartRateDisclosure
                 heartRateDisplay
 
                 if !sessionManager.status.userName.isEmpty {
@@ -114,6 +123,32 @@ struct MainView: View {
         }
         .buttonStyle(.plain)
         .disabled(sessionManager.isLoading)
+    }
+
+    private var heartRateDisclosure: some View {
+        Group {
+            if heartRate.isAvailable && !heartRate.serverMonitoringEnabled {
+                VStack(spacing: 4) {
+                    Image(systemName: "heart.slash")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 14))
+                    Text("Heart rate is off")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    Text("Open StillHere on iPhone, go to Settings > Heart rate to turn it on.")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.12))
+                )
+            }
+        }
     }
 
     private var heartRateDisplay: some View {

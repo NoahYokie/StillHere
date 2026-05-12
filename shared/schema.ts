@@ -131,6 +131,16 @@ export const users = pgTable("users", {
   // urgent safety flows (SOS, active incident, Safe Walk, Safety Timer,
   // Drive Safety, etc).
   acknowledgedLimitationsAt: timestamp("acknowledged_limitations_at"),
+  // Heart-rate opt-in (Apple Privacy Nutrition Label compliance).
+  // Both default false. When `heartRateMonitoringEnabled` is false the Watch
+  // does not request HealthKit, the server `/api/heartrate` ingest is a no-op,
+  // and the weekly safety report omits any heart-rate section. When that flag
+  // is true but `heartRateAlertsEnabled` is false, readings are persisted but
+  // no `heart_rate_alerts` rows are ever created (so contacts are not paged
+  // for high/low BPM crossings). Both must be true for an alert to fire.
+  // 120 BPM / 40 BPM are StillHere alert thresholds, NOT medical thresholds.
+  heartRateMonitoringEnabled: boolean("heart_rate_monitoring_enabled").notNull().default(false),
+  heartRateAlertsEnabled: boolean("heart_rate_alerts_enabled").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

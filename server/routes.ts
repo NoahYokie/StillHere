@@ -2330,29 +2330,105 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No valid readings" });
       }
 
+      // Heart-rate opt-in gate (Privacy Nutrition Label compliance).
+      // - monitoring=false: respond { disabled: true }, persist nothing,
+      //   create no alerts. Watch should also bail before calling here, this
+      //   is a server-side belt-and-braces.
+      // - monitoring=true, alerts=false: persist readings only, never create
+      //   `heart_rate_alerts` rows.
+      // - monitoring=true, alerts=true: persist readings and create one alert
+      //   per (high/low) threshold crossing while no active alert of that
+      //   type exists.
+      const hrCfg = await storage.getUserHeartRateConfig(result.userId);
+      if (!hrCfg.monitoring) {
+        return res.json({ ok: true, saved: 0, alert: null, disabled: true });
+      }
+
       const saved = await storage.saveHeartRateReadings(result.userId, validated);
 
       const latestBpm = validated[validated.length - 1].bpm;
       let alert = null;
-      if (latestBpm > 120) {
-        const existing = await storage.getActiveHeartRateAlerts(result.userId);
-        const hasHighAlert = existing.some(a => a.alertType === "high");
-        if (!hasHighAlert) {
-          alert = await storage.createHeartRateAlert(result.userId, "high", latestBpm);
-          console.log(`[HeartRate] HIGH alert for user (bpm: ${latestBpm})`);
-        }
-      } else if (latestBpm < 40) {
-        const existing = await storage.getActiveHeartRateAlerts(result.userId);
-        const hasLowAlert = existing.some(a => a.alertType === "low");
-        if (!hasLowAlert) {
-          alert = await storage.createHeartRateAlert(result.userId, "low", latestBpm);
-          console.log(`[HeartRate] LOW alert for user (bpm: ${latestBpm})`);
+      if (hrCfg.alerts) {
+        if (latestBpm > 120) {
+          const existing = await storage.getActiveHeartRateAlerts(result.userId);
+          const hasHighAlert = existing.some(a => a.alertType === "high");
+          if (!hasHighAlert) {
+            alert = await storage.createHeartRateAlert(result.userId, "high", latestBpm);
+            console.log(`[HeartRate] HIGH alert for user (bpm: ${latestBpm})`);
+          }
+        } else if (latestBpm < 40) {
+          const existing = await storage.getActiveHeartRateAlerts(result.userId);
+          const hasLowAlert = existing.some(a => a.alertType === "low");
+          if (!hasLowAlert) {
+            alert = await storage.createHeartRateAlert(result.userId, "low", latestBpm);
+            console.log(`[HeartRate] LOW alert for user (bpm: ${latestBpm})`);
+          }
         }
       }
 
       res.json({ ok: true, saved: saved.length, alert: alert ? alert.alertType : null });
     } catch (error) {
       console.error("Error saving heart rate:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  // Heart-rate opt-in config. Read by both the iPhone Settings screen
+  // (cookie-auth) and the Apple Watch (bearer-auth) before requesting
+  // HealthKit permissions or starting a workout session. Thresholds are
+  // returned alongside so the Watch can display them in the disclosure
+  // screen; they are StillHere alert thresholds, not medical thresholds.
+  app.get("/api/heartrate/config", async (req, res) => {
+    try {
+      let userId = getUserId(req);
+      if (!userId) {
+        const token = req.headers["authorization"]?.replace("Bearer ", "");
+        if (token) {
+          const result = await getUserFromSession(token);
+          if (result) userId = result.userId;
+        }
+      }
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const cfg = await storage.getUserHeartRateConfig(userId);
+      res.json({
+        monitoring: cfg.monitoring,
+        alerts: cfg.alerts,
+        highBpm: 120,
+        lowBpm: 40,
+      });
+    } catch (error) {
+      console.error("Error reading heart-rate config:", error);
+      res.status(500).json({ error: "Failed" });
+    }
+  });
+
+  app.post("/api/heartrate/config", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { monitoring, alerts } = req.body ?? {};
+      if (monitoring !== undefined && typeof monitoring !== "boolean") {
+        return res.status(400).json({ error: "monitoring must be a boolean" });
+      }
+      if (alerts !== undefined && typeof alerts !== "boolean") {
+        return res.status(400).json({ error: "alerts must be a boolean" });
+      }
+      // Cannot enable alerts without monitoring. We refuse the request rather
+      // than silently flipping monitoring on, so the UI must surface both
+      // toggles to the user.
+      if (alerts === true && monitoring === false) {
+        return res.status(400).json({ error: "Cannot enable alerts while monitoring is off" });
+      }
+      const cfg = await storage.setUserHeartRateConfig(userId, { monitoring, alerts });
+      res.json({
+        success: true,
+        monitoring: cfg.monitoring,
+        alerts: cfg.alerts,
+        highBpm: 120,
+        lowBpm: 40,
+      });
+    } catch (error) {
+      console.error("Error updating heart-rate config:", error);
       res.status(500).json({ error: "Failed" });
     }
   });
@@ -5473,17 +5549,25 @@ export async function registerRoutes(
       const missedCheckins = Math.max(0, expectedCheckins - checkinList.length);
       const complianceRate = checkinList.length > 0 ? Math.round((checkinList.length / expectedCheckins) * 100) : 0;
 
+      // Heart-rate section is omitted entirely when the watched user has not
+      // opted in to monitoring. This matches the Privacy Nutrition Label
+      // promise that we do not collect or report HR data without consent.
       let heartRateSummary = null;
-      const hrHistory = await storage.getHeartRateHistory(watchedUserId, dayCount * 24);
-      if (hrHistory.length > 0) {
-        const bpms = hrHistory.map(r => r.bpm);
-        const hrAlerts = await storage.getActiveHeartRateAlerts(watchedUserId);
-        heartRateSummary = {
-          avgBpm: Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length),
-          minBpm: Math.min(...bpms),
-          maxBpm: Math.max(...bpms),
-          alerts: hrAlerts.length,
-        };
+      const hrCfgForReport = await storage.getUserHeartRateConfig(watchedUserId);
+      if (hrCfgForReport.monitoring) {
+        const hrHistory = await storage.getHeartRateHistory(watchedUserId, dayCount * 24);
+        if (hrHistory.length > 0) {
+          const bpms = hrHistory.map(r => r.bpm);
+          const hrAlerts = hrCfgForReport.alerts
+            ? await storage.getActiveHeartRateAlerts(watchedUserId)
+            : [];
+          heartRateSummary = {
+            avgBpm: Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length),
+            minBpm: Math.min(...bpms),
+            maxBpm: Math.max(...bpms),
+            alerts: hrAlerts.length,
+          };
+        }
       }
 
       const fallAlerts = incidentList.filter(i => i.reason === "sos").length;

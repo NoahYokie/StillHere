@@ -226,6 +226,8 @@ export default function SettingsPage() {
   const [allowReports, setAllowReports] = useState(true);
   const [autoWellnessCall, setAutoWellnessCall] = useState(false);
   const [escalationMinutes, setEscalationMinutes] = useState(20);
+  const [heartRateMonitoring, setHeartRateMonitoring] = useState(false);
+  const [heartRateAlerts, setHeartRateAlerts] = useState(false);
   const [customInterval, setCustomInterval] = useState("");
   const [showCustomInterval, setShowCustomInterval] = useState(false);
   const [customPauseHours, setCustomPauseHours] = useState("");
@@ -272,6 +274,8 @@ export default function SettingsPage() {
       setAllowReports((status.settings as any)?.allowReports !== false);
       setAutoWellnessCall((status.settings as any)?.autoWellnessCall || false);
       setEscalationMinutes((status.settings as any)?.escalationMinutes || 20);
+      setHeartRateMonitoring((status.user as any)?.heartRateMonitoringEnabled || false);
+      setHeartRateAlerts((status.user as any)?.heartRateAlertsEnabled || false);
 
       if (!contactsInitialized && status.contacts?.length) {
         const sorted = [...status.contacts].sort((a, b) => a.priority - b.priority);
@@ -294,6 +298,23 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: "Error saving settings", variant: "destructive" });
+    },
+  });
+
+  // Heart-rate opt-in mutation. Lives separate from settingsMutation because
+  // the flags live on the `users` table (not `settings`) for App Store
+  // Privacy Nutrition Label clarity, and because flipping monitoring off
+  // must server-side also force alerts off (handled in storage).
+  const heartRateConfigMutation = useMutation({
+    mutationFn: async (data: { monitoring?: boolean; alerts?: boolean }) => {
+      return apiRequest("POST", "/api/heartrate/config", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      toast({ title: "Heart rate settings saved" });
+    },
+    onError: () => {
+      toast({ title: "Could not save heart rate settings", variant: "destructive" });
     },
   });
 
@@ -992,6 +1013,54 @@ export default function SettingsPage() {
                     </div>
                   )}
                 </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* Heart rate (top-level, opt-in for App Store Privacy Nutrition Label) */}
+            <AccordionItem value="heart-rate" data-testid="section-heart-rate">
+              <AccordionTrigger className="hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-sm">Heart rate</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="pr-3">
+                    <Label htmlFor="hr-monitoring" className="text-sm font-medium">Read heart rate from my Apple Watch</Label>
+                    <p className="text-[11px] text-muted-foreground">When off, the Watch does not request HealthKit and no readings are saved.</p>
+                  </div>
+                  <Switch
+                    id="hr-monitoring"
+                    checked={heartRateMonitoring}
+                    disabled={heartRateConfigMutation.isPending}
+                    onCheckedChange={(checked) => {
+                      setHeartRateMonitoring(checked);
+                      if (!checked) setHeartRateAlerts(false);
+                      heartRateConfigMutation.mutate({ monitoring: checked });
+                    }}
+                    data-testid="switch-hr-monitoring"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="pr-3">
+                    <Label htmlFor="hr-alerts" className={`text-sm font-medium ${!heartRateMonitoring ? "text-muted-foreground" : ""}`}>Notify my Safety Circle of unusual readings</Label>
+                    <p className="text-[11px] text-muted-foreground">Sends an alert above 120 BPM or below 40 BPM.</p>
+                  </div>
+                  <Switch
+                    id="hr-alerts"
+                    checked={heartRateAlerts && heartRateMonitoring}
+                    disabled={!heartRateMonitoring || heartRateConfigMutation.isPending}
+                    onCheckedChange={(checked) => {
+                      setHeartRateAlerts(checked);
+                      heartRateConfigMutation.mutate({ alerts: checked });
+                    }}
+                    data-testid="switch-hr-alerts"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed" data-testid="text-hr-disclosure">
+                  StillHere is not a medical device, does not diagnose, and does not detect health emergencies. The 120 BPM high and 40 BPM low values are StillHere alert thresholds, not medical thresholds.
+                </p>
               </AccordionContent>
             </AccordionItem>
 

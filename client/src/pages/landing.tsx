@@ -662,7 +662,7 @@ export default function LandingPage() {
               { icon: Eye, title: "Guardian Map", body: "One screen view of every person you watch. Color coded and live.", color: "bg-sky-100 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400" },
               { icon: MoonStar, title: "Sleep protection", body: "Quiet hours so non emergency notifications don't wake you up.", color: "bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400" },
               { icon: BarChart3, title: "Weekly Safety Record", body: "A clear receipt of what was handled and what was resolved.", color: "bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400" },
-              { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, fall sensing, and heart rate from your wrist.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
+              { icon: Watch, title: "Smartwatch companion", body: "Check in, SOS, fall sensing, and view your heart rate from your wrist.", color: "bg-fuchsia-100 dark:bg-fuchsia-900/20 text-fuchsia-600 dark:text-fuchsia-400" },
               { icon: Lock, title: "Privacy controls", body: "Precise, area only, presence only, or paused sharing. You decide.", color: "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300" },
             ].map((f) => (
               <div key={f.title} className="rounded-xl bg-card border border-border p-5 hover-elevate" data-testid={`feature-${f.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>

@@ -1,0 +1,65 @@
+Send this to Replit:
+
+  Approved for Batch 1 only.
+
+  Use a top-level “Heart rate” section in Settings.
+
+  Implement heart-rate opt-in and wording exactly as planned.
+
+  Requirements:
+
+  1. Add:
+  users.heartRateMonitoringEnabled default false
+  users.heartRateAlertsEnabled default false
+
+  2. If heartRateMonitoringEnabled=false:
+  Watch should not upload heart-rate samples.
+  Server /api/heartrate should save nothing and return disabled:true.
+  Weekly reports should not include heart-rate data.
+
+  3. If heartRateMonitoringEnabled=true and heartRateAlertsEnabled=false:
+  Save readings.
+  Do not create heart_rate_alerts rows.
+
+  4. If both are true:
+  Save readings.
+  Create alert rows only when thresholds are crossed.
+
+  5. Watch app:
+  Fetch config before starting monitoring.
+  Do not request HealthKit or start workout monitoring if monitoring is disabled.
+  Add the disclosure screen telling the user to enable Heart rate in the iPhone app.
+
+  6. Settings UI:
+  Add top-level Heart rate section.
+  Switch 1: Read heart rate from my Apple Watch.
+  Switch 2: Notify my Safety Circle of unusual readings.
+  Second switch disabled when first is off.
+
+  7. Copy:
+  Use non-medical wording.
+  Say 120 BPM and 40 BPM are StillHere alert thresholds, not medical thresholds.
+  Do not say StillHere detects health emergencies.
+
+  8. Update:
+  Watch Info.plist HealthKit wording.
+  help.tsx heart-rate wording.
+  landing/tour wording from “monitor your heart rate” to “view your heart rate.”
+
+  9. Tests:
+  monitoring=false saves nothing.
+  monitoring=true alerts=false saves readings but creates no alerts.
+  monitoring=true alerts=true creates alert rows at thresholds.
+  weekly report omits HR when monitoring=false.
+
+  After Batch 1, stop and report:
+
+  files changed
+  schema changes
+  db:push result
+  test results
+  screenshot or description of Settings Heart rate section
+  updated permission wording
+  confirmation no other features were changed
+
+  Do not approve Batches 2, 3, or 4 yet.

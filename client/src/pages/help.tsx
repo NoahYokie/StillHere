@@ -136,11 +136,11 @@ const faqs = [
     questions: [
       {
         q: "Which smartwatches are supported?",
-        a: "StillHere has a companion app for Apple Watch with one-tap checkin, SOS, fall sensing, and heart rate monitoring. Wear OS support is planned.",
+        a: "StillHere has a companion app for Apple Watch with one-tap checkin, SOS, fall sensing, and an optional heart rate view. Wear OS support is planned.",
       },
       {
-        q: "What about heart rate monitoring?",
-        a: "If you use an Apple Watch, StillHere reads your heart rate via HealthKit. If your heart rate goes unusually high (above 120 BPM) or low (below 40 BPM), you and your contacts are alerted.",
+        q: "What about heart rate?",
+        a: "Heart rate is off by default. If you turn on Heart rate in Settings, StillHere can read your heart rate from your Apple Watch via HealthKit so you can see it in the app. If you also turn on heart rate alerts, your Safety Circle is notified when a reading goes above 120 BPM or below 40 BPM. StillHere is not a medical device, does not diagnose, and does not detect health emergencies. The 120 BPM and 40 BPM values are StillHere alert thresholds, not medical thresholds.",
       },
       {
         q: "Can I use a satellite communicator?",
