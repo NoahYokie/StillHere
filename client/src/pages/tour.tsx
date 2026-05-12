@@ -33,7 +33,7 @@ const tourSteps = [
   {
     id: "checkin",
     title: "Tap to check in",
-    description: "Once a day, just tap the green button to let your contacts know you're safe. That's it!",
+    description: "Once a day, just tap the green button so your Safety Circle gets your check-in. That's it!",
     mockup: "checkin",
   },
   {

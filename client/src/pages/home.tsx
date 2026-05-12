@@ -103,7 +103,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
             <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium text-blue-800 dark:text-blue-300" data-testid="text-banner-title">
-                {contactName} is checking on you
+                {contactName} acknowledged your alert
               </p>
               <p className="text-sm text-blue-700/80 dark:text-blue-300/60 mt-1" data-testid="text-banner-detail">
                 They've seen your alert and will reach out soon.

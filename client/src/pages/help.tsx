@@ -27,7 +27,7 @@ const faqs = [
     questions: [
       {
         q: "How does the checkin work?",
-        a: "Open the app and tap the green \"I'm OK\" button. That's it. We let your contacts know you're safe, and the system resets for the next day.",
+        a: "Open the app and tap the green \"I'm OK\" button. That's it. Your check-in update is sent to your Safety Circle, and the system resets for the next day.",
       },
       {
         q: "What happens if I forget to check in?",
