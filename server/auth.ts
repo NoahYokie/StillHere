@@ -395,9 +395,16 @@ export async function createOtp(phone: string): Promise<{
   return { success: true, phone: normalizedPhone };
 }
 
-// Verify OTP and create session
-export async function verifyOtp(phone: string, code: string): Promise<{
+// Verify OTP and create session.
+// `ageConfirmed` is the new-signup 13+ confirmation (Batch 3 / COPPA gate).
+// It is REQUIRED only for new users (i.e. when no row exists yet for this
+// phone). Returning users are unaffected. When a new user is detected and
+// `ageConfirmed !== true`, we DO NOT create the user row, DO NOT issue a
+// session, and return `{ success: false, error: "age_gate_required" }`.
+// This keeps the audit trail clean: under-13 phones never produce a user row.
+export async function verifyOtp(phone: string, code: string, opts?: { ageConfirmed?: boolean }): Promise<{
   success: boolean;
+  error?: "age_gate_required";
   sessionToken?: string;
   userId?: string;
   isNewUser?: boolean;
@@ -466,6 +473,13 @@ export async function verifyOtp(phone: string, code: string): Promise<{
   let needsSetup = false;
   
   if (!user) {
+    // COPPA / age-gate (Batch 3). New user requires explicit 13+ confirmation
+    // BEFORE we create the row. The store-review login is exempt because it
+    // is an internal account, not a real signup. No DB write happens; under-13
+    // phones leave zero footprint.
+    if (!isReviewLogin && opts?.ageConfirmed !== true) {
+      return { success: false, error: "age_gate_required" };
+    }
     // Create new user with phone only (name will be set in setup).
     // Race-safe: if a parallel verifyOtp for the same phone wins the insert
     // first, our INSERT hits the users.phone UNIQUE constraint (Postgres
@@ -479,6 +493,8 @@ export async function verifyOtp(phone: string, code: string): Promise<{
           phone: normalizedPhone,
           timezone: "Australia/Melbourne",
           isReviewAccount: isReviewLogin,
+          // Stamp the gate. Skipped for review login (internal account).
+          ageGateAcceptedAt: isReviewLogin ? null : new Date(),
         })
         .returning();
       user = newUser;

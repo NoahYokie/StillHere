@@ -78,7 +78,7 @@ export default function PrivacyPolicyPage() {
 
         <section>
           <h2 className="text-base font-semibold text-foreground mb-2">Children's Privacy</h2>
-          <p>StillHere is not intended for children under 13. We do not knowingly collect personal information from children under 13.</p>
+          <p>StillHere is intended for users 13 and older. We do not knowingly collect personal information from children under 13. If we learn we have, we will delete the account and associated data.</p>
         </section>
 
         <section>

@@ -67,17 +67,22 @@ export default function TermsOfServicePage() {
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground mb-2">10. Modifications to Terms</h2>
+          <h2 className="text-base font-semibold text-foreground mb-2">10. Eligibility</h2>
+          <p>StillHere is intended for users 13 and older. We do not knowingly collect personal information from children under 13. If we learn we have, we will delete the account and associated data.</p>
+        </section>
+
+        <section>
+          <h2 className="text-base font-semibold text-foreground mb-2">11. Modifications to Terms</h2>
           <p>We reserve the right to modify these Terms of Service at any time. We will notify users of significant changes through the App. Continued use of the App after changes constitutes acceptance of the modified terms.</p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground mb-2">11. Governing Law</h2>
+          <h2 className="text-base font-semibold text-foreground mb-2">12. Governing Law</h2>
           <p>These Terms of Service shall be governed by and construed in accordance with the laws of Australia, without regard to its conflict of law provisions.</p>
         </section>
 
         <section>
-          <h2 className="text-base font-semibold text-foreground mb-2">12. Contact Us</h2>
+          <h2 className="text-base font-semibold text-foreground mb-2">13. Contact Us</h2>
           <p>If you have questions about these Terms of Service, please contact us at:</p>
           <p className="mt-1 text-foreground">support@stillhere.health</p>
         </section>

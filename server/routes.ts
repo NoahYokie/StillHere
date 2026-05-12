@@ -508,9 +508,19 @@ export async function registerRoutes(
         verifyAttempts.set(normalizedPhone, { count: 0, resetAt: now + VERIFY_WINDOW_MS });
       }
       
-      const result = await verifyOtp(phone, code);
-      
+      const ageConfirmed = req.body?.ageConfirmed === true;
+      const result = await verifyOtp(phone, code, { ageConfirmed });
+
       if (!result.success) {
+        // COPPA / age gate (Batch 3). New user did not tick the 13+ box.
+        // Distinct error code so the client can show a specific message.
+        // No session is set, no user row was created.
+        if (result.error === "age_gate_required") {
+          return res.status(400).json({
+            error: "age_gate_required",
+            message: "StillHere is not available for users under 13.",
+          });
+        }
         const entry = verifyAttempts.get(normalizedPhone)!;
         entry.count++;
         return res.status(401).json({ error: "Invalid or expired code" });
@@ -7540,9 +7550,16 @@ export async function registerRoutes(
       const name = (req.body?.name || "").toString().trim();
       const phoneRaw = (req.body?.phone || "").toString().trim();
       const role = (req.body?.role || "adult") as FamilyRole;
-      const parentalConsentRequired = !!req.body?.parentalConsentRequired;
       if (!name || !phoneRaw) return res.status(400).json({ error: "Name and phone are required" });
-      if (!["admin", "adult", "teen", "child"].includes(role)) return res.status(400).json({ error: "Invalid role" });
+      // COPPA / age gate (Batch 3). StillHere is for 13+. teen/child roles
+      // are NOT supported in v1 (no parental consent flow). Block at API.
+      if (role === "teen" || role === "child") {
+        return res.status(400).json({
+          error: "role_not_supported",
+          message: "StillHere is for users 13 and older. Invite as Adult.",
+        });
+      }
+      if (!["admin", "adult"].includes(role)) return res.status(400).json({ error: "Invalid role" });
 
       const phone = normalizePhone(phoneRaw);
       const member = await storage.inviteFamilyMember({
@@ -7551,8 +7568,8 @@ export async function registerRoutes(
         name,
         phone,
         role,
-        // teen/child auto-require parental consent regardless of caller flag
-        parentalConsentRequired: parentalConsentRequired || role === "child" || role === "teen",
+        // No parental consent flow in v1. teen/child roles are blocked above.
+        parentalConsentRequired: false,
       });
 
       // Send the SMS invite (best-effort  -  does not block the API response).
@@ -7789,18 +7806,21 @@ export async function registerRoutes(
       const isAdmin = overview.isAdmin;
       const updates: any = {};
 
-      // Sharing mode: members can change their own, admin can change for under-16
+      // Sharing mode: members change their own only. The previous
+      // "admin can change for under-16" branch is removed in Batch 3 because
+      // teen/child roles are no longer supported (StillHere v1 is 13+; no
+      // parental consent flow). Each adult controls their own sharing mode,
+      // matching the Family Mode UI copy.
       if (req.body?.sharingMode) {
         const m = req.body.sharingMode;
         if (!["precise", "area", "presence", "paused"].includes(m)) {
           return res.status(400).json({ error: "Invalid sharing mode" });
         }
-        const isMinor = member.role === "teen" || member.role === "child";
-        if (isSelf || (isAdmin && isMinor)) {
+        if (isSelf) {
           updates.sharingMode = m;
           // The member whose sharingMode is changing needs to re-evaluate their
-          // tracking policy immediately. Emit to that user (not the admin who
-          // initiated) so their device stops/starts native GPS.
+          // tracking policy immediately. Emit to that user so their device
+          // stops/starts native GPS.
           if (member.userId) {
             emitTrackingPolicyChanged(member.userId, "family_sharing_mode").catch(() => {});
           }
@@ -7812,7 +7832,16 @@ export async function registerRoutes(
       // Admin-only fields
       if (req.body?.role !== undefined) {
         if (!isAdmin) return res.status(403).json({ error: "Admin only" });
-        if (!["admin", "adult", "teen", "child"].includes(req.body.role)) {
+        // COPPA / age gate (Batch 3). teen/child are not supported in v1.
+        // Existing teen/child rows can still be read but cannot be set or
+        // re-saved as teen/child. Admin can promote them to adult/admin.
+        if (req.body.role === "teen" || req.body.role === "child") {
+          return res.status(400).json({
+            error: "role_not_supported",
+            message: "StillHere is for users 13 and older. Invite as Adult.",
+          });
+        }
+        if (!["admin", "adult"].includes(req.body.role)) {
           return res.status(400).json({ error: "Invalid role" });
         }
         updates.role = req.body.role;

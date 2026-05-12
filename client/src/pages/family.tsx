@@ -45,7 +45,7 @@ const PLACE_LABELS: { value: string; label: string }[] = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
-  admin: "Admin", adult: "Adult", teen: "Teen", child: "Child",
+  admin: "Admin", adult: "Adult", teen: "Member", child: "Member",
 };
 
 // Day-of-week labels (0 = Sunday) used in schedule UI
@@ -651,8 +651,6 @@ export default function FamilyPage() {
                     <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="adult">Adult</SelectItem>
-                      <SelectItem value="teen">Teen</SelectItem>
-                      <SelectItem value="child">Child</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
@@ -662,7 +660,7 @@ export default function FamilyPage() {
                 <Button
                   onClick={() => inviteMutation.mutate({
                     ...inviteForm,
-                    parentalConsentRequired: inviteForm.role === "child" || inviteForm.role === "teen",
+                    parentalConsentRequired: false,
                   })}
                   disabled={!inviteForm.name.trim() || !inviteForm.phone.trim() || inviteMutation.isPending}
                   data-testid="button-invite-confirm"
@@ -1487,7 +1485,7 @@ export default function FamilyPage() {
               </div>
               <p className="text-sm text-muted-foreground">
                 StillHere never tracks app usage, browser history, or device activity.
-                Each adult controls their own sharing mode. Under-16 members need a guardian's permission first.
+                Each adult controls their own sharing mode.
               </p>
               <div className="text-xs text-muted-foreground pt-2 border-t border-border mt-2">
                 StillHere alerts your family. In a life-threatening emergency, call 911 (or your local emergency number) first.

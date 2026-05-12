@@ -320,3 +320,48 @@ sheet explaining why.
   (a) a feature subscribed to the location service AND (b) the
   Always-gate is true. There is no app-launch BG.start.
 
+---
+
+## App Store Connect Age Rating + COPPA Posture (Batch 3)
+
+This is documentation only. Do not change anything in App Store Connect
+from code. These are the answers the human submitter must enter.
+
+**Made for Kids:** No
+**Primarily directed to children under 13:** No
+**Recommended age rating:** 12+
+**Supported user age range:** 13 and older
+
+**Reason:** StillHere is intended for users 13 and older. We do not
+knowingly collect personal information from children under 13. If we
+learn we have, we will delete the account and associated data.
+
+**Behavior in the build (enforced in code):**
+- Signup screen requires the user to tick "I confirm I am 13 or older."
+  The Continue button is disabled until ticked.
+- Server-side: `verifyOtp` refuses to create a new user row unless
+  `ageConfirmed === true`. No under-13 phone leaves a DB footprint.
+- Family Mode: the role picker exposes only `Adult` and `Admin`. The
+  server (`POST /api/family/invite`, `PATCH /api/family/member/:id`)
+  and storage layer reject `teen`/`child`. Pre-existing rows still
+  display; their label collapses to "Member".
+- Privacy Policy and Terms of Service both contain the canonical
+  paragraph: "StillHere is intended for users 13 and older. We do not
+  knowingly collect personal information from children under 13. If we
+  learn we have, we will delete the account and associated data."
+
+**Privacy Nutrition Label implications:**
+- StillHere collects no DOB. Do NOT tick "Date of Birth" or any
+  childhood-related data category.
+- "Children's data" sections in App Store Connect should be left at
+  their defaults (i.e. NO). The app is not designed for or directed at
+  children.
+
+### TODO (future compliance pass, not Batch 3)
+- Existing users created before the age gate landed have
+  `users.age_gate_accepted_at = NULL`. They are NOT prompted in this
+  batch (Batch 3 deliberately scopes to v1 signup gating only). If an
+  App Store reviewer flags this in a future submission, add a one-time
+  modal that forces existing users to confirm 13+ on next launch and
+  populates the column. Until then, leave existing accounts untouched.
+

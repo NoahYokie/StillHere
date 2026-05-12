@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Heart, ArrowLeft, Fingerprint, Check } from "lucide-react";
 import { BackButton } from "@/components/back-button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
 export default function LoginCodePage() {
@@ -18,6 +19,13 @@ export default function LoginCodePage() {
   const [showPasskeySetup, setShowPasskeySetup] = useState(false);
   const [loginResult, setLoginResult] = useState<any>(null);
   const [resendCooldown, setResendCooldown] = useState(60);
+  // COPPA / age gate (Batch 3). Required for new users; ignored by server
+  // for returning users. We always show the checkbox here because we cannot
+  // tell ahead of time whether this phone belongs to a new or returning
+  // account without leaking enumeration. One tap; no friction for returning
+  // users beyond a single check.
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [ageGateError, setAgeGateError] = useState(false);
 
   const params = new URLSearchParams(search);
   const phone = params.get("phone") || "";
@@ -38,10 +46,11 @@ export default function LoginCodePage() {
 
   const verifyCodeMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/verify-code", { phone, code });
+      const res = await apiRequest("POST", "/api/auth/verify-code", { phone, code, ageConfirmed });
       return res.json();
     },
     onSuccess: async (data: any) => {
+      setAgeGateError(false);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLoginResult(data);
 
@@ -63,7 +72,19 @@ export default function LoginCodePage() {
         setLocation("/");
       }
     },
-    onError: () => {
+    onError: (error: Error) => {
+      // apiRequest serialises non-2xx as "<status>: <body>". Detect the COPPA
+      // gate response so we can show the dedicated message rather than the
+      // generic "code didn't work" toast.
+      try {
+        const jsonStr = error.message.replace(/^\d+:\s*/, "");
+        const parsed = JSON.parse(jsonStr);
+        if (parsed?.error === "age_gate_required") {
+          setAgeGateError(true);
+          setCode("");
+          return;
+        }
+      } catch {}
       toast({
         title: "That code didn't work",
         description: "Try again.",
@@ -135,16 +156,16 @@ export default function LoginCodePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.length === 6) {
+    if (code.length === 6 && ageConfirmed) {
       verifyCodeMutation.mutate();
     }
   };
 
   useEffect(() => {
-    if (code.length === 6 && !verifyCodeMutation.isPending && !showPasskeySetup) {
+    if (code.length === 6 && ageConfirmed && !verifyCodeMutation.isPending && !showPasskeySetup) {
       verifyCodeMutation.mutate();
     }
-  }, [code]);
+  }, [code, ageConfirmed]);
 
   const formatPhone = (p: string) => {
     if (p.startsWith("+61")) {
@@ -225,11 +246,37 @@ export default function LoginCodePage() {
                 </InputOTPGroup>
               </InputOTP>
             </div>
+            <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/40 p-3">
+              <Checkbox
+                id="age-confirm"
+                checked={ageConfirmed}
+                onCheckedChange={(v) => {
+                  setAgeConfirmed(v === true);
+                  if (v === true) setAgeGateError(false);
+                }}
+                className="mt-0.5"
+                data-testid="checkbox-age-confirm"
+              />
+              <label
+                htmlFor="age-confirm"
+                className="text-sm leading-relaxed text-foreground cursor-pointer select-none"
+              >
+                I confirm I am 13 or older.
+              </label>
+            </div>
+            {ageGateError && (
+              <p
+                className="text-sm text-destructive text-center"
+                data-testid="text-age-gate-error"
+              >
+                StillHere is not available for users under 13.
+              </p>
+            )}
             <Button
               type="submit"
               className="w-full"
               size="lg"
-              disabled={code.length !== 6 || verifyCodeMutation.isPending}
+              disabled={code.length !== 6 || !ageConfirmed || verifyCodeMutation.isPending}
               data-testid="button-verify"
             >
               {verifyCodeMutation.isPending ? "Verifying..." : "Continue"}

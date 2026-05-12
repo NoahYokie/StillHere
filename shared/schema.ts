@@ -141,6 +141,13 @@ export const users = pgTable("users", {
   // 120 BPM / 40 BPM are StillHere alert thresholds, NOT medical thresholds.
   heartRateMonitoringEnabled: boolean("heart_rate_monitoring_enabled").notNull().default(false),
   heartRateAlertsEnabled: boolean("heart_rate_alerts_enabled").notNull().default(false),
+  // COPPA / age gate (Batch 3). Set when a NEW user confirms "I am 13 or
+  // older" during signup. Nullable so existing rows (created before the
+  // gate) are not broken; we do not retroactively prompt existing users in
+  // this batch. Server refuses to insert a new user row without this set
+  // (see verifyOtp). No date of birth is collected. Under-13 users are not
+  // supported in v1; no parental consent flow exists.
+  ageGateAcceptedAt: timestamp("age_gate_accepted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

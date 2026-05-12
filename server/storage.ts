@@ -2650,6 +2650,12 @@ export class DatabaseStorage implements IStorage {
     role: FamilyRole;
     parentalConsentRequired: boolean;
   }): Promise<FamilyMember> {
+    // Defense-in-depth (Batch 3): refuse to insert teen/child rows even if a
+    // future caller forgets the API-layer guard. StillHere v1 is 13+; under-13
+    // accounts are not supported and there is no parental-consent flow.
+    if (params.role === "teen" || params.role === "child") {
+      throw new Error("role_not_supported: teen/child roles are not allowed in v1");
+    }
     // Dedupe: if this phone (or its linked user) is already a non-removed
     // member of this family, return the existing row instead of inserting a
     // duplicate. Prevents repeat-click SMS spam and duplicate cards.
@@ -2692,6 +2698,12 @@ export class DatabaseStorage implements IStorage {
     parentalConsentGranted: boolean;
     parentalConsentRequired: boolean;
   }>): Promise<FamilyMember> {
+    // Defense-in-depth (Batch 3): refuse to set teen/child role on any
+    // existing row. Existing rows with these roles can still be READ; they
+    // just can't be re-saved as teen/child or freshly assigned that role.
+    if (updates.role === "teen" || updates.role === "child") {
+      throw new Error("role_not_supported: teen/child roles are not allowed in v1");
+    }
     const [row] = await db.update(familyMembers)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(familyMembers.id, memberId))
