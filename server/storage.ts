@@ -220,6 +220,7 @@ export interface IStorage {
   
   // Location Sessions
   getActiveLocationSession(userId: string): Promise<LocationSession | undefined>;
+  getActiveEmergencyLocationSession(userId: string): Promise<LocationSession | undefined>;
   createLocationSession(userId: string, type: LocationSessionType, incidentId?: string, initialLocation?: { lat: number; lng: number; accuracy?: number | null }): Promise<LocationSession>;
   updateLocationSession(id: string, lat: number, lng: number, accuracy: number): Promise<LocationSession>;
   endLocationSession(id: string): Promise<void>;
@@ -1437,6 +1438,24 @@ export class DatabaseStorage implements IStorage {
     return session || undefined;
   }
 
+  async getActiveEmergencyLocationSession(userId: string): Promise<LocationSession | undefined> {
+    // Emergency sessions can coexist with other session types (e.g. shift).
+    // The generic getActiveLocationSession() returns the first match without
+    // filtering by type, so use a type-specific query and prefer the most
+    // recently updated row.
+    const [session] = await db
+      .select()
+      .from(locationSessions)
+      .where(and(
+        eq(locationSessions.userId, userId),
+        eq(locationSessions.active, true),
+        eq(locationSessions.type, "emergency"),
+      ))
+      .orderBy(desc(locationSessions.updatedAt))
+      .limit(1);
+    return session || undefined;
+  }
+
   async createLocationSession(
     userId: string,
     type: LocationSessionType,
@@ -2632,6 +2651,42 @@ export class DatabaseStorage implements IStorage {
           const openIncident = await this.getOpenIncident(contact.userId);
           results.push({
             ...share,
+            userName: user.name,
+            safetyState: user.safetyState,
+            hasSafetyEvent: !!openIncident,
+            safetyStateReason: user.safetyStateReason ?? null,
+            incidentReason: openIncident?.reason ?? null,
+            hasOpenIncident: !!openIncident,
+          });
+        }
+        continue;
+      }
+
+      // No explicit live share, but the user may have an active emergency
+      // location session (e.g. SOS). Surface it as a virtual share so the
+      // watcher's live-location view shows the tracked location instead of
+      // appearing empty during an actual emergency.
+      const emergencySession = await this.getActiveEmergencyLocationSession(contact.userId);
+      if (emergencySession && emergencySession.lastLat != null && emergencySession.lastLng != null) {
+        const user = await this.getUser(contact.userId);
+        if (user) {
+          const openIncident = await this.getOpenIncident(contact.userId);
+          const virtualShare: LiveLocationShare = {
+            id: `emergency:${emergencySession.id}`,
+            userId: contact.userId,
+            active: true,
+            expiresAt: emergencySession.expiresAt ?? null,
+            lastLat: emergencySession.lastLat,
+            lastLng: emergencySession.lastLng,
+            lastAccuracy: emergencySession.lastAccuracy ?? null,
+            lastSpeed: null,
+            lastHeading: null,
+            lastActivity: null,
+            lastUpdatedAt: emergencySession.lastTimestamp ?? emergencySession.updatedAt ?? new Date(),
+            createdAt: emergencySession.updatedAt ?? new Date(),
+          } as LiveLocationShare;
+          results.push({
+            ...virtualShare,
             userName: user.name,
             safetyState: user.safetyState,
             hasSafetyEvent: !!openIncident,

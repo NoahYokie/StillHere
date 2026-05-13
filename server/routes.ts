@@ -5035,16 +5035,43 @@ export async function registerRoutes(
       }
 
       const share = await storage.getActiveLiveShare(targetUserId);
-      if (!share) return res.json({ active: false, points: [] });
-
       const targetUser = await storage.getUser(targetUserId);
-      const shareWithName = { ...share, userName: targetUser?.name || "Contact" };
 
-      const sinceParam = req.query.since as string | undefined;
-      const since = sinceParam ? new Date(sinceParam) : undefined;
-      const points = await storage.getLiveLocationPoints(share.id, since, 200);
+      if (share) {
+        const shareWithName = { ...share, userName: targetUser?.name || "Contact" };
+        const sinceParam = req.query.since as string | undefined;
+        const since = sinceParam ? new Date(sinceParam) : undefined;
+        const points = await storage.getLiveLocationPoints(share.id, since, 200);
+        return res.json({ active: true, share: shareWithName, points: points.reverse() });
+      }
 
-      res.json({ active: true, share: shareWithName, points: points.reverse() });
+      // Fallback: surface an active emergency location session (e.g. SOS) as a
+      // virtual share so the watcher's detail page shows the latest tracked
+      // pin even when the user never tapped Start Sharing. Historical points
+      // are not available because emergency sessions write to location_sessions
+      // rather than live_location_points; we return an empty points array.
+      const emergencySession = await storage.getActiveEmergencyLocationSession(targetUserId);
+      if (emergencySession && emergencySession.lastLat != null && emergencySession.lastLng != null) {
+        const virtualShare = {
+          id: `emergency:${emergencySession.id}`,
+          userId: targetUserId,
+          active: true,
+          expiresAt: emergencySession.expiresAt ?? null,
+          lastLat: emergencySession.lastLat,
+          lastLng: emergencySession.lastLng,
+          lastAccuracy: emergencySession.lastAccuracy ?? null,
+          lastSpeed: null,
+          lastHeading: null,
+          lastActivity: null,
+          lastUpdatedAt: emergencySession.lastTimestamp ?? emergencySession.updatedAt ?? new Date(),
+          createdAt: emergencySession.updatedAt ?? new Date(),
+          userName: targetUser?.name || "Contact",
+          source: "emergency_session" as const,
+        };
+        return res.json({ active: true, share: virtualShare, points: [] });
+      }
+
+      return res.json({ active: false, points: [] });
     } catch (error) {
       res.status(500).json({ error: "Failed to get location trail" });
     }
