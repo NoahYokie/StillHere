@@ -263,7 +263,11 @@ export default function LiveLocationPage() {
       ? { lat: myLat, lng: myLng }
       : { lat: -31.95, lng: 115.86 };
 
-  const hasMap = allPeople.length > 0;
+  // Always render the map. If GPS is still resolving and there are no watched
+  // contacts to focus on either, the map shows its default center with a
+  // small "Locating you..." overlay instead of blocking the entire page.
+  const hasMap = true;
+  const hasAnyPin = allPeople.length > 0;
   const watchedPeopleList = Object.values(watchedLocations);
 
   const handlePersonTap = useCallback((personId: string) => {
@@ -319,19 +323,12 @@ export default function LiveLocationPage() {
         </div>
       )}
 
-      {isLocating && !hasMap && (
-        <div className="flex flex-col items-center justify-center p-8 gap-3" data-testid="locating-indicator">
-          <Navigation className="h-8 w-8 text-blue-500 animate-pulse" />
-          <p className="text-sm text-muted-foreground">Locating you...</p>
-        </div>
-      )}
-
       {hasMap ? (
         <div className="relative flex-1 min-h-[50vh]">
           <GoogleMap
             center={mapCenter}
             people={allPeople}
-            zoom={15}
+            zoom={hasAnyPin ? 15 : 11}
             className="w-full h-full absolute inset-0"
             showTrail={false}
             onPersonTap={handlePersonTap}
@@ -339,6 +336,12 @@ export default function LiveLocationPage() {
             isLocating={isLocating}
             focusPersonId={selectedPerson}
           />
+          {isLocating && !hasAnyPin && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-background/90 backdrop-blur rounded-full px-3 py-1.5 flex items-center gap-2 shadow text-xs font-medium" data-testid="locating-indicator">
+              <Navigation className="h-3.5 w-3.5 text-blue-500 animate-pulse" />
+              <span>Locating you...</span>
+            </div>
+          )}
 
           {sharingActive && (
             <div className="absolute top-3 left-3 z-10">

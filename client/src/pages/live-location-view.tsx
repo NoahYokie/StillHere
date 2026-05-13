@@ -431,20 +431,35 @@ export default function LiveLocationViewPage() {
     : null;
 
   if (!trail?.active && !isLoading) {
+    // No live share, no emergency session, no recent snapshot. Still render a
+    // map (centered on the watcher's last known coordinate or a neutral
+    // default) with a small banner so the screen is never blank. Users
+    // perceive a blank page as a broken app, even when the data legitimately
+    // is not available.
+    const fallbackLat = liveLat ?? -31.95;
+    const fallbackLng = liveLng ?? 115.86;
     return (
-      <div className="min-h-screen bg-background">
-        <div className="sticky top-0 z-10 bg-primary text-primary-foreground p-4 flex items-center gap-3">
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
           <BackButton onClick={() => navigate("/live-location")} tone="onPrimary" />
-          <h1 className="text-lg font-semibold">Live Location</h1>
+          <h1 className="text-lg font-semibold truncate">{userName}</h1>
         </div>
-        <div className="p-4 text-center">
-          <Card>
-            <CardContent className="pt-6">
-              <PersonStanding className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-              <p className="font-medium">Location sharing is not active</p>
-              <p className="text-sm text-muted-foreground mt-1">This person is not currently sharing their live location.</p>
-            </CardContent>
-          </Card>
+        <div className="relative flex-1 min-h-[45vh]">
+          <GoogleMap
+            center={{ lat: fallbackLat, lng: fallbackLng }}
+            zoom={11}
+            className="w-full h-full absolute inset-0"
+            showTrail={false}
+          />
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 bg-background/95 backdrop-blur rounded-lg px-4 py-2 shadow-lg max-w-[90%]" data-testid="banner-no-share">
+            <div className="flex items-start gap-2">
+              <PersonStanding className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-tight">Location not currently shared</p>
+                <p className="text-xs text-muted-foreground leading-tight mt-0.5">This person is not actively sharing their live location.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
