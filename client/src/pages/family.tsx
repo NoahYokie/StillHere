@@ -895,8 +895,17 @@ export default function FamilyPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium truncate" data-testid={`text-member-name-${m.id}`}>
-                        {m.name}{isMe && <span className="text-muted-foreground text-xs"> (You)</span>}
+                        {m.nickname || m.name}{isMe && <span className="text-muted-foreground text-xs"> (You)</span>}
                       </span>
+                      {m.nickname && m.nickname !== m.name && (
+                        <span
+                          className="text-xs text-muted-foreground truncate"
+                          data-testid={`text-member-realname-${m.id}`}
+                          title={m.name}
+                        >
+                          ({m.name})
+                        </span>
+                      )}
                       {isMemberAdmin && (
                         <Badge variant="secondary" className="text-[10px] h-4 px-1 gap-0.5">
                           <Crown className="w-2.5 h-2.5" /> Admin
@@ -937,6 +946,20 @@ export default function FamilyPage() {
                       })()}
                     </div>
                   </div>
+                  {(isMe || isAdmin) && !m.id.startsWith("admin:") && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-muted-foreground"
+                      data-testid={`button-rename-member-${m.id}`}
+                      onClick={() => {
+                        setRenameTarget({ id: m.id, current: m.nickname || "" });
+                        setRenameValue(m.nickname || "");
+                      }}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                  )}
                   {(isMe || isAdmin) && !isMemberAdmin && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -1034,6 +1057,47 @@ export default function FamilyPage() {
               </AlertDialogContent>
             </AlertDialog>
           )}
+          <Dialog open={!!renameTarget} onOpenChange={(o) => { if (!o) { setRenameTarget(null); setRenameValue(""); } }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Rename in your family</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label htmlFor="rename-input">Display name</Label>
+                <Input
+                  id="rename-input"
+                  value={renameValue}
+                  maxLength={40}
+                  placeholder="Dad, Mum, Kid..."
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  data-testid="input-rename-nickname"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Only your family sees this. Leave blank to use their real name.
+                </p>
+              </div>
+              <DialogFooter className="gap-2">
+                {renameTarget?.current && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => renameTarget && renameMutation.mutate({ memberId: renameTarget.id, nickname: "" })}
+                    disabled={renameMutation.isPending}
+                    data-testid="button-rename-clear"
+                  >
+                    Clear
+                  </Button>
+                )}
+                <Button
+                  onClick={() => renameTarget && renameMutation.mutate({ memberId: renameTarget.id, nickname: renameValue })}
+                  disabled={renameMutation.isPending}
+                  data-testid="button-rename-save"
+                >
+                  {renameMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Save
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* CHAT TAB */}
