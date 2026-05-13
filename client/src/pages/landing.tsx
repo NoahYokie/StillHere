@@ -374,6 +374,9 @@ export default function LandingPage() {
                 className="text-[1.85rem] md:text-5xl lg:text-[3.4rem] leading-[1.1] font-bold tracking-tight mb-3 md:mb-5 text-center md:text-left"
                 data-testid="text-hero-title"
               >
+                <span className="block text-white/85 text-[1.25rem] md:text-2xl lg:text-3xl font-semibold tracking-tight mb-2 md:mb-3">
+                  Personal safety check-ins.
+                </span>
                 When you can't check in,{" "}
                 <span className="text-white/90">StillHere checks on you.</span>
               </h1>

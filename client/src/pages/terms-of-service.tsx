@@ -2,9 +2,14 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { BackButton } from "@/components/back-button";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function TermsOfServicePage() {
   const [, setLocation] = useLocation();
+  useDocumentMeta({
+    title: "Terms of Service — StillHere",
+    description: "Terms governing use of the StillHere personal safety check-in app.",
+  });
 
   return (
     <div className="min-h-screen bg-background" data-testid="page-terms-of-service">

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="StillHere — safety check-ins, SOS, and GPS for your Safety Circle">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="60%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.18" cy="0.22" r="0.55">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.85" cy="0.85" r="0.5">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#0c4a6e" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow1)"/>
+  <rect width="1200" height="630" fill="url(#glow2)"/>
+
+  <g transform="translate(80, 80)" filter="url(#shadow)">
+    <rect x="0" y="0" width="92" height="92" rx="22" fill="#ffffff"/>
+    <path d="M46 22 L70 32 V50 C70 60 60 70 46 74 C32 70 22 60 22 50 V32 Z" fill="#0ea5e9"/>
+    <path d="M37 48 L43 54 L57 40" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <text x="200" y="148" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="56" font-weight="800" fill="#ffffff" letter-spacing="-1.5">StillHere</text>
+
+  <text x="80" y="338" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="76" font-weight="800" fill="#ffffff" letter-spacing="-2.2">
+    <tspan x="80" dy="0">Personal safety</tspan>
+    <tspan x="80" dy="92">check-ins.</tspan>
+  </text>
+
+  <text x="80" y="520" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="32" font-weight="500" fill="#ffffff" fill-opacity="0.92" letter-spacing="-0.4">
+    Safety check-ins, SOS, and GPS for your Safety Circle.
+  </text>
+
+  <g transform="translate(80, 558)">
+    <rect x="0" y="0" width="14" height="14" rx="3" fill="#ffffff" fill-opacity="0.85"/>
+    <text x="26" y="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="18" font-weight="600" fill="#ffffff" fill-opacity="0.9" letter-spacing="0.5">stillhere.health</text>
+  </g>
+</svg>

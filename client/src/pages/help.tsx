@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Heart, ChevronDown } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { useState } from "react";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 const faqs = [
   {
@@ -233,6 +234,10 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 
 export default function HelpPage() {
   const [, setLocation] = useLocation();
+  useDocumentMeta({
+    title: "Help & FAQ — StillHere",
+    description: "Common questions about safety check-ins, missed check-ins, SOS, and the Safety Circle on StillHere.",
+  });
 
   return (
     <div className="min-h-screen bg-background">

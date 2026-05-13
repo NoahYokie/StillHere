@@ -2,9 +2,14 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { BackButton } from "@/components/back-button";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function PrivacyPolicyPage() {
   const [, setLocation] = useLocation();
+  useDocumentMeta({
+    title: "Privacy Policy — StillHere",
+    description: "How StillHere collects, uses, and protects your personal and location data.",
+  });
 
   return (
     <div className="min-h-screen bg-background" data-testid="page-privacy-policy">

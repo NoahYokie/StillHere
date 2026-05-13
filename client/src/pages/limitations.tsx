@@ -5,6 +5,7 @@ import { Shield } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export const LIMITATIONS_ESCAPE_KEY = "limitations_escape_used_at";
 
@@ -12,6 +13,10 @@ export default function LimitationsPage() {
   const [, setLocation] = useLocation();
   const { auth } = useAuth();
   const { toast } = useToast();
+  useDocumentMeta({
+    title: "Limitations of Service — StillHere",
+    description: "What StillHere is, what it isn't, and the limits of our best-effort safety alerts.",
+  });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [reachedBottom, setReachedBottom] = useState(false);
   const [submitting, setSubmitting] = useState(false);

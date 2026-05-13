@@ -1,0 +1,37 @@
+# StillHere robots policy
+# Public marketing, help, and legal pages are crawlable.
+# All authenticated app routes and incident-token routes are disallowed.
+
+User-agent: *
+Allow: /
+Allow: /help
+Allow: /trust
+Allow: /privacy
+Allow: /terms
+Allow: /tour
+
+Disallow: /emergency/
+Disallow: /e/
+Disallow: /setup/
+Disallow: /settings
+Disallow: /watched
+Disallow: /inbox
+Disallow: /chat
+Disallow: /call
+Disallow: /report
+Disallow: /weekly-report
+Disallow: /live-location
+Disallow: /safety-circle
+Disallow: /safety-timer
+Disallow: /safe-walk
+Disallow: /saved-places
+Disallow: /family
+Disallow: /billing
+Disallow: /limitations
+Disallow: /drive
+Disallow: /drive-history
+Disallow: /drive-report
+Disallow: /satellite
+Disallow: /api/
+
+Sitemap: https://stillhere.health/sitemap.xml

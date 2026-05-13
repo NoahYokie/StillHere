@@ -4,9 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, MapPin, Heart, Lock, Eye, Users, Mail, Server, Smartphone } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function TrustPage() {
   const [, setLocation] = useLocation();
+  useDocumentMeta({
+    title: "Trust & Safety — StillHere",
+    description: "How StillHere keeps your data private and what we do (and don't) promise about safety alerts.",
+  });
 
   return (
     <div className="min-h-screen bg-background">

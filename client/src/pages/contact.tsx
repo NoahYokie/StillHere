@@ -20,10 +20,12 @@ import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813
 import type { ContactPageData } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function ContactPage() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
+  useDocumentMeta({ noindex: true });
   const [showHandleConfirm, setShowHandleConfirm] = useState(false);
   const [showEscalateConfirm, setShowEscalateConfirm] = useState(false);
   const [address, setAddress] = useState<string | null>(null);

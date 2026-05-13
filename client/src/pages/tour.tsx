@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { Button } from "@/components/ui/button";
 import {
   Heart,
@@ -919,6 +920,10 @@ function SettingsScreen() {
 export default function TourPage() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(0);
+  useDocumentMeta({
+    title: "Take the Tour — StillHere",
+    description: "A quick walkthrough of how StillHere check-ins, SOS alerts, and the Safety Circle work.",
+  });
 
   const current = tourSteps[step];
   const isFirst = step === 0;
