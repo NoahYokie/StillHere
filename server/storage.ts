@@ -2815,6 +2815,7 @@ export class DatabaseStorage implements IStorage {
         id: `admin:${adminUser.id}`,
         userId: adminUser.id,
         name: adminUser.name || "Admin",
+        nickname: null,
         phone: adminUser.phone || null,
         role: "admin",
         status: "active",
@@ -2867,6 +2868,7 @@ export class DatabaseStorage implements IStorage {
         id: row.id,
         userId: row.userId,
         name,
+        nickname: row.nickname || null,
         phone,
         role: row.role as FamilyRole,
         status: row.status as FamilyMemberStatus,
@@ -2950,6 +2952,7 @@ export class DatabaseStorage implements IStorage {
     sharingMode: "precise" | "area" | "presence" | "paused";
     parentalConsentGranted: boolean;
     parentalConsentRequired: boolean;
+    nickname: string | null;
   }>): Promise<FamilyMember> {
     // Defense-in-depth (Batch 3): refuse to set teen/child role on any
     // existing row. Existing rows with these roles can still be READ; they

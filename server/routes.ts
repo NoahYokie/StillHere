@@ -7897,6 +7897,20 @@ export async function registerRoutes(
         updates.parentalConsentRequired = !!req.body.parentalConsentRequired;
       }
 
+      // Nickname: family-scoped display name (e.g. "Dad", "Mum", "Kid").
+      // Admins can rename anyone; members can rename themselves. Empty string
+      // clears the nickname and falls back to the underlying user/invite name.
+      if (req.body?.nickname !== undefined) {
+        if (!isAdmin && !isSelf) {
+          return res.status(403).json({ error: "Only an admin or this member can rename" });
+        }
+        const raw = typeof req.body.nickname === "string" ? req.body.nickname.trim() : "";
+        if (raw.length > 40) {
+          return res.status(400).json({ error: "Nickname is too long (max 40 characters)" });
+        }
+        updates.nickname = raw.length === 0 ? null : raw;
+      }
+
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
       }

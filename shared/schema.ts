@@ -984,6 +984,7 @@ export const familyMembers = pgTable("family_members", {
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
   invitePhone: text("invite_phone"),
   inviteName: text("invite_name"),
+  nickname: text("nickname"),
   role: familyRoleEnum("role").notNull().default("adult"),
   status: familyMemberStatusEnum("status").notNull().default("invited"),
   sharingMode: sharingModeEnum("sharing_mode").notNull().default("precise"),
@@ -1168,6 +1169,7 @@ export interface FamilyMemberView {
   id: string;
   userId: string | null;
   name: string;
+  nickname: string | null;
   phone: string | null;
   role: FamilyRole;
   status: FamilyMemberStatus;

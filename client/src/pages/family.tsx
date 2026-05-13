@@ -24,7 +24,7 @@ import {
   ShieldCheck, Activity, AlertTriangle, Eye, LogOut, Trash2, Users,
   Sparkles, Battery, Car, Settings as SettingsIcon, Crown,
   Home as HomeIcon, GraduationCap, Briefcase, Dumbbell, Trees, Plus, Navigation,
-  Phone, Clock, CheckCircle2, X,
+  Phone, Clock, CheckCircle2, X, Pencil,
 } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { formatDistanceToNow } from "date-fns";
@@ -144,6 +144,21 @@ export default function FamilyPage() {
       toast({ title: "Removed" });
     },
     onError: () => toast({ title: "Could not remove", variant: "destructive" }),
+  });
+
+  const [renameTarget, setRenameTarget] = useState<{ id: string; current: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameMutation = useMutation({
+    mutationFn: async (vars: { memberId: string; nickname: string }) =>
+      apiRequest("PATCH", `/api/family/member/${vars.memberId}`, { nickname: vars.nickname }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family"] });
+      toast({ title: "Saved" });
+      setRenameTarget(null);
+      setRenameValue("");
+    },
+    onError: (e: any) =>
+      toast({ title: "Could not rename", description: e?.message || "Try again", variant: "destructive" }),
   });
 
   const closeFamilyMutation = useMutation({
