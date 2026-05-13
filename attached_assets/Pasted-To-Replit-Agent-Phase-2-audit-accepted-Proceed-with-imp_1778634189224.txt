@@ -1,0 +1,78 @@
+To Replit Agent:
+
+  Phase 2 audit accepted.
+
+  Proceed with implementation using option (b) with per-incident reuse.
+
+  Approved policy:
+  - Incident-time watcher/contact links use purpose="incident".
+  - TTL is 24 hours max.
+  - Reuse is allowed only within the same incident window for the same contact.
+  - Never reuse a token from a previous incident.
+  - Standing tokens remain for settings/watcher-card/share flows only.
+  - All-clear tokens remain unchanged: purpose="allclear", 4h TTL.
+  - No schema migration.
+  - Do not add incidentId to contact_tokens in this phase.
+
+  Implementation direction:
+  Add a small storage/helper function that, for each contact, returns an existing non-revoked purpose="incident" token only if:
+  - token.contactId matches
+  - token.createdAt >= incident.openedAt / incident.startedAt / incident.createdAt, whichever is the correct incident start
+  timestamp in the schema
+  - token is still inside the 24h hard cap
+  - token is not revoked
+
+  Otherwise mint a fresh token with:
+  - purpose: "incident"
+  - ttlHours: 24
+
+  Use this helper at incident-time link sends only:
+  - manual SOS
+  - watcher "I can't help" escalation
+  - crash alert
+  - inbound SMS HELP/SOS
+  - satellite SOS
+  - wellness call "I need help"
+  - missed-check-in escalation branches
+  - Safety Timer expired
+  - Safe Walk overdue
+  - any direct incident SMS/email watcher link site identified in your table
+
+  Do not use this helper for:
+  - Settings watcher-card links
+  - Safety Circle token rotation
+  - contact setup
+  - test seeded contacts
+  - all-clear links
+
+  Site #7a:
+  If the L6674 cron call truly only warms/regenerates tokens and sends no link, remove it or stop it from minting tokens. Confirm
+  in the implementation report exactly what you did.
+
+  Phase 1 resolved-state behavior stays as the privacy backstop:
+  After incident resolution, purpose="incident" or old standing alert links should show resolved state and no live location.
+
+  Do not auto-revoke incident tokens on resolution in this phase. Resolved-state page is better UX than a broken expired link.
+
+  Question on strict timestamp:
+  Keep tokenCreatedAt < resolvedAt for now unless you find a real edge case. Do not change to <= unless needed by tests.
+
+  Tests:
+  Add or extend tests to cover:
+  1. Incident token has purpose="incident" and 24h TTL.
+  2. Same incident + same contact reuses the existing incident token.
+  3. New incident + same contact gets a fresh token.
+  4. Old standing token is not reused for an incident alert.
+  5. All-clear token remains purpose="allclear" and 4h TTL.
+  6. Settings/watcher-card flow still uses purpose="standing".
+  7. SMS and email for the same contact use the same token link when both are sent for the same incident.
+  8. After incident resolution, the original incident token renders mode="resolved" and exposes no live/last location.
+
+  After implementation, report:
+  - files changed
+  - helper/function name and behavior
+  - exact call sites changed
+  - site #7a decision
+  - tests run/result
+  - tsc result
+  - any links intentionally left using standing tokens and why

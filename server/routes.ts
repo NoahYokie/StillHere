@@ -1348,8 +1348,8 @@ export async function registerRoutes(
         );
       }
       
-      // Generate fresh tokens for this emergency
-      const tokens = await storage.regenerateTokensForUser(userId);
+      // Phase 2: incident-scoped tokens, fresh per incident, reused within it.
+      const tokens = await storage.getOrMintIncidentTokensForUser(userId, incident.startedAt);
       const user = await storage.getUser(userId);
       const baseUrl = getBaseUrl();
       
@@ -2626,9 +2626,8 @@ export async function registerRoutes(
       const now = new Date();
       
       const contacts = await storage.getContacts(data.user.id);
-      // Use regenerate so a fresh standing token is minted if no live one exists
-      // (existing tokens may have aged past the 24h hard cap).
-      const tokens = await storage.regenerateTokensForUser(data.user.id);
+      // Phase 2: incident-scoped tokens for the active incident.
+      const tokens = await storage.getOrMintIncidentTokensForUser(data.user.id, data.incident.startedAt);
       const baseUrl = getBaseUrl();
       const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
       const firstContact = sortedContacts[0];
@@ -3608,11 +3607,18 @@ export async function registerRoutes(
       const sortedContacts = contactsRaw.sort((a, b) => a.priority - b.priority);
       const baseUrl = getBaseUrl();
 
+      // Phase 2: incident-scoped tokens. revokeAllTokensForUser above clears
+      // the slate, so the helper will mint fresh purpose="incident" tokens
+      // for every contact in this loop's first pass.
+      const crashTokens = await storage.getOrMintIncidentTokensForUser(userId, incident.startedAt);
+      const crashTokenByContact = new Map(crashTokens.map(t => [t.contact.id, t.token]));
+
       for (const contact of sortedContacts) {
         try {
           const normalizedPhone = normalizePhone(contact.phone);
-          const tokenRecord = await storage.generateToken(contact.id);
-          const link = `${baseUrl}/emergency/${tokenRecord.token}`;
+          const crashToken = crashTokenByContact.get(contact.id);
+          if (!crashToken) continue;
+          const link = `${baseUrl}/emergency/${crashToken}`;
 
           const crashMsg = `CRASH ALERT from ${user.name}! A possible vehicle crash has been detected. ${speedKmh ? `Speed at impact: ${Math.round(speedKmh)} km/h. ` : ""}Please check on them immediately: ${link}`;
 
@@ -4065,7 +4071,8 @@ export async function registerRoutes(
           const incident = await storage.createIncident(user.id, "sos");
           const allContacts = await storage.getContacts(user.id);
           const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
-          const tokens = await storage.regenerateTokensForUser(user.id);
+          // Phase 2: incident-scoped token for this brand-new incident.
+          const tokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
           const baseUrl = getBaseUrl();
           const first = sorted[0];
           if (first) {
@@ -5118,7 +5125,8 @@ export async function registerRoutes(
           const incident = await storage.createIncident(user.id, "sos");
           const allContacts = await storage.getContacts(user.id);
           const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
-          const tokens = await storage.regenerateTokensForUser(user.id);
+          // Phase 2: incident-scoped token for this brand-new incident.
+          const tokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
           const baseUrl = getBaseUrl();
           const first = sorted[0];
           if (first) {
@@ -6161,7 +6169,8 @@ export async function registerRoutes(
         // confirmed they need help, so we don't wait for sequential escalation.
         const sosCont = await storage.getContacts(user.id);
         const sortedSos = [...sosCont].sort((a, b) => a.priority - b.priority);
-        const sosTokens = await storage.regenerateTokensForUser(user.id);
+        // Phase 2: incident-scoped tokens for the active wellness-call incident.
+        const sosTokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
         const sosBaseUrl = getBaseUrl();
         const notifiedIds: string[] = [];
 
@@ -6671,7 +6680,11 @@ export async function registerRoutes(
             await storage.createLocationSession(user.id, "emergency", incident.id);
           }
 
-          await storage.regenerateTokensForUser(user.id);
+          // Phase 2: site #7a removed. The previous regenerateTokensForUser
+          // call here only "warmed" tokens but built/sent no link (no link is
+          // constructed in this block; this is the missed-checkin push step
+          // that runs before any contact escalation). The escalation worker
+          // below mints incident-scoped tokens itself when it actually sends.
 
           await storage.updateIncident(incident.id, {
             escalationLevel: 0,
@@ -6739,7 +6752,10 @@ export async function registerRoutes(
         const graceMs = (userSettings?.graceMinutes || 15) * 60 * 1000;
 
         const contacts = await storage.getContacts(incident.userId);
-        const tokens = await storage.regenerateTokensForUser(incident.userId);
+        // Phase 2: incident-scoped tokens. Reused within this incident across
+        // every escalation branch below (paused, sms_fallthrough, call_unanswered,
+        // sequential, blast, legacy).
+        const tokens = await storage.getOrMintIncidentTokensForUser(incident.userId, incident.startedAt);
         const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
 
         let notifiedIds: string[] = [];
@@ -7217,7 +7233,8 @@ export async function registerRoutes(
             notifyConcern(timer.userId, user.name, "sos").catch((err) => {
               console.error(`[TIMER] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
-            const tokens = await storage.regenerateTokensForUser(timer.userId);
+            // Phase 2: incident-scoped tokens for the safety-timer incident.
+            const tokens = await storage.getOrMintIncidentTokensForUser(timer.userId, incident.startedAt);
             const allContactIds: string[] = [];
 
             for (const { contact, token } of tokens) {
@@ -7335,7 +7352,8 @@ export async function registerRoutes(
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for ${user.name}:`, err?.message || err);
             });
-            const tokens = await storage.regenerateTokensForUser(walk.userId);
+            // Phase 2: incident-scoped tokens for the safe-walk incident.
+            const tokens = await storage.getOrMintIncidentTokensForUser(walk.userId, incident.startedAt);
             const contacts = await storage.getContacts(walk.userId);
             const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
             const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";

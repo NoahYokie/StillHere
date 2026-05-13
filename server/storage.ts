@@ -205,6 +205,7 @@ export interface IStorage {
   rotateAllStandingTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
   revokeAllTokensForUser(userId: string): Promise<void>;
   regenerateTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
+  getOrMintIncidentTokensForUser(userId: string, incidentStartedAt: Date): Promise<{ contact: Contact; token: string }[]>;
   
   // Checkins
   getLastCheckin(userId: string): Promise<Checkin | undefined>;
@@ -1253,6 +1254,51 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return result.sort((a, b) => a.contact.priority - b.contact.priority);
+  }
+
+  // Phase-2 incident-time token helper. For each non-deleted contact, return
+  // an existing non-revoked purpose="incident" token IF it was minted at or
+  // after the current incident started AND is still inside the 24h hard cap.
+  // Otherwise mint a fresh purpose="incident", 24h-TTL token. This guarantees:
+  //   - Fresh-per-incident: tokens from a previous incident are never reused
+  //     (the floor is incidentStartedAt, not just the 24h cap).
+  //   - Reuse-within-incident: re-sends to the same contact during the same
+  //     escalation reuse the same link, avoiding inbox clutter.
+  // Caller is responsible for using this only at incident-time send sites;
+  // settings/watcher-card flows must continue using regenerateTokensForUser.
+  async getOrMintIncidentTokensForUser(
+    userId: string,
+    incidentStartedAt: Date,
+  ): Promise<{ contact: Contact; token: string }[]> {
+    const userContacts = await this.getContacts(userId);
+    const out: { contact: Contact; token: string }[] = [];
+    const now = new Date();
+    const HARD_CAP_MS = 24 * 60 * 60 * 1000;
+    const minCreatedAt = new Date(now.getTime() - HARD_CAP_MS);
+    // The within-incident floor is whichever is later: incidentStartedAt or
+    // the 24h cap. In practice the incident is always within 24h of now for
+    // any active escalation, so incidentStartedAt wins.
+    const incidentFloor = incidentStartedAt > minCreatedAt ? incidentStartedAt : minCreatedAt;
+    for (const contact of userContacts) {
+      if (contact.softDeletedAt) continue;
+      const [existing] = await db.select().from(contactTokens)
+        .where(and(
+          eq(contactTokens.contactId, contact.id),
+          eq(contactTokens.revoked, false),
+          eq(contactTokens.purpose, "incident"),
+          gte(contactTokens.createdAt, incidentFloor),
+          gte(contactTokens.expiresAt, now),
+        ))
+        .orderBy(desc(contactTokens.createdAt))
+        .limit(1);
+      if (existing) {
+        out.push({ contact, token: existing.token });
+      } else {
+        const fresh = await this.generateToken(contact.id, { ttlHours: 24, purpose: "incident" });
+        out.push({ contact, token: fresh.token });
+      }
+    }
+    return out.sort((a, b) => a.contact.priority - b.contact.priority);
   }
 
   async getLastCheckin(userId: string): Promise<Checkin | undefined> {
