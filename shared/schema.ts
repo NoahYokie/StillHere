@@ -1366,7 +1366,11 @@ export interface WatchedUser {
 export interface ContactPageData {
   // 'live'     - normal watcher view, may include location during active sharing windows
   // 'allclear' - read-only resolution view; never carries location or history
-  mode: "live" | "allclear";
+  // 'resolved' - shown when a watcher opens an alert-era link AFTER the
+  //              incident has been resolved. Strips location, last check-in,
+  //              live share, and all actions. The fresh allclear link sent in
+  //              the resolution SMS still works normally.
+  mode: "live" | "allclear" | "resolved";
   user: {
     id: string;
     name: string;

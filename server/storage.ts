@@ -200,7 +200,7 @@ export interface IStorage {
   getContactLimit(userId: string): Promise<number>;
   
   // Contact Tokens
-  getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string } | undefined>;
+  getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string; tokenCreatedAt: Date } | undefined>;
   generateToken(contactId: string, options?: { ttlHours?: number; purpose?: "standing" | "incident" | "allclear" }): Promise<ContactToken>;
   rotateAllStandingTokensForUser(userId: string): Promise<{ contact: Contact; token: string }[]>;
   revokeAllTokensForUser(userId: string): Promise<void>;
@@ -1138,7 +1138,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string } | undefined> {
+  async getContactByToken(token: string): Promise<{ contact: Contact; user: User; purpose: string; tokenCreatedAt: Date } | undefined> {
     const [tokenRecord] = await db.select().from(contactTokens).where(
       and(eq(contactTokens.token, token), eq(contactTokens.revoked, false))
     );
@@ -1163,7 +1163,12 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUser(contact.userId);
     if (!user) return undefined;
 
-    return { contact, user, purpose: tokenRecord.purpose || "standing" };
+    return {
+      contact,
+      user,
+      purpose: tokenRecord.purpose || "standing",
+      tokenCreatedAt: new Date(tokenRecord.createdAt),
+    };
   }
 
   async generateToken(
@@ -1444,7 +1449,7 @@ export class DatabaseStorage implements IStorage {
     const result = await this.getContactByToken(token);
     if (!result) return undefined;
 
-    const { contact, user, purpose } = result;
+    const { contact, user, purpose, tokenCreatedAt } = result;
 
     // All-clear links are read-only resolution receipts. They never carry
     // location, history, or actions, even if the user later starts a new
@@ -1477,6 +1482,45 @@ export class DatabaseStorage implements IStorage {
     const lastCheckin = await this.getLastCheckin(user.id);
     const incident = await this.getOpenIncident(user.id);
     const locationSession = await this.getActiveLocationSession(user.id);
+
+    // Phase-1 privacy guard: if a watcher opens a non-allclear link AFTER the
+    // incident it was issued for has been resolved, strip every live signal
+    // and show a resolved-state page. The rule is "the token predates the
+    // resolution AND the resolution happened within the last 24h", which
+    // matches the alert-era token use case while leaving freshly issued
+    // standing watcher-card tokens (minted after the resolution) untouched.
+    // Real-incident SMS tokens minted before the resolve will fall through
+    // here; the fresh purpose='allclear' link sent in the resolution SMS is
+    // unaffected because the allclear branch above returns earlier.
+    if (!incident) {
+      const HARD_CAP_MS = 24 * 60 * 60 * 1000;
+      const recentCutoff = new Date(Date.now() - HARD_CAP_MS);
+      const [recentResolved] = await db.select().from(incidents)
+        .where(and(
+          eq(incidents.userId, user.id),
+          eq(incidents.status, "resolved"),
+          gte(incidents.resolvedAt, recentCutoff),
+        ))
+        .orderBy(desc(incidents.resolvedAt))
+        .limit(1);
+      if (recentResolved?.resolvedAt && tokenCreatedAt < new Date(recentResolved.resolvedAt)) {
+        return {
+          mode: "resolved",
+          // Minimal projection: name only, plus the resolution time.
+          user: { id: "", name: user.name, phone: null },
+          contact: { id: "", name: contact.name, phone: "", email: null, userId: "", priority: 0 } as unknown as Contact,
+          lastCheckin: null,
+          incident: null,
+          locationSession: null,
+          handlingContact: null,
+          safetyTimer: null,
+          safeWalk: null,
+          crashDrive: null,
+          tripTrail: [],
+          resolvedAt: new Date(recentResolved.resolvedAt).toISOString(),
+        };
+      }
+    }
 
     let handlingContact: Contact | null = null;
     if (incident?.handledByContactId) {
