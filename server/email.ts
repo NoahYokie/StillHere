@@ -144,10 +144,11 @@ interface RenderArgs {
   ctaLabel: string;
   whyReceiving: string;
   emergencyHint?: boolean;
+  expiryNote?: string;
   context?: EmailContext;
 }
 
-function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyReceiving, emergencyHint, context }: RenderArgs): string {
+function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyReceiving, emergencyHint, expiryNote, context }: RenderArgs): string {
   const style = LEVEL[level];
   const safeName = esc(userName);
   const safeUrl = esc(ctaUrl);
@@ -200,6 +201,11 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
             If you can't reach <strong>${safeName}</strong>, <strong>call emergency services immediately</strong>.
           </p>` : "";
 
+  const expiryNoteHtml = expiryNote ? `
+          <p style="margin:10px 0 0 0;font-size:12px;line-height:1.5;color:#64748b;text-align:center;">
+            ${esc(expiryNote)}
+          </p>` : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -246,6 +252,7 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
           </table>
           ${fallbackLink}
           ${emergencyHintHtml}
+          ${expiryNoteHtml}
         </td></tr>
 
         <tr><td style="padding:18px 24px 22px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;">
@@ -381,7 +388,9 @@ export async function sendEmergencyEmail(
   const body = renderEmail({
     level, title, userName, eventLine,
     ctaUrl: link, ctaLabel: "View live location",
-    whyReceiving, emergencyHint: true, context: enriched,
+    whyReceiving, emergencyHint: true,
+    expiryNote: "This link expires in 24 hours for your safety and privacy.",
+    context: enriched,
   });
   return sendEmail(contactEmail, subject, body, {
     purpose: issos ? "sos_alert" : "missed_checkin_alert",
@@ -407,7 +416,9 @@ export async function sendCrashEmail(
     level: "emergency", title: "Possible vehicle crash detected",
     userName, eventLine,
     ctaUrl: link, ctaLabel: "View live location",
-    whyReceiving, emergencyHint: true, context: enriched,
+    whyReceiving, emergencyHint: true,
+    expiryNote: "This link expires in 24 hours for your safety and privacy.",
+    context: enriched,
   });
   return sendEmail(contactEmail, subject, body);
 }

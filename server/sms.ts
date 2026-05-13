@@ -321,7 +321,7 @@ export async function sendMissedCheckinAlert(
   link: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call. None received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you are unable to reach them, please contact your local emergency services.`;
+  const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call. None received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you are unable to reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body, { purpose: "missed_checkin_alert", ...options });
 }
 
@@ -331,7 +331,7 @@ export async function sendSosAlert(
   link: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere SOS Alert\n\n${userName} has activated an SOS in the StillHere app and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services. StillHere is not an emergency response service.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
+  const body = `StillHere SOS Alert\n\n${userName} has activated an SOS in the StillHere app and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services. StillHere is not an emergency response service.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
   return sendSms(contactPhone, body, { purpose: "sos_alert", ...options });
 }
 
@@ -389,7 +389,7 @@ export async function sendEscalationAlert(
   const reasonText = reason === "sos"
     ? "activated an emergency SOS"
     : "has not responded to a safety check-in";
-  const body = `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
+  const body = `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body, { purpose: "escalation_alert", ...options });
 }
 
@@ -407,7 +407,7 @@ export async function sendHandlingTimeoutAlert(
   link: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere Follow-Up\n\n${userName}'s safety alert is still active and needs your attention.\n\nPlease confirm whether you have been able to reach them. Open the StillHere app for one-tap response, or use this link from any browser:\n${link}\n\nIf you cannot reach them, please contact your local emergency services.`;
+  const body = `StillHere Follow-Up\n\n${userName}'s safety alert is still active and needs your attention.\n\nPlease confirm whether you have been able to reach them. Open the StillHere app for one-tap response, or use this link from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services.`;
   return sendSms(contactPhone, body, { purpose: "handling_timeout", ...options });
 }
 

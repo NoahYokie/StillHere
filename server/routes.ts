@@ -3620,7 +3620,7 @@ export async function registerRoutes(
           if (!crashToken) continue;
           const link = `${baseUrl}/emergency/${crashToken}`;
 
-          const crashMsg = `CRASH ALERT from ${user.name}! A possible vehicle crash has been detected. ${speedKmh ? `Speed at impact: ${Math.round(speedKmh)} km/h. ` : ""}Please check on them immediately: ${link}`;
+          const crashMsg = `CRASH ALERT from ${user.name}! A possible vehicle crash has been detected. ${speedKmh ? `Speed at impact: ${Math.round(speedKmh)} km/h. ` : ""}Please check on them immediately: ${link}\n\nLink expires in 24 hours.`;
 
           if (isTwilioConfigured()) {
             await sendSms(normalizedPhone, crashMsg, {
@@ -7249,7 +7249,7 @@ export async function registerRoutes(
               if (contact.phone) {
                 try {
                   await sendSms(contact.phone,
-                    `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`,
+                    `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nLink expires in 24 hours.`,
                     { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safety_timer:${timer.id}:${contact.id}` }
                   );
                 } catch (err: any) {
@@ -7263,7 +7263,7 @@ export async function registerRoutes(
                   const { sendEmail } = await import("./email");
                   await sendEmail(contact.email!.trim(),
                     `StillHere Alert: ${user.name}'s Safety Timer Expired`,
-                    `${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                    `${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nThis link expires in 24 hours for your safety and privacy.`
                   );
                 } catch (err: any) {
                   console.error(`[TIMER] Email to ${contact.name} failed:`, err?.message || err);
@@ -7371,7 +7371,7 @@ export async function registerRoutes(
               if (contact.phone) {
                 try {
                   await sendSms(contact.phone,
-                    `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`,
+                    `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nLink expires in 24 hours.`,
                     { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safe_walk:${walk.id}:${contact.id}` }
                   );
                 } catch (err: any) {
@@ -7385,7 +7385,7 @@ export async function registerRoutes(
                   const { sendEmail } = await import("./email");
                   await sendEmail(contact.email!.trim(),
                     `StillHere Alert: ${user.name} Did Not Arrive${destInfo}`,
-                    `${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}`
+                    `${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nThis link expires in 24 hours for your safety and privacy.`
                   );
                 } catch (err: any) {
                   console.error(`[SAFE-WALK] Escalation email to ${contact.name} failed:`, err?.message || err);
