@@ -339,6 +339,15 @@ export interface IStorage {
   getLiveLocationPoints(shareId: string, since?: Date, limit?: number): Promise<LiveLocationPoint[]>;
   getAllActiveLiveShares(): Promise<LiveLocationShare[]>;
   getActiveLiveSharesForWatcher(watcherUserId: string): Promise<(LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean; safetyStateReason: string | null; incidentReason: string | null; hasOpenIncident: boolean })[]>;
+  getWatcherVisibleSnapshot(userId: string): Promise<{
+    virtualId: string;
+    lat: number;
+    lng: number;
+    accuracy: number | null;
+    updatedAt: Date;
+    expiresAt: Date | null;
+    source: "emergency_session" | "user_snapshot";
+  } | undefined>;
 
   // Report Data
   getCheckinHistory(userId: string, from: Date, to: Date): Promise<Checkin[]>;
@@ -1442,7 +1451,9 @@ export class DatabaseStorage implements IStorage {
     // Emergency sessions can coexist with other session types (e.g. shift).
     // The generic getActiveLocationSession() returns the first match without
     // filtering by type, so use a type-specific query and prefer the most
-    // recently updated row.
+    // recently updated row. Expired-but-still-active rows are filtered out
+    // so we never surface a stale pin from a dormant incident.
+    const now = new Date();
     const [session] = await db
       .select()
       .from(locationSessions)
@@ -1453,7 +1464,9 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(locationSessions.updatedAt))
       .limit(1);
-    return session || undefined;
+    if (!session) return undefined;
+    if (session.expiresAt && session.expiresAt < now) return undefined;
+    return session;
   }
 
   async createLocationSession(
@@ -2662,28 +2675,29 @@ export class DatabaseStorage implements IStorage {
         continue;
       }
 
-      // No explicit live share, but the user may have an active emergency
-      // location session (e.g. SOS). Surface it as a virtual share so the
-      // watcher's live-location view shows the tracked location instead of
-      // appearing empty during an actual emergency.
-      const emergencySession = await this.getActiveEmergencyLocationSession(contact.userId);
-      if (emergencySession && emergencySession.lastLat != null && emergencySession.lastLng != null) {
+      // No explicit live share. Try the cascading fallback: emergency
+      // location_session (e.g. SOS) first, then a recent users.lastLat
+      // snapshot when there is an open incident. This guarantees a watcher
+      // can always see something during an active concern, regardless of
+      // which tracking subsystem captured the location.
+      const snapshot = await this.getWatcherVisibleSnapshot(contact.userId);
+      if (snapshot) {
         const user = await this.getUser(contact.userId);
         if (user) {
           const openIncident = await this.getOpenIncident(contact.userId);
           const virtualShare: LiveLocationShare = {
-            id: `emergency:${emergencySession.id}`,
+            id: snapshot.virtualId,
             userId: contact.userId,
             active: true,
-            expiresAt: emergencySession.expiresAt ?? null,
-            lastLat: emergencySession.lastLat,
-            lastLng: emergencySession.lastLng,
-            lastAccuracy: emergencySession.lastAccuracy ?? null,
+            expiresAt: snapshot.expiresAt,
+            lastLat: snapshot.lat,
+            lastLng: snapshot.lng,
+            lastAccuracy: snapshot.accuracy,
             lastSpeed: null,
             lastHeading: null,
             lastActivity: null,
-            lastUpdatedAt: emergencySession.lastTimestamp ?? emergencySession.updatedAt ?? new Date(),
-            createdAt: emergencySession.updatedAt ?? new Date(),
+            lastUpdatedAt: snapshot.updatedAt,
+            createdAt: snapshot.updatedAt,
           } as LiveLocationShare;
           results.push({
             ...virtualShare,
@@ -2698,6 +2712,62 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return results;
+  }
+
+  // Cascading fallback used by both /api/live-location/watching and
+  // /api/live-location/trail/:userId when no explicit live_location_share
+  // row exists. Returns the most authoritative recent location the watcher
+  // is allowed to see, or undefined when nothing is available.
+  // Order:
+  //   1) Active emergency location_session (e.g. SOS) with fresh lat/lng.
+  //   2) users.lastLat snapshot, gated by recency (<= 60 min) and the
+  //      subject's sharing mode (precise|area only). Requires an open
+  //      incident so we never expose location outside an active concern.
+  async getWatcherVisibleSnapshot(userId: string): Promise<{
+    virtualId: string;
+    lat: number;
+    lng: number;
+    accuracy: number | null;
+    updatedAt: Date;
+    expiresAt: Date | null;
+    source: "emergency_session" | "user_snapshot";
+  } | undefined> {
+    const emergencySession = await this.getActiveEmergencyLocationSession(userId);
+    if (emergencySession && emergencySession.lastLat != null && emergencySession.lastLng != null) {
+      return {
+        virtualId: `emergency:${emergencySession.id}`,
+        lat: emergencySession.lastLat,
+        lng: emergencySession.lastLng,
+        accuracy: emergencySession.lastAccuracy ?? null,
+        updatedAt: emergencySession.lastTimestamp ?? emergencySession.updatedAt ?? new Date(),
+        expiresAt: emergencySession.expiresAt ?? null,
+        source: "emergency_session",
+      };
+    }
+
+    const openIncident = await this.getOpenIncident(userId);
+    if (!openIncident) return undefined;
+
+    const user = await this.getUser(userId);
+    if (!user || user.lastLat == null || user.lastLng == null || !user.lastLocationAt) return undefined;
+
+    // Respect explicit privacy posture: presence/paused users do not
+    // surface coordinates even during a concern.
+    if (user.sharingMode !== "precise" && user.sharingMode !== "area") return undefined;
+
+    const ageMs = Date.now() - new Date(user.lastLocationAt).getTime();
+    const SNAPSHOT_MAX_AGE_MS = 60 * 60_000; // 60 minutes
+    if (ageMs > SNAPSHOT_MAX_AGE_MS) return undefined;
+
+    return {
+      virtualId: `snapshot:${userId}`,
+      lat: user.lastLat,
+      lng: user.lastLng,
+      accuracy: null,
+      updatedAt: new Date(user.lastLocationAt),
+      expiresAt: null,
+      source: "user_snapshot",
+    };
   }
   // Safety Timer
   async createSafetyTimer(userId: string, durationMinutes: number, note?: string): Promise<SafetyTimer> {

@@ -5045,28 +5045,29 @@ export async function registerRoutes(
         return res.json({ active: true, share: shareWithName, points: points.reverse() });
       }
 
-      // Fallback: surface an active emergency location session (e.g. SOS) as a
-      // virtual share so the watcher's detail page shows the latest tracked
-      // pin even when the user never tapped Start Sharing. Historical points
-      // are not available because emergency sessions write to location_sessions
-      // rather than live_location_points; we return an empty points array.
-      const emergencySession = await storage.getActiveEmergencyLocationSession(targetUserId);
-      if (emergencySession && emergencySession.lastLat != null && emergencySession.lastLng != null) {
+      // Cascading fallback: emergency location_session (e.g. SOS) first, then
+      // a recent users.lastLat snapshot when there is an open incident. This
+      // mirrors what the home /watching feed shows so a watcher who sees the
+      // person on the home map can always tap in and see them on the detail
+      // page too. Historical points are not available because these sources
+      // do not write to live_location_points; we return an empty points array.
+      const snapshot = await storage.getWatcherVisibleSnapshot(targetUserId);
+      if (snapshot) {
         const virtualShare = {
-          id: `emergency:${emergencySession.id}`,
+          id: snapshot.virtualId,
           userId: targetUserId,
           active: true,
-          expiresAt: emergencySession.expiresAt ?? null,
-          lastLat: emergencySession.lastLat,
-          lastLng: emergencySession.lastLng,
-          lastAccuracy: emergencySession.lastAccuracy ?? null,
+          expiresAt: snapshot.expiresAt,
+          lastLat: snapshot.lat,
+          lastLng: snapshot.lng,
+          lastAccuracy: snapshot.accuracy,
           lastSpeed: null,
           lastHeading: null,
           lastActivity: null,
-          lastUpdatedAt: emergencySession.lastTimestamp ?? emergencySession.updatedAt ?? new Date(),
-          createdAt: emergencySession.updatedAt ?? new Date(),
+          lastUpdatedAt: snapshot.updatedAt,
+          createdAt: snapshot.updatedAt,
           userName: targetUser?.name || "Contact",
-          source: "emergency_session" as const,
+          source: snapshot.source,
         };
         return res.json({ active: true, share: virtualShare, points: [] });
       }
