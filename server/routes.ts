@@ -124,9 +124,9 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     const checkinMethod = method === "call" ? "auto" : method === "app" ? "button" : method;
     await storage.createCheckin(userId, checkinMethod as any, {});
     await storage.resetReminderState(userId);
-    console.log(`[RESOLVE] Check-in recorded for ${user.name} via ${method}`);
+    console.log(`[RESOLVE] Check-in recorded for user=${userId} via ${method}`);
   } else {
-    console.log(`[RESOLVE] Skipped duplicate check-in creation for ${user.name} (already created by caller)`);
+    console.log(`[RESOLVE] Skipped duplicate check-in creation for user=${userId} (already created by caller)`);
   }
 
   if (user.safetyState === "concern" || user.safetyState === "quiet") {
@@ -227,10 +227,8 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
   console.log(JSON.stringify({
     event: "SAFETY_RESOLVED",
     userId,
-    userName: user.name,
     method,
     resolvedBy,
-    resolverName: resolverName || null,
     hadIncident,
     safetyStateRestored: user.safetyState !== "active",
     smsAllClearSent: hadIncident ? smsSuccess > 0 : false,
@@ -247,7 +245,7 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
   // shifted (e.g. open incident closed → presence-mode user can stop GPS).
   emitTrackingPolicyChanged(userId, "incident_resolved").catch(() => {});
 
-  console.log(`[RESOLVE] Complete: ${user.name} confirmed safe via ${method}, incident=${hadIncident}`);
+  console.log(`[RESOLVE] Complete: user=${userId} confirmed safe via ${method}, incident=${hadIncident}`);
   return { resolved: true, hadIncident };
 }
 
@@ -367,7 +365,7 @@ async function notifyContact(
         console.log(`[NOTIFY] Also sent push notification to contact (in-app user)`);
       }
     } catch (err: any) {
-      console.error(`[NOTIFY] Push to linked contact ${contact.name} failed:`, err?.message || err);
+      console.error(`[NOTIFY] Push to linked contact=${contact.id} failed:`, err?.message || err);
     }
 
     summary.attempted.push("in_app");
@@ -383,7 +381,7 @@ async function notifyContact(
       });
       summary.delivered.push("in_app");
     } catch (err: any) {
-      console.error(`[NOTIFY] In-app message to linked contact ${contact.name} failed:`, err?.message || err);
+      console.error(`[NOTIFY] In-app message to linked contact=${contact.id} failed:`, err?.message || err);
     }
   }
 
@@ -1016,12 +1014,12 @@ export async function registerRoutes(
 
       const openIncident = await storage.getOpenIncident(userId);
       if (user.safetyState !== "concern" && user.safetyState !== "quiet" && !openIncident) {
-        console.log(`[RESOLVE] Concern resolve skipped for ${user.name}: safetyState=${user.safetyState}, no open incident`);
+        console.log(`[RESOLVE] Concern resolve skipped for user=${userId}: safetyState=${user.safetyState}, no open incident`);
         return res.json({ success: true, alreadySafe: true });
       }
 
       const result = await resolveCheckin(userId, "app");
-      console.log(`[RESOLVE] Concern self-resolve: ${user.name}, hadIncident=${result.hadIncident}`);
+      console.log(`[RESOLVE] Concern self-resolve: user=${userId}, hadIncident=${result.hadIncident}`);
 
       res.json({ success: true });
     } catch (error) {
@@ -1045,7 +1043,7 @@ export async function registerRoutes(
 
       const openIncident = await storage.getOpenIncident(targetUserId);
       if (user.safetyState !== "concern" && user.safetyState !== "quiet" && !openIncident) {
-        console.log(`[RESOLVE] Watcher resolve skipped for ${user.name}: safetyState=${user.safetyState}, no open incident`);
+        console.log(`[RESOLVE] Watcher resolve skipped for user=${targetUserId}: safetyState=${user.safetyState}, no open incident`);
         return res.json({ success: true, alreadySafe: true });
       }
 
@@ -1054,7 +1052,7 @@ export async function registerRoutes(
         resolvedBy: "watcher",
         resolverName: watcher?.name || undefined,
       });
-      console.log(`[RESOLVE] Watcher resolve: ${user.name} marked safe by ${watcher?.name}, hadIncident=${result.hadIncident}`);
+      console.log(`[RESOLVE] Watcher resolve: user=${targetUserId} marked safe by watcher=${watcherId}, hadIncident=${result.hadIncident}`);
 
       emitToUser(targetUserId, "concern:resolved", {
         userId: targetUserId,
@@ -1176,12 +1174,12 @@ export async function registerRoutes(
 
       const user = await storage.getUser(userId);
       if (user && (user.safetyState === "concern" || user.safetyState === "quiet")) {
-        console.log(`[CHECKIN] User ${user.name} checked in while safetyState=${user.safetyState}  -  routing through resolveCheckin`);
+        console.log(`[CHECKIN] User user=${userId} checked in while safetyState=${user.safetyState}  -  routing through resolveCheckin`);
         await resolveCheckin(userId, "app", { skipCreateCheckin: true });
       } else {
         const openIncident = await storage.getOpenIncident(userId);
         if (openIncident) {
-          console.log(`[CHECKIN] User ${user?.name} checked in with open incident (state=${user?.safetyState})  -  routing through resolveCheckin`);
+          console.log(`[CHECKIN] User user=${userId} checked in with open incident (state=${user?.safetyState})  -  routing through resolveCheckin`);
           await resolveCheckin(userId, "app", { skipCreateCheckin: true });
         }
       }
@@ -1378,7 +1376,7 @@ export async function registerRoutes(
       });
       
       notifyConcern(userId, user?.name || "Someone", "sos").catch((err) => {
-        console.error(`[SOS] notifyConcern failed for ${user?.name}:`, err?.message || err);
+        console.error(`[SOS] notifyConcern failed for user=${userId}:`, err?.message || err);
       });
 
       res.json({ success: true, incident });
@@ -1698,7 +1696,7 @@ export async function registerRoutes(
         if (wc.linkedUserId) emitToUser(wc.linkedUserId, "incident:claimed", { incidentId, claimedBy: claimer?.name });
       }
 
-      console.log(`[CLAIM] Incident ${incidentId} claimed by ${claimer?.name} (${userId})`);
+      console.log(`[CLAIM] Incident ${incidentId} claimed by user=${userId}`);
       res.json({ success: true, incident: updated });
     } catch (error) {
       console.error("Error claiming incident:", error);
@@ -1791,7 +1789,7 @@ export async function registerRoutes(
         }
       }, 60000);
 
-      console.log(`[DRILL] Safety drill started by ${user.name} (${userId}), incidentId=${drill.id}`);
+      console.log(`[DRILL] Safety drill started by user=${userId}, incidentId=${drill.id}`);
       res.json({ success: true, drillId: drill.id });
     } catch (error) {
       console.error("Error starting safety drill:", error);
@@ -2108,7 +2106,7 @@ export async function registerRoutes(
               url: "/watched",
               tag: `guardian-briefing-${contact.id}`,
             });
-            console.log(`[GUARDIAN] Briefing sent to ${linkedUser.name} (${roleLabel}) for ${ownerUser?.name}`);
+            console.log(`[GUARDIAN] Briefing sent to linkedUser=${linkedUser.id} (${roleLabel}) for owner=${userId}`);
           } else {
             await storage.linkContactToUser(contact.id, null);
           }
@@ -2123,7 +2121,7 @@ export async function registerRoutes(
             url: "/",
             tag: "setup-confirmed",
           });
-          console.log(`[SETUP] Confirmation sent to ${ownerUser?.name}`);
+          console.log(`[SETUP] Confirmation sent to user=${userId}`);
         }
 
         const updatedContacts = await storage.getContacts(userId);
@@ -3584,7 +3582,7 @@ export async function registerRoutes(
       await storage.updateSafetyState(userId, "concern", "Crash detected");
       emitTrackingPolicyChanged(userId, "crash_open").catch(() => {});
       notifyConcern(userId, user.name, "crash_detection").catch((err) => {
-        console.error(`[CRASH] notifyConcern failed for ${user.name}:`, err?.message || err);
+        console.error(`[CRASH] notifyConcern failed for user=${userId}:`, err?.message || err);
       });
       // Auto-post into family chat with push fan-out
       broadcastToFamily(
@@ -4670,7 +4668,7 @@ export async function registerRoutes(
                   timezone: user?.timezone ?? null,
                 });
               } catch (err: any) {
-                console.error(`[GEOFENCE] Email to ${contact.name} about zone ${zone.name} failed:`, err?.message || err);
+                console.error(`[GEOFENCE] Email to contact=${contact.id} about zone=${zone.id} failed:`, err?.message || err);
               }
             }
           }
@@ -6222,14 +6220,14 @@ export async function registerRoutes(
           console.error(`[WELLNESS CALL] Socket broadcast failed:`, err?.message || err);
         }
 
-        console.log(`[WELLNESS CALL] SOS notified ${notifiedIds.length}/${sortedSos.length} contacts for ${user.name}`);
+        console.log(`[WELLNESS CALL] SOS notified ${notifiedIds.length}/${sortedSos.length} contacts for user=${user.id}`);
 
         // ----- "We care" wraparound: keep the user supported, don't just hang up -----
         // Resolve the user's local emergency number from their last known
         // location (GPS) with timezone fallback, so we say "999" in the UK,
         // "000" in Australia, "112" in the EU, etc.  -  not just "911".
         const emergency = await getEmergencyInfoForUser(user as any);
-        console.log(`[WELLNESS CALL] Local emergency number for ${user.name}: ${emergency.number} (country=${emergency.country || "unknown"})`);
+        console.log(`[WELLNESS CALL] Local emergency number for user=${user.id}: ${emergency.number} (country=${emergency.country || "unknown"})`);
 
         // 1. Text the USER themselves so they have a written record of who's coming
         //    and a clear local-emergency prompt, even if they hang up the call.
@@ -6511,7 +6509,7 @@ export async function registerRoutes(
           });
         }
         const result = await resolveCheckin(user.id, "call", { resolvedBy: "user" });
-        console.log(`[WELLNESS CALL] Post-contact resolution: user ${user.name} confirmed safe (incidentResolved=${result.hadIncident})`);
+        console.log(`[WELLNESS CALL] Post-contact resolution: user=${user.id} confirmed safe (incidentResolved=${result.hadIncident})`);
 
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -6540,7 +6538,7 @@ export async function registerRoutes(
             escalationTimeline: JSON.stringify(timeline),
             nextActionAt: new Date(),
           });
-          console.log(`[WELLNESS CALL] User ${user.name} still needs help — accelerating escalation to next contact`);
+          console.log(`[WELLNESS CALL] User user=${user.id} still needs help — accelerating escalation to next contact`);
         }
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -6658,7 +6656,7 @@ export async function registerRoutes(
         if (isDueForAlert) {
           const existingOpenIncident = await storage.getOpenIncident(user.id);
           if (existingOpenIncident) {
-            console.log(`[ALERT] Skipping checkin alert for ${user.name}  -  open incident already exists (${existingOpenIncident.reason})`);
+            console.log(`[ALERT] Skipping checkin alert for user=${user.id}  -  open incident already exists (${existingOpenIncident.reason})`);
             continue;
           }
 
@@ -6674,7 +6672,7 @@ export async function registerRoutes(
           timeline.push({ type: "push", time: timeStr, detail: "Push notification sent to user" });
 
           await sendReminderPush(user.id, user.name);
-          console.log(`[ESCALATION] Step 1/3: Push sent to ${user.name}`);
+          console.log(`[ESCALATION] Step 1/3: Push sent to user=${user.id}`);
 
           if (settings.locationMode === "emergency_only" || settings.locationMode === "both") {
             await storage.createLocationSession(user.id, "emergency", incident.id);
@@ -6802,11 +6800,11 @@ export async function registerRoutes(
           if (user.phone) {
             await sendReminderSms(user.phone, checkInLink, !!userSettings?.smsCheckinEnabled);
             existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user  -  still trying to reach them" });
-            console.log(`[ESCALATION] Step 2/3: SMS sent to ${user.name} (***${user.phone.slice(-4)})`);
+            console.log(`[ESCALATION] Step 2/3: SMS sent to user=${user.id} (phone ***${user.phone.slice(-4)})`);
           } else {
             await sendReminderPush(user.id, user.name);
             existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent (no phone)  -  still trying to reach them" });
-            console.log(`[ESCALATION] Step 2/3: Push sent to ${user.name} (no phone for SMS)`);
+            console.log(`[ESCALATION] Step 2/3: Push sent to user=${user.id} (no phone for SMS)`);
           }
           await storage.updateIncident(incident.id, {
             lastEscalationStep: "sms",
@@ -6828,7 +6826,6 @@ export async function registerRoutes(
           console.log(JSON.stringify({
             event: "CALL_FLOW_DIAGNOSTIC",
             userId: user.id,
-            userName: user.name,
             autoWellnessCallEnabled: autoWellnessCallFlag,
             twilioConfigured: twilioReady,
             hasPhone,
@@ -6842,7 +6839,7 @@ export async function registerRoutes(
             const voicePolicy = await import("./outbound-policy");
             let voiceAttemptId: string | undefined;
             try {
-              console.log(`[ESCALATION] Step 3/3: Calling ${user.name} (***${user.phone.slice(-4)})`);
+              console.log(`[ESCALATION] Step 3/3: Calling user=${user.id} (phone ***${user.phone.slice(-4)})`);
               // Voice is the most expensive channel — gate it through the
               // outbound policy with a per-incident dedupe key so a stuck
               // escalation worker can't dial the same person twice. Note:
@@ -6862,7 +6859,7 @@ export async function registerRoutes(
                 await storage.updateIncident(incident.id, { degradedDelivery: true });
               }
               if (!voiceDecision.allowed) {
-                console.warn(`[ESCALATION] Wellness call blocked by policy (${voiceDecision.reason}) for ${user.name}`);
+                console.warn(`[ESCALATION] Wellness call blocked by policy (${voiceDecision.reason}) for user=${user.id}`);
                 existingTimeline.push({ type: "call_failed", time: timeStr, detail: `Wellness call blocked by policy: ${voiceDecision.reason}` });
               } else {
               const twilio = (await import("twilio")).default;
@@ -6880,7 +6877,6 @@ export async function registerRoutes(
               console.log(JSON.stringify({
                 event: "CALL_FLOW_RESULT",
                 userId: user.id,
-                userName: user.name,
                 callPlaced: true,
                 callSid: callResult.sid,
                 timestamp: timeStr,
@@ -6898,7 +6894,7 @@ export async function registerRoutes(
             } catch (err: any) {
               const callError = err?.message || "unknown error";
               existingTimeline.push({ type: "call_failed", time: timeStr, detail: `Wellness call failed: ${callError}` });
-              console.error(`[ESCALATION] Wellness call FAILED for ${user.name}: ${callError}  -  falling through to contacts`);
+              console.error(`[ESCALATION] Wellness call FAILED for user=${user.id}: ${callError}  -  falling through to contacts`);
               try {
                 await voicePolicy.markSendProviderResult(voiceAttemptId, "failed", { errorMessage: callError });
                 await storage.updateIncident(incident.id, { degradedDelivery: true });
@@ -6909,7 +6905,7 @@ export async function registerRoutes(
             if (!autoWellnessCallFlag) reasons.push("autoWellnessCall disabled");
             if (!twilioReady) reasons.push("Twilio not configured");
             if (!hasPhone) reasons.push("no phone number");
-            console.log(`[ESCALATION] Skipping call for ${user.name}: ${reasons.join(", ")}  -  advancing to contacts`);
+            console.log(`[ESCALATION] Skipping call for user=${user.id}: ${reasons.join(", ")}  -  advancing to contacts`);
           }
 
           const firstContact = sortedContacts[0];
@@ -7231,7 +7227,7 @@ export async function registerRoutes(
             await storage.updateSafetyState(timer.userId, "concern", "Safety timer expired");
             emitTrackingPolicyChanged(timer.userId, "safety_timer_escalated").catch(() => {});
             notifyConcern(timer.userId, user.name, "sos").catch((err) => {
-              console.error(`[TIMER] notifyConcern failed for ${user.name}:`, err?.message || err);
+              console.error(`[TIMER] notifyConcern failed for user=${timer.userId}:`, err?.message || err);
             });
             // Phase 2: incident-scoped tokens for the safety-timer incident.
             const tokens = await storage.getOrMintIncidentTokensForUser(timer.userId, incident.startedAt);
@@ -7253,10 +7249,10 @@ export async function registerRoutes(
                     { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safety_timer:${timer.id}:${contact.id}` }
                   );
                 } catch (err: any) {
-                  console.error(`[TIMER] SMS to ${contact.name} (***${contact.phone.slice(-4)}) failed:`, err?.message || err);
+                  console.error(`[TIMER] SMS to contact=${contact.id} (phone ***${contact.phone.slice(-4)}) failed:`, err?.message || err);
                 }
               } else {
-                console.log(`[TIMER] Skipping SMS for ${contact.name}: no phone number`);
+                console.log(`[TIMER] Skipping SMS for contact=${contact.id}: no phone number`);
               }
               if (isValidEmail(contact.email)) {
                 try {
@@ -7266,7 +7262,7 @@ export async function registerRoutes(
                     `${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nThis link expires in 24 hours for your safety and privacy.`
                   );
                 } catch (err: any) {
-                  console.error(`[TIMER] Email to ${contact.name} failed:`, err?.message || err);
+                  console.error(`[TIMER] Email to contact=${contact.id} failed:`, err?.message || err);
                 }
               }
               allContactIds.push(contact.id);
@@ -7284,7 +7280,7 @@ export async function registerRoutes(
             });
 
             timerEscalations++;
-            console.log(`[CRON] Safety timer escalated for ${user.name}`);
+            console.log(`[CRON] Safety timer escalated for user=${user.id}`);
           } catch (err) {
             console.error("[CRON] Safety timer escalation failed:", err);
           }
@@ -7302,7 +7298,7 @@ export async function registerRoutes(
           await storage.updateSafeWalk(w.id, { status: "overdue" });
           const u = await storage.getUser(w.userId);
           if (!u) continue;
-          console.log(`[CRON] Safe Walk now overdue for ${u.name}  -  10 min grace period started`);
+          console.log(`[CRON] Safe Walk now overdue for user=${u.id}  -  10 min grace period started`);
 
           const destInfo = w.destinationName ? ` to ${w.destinationName}` : "";
 
@@ -7315,9 +7311,9 @@ export async function registerRoutes(
               tag: "safe-walk-overdue",
               url: "/safe-walk",
             }, { purpose: "missed_checkin_alert", incidentId: null, dedupeKey: `safe_walk_overdue:${w.id}` });
-            console.log(`[CRON] Sent push notification to ${u.name}  -  safe walk overdue`);
+            console.log(`[CRON] Sent push notification to user=${u.id}  -  safe walk overdue`);
           } catch (err: any) {
-            console.error(`[SAFE-WALK] Push notification batch failed for ${u.name}:`, err?.message || err);
+            console.error(`[SAFE-WALK] Push notification batch failed for user=${u.id}:`, err?.message || err);
           }
 
           if (u.phone && isTwilioConfigured()) {
@@ -7326,9 +7322,9 @@ export async function registerRoutes(
                 `StillHere: You haven't arrived${destInfo} yet. Are you OK? Open the app to confirm you're safe, or reply YES to this message.`,
                 { purpose: "reminder", userId: u.id, dedupeKey: `safe_walk:${w.id}:user_check` }
               );
-              console.log(`[CRON] Sent SMS to ${u.name}  -  safe walk overdue`);
+              console.log(`[CRON] Sent SMS to user=${u.id}  -  safe walk overdue`);
             } catch (err: any) {
-              console.error(`[SAFE-WALK] Overdue SMS to ${u.name} failed:`, err?.message || err);
+              console.error(`[SAFE-WALK] Overdue SMS to user=${u.id} failed:`, err?.message || err);
             }
           }
         }
@@ -7350,7 +7346,7 @@ export async function registerRoutes(
             await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue  -  not responding");
             emitTrackingPolicyChanged(walk.userId, "safe_walk_escalated").catch(() => {});
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
-              console.error(`[SAFE-WALK] notifyConcern failed for ${user.name}:`, err?.message || err);
+              console.error(`[SAFE-WALK] notifyConcern failed for user=${walk.userId}:`, err?.message || err);
             });
             // Phase 2: incident-scoped tokens for the safe-walk incident.
             const tokens = await storage.getOrMintIncidentTokensForUser(walk.userId, incident.startedAt);
@@ -7375,10 +7371,10 @@ export async function registerRoutes(
                     { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safe_walk:${walk.id}:${contact.id}` }
                   );
                 } catch (err: any) {
-                  console.error(`[SAFE-WALK] Escalation SMS to ${contact.name} (***${contact.phone.slice(-4)}) failed:`, err?.message || err);
+                  console.error(`[SAFE-WALK] Escalation SMS to contact=${contact.id} (phone ***${contact.phone.slice(-4)}) failed:`, err?.message || err);
                 }
               } else {
-                console.log(`[SAFE-WALK] Skipping SMS for ${contact.name}: no phone number`);
+                console.log(`[SAFE-WALK] Skipping SMS for contact=${contact.id}: no phone number`);
               }
               if (isValidEmail(contact.email)) {
                 try {
@@ -7388,7 +7384,7 @@ export async function registerRoutes(
                     `${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nThis link expires in 24 hours for your safety and privacy.`
                   );
                 } catch (err: any) {
-                  console.error(`[SAFE-WALK] Escalation email to ${contact.name} failed:`, err?.message || err);
+                  console.error(`[SAFE-WALK] Escalation email to contact=${contact.id} failed:`, err?.message || err);
                 }
               }
               allContactIds.push(contact.id);
@@ -7406,7 +7402,7 @@ export async function registerRoutes(
             });
 
             walkEscalations++;
-            console.log(`[CRON] Safe Walk escalated for ${user.name}`);
+            console.log(`[CRON] Safe Walk escalated for user=${user.id}`);
           } catch (err) {
             console.error("[CRON] Safe Walk escalation failed:", err);
           }

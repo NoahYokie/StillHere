@@ -171,7 +171,7 @@ export async function notifyConcern(
   const isEmergency = reason === "sos" || reason === "crash_detection";
   const protectedUser = await storage.getUser(userId);
   if (!isEmergency && protectedUser && isUserInSleepHours(protectedUser)) {
-    console.log(`[NOTIFY] Suppressed ${reason} concern for ${userName} (sleep hours active)`);
+    console.log(`[NOTIFY] Suppressed ${reason} concern for user=${userId} (sleep hours active)`);
     return;
   }
 
