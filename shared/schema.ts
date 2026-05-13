@@ -18,7 +18,21 @@ export const sharingModeEnum = pgEnum("sharing_mode", ["precise", "area", "prese
 export const circleRoleEnum = pgEnum("circle_role", ["primary", "backup", "support"]);
 export const messageTypeEnum = pgEnum("message_type", ["user", "system_alert", "system_safe", "system_info"]);
 export const familyRoleEnum = pgEnum("family_role", ["admin", "adult", "teen", "child"]);
-export const familyMemberStatusEnum = pgEnum("family_member_status", ["active", "invited", "paused", "removed"]);
+export const familyMemberStatusEnum = pgEnum("family_member_status", [
+  "active",
+  "invited",
+  "paused",
+  "removed",
+  // Consent fix: explicit accept required before family data is exposed.
+  "pending",
+  // One-time backfill marker for rows that existed before the explicit-accept
+  // requirement. Treated as `active` until `legacyConfirmDeadline`, then the
+  // helper layer treats them as `pending` until the user re-confirms.
+  "active_legacy",
+  // Terminal: invitee declined. New invites create new rows after a 24h
+  // anti-harassment cooldown.
+  "declined",
+]);
 // Outbound communication audit channels. `in_app` covers system_alert / system_safe
 // messages that are delivered through the chat / socket layer (no carrier cost,
 // but still spam-eligible if a buggy loop fires).
@@ -991,6 +1005,16 @@ export const familyMembers = pgTable("family_members", {
   parentalConsentRequired: boolean("parental_consent_required").notNull().default(false),
   parentalConsentGranted: boolean("parental_consent_granted").notNull().default(false),
   invitedBy: uuid("invited_by").references(() => users.id),
+  // Consent audit trail (added with the explicit-accept requirement). Nullable
+  // because legacy rows pre-date these fields; they are populated on the next
+  // accept/decline transition for those rows.
+  invitedAt: timestamp("invited_at"),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+  // Set on rows backfilled from the pre-consent era. While in the future,
+  // helpers treat status="active_legacy" as effectively-active. Once it
+  // passes, helpers treat the row as pending until the user re-confirms.
+  legacyConfirmDeadline: timestamp("legacy_confirm_deadline"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -1162,7 +1186,14 @@ export type InsertFamily = z.infer<typeof insertFamilySchema>;
 export type FamilyMember = typeof familyMembers.$inferSelect;
 export type InsertFamilyMember = z.infer<typeof insertFamilyMemberSchema>;
 export type FamilyRole = "admin" | "adult" | "teen" | "child";
-export type FamilyMemberStatus = "active" | "invited" | "paused" | "removed";
+export type FamilyMemberStatus =
+  | "active"
+  | "invited"
+  | "paused"
+  | "removed"
+  | "pending"
+  | "active_legacy"
+  | "declined";
 
 // Hydrated row for the Family page
 export interface FamilyMemberView {

@@ -175,6 +175,26 @@ app.use((req, res, next) => {
   setupSocketServer(httpServer);
   await registerRoutes(httpServer, app);
 
+  // Family consent backfill (Round 3 plan): idempotent. On every boot, mark
+  // pre-consent rows as `active_legacy` with a 21-day re-confirm deadline,
+  // convert old `invited` to `pending`, and downgrade any expired
+  // `active_legacy` to `pending`. Runs in the background so a slow query
+  // never blocks startup; failures are logged but do not crash the server.
+  (async () => {
+    try {
+      const { storage } = await import("./storage");
+      const result = await storage.backfillFamilyConsent();
+      if (result.legacyMarked || result.pendingMarked || result.expiredDowngraded) {
+        log(
+          `family consent backfill: legacy=${result.legacyMarked} pending=${result.pendingMarked} expired=${result.expiredDowngraded}`,
+          "family",
+        );
+      }
+    } catch (err: any) {
+      log(`family consent backfill skipped: ${err?.message || err}`, "family");
+    }
+  })();
+
   // Bring up the stripe.* schema (idempotent) and create/refresh the managed
   // webhook endpoint so Stripe events flow into stripe-replit-sync. Runs in
   // the background so a Stripe outage cannot block app startup.

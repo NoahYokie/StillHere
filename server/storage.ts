@@ -83,6 +83,53 @@ import {
   type FamilyMessage,
   type FamilyPlace,
 } from "@shared/schema";
+
+// ===== Family consent helpers =====
+// `active_legacy` is a backfill marker. While the legacyConfirmDeadline is in
+// the future the row is treated as effectively-active so the inviter does not
+// suddenly lose visibility on day-of-deploy. Once the deadline passes (or if
+// the marker is missing for any reason) the row is treated as `pending` so no
+// data leaks if the nightly downgrade cron is delayed or fails.
+function effectiveFamilyStatus(row: {
+  status: FamilyMemberStatus;
+  legacyConfirmDeadline: Date | null;
+}): FamilyMemberStatus {
+  if (row.status === "active_legacy") {
+    if (!row.legacyConfirmDeadline) return "pending";
+    return row.legacyConfirmDeadline.getTime() > Date.now() ? "active_legacy" : "pending";
+  }
+  return row.status;
+}
+
+function isEffectivelyActiveFamilyMember(row: {
+  status: FamilyMemberStatus;
+  legacyConfirmDeadline: Date | null;
+}): boolean {
+  const eff = effectiveFamilyStatus(row);
+  return eff === "active" || eff === "active_legacy";
+}
+
+export interface PendingFamilyInvitation {
+  memberId: string;
+  familyId: string;
+  familyName: string;
+  inviterUserId: string;
+  inviterName: string;
+  role: FamilyRole;
+  invitedAt: Date;
+  // For active_legacy in-window: the user is asked to re-confirm before this.
+  // Null for fresh pending invites.
+  legacyConfirmDeadline: Date | null;
+  // True when this row was backfilled from before the explicit-accept rule.
+  isLegacyReconfirm: boolean;
+}
+
+// Anti-harassment cooldown after a decline: the same family cannot re-invite
+// the same phone within 24 hours.
+export const DECLINE_REINVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+// Backfill window: legacy rows have 21 days to re-confirm before they are
+// treated as pending and lose visibility.
+export const LEGACY_CONFIRM_WINDOW_DAYS = 21;
 import { addHours, startOfDay, format } from "date-fns";
 import { lte } from "drizzle-orm";
 
@@ -371,6 +418,22 @@ export interface IStorage {
   // Trip Points
   addTripPoint(data: { tripId: string; tripType: string; userId: string; lat: number; lng: number; speed?: number; activity?: string }): Promise<TripPoint>;
   getTripPoints(tripId: string, tripType: string): Promise<TripPoint[]>;
+
+  // ===== Family consent / membership (centralized authorization) =====
+  // The ONLY family helpers that callers should use for authorization or for
+  // exposing family data, presence, location, chat, schedules, places, or
+  // notifications. `getFamilyForUser` is retained for the invitations inbox
+  // path only and returns rows in any non-removed status.
+  getActiveFamilyForUser(userId: string): Promise<FamilyOverview>;
+  requireActiveFamilyMembership(userId: string, familyId: string): Promise<FamilyMember | { isAdmin: true }>;
+  getPendingInvitationsForUser(userId: string): Promise<PendingFamilyInvitation[]>;
+  acceptFamilyInvite(memberId: string, userId: string): Promise<FamilyMember>;
+  declineFamilyInvite(memberId: string, userId: string): Promise<FamilyMember>;
+  // Idempotent. Marks pre-consent rows as active_legacy (with a 21d deadline)
+  // and converts the old `invited` default to `pending`. Also downgrades any
+  // active_legacy whose deadline has passed to `pending` so visibility stops
+  // even if this is called between cron runs.
+  backfillFamilyConsent(): Promise<{ legacyMarked: number; pendingMarked: number; expiredDowngraded: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2889,42 +2952,59 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== Family Mode =====
-  // Returns the family the user belongs to (as admin or member) plus a hydrated
-  // member list with safety state. Pending invites for *this* user (matched by
-  // phone) are also auto-attached to their userId on read.
+  // INTERNAL helper. Returns the family the user belongs to (as admin or
+  // active/active_legacy/pending member) plus a hydrated member list. This is
+  // used by the Family page (which needs to show pending invitees to admins)
+  // and by `getActiveFamilyForUser` which wraps it with a strict filter.
+  // DO NOT use this directly for authorization or for exposing family data on
+  // any data route. Use `getActiveFamilyForUser` or
+  // `requireActiveFamilyMembership` instead.
+  //
+  // This helper auto-LINKS pending invites that match the caller's phone
+  // (sets userId on the row) but does NOT promote them to "active" — that
+  // requires an explicit accept via `acceptFamilyInvite`.
   async getFamilyForUser(userId: string): Promise<FamilyOverview> {
     const me = await this.getUser(userId);
     if (!me) return { family: null, isAdmin: false, members: [] };
 
     // Auto-link any pending invites that match my phone (so users see their
-    // family appear after they sign up).
+    // pending invites in the inbox after they sign up). Status stays
+    // "pending" until they explicitly accept.
     if (me.phone) {
       const linked = await db.update(familyMembers)
-        .set({ userId: me.id, status: "active", updatedAt: new Date() })
+        .set({ userId: me.id, updatedAt: new Date() })
         .where(and(
           eq(familyMembers.invitePhone, me.phone),
           isNull(familyMembers.userId),
+          // Only link rows that are still awaiting consent. Never resurrect
+          // declined or removed rows.
+          inArray(familyMembers.status, ["pending", "invited"]),
         ))
         .returning({ id: familyMembers.id });
       if (linked.length > 0) {
-        console.log(`[INVITE] Linked existing user to family (user:${me.id.slice(0, 8)}, ${linked.length} invite${linked.length === 1 ? "" : "s"})`);
+        console.log(`[INVITE] Linked existing user to ${linked.length} pending invite${linked.length === 1 ? "" : "s"} (user:${me.id.slice(0, 8)})`);
       }
     }
 
-    // Find a family I admin OR a family I'm a member of
+    // Find a family I admin OR a family where I have an effectively-active
+    // membership row. Pending-only membership does NOT confer family access;
+    // it goes through the invitations inbox path instead.
     const [adminedFam] = await db.select().from(families)
       .where(eq(families.adminUserId, userId)).limit(1);
 
     let family: Family | null = adminedFam ?? null;
     if (!family) {
-      const [memberRow] = await db.select().from(familyMembers)
+      const memberRows = await db.select().from(familyMembers)
         .where(and(
           eq(familyMembers.userId, userId),
           ne(familyMembers.status, "removed"),
-        )).limit(1);
-      if (memberRow) {
+          ne(familyMembers.status, "declined"),
+        ));
+      // Pick the first effectively-active membership, if any.
+      const activeMember = memberRows.find((r) => isEffectivelyActiveFamilyMember(r));
+      if (activeMember) {
         const [fam] = await db.select().from(families)
-          .where(eq(families.id, memberRow.familyId)).limit(1);
+          .where(eq(families.id, activeMember.familyId)).limit(1);
         family = fam ?? null;
       }
     }
@@ -2932,11 +3012,18 @@ export class DatabaseStorage implements IStorage {
     if (!family) return { family: null, isAdmin: false, members: [] };
 
     const isAdmin = family.adminUserId === userId;
-    const rows = await db.select().from(familyMembers)
+    // Admins see everyone (including pending) so they can manage invitations
+    // from the Family page. Non-admin members see only effectively-active
+    // members so pending invitees never appear in their member list.
+    const allRows = await db.select().from(familyMembers)
       .where(and(
         eq(familyMembers.familyId, family.id),
         ne(familyMembers.status, "removed"),
+        ne(familyMembers.status, "declined"),
       ));
+    const rows = isAdmin
+      ? allRows
+      : allRows.filter((r) => isEffectivelyActiveFamilyMember(r));
 
     // Apply the same sharing-mode redaction as for regular members so the
     // admin's own location respects their `paused`/`presence`/`area` choice.
@@ -3000,7 +3087,13 @@ export class DatabaseStorage implements IStorage {
       let timezone: string | null = null;
       let resolvedSharingMode: any = row.sharingMode;
 
-      if (row.userId) {
+      // CRITICAL CONSENT GATE: only effectively-active members hydrate any
+      // location, presence, or safety data. Pending and active_legacy-expired
+      // rows show only their invite name/phone so the inviter can manage the
+      // invitation, never their location or safety state.
+      const exposeMemberData = isEffectivelyActiveFamilyMember(row);
+
+      if (row.userId && exposeMemberData) {
         const u = await this.getUser(row.userId);
         if (u) {
           name = u.name || name;
@@ -3018,6 +3111,15 @@ export class DatabaseStorage implements IStorage {
           lastLat = memberLoc.lat;
           lastLng = memberLoc.lng;
         }
+      } else if (row.userId) {
+        // Pending invitee already has an account — show their display name so
+        // the inviter sees "Pending: Sarah Smith" instead of the raw invite
+        // name they typed. No location, no safety state, no presence.
+        const u = await this.getUser(row.userId);
+        if (u) {
+          name = u.name || name;
+          phone = u.phone || phone;
+        }
       }
 
       memberViews.push({
@@ -3026,8 +3128,10 @@ export class DatabaseStorage implements IStorage {
         name,
         nickname: row.nickname || null,
         phone,
+        // Surface the EFFECTIVE status to the UI so the client can render
+        // "Pending" for both fresh pending and expired active_legacy rows.
+        status: effectiveFamilyStatus(row) as FamilyMemberStatus,
         role: row.role as FamilyRole,
-        status: row.status as FamilyMemberStatus,
         sharingMode: resolvedSharingMode,
         parentalConsentRequired: row.parentalConsentRequired,
         parentalConsentGranted: row.parentalConsentGranted,
@@ -3043,6 +3147,215 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { family, isAdmin, members: memberViews };
+  }
+
+  // STRICT helper. Use this on every data route that exposes family info,
+  // location, presence, safety state, chat, places, schedules, panic, pulse,
+  // map payloads, watcher reports, geofence sharing, or notifications.
+  // Returns members in `active` or in-window `active_legacy` state only.
+  // Pending invitations never appear here.
+  async getActiveFamilyForUser(userId: string): Promise<FamilyOverview> {
+    const overview = await this.getFamilyForUser(userId);
+    return {
+      ...overview,
+      members: overview.members.filter(
+        (m) => m.status === "active" || m.status === "active_legacy" || m.isAdmin,
+      ),
+    };
+  }
+
+  // Throws on no-access. Returns the effectively-active member row, or
+  // `{ isAdmin: true }` when the caller is the family admin (admin doesn't
+  // have a family_members row of their own).
+  async requireActiveFamilyMembership(
+    userId: string,
+    familyId: string,
+  ): Promise<FamilyMember | { isAdmin: true }> {
+    const [fam] = await db.select().from(families).where(eq(families.id, familyId)).limit(1);
+    if (!fam) {
+      const e: any = new Error("family_not_found");
+      e.status = 404;
+      throw e;
+    }
+    if (fam.adminUserId === userId) return { isAdmin: true };
+
+    const [row] = await db.select().from(familyMembers)
+      .where(and(
+        eq(familyMembers.familyId, familyId),
+        eq(familyMembers.userId, userId),
+      ))
+      .limit(1);
+    if (!row || !isEffectivelyActiveFamilyMember(row)) {
+      const e: any = new Error("not_in_family");
+      e.status = 403;
+      throw e;
+    }
+    return row;
+  }
+
+  // Inbox helper. Returns minimal data — no family chat, no places, no map.
+  // Just enough for the invitee to recognize who invited them and decide.
+  // Auto-links pending invites that match the caller's phone (so newly
+  // signed-up users see their inbox immediately).
+  async getPendingInvitationsForUser(userId: string): Promise<PendingFamilyInvitation[]> {
+    const me = await this.getUser(userId);
+    if (!me) return [];
+
+    if (me.phone) {
+      await db.update(familyMembers)
+        .set({ userId: me.id, updatedAt: new Date() })
+        .where(and(
+          eq(familyMembers.invitePhone, me.phone),
+          isNull(familyMembers.userId),
+          inArray(familyMembers.status, ["pending", "invited"]),
+        ));
+    }
+
+    // STRICTLY pending invitations only. Per the locked Round 3 contract,
+    // /api/family/invitations is the inbox of invites awaiting the invitee's
+    // explicit accept. In-window active_legacy rows already have visibility
+    // and are surfaced through a separate re-confirm flow on the family
+    // overview, not through this endpoint, so the API contract stays
+    // unambiguous (pending = needs accept).
+    const rows = await db.select().from(familyMembers)
+      .where(and(
+        eq(familyMembers.userId, userId),
+        inArray(familyMembers.status, ["pending", "invited"]),
+      ));
+
+    const out: PendingFamilyInvitation[] = [];
+    for (const row of rows) {
+      const eff = effectiveFamilyStatus(row);
+      if (eff !== "pending") continue;
+      const [fam] = await db.select().from(families).where(eq(families.id, row.familyId)).limit(1);
+      if (!fam) continue;
+      const inviter = row.invitedBy ? await this.getUser(row.invitedBy) : null;
+      const adminUser = await this.getUser(fam.adminUserId);
+      out.push({
+        memberId: row.id,
+        familyId: fam.id,
+        familyName: fam.name,
+        inviterUserId: row.invitedBy || fam.adminUserId,
+        inviterName: inviter?.name || adminUser?.name || "A StillHere user",
+        role: row.role as FamilyRole,
+        invitedAt: row.invitedAt || row.createdAt,
+        legacyConfirmDeadline: row.legacyConfirmDeadline,
+        isLegacyReconfirm: row.status === "active_legacy",
+      });
+    }
+    return out;
+  }
+
+  // Single state-machine transition for the consent gate. The accept/decline
+  // routes are the ONLY callers that can move a row into `active` / `declined`
+  // through the consent flow. Admin PATCH /api/family/member/:id is no longer
+  // allowed to set status directly to `active`, `pending`, or `declined`.
+  async acceptFamilyInvite(memberId: string, userId: string): Promise<FamilyMember> {
+    const me = await this.getUser(userId);
+    if (!me) {
+      const e: any = new Error("not_authenticated"); e.status = 401; throw e;
+    }
+    const [row] = await db.select().from(familyMembers).where(eq(familyMembers.id, memberId)).limit(1);
+    if (!row) {
+      const e: any = new Error("invite_not_found"); e.status = 404; throw e;
+    }
+    // Auth: the row must already be linked to me, OR its invite phone must
+    // match my verified phone (we link it on accept in that case).
+    const myRow = row.userId === userId;
+    const myPhone = !!(me.phone && row.invitePhone && row.invitePhone === me.phone);
+    if (!myRow && !myPhone) {
+      const e: any = new Error("forbidden"); e.status = 403; throw e;
+    }
+    // Only pending or active_legacy can be accepted.
+    if (row.status !== "pending" && row.status !== "invited" && row.status !== "active_legacy") {
+      const e: any = new Error(`cannot_accept_status:${row.status}`); e.status = 409; throw e;
+    }
+    const [updated] = await db.update(familyMembers)
+      .set({
+        status: "active",
+        userId: userId,
+        acceptedAt: new Date(),
+        legacyConfirmDeadline: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(familyMembers.id, memberId))
+      .returning();
+    return updated;
+  }
+
+  async declineFamilyInvite(memberId: string, userId: string): Promise<FamilyMember> {
+    const me = await this.getUser(userId);
+    if (!me) {
+      const e: any = new Error("not_authenticated"); e.status = 401; throw e;
+    }
+    const [row] = await db.select().from(familyMembers).where(eq(familyMembers.id, memberId)).limit(1);
+    if (!row) {
+      const e: any = new Error("invite_not_found"); e.status = 404; throw e;
+    }
+    const myRow = row.userId === userId;
+    const myPhone = !!(me.phone && row.invitePhone && row.invitePhone === me.phone);
+    if (!myRow && !myPhone) {
+      const e: any = new Error("forbidden"); e.status = 403; throw e;
+    }
+    if (row.status !== "pending" && row.status !== "invited" && row.status !== "active_legacy") {
+      const e: any = new Error(`cannot_decline_status:${row.status}`); e.status = 409; throw e;
+    }
+    const [updated] = await db.update(familyMembers)
+      .set({
+        status: "declined",
+        userId: row.userId || userId,
+        declinedAt: new Date(),
+        legacyConfirmDeadline: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(familyMembers.id, memberId))
+      .returning();
+    return updated;
+  }
+
+  // One-shot, idempotent backfill run on server boot. Also doubles as the
+  // expiry sweeper for active_legacy rows whose deadline has passed.
+  async backfillFamilyConsent(): Promise<{ legacyMarked: number; pendingMarked: number; expiredDowngraded: number }> {
+    const deadline = new Date(Date.now() + LEGACY_CONFIRM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const now = new Date();
+
+    // 1) Pre-consent rows that were auto-active become active_legacy with a
+    //    21-day deadline. Pre-consent is identified by `acceptedAt IS NULL`,
+    //    which is the canonical marker (post-consent accept paths always set
+    //    acceptedAt). Idempotent and safe across reboots: post-consent
+    //    members keep `status="active"` because they have acceptedAt set.
+    const legacyMarked = await db.update(familyMembers)
+      .set({ status: "active_legacy", legacyConfirmDeadline: deadline, updatedAt: now })
+      .where(and(
+        eq(familyMembers.status, "active"),
+        isNull(familyMembers.acceptedAt),
+      ))
+      .returning({ id: familyMembers.id });
+
+    // 2) Old "invited" rows (no account yet) become "pending" so the new
+    //    accept/decline UI handles them uniformly.
+    const pendingMarked = await db.update(familyMembers)
+      .set({ status: "pending", invitedAt: now, updatedAt: now })
+      .where(eq(familyMembers.status, "invited"))
+      .returning({ id: familyMembers.id });
+
+    // 3) Expiry sweep: any active_legacy whose deadline has passed is
+    //    downgraded to pending so visibility stops. The helper layer also
+    //    treats expired active_legacy as pending in real-time, so this is
+    //    cleanup, not a security boundary.
+    const expiredDowngraded = await db.update(familyMembers)
+      .set({ status: "pending", legacyConfirmDeadline: null, updatedAt: now })
+      .where(and(
+        eq(familyMembers.status, "active_legacy"),
+        lte(familyMembers.legacyConfirmDeadline, now),
+      ))
+      .returning({ id: familyMembers.id });
+
+    return {
+      legacyMarked: legacyMarked.length,
+      pendingMarked: pendingMarked.length,
+      expiredDowngraded: expiredDowngraded.length,
+    };
   }
 
   async createFamily(adminUserId: string, name: string): Promise<Family> {
@@ -3068,31 +3381,58 @@ export class DatabaseStorage implements IStorage {
       throw new Error("role_not_supported: teen/child roles are not allowed in v1");
     }
     // Dedupe: if this phone (or its linked user) is already a non-removed
-    // member of this family, return the existing row instead of inserting a
-    // duplicate. Prevents repeat-click SMS spam and duplicate cards.
+    // and non-declined member of this family, return the existing row instead
+    // of inserting a duplicate. Prevents repeat-click SMS spam and duplicate
+    // cards. Declined rows are checked separately for the 24h cooldown.
     const existing = await this.getUserByPhone(params.phone);
-    const dupes = await db.select().from(familyMembers).where(
+    const allRows = await db.select().from(familyMembers).where(
       and(
         eq(familyMembers.familyId, params.familyId),
         ne(familyMembers.status, "removed"),
       ),
     );
-    const existingDup = dupes.find(
-      (m) => m.invitePhone === params.phone || (existing && m.userId === existing.id),
+
+    // Anti-harassment cooldown: if the same phone declined an invite from
+    // this family within the last 24h, refuse the new invite.
+    const declinedRecently = allRows.find(
+      (m) =>
+        m.status === "declined" &&
+        (m.invitePhone === params.phone || (existing && m.userId === existing.id)) &&
+        m.declinedAt &&
+        Date.now() - m.declinedAt.getTime() < DECLINE_REINVITE_COOLDOWN_MS,
+    );
+    if (declinedRecently) {
+      const e: any = new Error("decline_cooldown");
+      e.status = 429;
+      e.retryAfterMs =
+        DECLINE_REINVITE_COOLDOWN_MS - (Date.now() - declinedRecently.declinedAt!.getTime());
+      throw e;
+    }
+
+    // Dedupe (only against non-declined rows).
+    const existingDup = allRows.find(
+      (m) =>
+        m.status !== "declined" &&
+        (m.invitePhone === params.phone || (existing && m.userId === existing.id)),
     );
     if (existingDup) return existingDup;
 
+    // Consent fix: ALWAYS create as `pending`, even when the invitee already
+    // has a StillHere account. The invitee must explicitly accept via the
+    // invitations inbox before any of their family/safety/location data is
+    // exposed to the inviter.
     const [row] = await db.insert(familyMembers).values({
       familyId: params.familyId,
       userId: existing?.id || null,
       invitePhone: params.phone,
       inviteName: params.name,
       role: params.role,
-      status: existing ? "active" : "invited",
+      status: "pending",
       sharingMode: "precise",
       parentalConsentRequired: params.parentalConsentRequired,
       parentalConsentGranted: !params.parentalConsentRequired,
       invitedBy: params.invitedBy,
+      invitedAt: new Date(),
     }).returning();
     return row;
   }
@@ -3115,6 +3455,18 @@ export class DatabaseStorage implements IStorage {
     // just can't be re-saved as teen/child or freshly assigned that role.
     if (updates.role === "teen" || updates.role === "child") {
       throw new Error("role_not_supported: teen/child roles are not allowed in v1");
+    }
+    // Consent fix: status transitions through the consent state machine
+    // (`pending` ↔ `active` ↔ `declined` ↔ `active_legacy`) MUST go through
+    // `acceptFamilyInvite`, `declineFamilyInvite`, `removeFamilyMember`, or
+    // the backfill helper. Admin PATCH may only `paused` an active member or
+    // unpause back to `active`. Direct writes to consent states are blocked
+    // here as defense-in-depth even if a route forgets the guard.
+    if (updates.status !== undefined) {
+      const allowed = new Set(["active", "paused"]);
+      if (!allowed.has(updates.status)) {
+        throw new Error(`status_transition_not_allowed:${updates.status}`);
+      }
     }
     const [row] = await db.update(familyMembers)
       .set({ ...updates, updatedAt: new Date() })
@@ -3162,11 +3514,20 @@ export class DatabaseStorage implements IStorage {
     return rows.reverse(); // oldest first for chat display
   }
 
-  // Active member user-ids for a family - used to fan out socket events.
+  // Active member user-ids for a family - used to fan out socket events,
+  // push notifications, and chat broadcasts. Includes effectively-active
+  // members (active + in-window active_legacy). Pending and expired-legacy
+  // members never receive family broadcasts.
   async getActiveFamilyUserIds(familyId: string): Promise<string[]> {
-    const rows = await db.select({ userId: familyMembers.userId }).from(familyMembers)
-      .where(and(eq(familyMembers.familyId, familyId), eq(familyMembers.status, "active")));
-    return rows.map(r => r.userId).filter((u): u is string => !!u);
+    const rows = await db.select().from(familyMembers)
+      .where(and(
+        eq(familyMembers.familyId, familyId),
+        inArray(familyMembers.status, ["active", "active_legacy"]),
+      ));
+    return rows
+      .filter((r) => isEffectivelyActiveFamilyMember(r))
+      .map((r) => r.userId)
+      .filter((u): u is string => !!u);
   }
 
   // ---- Family Places (Home / School / Work) ----

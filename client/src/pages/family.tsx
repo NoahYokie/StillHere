@@ -73,7 +73,12 @@ function initials(name: string): string {
 }
 
 function safetyTone(m: FamilyMemberView): { label: string; dot: string; tone: string } {
-  if (m.status === "invited") return { label: "Invited", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
+  if (m.status === "pending" || m.status === "invited") {
+    return { label: "Awaiting accept", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
+  }
+  if (m.status === "declined") {
+    return { label: "Declined", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
+  }
   if (m.status === "paused") return { label: "Paused", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
   if (m.hasActiveIncident || m.safetyState === "concern") {
     return { label: "Needs help", dot: "bg-destructive animate-pulse", tone: "text-destructive" };
@@ -92,6 +97,21 @@ function safetyTone(m: FamilyMemberView): { label: string; dot: string; tone: st
 }
 
 type FamilyMessageWithSender = FamilyMessage & { senderName: string | null };
+
+// Pending invitation surfaced by GET /api/family/invitations. Mirrors the
+// PendingFamilyInvitation interface in server/storage.ts (kept inline here to
+// avoid leaking server-only types to the client bundle).
+interface PendingInvitation {
+  memberId: string;
+  familyId: string;
+  familyName: string;
+  inviterUserId: string;
+  inviterName: string;
+  role: "admin" | "adult" | "teen" | "child";
+  invitedAt: string;
+  legacyConfirmDeadline: string | null;
+  isLegacyReconfirm: boolean;
+}
 
 export default function FamilyPage() {
   const [, setLocation] = useLocation();
@@ -127,14 +147,54 @@ export default function FamilyPage() {
   const [inviteForm, setInviteForm] = useState({ name: "", phone: "", role: "adult" });
   const inviteMutation = useMutation({
     mutationFn: async (body: any) => apiRequest("POST", "/api/family/invite", body),
-    onSuccess: () => {
+    onSuccess: (_data, vars: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/family"] });
-      toast({ title: "Invite sent", description: "They'll get an SMS to join." });
+      const firstName = (vars?.name || "They").split(" ")[0] || "They";
+      toast({
+        title: "Invite sent",
+        description: `${firstName} will need to accept before you can see their safety status or location.`,
+      });
       setShowInvite(false);
       setInviteForm({ name: "", phone: "", role: "adult" });
     },
+    onError: (e: any) => {
+      // The 24h decline cooldown is the most common rejection - show the
+      // friendly message rather than a generic failure.
+      const msg = e?.message?.includes("decline_cooldown") || e?.message?.includes("recent invite")
+        ? "This person declined a recent invite. You can re-invite them after 24 hours."
+        : e?.message || "Try again";
+      toast({ title: "Invite failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  // ---- Invitations inbox (consent gate) ----
+  const { data: invitationsData } = useQuery<{ invitations: PendingInvitation[] }>({
+    queryKey: ["/api/family/invitations"],
+    refetchInterval: 60_000,
+  });
+  const invitations = invitationsData?.invitations ?? [];
+
+  const acceptInviteMutation = useMutation({
+    mutationFn: async (memberId: string) =>
+      apiRequest("POST", `/api/family/invite/${memberId}/accept`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/family/invitations"] });
+      toast({ title: "Joined family", description: "You're now part of the family safety circle." });
+    },
     onError: (e: any) =>
-      toast({ title: "Invite failed", description: e?.message || "Try again", variant: "destructive" }),
+      toast({ title: "Could not accept", description: e?.message || "Try again", variant: "destructive" }),
+  });
+
+  const declineInviteMutation = useMutation({
+    mutationFn: async (memberId: string) =>
+      apiRequest("POST", `/api/family/invite/${memberId}/decline`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/family/invitations"] });
+      toast({ title: "Invite declined" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Could not decline", description: e?.message || "Try again", variant: "destructive" }),
   });
 
   const removeMutation = useMutation({
@@ -345,7 +405,7 @@ export default function FamilyPage() {
 
   const mapPeople: MapPerson[] = useMemo(() => {
     const fromMembers = members
-      .filter((m) => m.lastLat != null && m.lastLng != null && m.status === "active")
+      .filter((m) => m.lastLat != null && m.lastLng != null && (m.status === "active" || m.status === "active_legacy"))
       .map((m) => ({
         id: m.id,
         name: m.name + (m.userId === myUserId ? " (You)" : ""),
@@ -566,6 +626,64 @@ export default function FamilyPage() {
     );
   }
 
+  // Reusable invitation cards. Rendered above both the empty-state landing
+  // (so a brand-new user with a pending invite sees it immediately on first
+  // load) and the in-family header (so multi-family users can accept other
+  // invites without leaving the page).
+  const renderInvitations = () => {
+    if (invitations.length === 0) return null;
+    return (
+      <div className="space-y-2" data-testid="invitations-banner">
+        {invitations.map((inv) => (
+          <Card key={inv.memberId} data-testid={`card-invitation-${inv.memberId}`}>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <UserPlus className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium" data-testid={`text-invitation-title-${inv.memberId}`}>
+                    {inv.isLegacyReconfirm ? "Re-confirm" : "Family invite"}: {inv.familyName}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {inv.inviterName} invited you. They will not see your safety status or location until you accept.
+                  </p>
+                  {inv.isLegacyReconfirm && inv.legacyConfirmDeadline && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                      Please confirm by {new Date(inv.legacyConfirmDeadline).toLocaleDateString()}.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  disabled={acceptInviteMutation.isPending}
+                  onClick={() => acceptInviteMutation.mutate(inv.memberId)}
+                  data-testid={`button-accept-invitation-${inv.memberId}`}
+                >
+                  {acceptInviteMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={declineInviteMutation.isPending}
+                  onClick={() => declineInviteMutation.mutate(inv.memberId)}
+                  data-testid={`button-decline-invitation-${inv.memberId}`}
+                >
+                  Decline
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
   // No family yet - simple create screen
   if (!family) {
     return (
@@ -574,7 +692,8 @@ export default function FamilyPage() {
           <BackButton to="/" />
           <h1 className="text-lg font-bold">Family</h1>
         </header>
-        <div className="px-4 py-8 max-w-md mx-auto">
+        <div className="px-4 py-8 max-w-md mx-auto space-y-4">
+          {renderInvitations()}
           <Card>
             <CardContent className="p-6 space-y-4 text-center">
               <div className="w-16 h-16 rounded-full bg-primary/10 mx-auto flex items-center justify-center">
@@ -632,7 +751,12 @@ export default function FamilyPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold truncate" data-testid="text-family-name">{family.name}</h1>
           <p className="text-xs text-muted-foreground">
-            {members.filter((m) => m.status === "active").length} members
+            {members.filter((m) => m.status === "active" || m.status === "active_legacy").length} members
+            {members.some((m) => m.status === "pending") && (
+              <span className="ml-1">
+                · {members.filter((m) => m.status === "pending").length} awaiting accept
+              </span>
+            )}
           </p>
         </div>
         {isAdmin && (
@@ -670,6 +794,19 @@ export default function FamilyPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Round 3 consent disclosure: make the opt-in explicit at
+                    invite time. The same wording is repeated in the SMS body
+                    and in the post-send toast for consistency. */}
+                <div
+                  className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground flex gap-2"
+                  data-testid="text-invite-disclosure"
+                >
+                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
+                  <span>
+                    {(inviteForm.name.trim().split(" ")[0] || "They")} will need to accept before
+                    you can see their safety status or location. They can decline at any time.
+                  </span>
+                </div>
               </div>
               <DialogFooter>
                 <Button
@@ -688,6 +825,10 @@ export default function FamilyPage() {
           </Dialog>
         )}
       </header>
+
+      {invitations.length > 0 && (
+        <div className="px-4 pt-3">{renderInvitations()}</div>
+      )}
 
       {/* Member chip rail - tap to zoom on a member, "All" to see everyone */}
       {mapPeople.length > 0 && (

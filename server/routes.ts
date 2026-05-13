@@ -4709,7 +4709,7 @@ export async function registerRoutes(
       }
 
       // ---- Family Saved Places: detect arrivals/departures and post to family chat ----
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       const placeArrivals: { name: string; icon: string }[] = [];
       const placeDepartures: { name: string; icon: string }[] = [];
       if (overview.family) {
@@ -7490,7 +7490,7 @@ export async function registerRoutes(
 
           // Cache per-family lookups so we don't re-fetch the same family N times.
           const placesCache = new Map<string, Awaited<ReturnType<typeof storage.getFamilyPlaces>>>();
-          const overviewCache = new Map<string, Awaited<ReturnType<typeof storage.getFamilyForUser>>>();
+          const overviewCache = new Map<string, Awaited<ReturnType<typeof storage.getActiveFamilyForUser>>>();
 
           for (const s of schedules) {
             try {
@@ -7520,7 +7520,7 @@ export async function registerRoutes(
                 // findFirst userId in the family for the lookup
                 const recipients = await storage.getActiveFamilyUserIds(s.familyId);
                 if (recipients.length === 0) continue;
-                overview = await storage.getFamilyForUser(recipients[0]);
+                overview = await storage.getActiveFamilyForUser(recipients[0]);
                 overviewCache.set(s.familyId, overview);
               }
               if (!overview?.family) continue;
@@ -7673,6 +7673,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      // Use the inclusive helper so admins see pending invitees in their
+      // member list (so they can manage them). Non-admin members still only
+      // see effectively-active members because getFamilyForUser filters its
+      // member list for non-admins.
       const overview = await storage.getFamilyForUser(userId);
       res.json(overview);
     } catch (e) {
@@ -7688,7 +7692,7 @@ export async function registerRoutes(
       const name = (req.body?.name || "").toString().trim();
       if (!name) return res.status(400).json({ error: "Family name is required" });
       // Prevent duplicate family per admin
-      const existing = await storage.getFamilyForUser(userId);
+      const existing = await storage.getActiveFamilyForUser(userId);
       if (existing.family) return res.status(409).json({ error: "You already belong to a family" });
       const family = await storage.createFamily(userId, name);
       res.json({ family });
@@ -7702,7 +7706,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
       if (!overview.isAdmin) return res.status(403).json({ error: "Only the family admin can invite" });
 
@@ -7731,24 +7735,25 @@ export async function registerRoutes(
         parentalConsentRequired: false,
       });
 
-      // Send the SMS invite (best-effort  -  does not block the API response).
-      // Dedupe by phone within a 5-minute window so repeat clicks don't spam.
-      const maskedPhone = `***${phone.slice(-4)}`;
+      // Send the SMS invite (best-effort - does not block the API response).
+      // Dedupe is enforced server-wide by the outbound policy (Category-A:
+      // 30-minute per-destination cooldown + per-user/IP hourly + daily caps).
+      // Phone numbers are PII - they are NEVER logged here, only the family
+      // id and policy result are. Use family_id + outbound logs in the DB to
+      // diagnose specific destinations.
       let deduped = false;
       try {
           const inviter = await storage.getUser(userId);
           const inviterName = inviter?.name || "Someone you trust";
           const baseUrl = getBaseUrl();
           const existingUser = await storage.getUserByPhone(phone);
+          // Consent disclosure (Round 3 plan): make it explicit to the
+          // invitee that joining is opt-in. Inviter cannot see safety or
+          // location until the invitee accepts in-app.
           const body = existingUser
-            ? `${inviterName} added you to their StillHere Family.\nOpen the app to view and accept.`
-            : `${inviterName} added you to their StillHere Family for safety.\nJoin here: ${baseUrl}\nYou'll be able to share safety updates and stay connected.`;
+            ? `${inviterName} invited you to their StillHere Family. Open the app to accept or decline. They will not see your safety status or location until you accept.`
+            : `${inviterName} invited you to their StillHere Family. Join and accept here: ${baseUrl} They will not see your safety status or location until you accept.`;
           if (isTwilioConfigured()) {
-            // The outbound policy enforces per-user/IP/destination Category-A
-            // limits AND a 30-minute per-destination cooldown for family
-            // invites. We await the result so we can return `deduped:true`
-            // to the client (matching the previous in-mem cache contract)
-            // when the policy soft-skips a repeat invite.
             const inviteResult = await sendSms(phone, body, {
               purpose: "family_invite",
               userId,
@@ -7756,24 +7761,93 @@ export async function registerRoutes(
               dedupeKey: `family_invite:${overview.family.id}:${phone}`,
             });
             if (inviteResult.success) {
-              console.log(`[INVITE] SMS sent to ${maskedPhone}`);
+              console.log(`[INVITE] SMS sent (family:${overview.family.id.slice(0, 8)})`);
             } else if (inviteResult.error?.startsWith("policy:")) {
               deduped = true;
-              console.log(`[INVITE] SMS suppressed by policy (${inviteResult.error}) ${maskedPhone}`);
+              console.log(`[INVITE] SMS suppressed by policy (${inviteResult.error}) family:${overview.family.id.slice(0, 8)}`);
             } else {
-              console.warn(`[INVITE] SMS send failed ${maskedPhone}: ${inviteResult.error}`);
+              console.warn(`[INVITE] SMS send failed family:${overview.family.id.slice(0, 8)}: ${inviteResult.error}`);
             }
           } else {
-            console.warn(`[INVITE] SMS skipped (Twilio not configured) ${maskedPhone}`);
+            console.warn(`[INVITE] SMS skipped (Twilio not configured) family:${overview.family.id.slice(0, 8)}`);
           }
       } catch (smsErr: any) {
         console.warn("[INVITE] SMS prep failed:", smsErr?.message || "unknown");
       }
 
       res.json({ member, deduped });
-    } catch (e) {
+    } catch (e: any) {
+      // Surface the 24h decline cooldown so the client can show a clear
+      // message instead of a generic 500. Phone is never echoed back.
+      if (e?.message === "decline_cooldown") {
+        const retryAfterSec = Math.ceil((e.retryAfterMs || 24 * 60 * 60 * 1000) / 1000);
+        return res.status(429).json({
+          error: "decline_cooldown",
+          message: "This person declined a recent invite. You can re-invite them after 24 hours.",
+          retryAfter: retryAfterSec,
+        });
+      }
       console.error("[family] invite failed", e);
       res.status(500).json({ error: "Failed to invite member" });
+    }
+  });
+
+  // ----- Invitations inbox + accept / decline (consent gate) -----
+
+  app.get("/api/family/invitations", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const invitations = await storage.getPendingInvitationsForUser(userId);
+      res.json({ invitations });
+    } catch (e) {
+      console.error("[family] invitations list failed", e);
+      res.status(500).json({ error: "Failed to load invitations" });
+    }
+  });
+
+  app.post("/api/family/invite/:memberId/accept", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const memberId = req.params.memberId;
+      const updated = await storage.acceptFamilyInvite(memberId, userId);
+      // Notify the inviter that the invite was accepted. Decline is
+      // intentionally silent (anti-harassment rule).
+      try {
+        const family = await storage.getActiveFamilyForUser(userId);
+        const me = await storage.getUser(userId);
+        const inviterId = updated.invitedBy || family.family?.adminUserId;
+        if (inviterId && inviterId !== userId) {
+          await sendPushNotification(inviterId, {
+            title: "Family invite accepted",
+            body: `${me?.name || "Someone"} accepted your StillHere Family invite.`,
+            url: "/family",
+            tag: `family-accept:${updated.id}`,
+          }).catch(() => {});
+          emitToUser(inviterId, "family:invite:accepted", { memberId: updated.id });
+        }
+      } catch {}
+      res.json({ member: updated });
+    } catch (e: any) {
+      const status = e?.status || 500;
+      if (status >= 500) console.error("[family] invite accept failed", e);
+      res.status(status).json({ error: e?.message || "Failed to accept invite" });
+    }
+  });
+
+  app.post("/api/family/invite/:memberId/decline", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const memberId = req.params.memberId;
+      const updated = await storage.declineFamilyInvite(memberId, userId);
+      // No notification to inviter (anti-harassment).
+      res.json({ member: updated });
+    } catch (e: any) {
+      const status = e?.status || 500;
+      if (status >= 500) console.error("[family] invite decline failed", e);
+      res.status(status).json({ error: e?.message || "Failed to decline invite" });
     }
   });
 
@@ -7794,12 +7868,12 @@ export async function registerRoutes(
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       await storage.stopLiveLocationShare(userId);
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       const me = await storage.getUser(userId);
       const myName = me?.name || "A family member";
       if (overview.family) {
         const recipients = overview.members.filter(
-          (m) => m.userId && m.userId !== userId && m.status === "active",
+          (m) => m.userId && m.userId !== userId && (m.status === "active" || m.status === "active_legacy"),
         );
         for (const r of recipients) {
           try {
@@ -7861,7 +7935,7 @@ export async function registerRoutes(
       }
       familyShareCooldown.set(userId, now);
 
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
 
       // Tracking-policy gate: this is a foreground "watch me" share button.
@@ -7898,7 +7972,7 @@ export async function registerRoutes(
       const myName = me?.name || "A family member";
       const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
       const recipients = overview.members.filter(
-        (m) => m.userId && m.userId !== userId && m.status === "active",
+        (m) => m.userId && m.userId !== userId && (m.status === "active" || m.status === "active_legacy"),
       );
       const durationLabel =
         durationMinutes >= 60
@@ -7956,7 +8030,7 @@ export async function registerRoutes(
       const member = await storage.getFamilyMember(memberId);
       if (!member) return res.status(404).json({ error: "Member not found" });
 
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family || overview.family.id !== member.familyId) {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -8007,8 +8081,30 @@ export async function registerRoutes(
       }
       if (req.body?.status !== undefined) {
         if (!isAdmin) return res.status(403).json({ error: "Admin only" });
-        if (!["active", "invited", "paused", "removed"].includes(req.body.status)) {
-          return res.status(400).json({ error: "Invalid status" });
+        // Consent state machine: admin PATCH may only pause an active member
+        // or unpause back to active. Transitions involving pending /
+        // active_legacy / declined go through the dedicated invite/accept/
+        // decline endpoints. Removal goes through DELETE /api/family/member.
+        if (!["active", "paused"].includes(req.body.status)) {
+          return res.status(400).json({
+            error: "status_transition_not_allowed",
+            message: "Use the accept, decline, or remove actions for this change.",
+          });
+        }
+        // Defense-in-depth: do not allow an admin PATCH to bypass the consent
+        // gate by flipping a pending / declined / active_legacy row directly
+        // to active. active_legacy specifically must go through the invitee's
+        // explicit accept (or expire to pending) before becoming active.
+        if (
+          member.status === "pending" ||
+          member.status === "invited" ||
+          member.status === "declined" ||
+          member.status === "active_legacy"
+        ) {
+          return res.status(409).json({
+            error: "status_transition_not_allowed",
+            message: "This invitation is awaiting the invitee's response.",
+          });
         }
         updates.status = req.body.status;
       }
@@ -8053,7 +8149,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.json({ messages: [] });
       const messages = await storage.getFamilyMessages(overview.family.id, 200);
       // Hydrate sender names without N+1 surprises - small N here.
@@ -8082,7 +8178,7 @@ export async function registerRoutes(
       const body = (req.body?.body || "").toString().trim();
       if (!body) return res.status(400).json({ error: "Message cannot be empty" });
       if (body.length > 2000) return res.status(400).json({ error: "Message too long" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
 
       const msg = await storage.saveFamilyMessage({
@@ -8109,7 +8205,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
       const me = await storage.getUser(userId);
       const myName = me?.name || "Family member";
@@ -8153,7 +8249,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
       const me = await storage.getUser(userId);
       const myName = me?.name || "Family member";
@@ -8210,7 +8306,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "No family to close" });
       if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can close the family" });
       const recipients = await storage.getActiveFamilyUserIds(overview.family.id);
@@ -8228,7 +8324,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.json({ places: [] });
       const places = await storage.getFamilyPlaces(overview.family.id);
       res.json({ places });
@@ -8242,7 +8338,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
 
       const name = (req.body?.name || "").toString().trim().slice(0, 60);
@@ -8270,7 +8366,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "No family" });
       // Only admin can delete shared places (kept simple, mirrors close-family rule)
       if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can delete places" });
@@ -8289,7 +8385,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.json({ schedules: [] });
       const schedules = await storage.getFamilyPlaceSchedules(overview.family.id);
       res.json({ schedules });
@@ -8303,7 +8399,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "Create a family first" });
       if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can set place schedules" });
 
@@ -8357,7 +8453,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return res.status(404).json({ error: "No family" });
       if (!overview.isAdmin) return res.status(403).json({ error: "Only admin can remove schedules" });
       await storage.deleteFamilyPlaceSchedule(req.params.scheduleId, overview.family.id);
@@ -8376,7 +8472,7 @@ export async function registerRoutes(
       const member = await storage.getFamilyMember(memberId);
       if (!member) return res.status(404).json({ error: "Member not found" });
 
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family || overview.family.id !== member.familyId) {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -8417,7 +8513,7 @@ async function broadcastToFamily(
     if (prefetched) {
       ({ familyId, senderName, recipients } = prefetched);
     } else {
-      const overview = await storage.getFamilyForUser(userId);
+      const overview = await storage.getActiveFamilyForUser(userId);
       if (!overview.family) return;
       familyId = overview.family.id;
       const me = await storage.getUser(userId);
