@@ -433,6 +433,20 @@ function determineFocusTarget(people: MapPerson[], focusOverride?: string | null
 
 const activeAnimations = new WeakMap<google.maps.marker.AdvancedMarkerElement, number>();
 
+function personVisualSignature(p: MapPerson): string {
+  return [
+    p.activity ?? "",
+    p.safetyState ?? "",
+    p.hasSafetyEvent ? 1 : 0,
+    p.isMe ? 1 : 0,
+    p.name,
+    (p.groupedNames || []).join("|"),
+    p.incidentReason ?? "",
+    p.safetyStateReason ?? "",
+  ].join("\u0001");
+}
+const personSignatures = new WeakMap<google.maps.marker.AdvancedMarkerElement, string>();
+
 function animateMarkerPosition(
   marker: google.maps.marker.AdvancedMarkerElement,
   from: { lat: number; lng: number },
@@ -698,7 +712,11 @@ export default function GoogleMapComponent({
           } else {
             existing.position = newPos;
           }
-          existing.content = createPersonMarker(person);
+          const sig = personVisualSignature(person);
+          if (personSignatures.get(existing) !== sig) {
+            existing.content = createPersonMarker(person);
+            personSignatures.set(existing, sig);
+          }
         } else {
           const marker = new google.maps.marker.AdvancedMarkerElement({
             map,
@@ -707,6 +725,7 @@ export default function GoogleMapComponent({
             title: person.name,
             zIndex: person.isMe ? 1000 : 0,
           });
+          personSignatures.set(marker, personVisualSignature(person));
 
           const personId = person.id;
           marker.addListener("click", () => {
