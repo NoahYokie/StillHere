@@ -1,0 +1,53 @@
+Send this to Replit:
+
+  To Replit Agent:
+
+  Batch 5b.2 accepted and complete.
+
+  Next: SEO audit and improvement plan. Discussion only first. Do not write code yet.
+
+  Context:
+  The SEO score shown to the founder was 69/100, marked “Needs work.” We want to improve SEO, App Store/web trust, and conversion
+  without reintroducing risky safety claims that we just removed.
+
+  Goal:
+  Make StillHere easier to understand and rank for the right searches while staying legally and App Review safe.
+
+  Important copy rules:
+  1. Do not use guaranteed safety language.
+  2. Do not say StillHere is an emergency response service.
+  3. Do not say it dispatches police, ambulance, rescue, or medical help.
+  4. Avoid “always watched”, “always protected”, “guaranteed”, “life-saving”, “detects every fall/crash”, or similar claims.
+  5. Prefer “check-ins”, “Safety Circle”, “trusted contacts”, “missed check-ins”, “SOS alerts”, “Safe Walk”, “Drive Safety”,
+  “weekly safety reports”, “Apple Watch heart-rate opt-in”, and “best-effort alerts”.
+  6. Keep it premium and clear. We do not want average generic SEO stuffing.
+
+  Audit these surfaces:
+  - client/index.html
+  - landing page SEO-visible headings and copy
+  - meta title and description
+  - Open Graph / Twitter tags
+  - canonical URL if present
+  - robots/indexability basics
+  - sitemap/robots files if present
+  - structured data opportunities, if safe
+  - heading hierarchy on landing page
+  - image alt text on landing page, if any
+  - app install / trust pages if they affect public SEO
+  - any public route that search engines can crawl
+
+  Return:
+  1. Current SEO issues found, with file/line.
+  2. Which issues likely caused the 69/100 score.
+  3. Recommended fixes grouped as:
+     - Must fix
+     - Should fix
+     - Optional
+  4. Exact proposed title and meta description.
+  5. Proposed Open Graph/Twitter copy.
+  6. Whether to add JSON-LD structured data, and if yes, exact safe schema type and fields.
+  7. Any risky current SEO copy that should be softened.
+  8. Any technical SEO risks specific to a React/Vite app on Replit.
+  9. Test plan after implementation.
+
+  Do not write code until we agree on the fix list.
