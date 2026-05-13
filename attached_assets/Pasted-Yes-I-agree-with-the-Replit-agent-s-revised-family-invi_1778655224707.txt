@@ -1,0 +1,59 @@
+Yes, I agree with the Replit agent’s revised family invite plan. It fixes the core issue: pending invitees must not become
+  invisible “active” family members through old getFamilyForUser paths.
+
+  Send this back:
+
+  I agree with the centralized-helper approach.
+
+  The key requirement is that getFamilyForUser must stop being used as an authorization boundary. Every route that exposes family
+  data, location, presence, safety state, reports, chat, panic, schedules, places, maps, watcher notifications, and incident flows
+  should use requireActiveFamilyMembership or getActiveFamilyForUser.
+
+  A pending invite should only be visible in the invite inbox and inviter pending-invites UI. It must not grant map access, live
+  location, safety status, chat, notifications, geofence alerts, reports, or watcher powers.
+
+  I agree with 21 days for active_legacy. After the deadline, downgrade to pending, not removed. Pending is better because it stops
+  sharing immediately but preserves the relationship so the user can confirm later.
+
+  Yes, add the inviter-side disclosure:
+  "[Invitee] will need to accept before you can see their safety status or location."
+
+  One addition: make active_legacy time-bound in the helper itself, not just in UI. If legacyConfirmDeadline has passed,
+  getActiveFamilyForUser and requireActiveFamilyMembership must treat it as non-active even if the database row still says
+  active_legacy. That prevents missed cron/backfill timing from leaking location.
+
+  Also add a negative test for expired active_legacy:
+  expired active_legacy user does not appear in /api/live-location/watching and cannot access family chat.
+
+  Everything else looks right. Implement in the order listed.
+
+  For the next phone-call problem: I recommend using Twilio Answering Machine Detection, assuming StillHere is using Twilio or can
+  route calls through it.
+
+  Best setup:
+
+  - Use MachineDetection=DetectMessageEnd
+  - Use AsyncAmd=true if you want humans to hear the check-in immediately without awkward silence
+  - Add AsyncAmdStatusCallback
+  - If callback returns human, continue the normal check-in flow
+  - If callback returns machine_end_beep, machine_end_silence, or machine_end_other, update the call to play a short voicemail
+    message
+  - If callback returns unknown, use a conservative fallback: either leave a generic voicemail or mark as “no confirmed answer” and
+    trigger SMS/push follow-up
+
+  Important product recommendation: do not treat voicemail as a successful check-in. A voicemail means StillHere reached the phone
+  line, not the person. The safety state should be something like:
+
+  - answered_human: successful check-in attempt
+  - voicemail_left: not answered, voicemail delivered
+  - no_answer: no pickup
+  - failed: carrier/network failure
+  - unknown_answer_type: detection uncertain
+
+  Voicemail copy should be calm and privacy-safe, for example:
+
+  Hi, this is StillHere calling for your scheduled check-in. We could not reach you directly. Please open StillHere or reply to
+  your check-in as soon as you can.
+
+  Avoid saying sensitive things like “safety alert,” “panic,” “family is watching,” or medical details in voicemail, because
+  someone else may hear it.
