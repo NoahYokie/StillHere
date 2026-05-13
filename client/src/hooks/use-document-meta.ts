@@ -28,7 +28,7 @@ export function useDocumentMeta({ title, description, noindex }: DocumentMeta): 
 
     if (title) document.title = title;
     if (description) setMeta("description", description);
-    if (noindex) setMeta("robots", "noindex, nofollow");
+    if (noindex) setMeta("robots", "noindex, nofollow, noarchive, nosnippet");
 
     return () => {
       document.title = prevTitle;
