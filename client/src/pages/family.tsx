@@ -45,7 +45,7 @@ const PLACE_LABELS: { value: string; label: string }[] = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
-  admin: "Organizer", adult: "Member", teen: "Member", child: "Member",
+  admin: "Admin", adult: "Member", teen: "Member", child: "Member",
 };
 
 // Day-of-week labels (0 = Sunday) used in schedule UI
@@ -651,7 +651,7 @@ export default function FamilyPage() {
                     <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="adult">Member</SelectItem>
-                      <SelectItem value="admin">Organizer</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -884,7 +884,7 @@ export default function FamilyPage() {
                       </span>
                       {isMemberAdmin && (
                         <Badge variant="secondary" className="text-[10px] h-4 px-1 gap-0.5">
-                          <Crown className="w-2.5 h-2.5" /> Organizer
+                          <Crown className="w-2.5 h-2.5" /> Admin
                         </Badge>
                       )}
                       <Badge variant="outline" className="text-[10px] h-4 px-1">
