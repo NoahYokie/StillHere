@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
-import { subscribe as subscribeLocation, subscribeLocating } from "@/lib/location-service";
+import { subscribe as subscribeLocation, subscribeLocating, getOneShotPosition } from "@/lib/location-service";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { BackButton } from "@/components/back-button";
@@ -82,7 +82,23 @@ export default function LiveLocationPage() {
       if (state.speed != null) setCurrentSpeed(state.speed);
     });
     const unsubLocating = subscribeLocating(setIsLocating);
-    return () => { unsub(); unsubLocating(); };
+    // Show the map immediately even if the user hasn't tapped "Start sharing"
+    // yet. Without this the page sits on "Locating you..." forever because the
+    // location service only emits when live tracking is started.
+    let cancelled = false;
+    getOneShotPosition()
+      .then((state) => {
+        if (cancelled || !state) return;
+        setMyLat((prev) => prev ?? state.lat);
+        setMyLng((prev) => prev ?? state.lng);
+        setMyAccuracy((prev) => prev ?? state.accuracy);
+        setIsLocating(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsLocating(false);
+      });
+    return () => { cancelled = true; unsub(); unsubLocating(); };
   }, []);
 
   const { data: myStatus } = useQuery<{ active: boolean; share: LiveShare | null }>({
