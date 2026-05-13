@@ -1257,35 +1257,68 @@ export async function registerRoutes(
       // lock has expired but an incident from a prior press is still open).
       const existingIncident = await storage.getOpenIncident(userId);
       if (existingIncident) {
-        const ageMs = Date.now() - new Date(existingIncident.startedAt).getTime();
-        const COOLDOWN_MS = 60_000;
-        if (ageMs >= COOLDOWN_MS) {
+        // If the prior incident has had no escalation activity for a long time
+        // it is almost certainly stuck open from a past session that never got
+        // resolved. Without this, every future SOS press for this user would
+        // be silently swallowed as a "duplicate" and no contact would ever be
+        // notified. Auto-resolve the stale one and fall through to create a
+        // fresh incident so this press actually pages the Safety Circle.
+        const lastTouchedMs = existingIncident.lastContactNotifiedAt
+          ? new Date(existingIncident.lastContactNotifiedAt).getTime()
+          : new Date(existingIncident.startedAt).getTime();
+        const stalenessMs = Date.now() - lastTouchedMs;
+        const STALE_INCIDENT_MS = 30 * 60_000; // 30 minutes
+        if (stalenessMs > STALE_INCIDENT_MS) {
           try {
             const timeline: any[] = (() => {
               try { return JSON.parse(existingIncident.escalationTimeline || "[]"); } catch { return []; }
             })();
             timeline.push({
-              type: "sos_repeat_press",
+              type: "auto_archived",
               time: new Date().toISOString(),
-              detail: "SOS button pressed again",
+              detail: `Auto-resolved stale open incident before starting a fresh SOS (${Math.round(stalenessMs / 60_000)} min since last activity)`,
             });
             await storage.updateIncident(existingIncident.id, {
+              status: "resolved",
+              resolvedAt: new Date(),
               escalationTimeline: JSON.stringify(timeline),
             });
           } catch (e) {
-            console.error("[SOS] Failed to log repeat press to timeline:", e);
+            console.error("[SOS] Failed to auto-resolve stale incident:", e);
           }
+          console.log(`[SOS] Auto-archived stale open incident ${existingIncident.id} for user=${userId} (${Math.round(stalenessMs / 60_000)}min stale); proceeding with fresh SOS`);
+          // Fall through to the new-incident creation path below.
+        } else {
+          const ageMs = Date.now() - new Date(existingIncident.startedAt).getTime();
+          const COOLDOWN_MS = 60_000;
+          if (ageMs >= COOLDOWN_MS) {
+            try {
+              const timeline: any[] = (() => {
+                try { return JSON.parse(existingIncident.escalationTimeline || "[]"); } catch { return []; }
+              })();
+              timeline.push({
+                type: "sos_repeat_press",
+                time: new Date().toISOString(),
+                detail: "SOS button pressed again",
+              });
+              await storage.updateIncident(existingIncident.id, {
+                escalationTimeline: JSON.stringify(timeline),
+              });
+            } catch (e) {
+              console.error("[SOS] Failed to log repeat press to timeline:", e);
+            }
+          }
+          return res.json({
+            success: true,
+            incident: existingIncident,
+            alreadyActive: true,
+            deduped: true,
+            cooldownActive: ageMs < COOLDOWN_MS,
+            message: ageMs < COOLDOWN_MS
+              ? "SOS already active. Your Safety Circle is being contacted right now."
+              : "SOS already active. We are still contacting your Safety Circle.",
+          });
         }
-        return res.json({
-          success: true,
-          incident: existingIncident,
-          alreadyActive: true,
-          deduped: true,
-          cooldownActive: ageMs < COOLDOWN_MS,
-          message: ageMs < COOLDOWN_MS
-            ? "SOS already active. Your Safety Circle is being contacted right now."
-            : "SOS already active. We are still contacting your Safety Circle.",
-        });
       }
       
       // Capture moment-of-SOS location from request body if provided
