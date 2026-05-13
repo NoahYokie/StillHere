@@ -7545,8 +7545,71 @@ export async function registerRoutes(
         console.error("[CRON] processor cleanup drain failed:", err);
       }
 
+      // Stale-incident sweeper. Without this, an incident that gets stuck
+      // open (resolve path failed mid-flight, watcher claimed via SMS but the
+      // claim ack was lost, escalation completed with no resolution) blocks
+      // every future SOS press for that user via the dedup logic in /api/sos.
+      // Threshold = 4 hours of no escalation activity. Genuine ongoing
+      // escalation runs at 20 min per step over up to 5 contacts, so a real
+      // active incident never trips this cap.
+      let staleArchived = 0;
+      try {
+        const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+        const stale = await storage.getStaleOpenIncidents(STALE_THRESHOLD_MS);
+        for (const inc of stale) {
+          try {
+            const lastTouched = inc.lastContactNotifiedAt
+              ? new Date(inc.lastContactNotifiedAt).getTime()
+              : new Date(inc.startedAt).getTime();
+            const stalenessMin = Math.round((Date.now() - lastTouched) / 60_000);
+            const timeline: any[] = (() => {
+              try { return JSON.parse(inc.escalationTimeline || "[]"); } catch { return []; }
+            })();
+            timeline.push({
+              type: "auto_archived",
+              time: new Date().toISOString(),
+              detail: `Auto-archived by sweeper after ${stalenessMin} min of no escalation activity`,
+            });
+            await storage.updateIncident(inc.id, {
+              status: "resolved",
+              resolvedAt: new Date(),
+              escalationTimeline: JSON.stringify(timeline),
+            });
+            // End any associated active location session so we are not
+            // collecting GPS for a closed incident.
+            const session = await storage.getActiveLocationSession(inc.userId);
+            if (session) {
+              try { await storage.endLocationSession(session.id); } catch {}
+            }
+            // Restore safety state if the user is still in concern from this
+            // incident. The safety-state worker also nudges users to quiet
+            // based on heartbeat, but explicitly clearing here avoids leaving
+            // a watcher's UI flagged red after we have given up on the
+            // incident.
+            const u = await storage.getUser(inc.userId);
+            if (u?.safetyState === "concern") {
+              await storage.updateSafetyState(inc.userId, "active", "Stale incident auto-archived").catch(() => {});
+            }
+            staleArchived++;
+            console.log(JSON.stringify({
+              event: "INCIDENT_AUTO_ARCHIVED",
+              incidentId: inc.id,
+              userId: inc.userId,
+              reason: inc.reason,
+              stalenessMinutes: stalenessMin,
+              startedAt: inc.startedAt,
+              timestamp: new Date().toISOString(),
+            }));
+          } catch (e: any) {
+            console.error(`[CRON] Failed to auto-archive stale incident ${inc.id}:`, e?.message || e);
+          }
+        }
+      } catch (err) {
+        console.error("[CRON] Stale-incident sweeper failed:", err);
+      }
+
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts, processorCleanup });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts, processorCleanup, staleArchived });
     } catch (error) {
       cronRunning = false;
       console.error("Error in cron tick:", error);

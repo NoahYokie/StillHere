@@ -214,6 +214,7 @@ export interface IStorage {
   // Incidents
   getOpenIncident(userId: string): Promise<Incident | undefined>;
   getIncidentsNeedingEscalation(): Promise<Incident[]>;
+  getStaleOpenIncidents(stalenessMs: number): Promise<Incident[]>;
   createIncident(userId: string, reason: IncidentReason): Promise<Incident>;
   updateIncident(id: string, updates: Partial<Incident>): Promise<Incident>;
   
@@ -1386,6 +1387,36 @@ export class DatabaseStorage implements IStorage {
       reason,
     }).returning();
     return incident;
+  }
+
+  async getStaleOpenIncidents(stalenessMs: number): Promise<Incident[]> {
+    // Returns incidents that are not resolved AND have not had any escalation
+    // activity for at least `stalenessMs`. Used by the cron sweeper to
+    // auto-archive incidents that got stuck open (e.g. resolve path failed
+    // halfway, watcher claimed but never closed, escalation completed with
+    // no resolution). Without this, future SOS presses for the same user are
+    // silently swallowed by the dedup logic.
+    const cutoff = new Date(Date.now() - stalenessMs);
+    const result = await db
+      .select()
+      .from(incidents)
+      .where(
+        and(
+          ne(incidents.status, "resolved"),
+          eq(incidents.isDrill, false),
+          or(
+            and(
+              isNotNull(incidents.lastContactNotifiedAt),
+              lt(incidents.lastContactNotifiedAt, cutoff),
+            ),
+            and(
+              isNull(incidents.lastContactNotifiedAt),
+              lt(incidents.startedAt, cutoff),
+            ),
+          ),
+        ),
+      );
+    return result;
   }
 
   async updateIncident(id: string, updates: Partial<Incident>): Promise<Incident> {
