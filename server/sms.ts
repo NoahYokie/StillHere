@@ -1,5 +1,6 @@
 import twilio from "twilio";
 import type { Request, Response, NextFunction } from "express";
+import { twilioSmsLimiter } from "./throughput";
 
 let client: twilio.Twilio | null = null;
 
@@ -70,6 +71,10 @@ export interface SendSmsResult {
   success: boolean;
   messageId?: string;
   error?: string;
+}
+
+async function createTwilioMessage(c: twilio.Twilio, params: Parameters<typeof c.messages.create>[0]) {
+  return twilioSmsLimiter.run(() => c.messages.create(params));
 }
 
 export function isSmsConfigured(): boolean {
@@ -215,7 +220,7 @@ export async function sendSms(
 
   if (messagingServiceSid) {
     try {
-      const message = await c.messages.create({ to, body, messagingServiceSid, statusCallback });
+      const message = await createTwilioMessage(c, { to, body, messagingServiceSid, statusCallback });
       console.log(`[SMS] Sent to ${masked} via messaging service: ${message.sid}`);
       await finalizeSuccess(message.sid);
       return { success: true, messageId: message.sid };
@@ -228,7 +233,7 @@ export async function sendSms(
       console.warn(`[SMS] Messaging service failed for ${masked}: ${error.message}, trying fallback`);
       if (fromPhone) {
         try {
-          const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
+          const message = await createTwilioMessage(c, { to, body, from: fromPhone, statusCallback });
           console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
           await finalizeSuccess(message.sid);
           return { success: true, messageId: message.sid };
@@ -250,7 +255,7 @@ export async function sendSms(
 
   if (alphaSender) {
     try {
-      const message = await c.messages.create({ to, body, from: alphaSender, statusCallback });
+      const message = await createTwilioMessage(c, { to, body, from: alphaSender, statusCallback });
       console.log(`[SMS] Sent to ${masked} via alpha sender "${alphaSender}": ${message.sid}`);
       await finalizeSuccess(message.sid);
       return { success: true, messageId: message.sid };
@@ -263,7 +268,7 @@ export async function sendSms(
       console.warn(`[SMS] Alpha sender "${alphaSender}" failed for ${masked}: ${error.message}, trying phone fallback`);
       if (fromPhone) {
         try {
-          const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
+          const message = await createTwilioMessage(c, { to, body, from: fromPhone, statusCallback });
           console.log(`[SMS] Sent to ${masked} via phone fallback: ${message.sid}`);
           await finalizeSuccess(message.sid);
           return { success: true, messageId: message.sid };
@@ -285,7 +290,7 @@ export async function sendSms(
 
   if (fromPhone) {
     try {
-      const message = await c.messages.create({ to, body, from: fromPhone, statusCallback });
+      const message = await createTwilioMessage(c, { to, body, from: fromPhone, statusCallback });
       console.log(`[SMS] Sent to ${masked} via phone number: ${message.sid}`);
       await finalizeSuccess(message.sid);
       return { success: true, messageId: message.sid };

@@ -51,6 +51,7 @@ import { emitToUser, isUserOnline } from "./socket";
 import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
 import { getTrackingPolicyForUser, emitTrackingPolicyChanged } from "./tracking-policy";
 import { deleteUserAccount, drainProcessorCleanupQueue } from "./accountDeletion";
+import { twilioVoiceLimiter } from "./throughput";
 
 // Helper to get userId from session
 // Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
@@ -7487,7 +7488,7 @@ export async function registerRoutes(
                 statusCallbackMethod: "POST",
                 statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
               };
-              const callResult = await client.calls.create(callParams);
+              const callResult = await twilioVoiceLimiter.run(() => client.calls.create(callParams));
               await voicePolicy.markSendProviderResult(voiceAttemptId, "sent", { providerId: callResult.sid });
               existingTimeline.push({ type: "call", time: timeStr, detail: "Wellness call placed" });
               console.log(`[ESCALATION] Call placed (SID: ${callResult.sid})`);

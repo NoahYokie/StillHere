@@ -8,7 +8,9 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "check:production": "tsx script/check-production-readiness.ts",
+    "load:smoke": "tsx script/load-smoke.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.1",

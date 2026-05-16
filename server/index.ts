@@ -8,6 +8,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { authMiddleware } from "./auth";
 import { setupSocketServer } from "./socket";
+import { pool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -253,9 +254,14 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
 
       const CRON_INTERVAL_MS = 2 * 60 * 1000;
+      const internalCronEnabled = process.env.INTERNAL_CRON_ENABLED !== "false";
       const cronSecret = process.env.SESSION_SECRET;
       if (!cronSecret) {
         log("WARNING: SESSION_SECRET not set, cron scheduler disabled", "cron");
+        return;
+      }
+      if (!internalCronEnabled) {
+        log("built-in cron scheduler disabled by INTERNAL_CRON_ENABLED=false", "cron");
         return;
       }
       setInterval(async () => {
@@ -295,4 +301,27 @@ app.use((req, res, next) => {
       log(`safety-state worker started (every ${SAFETY_STATE_INTERVAL_MS / 1000}s, quiet threshold ${QUIET_THRESHOLD_SECONDS}s)`, "cron");
     },
   );
+
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`${signal} received, closing server`, "shutdown");
+    httpServer.close(async () => {
+      try {
+        await pool.end();
+        log("database pool closed", "shutdown");
+      } catch (error: any) {
+        log(`database pool close failed: ${error?.message || error}`, "shutdown");
+      } finally {
+        process.exit(0);
+      }
+    });
+    setTimeout(() => {
+      log("shutdown timeout reached", "shutdown");
+      process.exit(1);
+    }, 25_000).unref();
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
 })();
