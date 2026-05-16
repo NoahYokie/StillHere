@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { apiRequest, queryClient } from "./queryClient";
 
 interface AuthUser {
   id: string;
   name: string;
   phone: string;
+  timezone?: string | null;
   acknowledgedLimitationsAt?: string | null;
 }
 
@@ -38,6 +40,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     retry: false,
     staleTime: 30000,
   });
+
+  useEffect(() => {
+    if (!auth?.authenticated) return;
+    let timezone = "";
+    try {
+      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {}
+    if (!timezone || !timezone.includes("/") || auth.user?.timezone === timezone) return;
+    apiRequest("POST", "/api/settings", { timezone })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      })
+      .catch(() => {});
+  }, [auth?.authenticated, auth?.user?.timezone]);
 
   return (
     <AuthContext.Provider value={{ auth: auth || null, isLoading }}>

@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { processLocationContext, getUserContext, getRecentContextEvents } from "./context-processor";
 import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, lt, gte, desc, isNull, sql } from "drizzle-orm";
 import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, type FamilyRole } from "@shared/schema";
 import {
@@ -58,6 +58,32 @@ import { deleteUserAccount, drainProcessorCleanupQueue } from "./accountDeletion
 // race past the dedup check. Values are wall-clock ms timestamps.
 const sosInFlightByUser = new Map<string, number>();
 const SOS_INFLIGHT_TTL_MS = 60_000;
+
+const CRON_TICK_LOCK_ID = 420_001;
+const SAFETY_STATE_TICK_LOCK_ID = 420_002;
+
+async function tryAcquireDbAdvisoryLock(lockId: number): Promise<null | (() => Promise<void>)> {
+  const client = await pool.connect();
+  let locked = false;
+  try {
+    const result = await client.query("SELECT pg_try_advisory_lock($1) AS locked", [lockId]);
+    locked = result.rows?.[0]?.locked === true;
+    if (!locked) {
+      client.release();
+      return null;
+    }
+    return async () => {
+      try {
+        await client.query("SELECT pg_advisory_unlock($1)", [lockId]);
+      } finally {
+        client.release();
+      }
+    };
+  } catch (error) {
+    if (!locked) client.release();
+    throw error;
+  }
+}
 
 const getUserId = (req: Request): string | null => {
   return (req as any).userId || null;
@@ -601,6 +627,7 @@ export async function registerRoutes(
           id: user.id,
           name: user.name,
           phone: user.phone,
+          timezone: user.timezone,
           acknowledgedLimitationsAt: user.acknowledgedLimitationsAt ?? null,
         },
         needsSetup,
@@ -1590,6 +1617,19 @@ export async function registerRoutes(
       if (autoWellnessCall !== undefined && typeof autoWellnessCall !== "boolean") {
         return res.status(400).json({ error: "Auto wellness call must be a boolean" });
       }
+      if (preferredCheckinTime !== undefined && (typeof preferredCheckinTime !== "string" || !/^([01]?\d|2[0-3]):[0-5]\d$/.test(preferredCheckinTime))) {
+        return res.status(400).json({ error: "Preferred check-in time must be HH:MM" });
+      }
+      if (timezone !== undefined) {
+        if (typeof timezone !== "string" || timezone.length > 100 || !timezone.includes("/")) {
+          return res.status(400).json({ error: "Invalid timezone" });
+        }
+        try {
+          new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+        } catch {
+          return res.status(400).json({ error: "Invalid timezone" });
+        }
+      }
       
       const updates: any = {};
       if (checkinIntervalHours !== undefined) updates.checkinIntervalHours = checkinIntervalHours;
@@ -1776,7 +1816,7 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
-      const { contactId } = req.params;
+      const contactId = String(req.params.contactId);
       const { role } = req.body;
       if (!["primary", "backup", "support"].includes(role)) {
         return res.status(400).json({ error: "Invalid role" });
@@ -3265,7 +3305,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { contactId } = req.params;
+      const contactId = String(req.params.contactId);
       const contact = await storage.getContact(contactId);
       if (!contact) {
         return res.status(404).json({ error: "Contact not found" });
@@ -3319,7 +3359,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { contactId } = req.params;
+      const contactId = String(req.params.contactId);
       const contact = await storage.getContact(contactId);
       if (!contact) {
         return res.status(404).json({ error: "Contact not found" });
@@ -3362,7 +3402,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { contactId } = req.params;
+      const contactId = String(req.params.contactId);
       const contact = await storage.getContact(contactId);
       if (!contact || contact.userId !== userId || contact.softDeletedAt) {
         return res.status(404).json({ error: "Contact not found" });
@@ -3380,13 +3420,13 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/contacts/:contactId", async (req, res) => {
+  const removeContactForOwner = async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      const { contactId } = req.params;
+      const contactId = String(req.params.contactId);
       const contact = await storage.getContact(contactId);
       if (!contact || contact.userId !== userId || contact.softDeletedAt) {
         return res.status(404).json({ error: "Contact not found" });
@@ -3404,6 +3444,65 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error removing contact:", error);
       res.status(500).json({ error: "Failed to remove contact" });
+    }
+  };
+
+  app.post("/api/contacts/:contactId/remove", removeContactForOwner);
+  app.delete("/api/contacts/:contactId", removeContactForOwner);
+
+  app.post("/api/contacts/:contactId/resend-request", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const contactId = String(req.params.contactId);
+      const contact = await storage.getContact(contactId);
+      if (!contact || contact.userId !== userId || contact.softDeletedAt) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      if (contact.pausedUntil && new Date(contact.pausedUntil).getTime() > Date.now()) {
+        return res.status(409).json({ error: "This contact is paused. Resume them before sending a new request link." });
+      }
+
+      const ownerUser = await storage.getUser(userId);
+      const normalizedContactPhone = normalizePhone(contact.phone);
+      let token = (await storage.getContactTokensForUser(userId)).find((t) => t.contact.id === contact.id)?.token;
+      if (!token) {
+        const fresh = await storage.generateToken(contact.id, { ttlHours: 24, purpose: "standing" });
+        token = fresh.token;
+      }
+      const link = `${getBaseUrl()}/emergency/${token}`;
+      const linkedUser = await storage.getUserByPhone(normalizedContactPhone);
+
+      if (linkedUser && linkedUser.id !== userId) {
+        await sendPushNotification(linkedUser.id, {
+          title: "Safety Circle request",
+          body: `${ownerUser?.name || "Someone"} asked you to be their StillHere Safety Circle contact. Open StillHere to accept or decline.`,
+          url: "/watched/list",
+          tag: `guardian-request-resend-${contact.id}`,
+        }).catch(() => {});
+      }
+
+      const smsResult = await sendSafetyCircleRequest(normalizedContactPhone, ownerUser?.name || "Someone", link, {
+        userId,
+        dedupeKey: `watcher_request_resend:${userId}:${contact.id}:${Math.floor(Date.now() / (10 * 60 * 1000))}`,
+      });
+      if (!smsResult.success) {
+        return res.status(502).json({ error: smsResult.error || "SMS could not be sent" });
+      }
+
+      await db.update(contacts)
+        .set({
+          watcherConsentStatus: "pending",
+          watcherConsentRequestedAt: new Date(),
+          watcherConsentDeclinedAt: null,
+        })
+        .where(eq(contacts.id, contact.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resending contact request:", error);
+      res.status(500).json({ error: "Failed to resend request link" });
     }
   });
 
@@ -7132,6 +7231,7 @@ export async function registerRoutes(
 
   // Cron tick - check for due users (internal only)
   app.get("/api/cron/tick", async (req, res) => {
+    let releaseCronLock: null | (() => Promise<void>) = null;
     try {
       const cronSecret = process.env.SESSION_SECRET;
       if (!cronSecret) {
@@ -7147,6 +7247,11 @@ export async function registerRoutes(
         return res.json({ skipped: true, reason: "previous tick still running" });
       }
       cronRunning = true;
+      releaseCronLock = await tryAcquireDbAdvisoryLock(CRON_TICK_LOCK_ID);
+      if (!releaseCronLock) {
+        cronRunning = false;
+        return res.json({ skipped: true, reason: "cron already running on another instance" });
+      }
 
       const overdueUsers = await storage.getOverdueUsersWithSettings();
       const baseUrl = getBaseUrl();
@@ -8106,9 +8211,16 @@ export async function registerRoutes(
         console.error("[CRON] Stale-incident sweeper failed:", err);
       }
 
+      if (releaseCronLock) {
+        await releaseCronLock();
+        releaseCronLock = null;
+      }
       cronRunning = false;
       res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts, processorCleanup, staleArchived });
     } catch (error) {
+      if (releaseCronLock) {
+        await releaseCronLock().catch((unlockError) => console.error("[CRON] Failed to release advisory lock:", unlockError));
+      }
       cronRunning = false;
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });
@@ -8116,11 +8228,16 @@ export async function registerRoutes(
   });
 
   app.get("/api/safety-state/tick", async (req, res) => {
+    let releaseSafetyLock: null | (() => Promise<void>) = null;
     try {
       const cronSecret = process.env.SESSION_SECRET;
       if (!cronSecret) return res.status(500).json({ error: "Server misconfigured" });
       const providedSecret = req.headers["x-cron-secret"];
       if (providedSecret !== cronSecret) return res.status(403).json({ error: "Forbidden" });
+      releaseSafetyLock = await tryAcquireDbAdvisoryLock(SAFETY_STATE_TICK_LOCK_ID);
+      if (!releaseSafetyLock) {
+        return res.json({ ok: true, skipped: true, reason: "safety-state tick already running on another instance", transitioned: 0 });
+      }
 
       const QUIET_THRESHOLD_SECONDS = 180;
       const staleUsers = await storage.getStaleActiveUsers(QUIET_THRESHOLD_SECONDS);
@@ -8129,8 +8246,15 @@ export async function registerRoutes(
         await storage.updateSafetyState(user.id, "quiet", "No heartbeat received for 3 minutes");
         transitioned++;
       }
+      if (releaseSafetyLock) {
+        await releaseSafetyLock();
+        releaseSafetyLock = null;
+      }
       res.json({ ok: true, transitioned });
     } catch (error) {
+      if (releaseSafetyLock) {
+        await releaseSafetyLock().catch((unlockError) => console.error("[CRON] Failed to release safety-state advisory lock:", unlockError));
+      }
       console.error("Error in safety-state tick:", error);
       res.status(500).json({ error: "Safety state tick failed" });
     }

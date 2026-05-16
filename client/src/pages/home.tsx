@@ -362,17 +362,22 @@ export default function Home() {
     };
   }, [locationEnabled, status?.activeLocationSession]);
 
-  const autoCheckedRef = useRef(false);
+  const autoCheckedForDueRef = useRef<string | null>(null);
   const hasActiveIncident = status?.openIncident && status.openIncident.status !== "resolved";
 
   useEffect(() => {
+    const nextDueValue = status?.nextCheckinDue ? new Date(status.nextCheckinDue).toISOString() : null;
+    const nextDue = nextDueValue ? new Date(nextDueValue).getTime() : null;
+    const checkinDue = nextDue != null && Date.now() >= nextDue;
     if (
       status?.settings?.autoCheckin &&
-      !autoCheckedRef.current &&
+      checkinDue &&
+      nextDueValue &&
+      autoCheckedForDueRef.current !== nextDueValue &&
       !hasActiveIncident &&
       !isLoading
     ) {
-      autoCheckedRef.current = true;
+      autoCheckedForDueRef.current = nextDueValue;
       getCheckinLocation().then((loc) => {
         const body: any = { method: "auto" };
         if (loc.lat != null) body.lat = loc.lat;
@@ -385,7 +390,7 @@ export default function Home() {
         triggerHaptic(30);
       }).catch(() => {});
     }
-  }, [status?.settings?.autoCheckin, isLoading, hasActiveIncident]);
+  }, [status?.settings?.autoCheckin, status?.nextCheckinDue, isLoading, hasActiveIncident]);
 
   const startFallCountdown = useCallback(() => {
     triggerHaptic([200, 100, 200, 100, 200]);

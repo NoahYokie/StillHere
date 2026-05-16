@@ -33,7 +33,8 @@ export default function ContactPage() {
   const [address, setAddress] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<ContactPageData>({
-    queryKey: ["/api/emergency", token],
+    queryKey: [`/api/emergency/${token}`],
+    enabled: !!token,
   });
 
   const locationLat = data?.locationSession?.lastLat ?? data?.lastCheckin?.lat ?? null;
@@ -62,6 +63,7 @@ export default function ContactPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/emergency", token] });
+      queryClient.invalidateQueries({ queryKey: [`/api/emergency/${token}`] });
       toast({
         title: "You're handling this",
         description: "We've paused further alerts while you check on them.",
@@ -82,6 +84,7 @@ export default function ContactPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/emergency", token] });
+      queryClient.invalidateQueries({ queryKey: [`/api/emergency/${token}`] });
       toast({
         title: "Alert escalated",
         description: "We will continue notifying other contacts.",

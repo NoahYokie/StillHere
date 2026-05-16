@@ -28,13 +28,14 @@ steps:
       - --allow-unauthenticated
       - --port=8080
       - --min-instances=1
-      - --max-instances=1
-      - --cpu=1
-      - --memory=1Gi
+      - --max-instances=20
+      - --concurrency=80
+      - --cpu=2
+      - --memory=2Gi
       - --timeout=300
-      - --set-env-vars=NODE_ENV=production,BASE_URL=https://stillhere.health,BRAND_BASE_URL=https://stillhere.health
+      - --set-env-vars=NODE_ENV=production,BASE_URL=https://stillhere.health,BRAND_BASE_URL=https://stillhere.health,DB_POOL_MAX=5
       - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:stillhere-prod
-      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,OUTBOUND_LOG_SECRET=OUTBOUND_LOG_SECRET:latest,GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,EMAIL_FROM=EMAIL_FROM:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,TWILIO_MESSAGING_SERVICE_SID=TWILIO_MESSAGING_SERVICE_SID:latest,TWILIO_PHONE_NUMBER=TWILIO_PHONE_NUMBER:latest,TWILIO_VOICE_PHONE_NUMBER=TWILIO_VOICE_PHONE_NUMBER:latest
+      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,OUTBOUND_LOG_SECRET=OUTBOUND_LOG_SECRET:latest,GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,EMAIL_FROM=EMAIL_FROM:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,TWILIO_MESSAGING_SERVICE_SID=TWILIO_MESSAGING_SERVICE_SID:latest,TWILIO_PHONE_NUMBER=TWILIO_PHONE_NUMBER:latest,TWILIO_VOICE_PHONE_NUMBER=TWILIO_VOICE_PHONE_NUMBER:latest,VAPID_PUBLIC_KEY=VAPID_PUBLIC_KEY:latest,VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/${_SERVICE}:$BUILD_ID

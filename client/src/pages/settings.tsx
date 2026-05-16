@@ -285,7 +285,7 @@ export default function SettingsPage() {
 
   const removeContactMutation = useMutation({
     mutationFn: async (contactId: string) => {
-      const res = await apiRequest("DELETE", `/api/contacts/${contactId}`);
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/remove`, {});
       return res.json();
     },
     onSuccess: () => {
@@ -296,6 +296,26 @@ export default function SettingsPage() {
     },
     onError: () => {
       toast({ title: "Could not remove contact", variant: "destructive" });
+    },
+  });
+
+  const resendContactRequestMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/resend-request`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      toast({ title: "Request link sent" });
+    },
+    onError: (error: any) => {
+      let message = "Please try again.";
+      try {
+        const jsonStr = error.message.replace(/^\d+:\s*/, "");
+        const parsed = JSON.parse(jsonStr);
+        if (parsed?.error) message = parsed.error;
+      } catch {}
+      toast({ title: "Could not resend link", description: message, variant: "destructive" });
     },
   });
 
@@ -790,7 +810,7 @@ export default function SettingsPage() {
                               </div>
                               {paused ? (
                                 <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pauseContact(contact, null)} disabled={pauseContactMutation.isPending} data-testid={`button-resume-contact-${index}`}>
-                                  Active
+                                  Resume alerts
                                 </Button>
                               ) : (
                                 <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5">Active</span>
@@ -799,15 +819,18 @@ export default function SettingsPage() {
                             {!paused && (
                               <div className="grid grid-cols-2 gap-1.5">
                                 <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pauseContact(contact, addHours(new Date(), 2))} disabled={pauseContactMutation.isPending} data-testid={`button-pause-contact-2h-${index}`}>
-                                  Pause 2h
+                                  Pause for 2 hours
                                 </Button>
                                 <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pauseContact(contact, setHours(startOfTomorrow(), 7))} disabled={pauseContactMutation.isPending} data-testid={`button-pause-contact-tomorrow-${index}`}>
-                                  Until tomorrow
+                                  Pause until morning
                                 </Button>
                               </div>
                             )}
                             <Button type="button" variant="ghost" size="sm" className="h-7 w-full text-xs justify-start text-destructive hover:text-destructive" onClick={() => removeContactEntry(index)} disabled={removeContactMutation.isPending} data-testid={`button-remove-saved-contact-${index}`}>
                               <Trash2 className="h-3 w-3 mr-1.5" /> Remove from Safety Circle
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" className="h-7 w-full text-xs justify-start" onClick={() => savedContact?.id && resendContactRequestMutation.mutate(savedContact.id)} disabled={resendContactRequestMutation.isPending} data-testid={`button-resend-contact-link-${index}`}>
+                              <MessageCircle className="h-3 w-3 mr-1.5" /> Resend request link
                             </Button>
                           </div>
                         )}
@@ -898,13 +921,17 @@ export default function SettingsPage() {
                     <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                     <div className="text-sm leading-relaxed">
                       <span className="font-medium text-foreground">
-                        {checkinInterval === 24 ? "Every day" :
+                        {checkinInterval === 12 ? "Twice a day" :
+                         checkinInterval === 24 ? "Every day" :
                          checkinInterval === 48 ? "Every 2 days" :
                          checkinInterval === 168 ? "Every week" :
                          `Every ${checkinInterval} hours`}
                       </span>
-                      {checkinInterval === 24 && timeOptions.find(t => t.value === preferredTime) && (
-                        <span className="text-muted-foreground"> around <span className="font-medium text-foreground">{timeOptions.find(t => t.value === preferredTime)?.label}</span></span>
+                      {[12, 24].includes(checkinInterval) && timeOptions.find(t => t.value === preferredTime) && (
+                        <span className="text-muted-foreground">
+                          {" "}starting around <span className="font-medium text-foreground">{timeOptions.find(t => t.value === preferredTime)?.label}</span>
+                          {checkinInterval === 12 ? " and again 12 hours later" : ""}
+                        </span>
                       )}
                       <span className="text-muted-foreground">. If you miss it, your safety circle is alerted after </span>
                       <span className="font-medium text-foreground">{graceMinutes} minutes</span>
@@ -921,7 +948,7 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mb-3 ml-7">Pick a rhythm that fits your routine.</p>
                   <RadioGroup
-                    value={showCustomInterval || ![24, 48, 168].includes(checkinInterval) ? "custom" : checkinInterval.toString()}
+                    value={showCustomInterval || ![12, 24, 48, 168].includes(checkinInterval) ? "custom" : checkinInterval.toString()}
                     onValueChange={(v) => {
                       if (v === "custom") {
                         setShowCustomInterval(true);
@@ -933,6 +960,16 @@ export default function SettingsPage() {
                     }}
                     className="space-y-2 ml-7"
                   >
+                    <Label htmlFor="twice-daily" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 12 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-twice-daily">
+                      <div className="flex items-center gap-3">
+                        <RadioGroupItem value="12" id="twice-daily" data-testid="radio-twice-daily" />
+                        <div>
+                          <div className="text-sm font-medium">Twice a day</div>
+                          <div className="text-xs text-muted-foreground">Your preferred time, then 12 hours later</div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">12h</span>
+                    </Label>
                     <Label htmlFor="daily" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 24 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-daily">
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="24" id="daily" data-testid="radio-daily" />
@@ -963,26 +1000,26 @@ export default function SettingsPage() {
                       </div>
                       <span className="text-xs text-muted-foreground">168h</span>
                     </Label>
-                    <Label htmlFor="custom" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${(showCustomInterval || ![24, 48, 168].includes(checkinInterval)) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-custom">
+                    <Label htmlFor="custom" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${(showCustomInterval || ![12, 24, 48, 168].includes(checkinInterval)) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-custom">
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="custom" id="custom" data-testid="radio-custom" />
                         <div>
                           <div className="text-sm font-medium">Custom</div>
                           <div className="text-xs text-muted-foreground">
-                            {![24, 48, 168].includes(checkinInterval) ? `Currently every ${checkinInterval} hours` : "Set your own interval in hours"}
+                            {![12, 24, 48, 168].includes(checkinInterval) ? `Currently every ${checkinInterval} hours` : "Set your own interval in hours"}
                           </div>
                         </div>
                       </div>
                     </Label>
                   </RadioGroup>
                   {/* Custom input only shows when Custom is selected */}
-                  {(showCustomInterval || ![24, 48, 168].includes(checkinInterval)) && (
+                  {(showCustomInterval || ![12, 24, 48, 168].includes(checkinInterval)) && (
                     <div className="flex items-center gap-2 mt-2 ml-7" data-testid="custom-interval-input">
                       <Input
                         type="number"
-                        min={1}
+                        min={12}
                         max={720}
-                        placeholder={![24, 48, 168].includes(checkinInterval) ? checkinInterval.toString() : "Hours"}
+                        placeholder={![12, 24, 48, 168].includes(checkinInterval) ? checkinInterval.toString() : "Hours"}
                         value={customInterval}
                         onChange={(e) => setCustomInterval(e.target.value)}
                         className="w-28 h-9 text-sm"
@@ -993,17 +1030,17 @@ export default function SettingsPage() {
                         className="h-9"
                         onClick={() => {
                           const hrs = parseInt(customInterval);
-                          if (isNaN(hrs) || hrs < 1) return;
+                          if (isNaN(hrs) || hrs < 12) return;
                           handleIntervalChange(customInterval);
                           setCustomInterval("");
                           setShowCustomInterval(false);
                         }}
-                        disabled={!customInterval || parseInt(customInterval) < 1}
+                        disabled={!customInterval || parseInt(customInterval) < 12}
                         data-testid="button-set-custom"
                       >
                         Apply
                       </Button>
-                      <span className="text-xs text-muted-foreground">hours between check-ins</span>
+                      <span className="text-xs text-muted-foreground">hours between check-ins (minimum 12)</span>
                     </div>
                   )}
                 </div>
@@ -1306,7 +1343,7 @@ export default function SettingsPage() {
                     <div className="flex flex-wrap gap-1.5">
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handlePause(2)} disabled={pauseMutation.isPending} data-testid="button-pause-2h">2 hours</Button>
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handlePause(6)} disabled={pauseMutation.isPending} data-testid="button-pause-6h">6 hours</Button>
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handlePause("tomorrow")} disabled={pauseMutation.isPending} data-testid="button-pause-tomorrow">Until tomorrow</Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handlePause("tomorrow")} disabled={pauseMutation.isPending} data-testid="button-pause-tomorrow">Until tomorrow morning</Button>
                     </div>
                     <div className="flex items-center gap-2">
                       <Input type="number" min="1" max="72" placeholder="Custom hrs" value={customPauseHours} onChange={(e) => setCustomPauseHours(e.target.value)} className="w-24 h-7 text-xs" data-testid="input-custom-pause" />
