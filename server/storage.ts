@@ -195,34 +195,15 @@ export function computeNextCheckinDue(opts: {
   lastTimeIsCheckin?: boolean;
 }): Date {
   const { lastTime, intervalHours } = opts;
+  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
+  if (!isDailyLike) {
+    return addHours(lastTime, intervalHours);
+  }
   const tz = opts.timezone || "UTC";
   const pref = (opts.preferredCheckinTime || "09:00").trim();
   const m = /^(\d{1,2}):(\d{2})$/.exec(pref);
   const targetH = Math.max(0, Math.min(23, m ? parseInt(m[1], 10) : 9));
   const targetM = Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0));
-
-  if (intervalHours > 0 && intervalHours < 24 && 24 % intervalHours === 0) {
-    let dayStart = startOfDayInTimezone(lastTime, tz);
-    const slotCount = 24 / intervalHours;
-    const slotsForDay = (start: Date) => Array.from({ length: slotCount }, (_, i) =>
-      new Date(start.getTime() + (targetH + i * intervalHours) * 3_600_000 + targetM * 60_000)
-    );
-    let candidates = slotsForDay(dayStart).filter((slot) => slot > lastTime);
-    if (opts.lastTimeIsCheckin && candidates.length > 0) {
-      const lastDayStart = startOfDayInTimezone(lastTime, tz).getTime();
-      candidates = candidates.filter((slot) => startOfDayInTimezone(slot, tz).getTime() !== lastDayStart || slot.getTime() - lastTime.getTime() > intervalHours * 3_600_000 / 2);
-    }
-    if (candidates.length > 0) return candidates[0];
-
-    const probe = new Date(dayStart.getTime() + 36 * 3_600_000);
-    dayStart = startOfDayInTimezone(probe, tz);
-    return slotsForDay(dayStart)[0];
-  }
-
-  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
-  if (!isDailyLike) {
-    return addHours(lastTime, intervalHours);
-  }
   const stepDays = intervalHours / 24;
   const stepMs = stepDays * 86_400_000;
 

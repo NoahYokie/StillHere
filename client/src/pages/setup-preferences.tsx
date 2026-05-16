@@ -106,10 +106,6 @@ export default function SetupPreferencesPage() {
               className="space-y-2"
             >
               <div className="flex items-center space-x-3">
-                <RadioGroupItem value="12" id="twice-daily" data-testid="radio-twice-daily" />
-                <Label htmlFor="twice-daily">Twice a day</Label>
-              </div>
-              <div className="flex items-center space-x-3">
                 <RadioGroupItem value="24" id="daily" data-testid="radio-daily" />
                 <Label htmlFor="daily">Once a day</Label>
               </div>

@@ -921,17 +921,13 @@ export default function SettingsPage() {
                     <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                     <div className="text-sm leading-relaxed">
                       <span className="font-medium text-foreground">
-                        {checkinInterval === 12 ? "Twice a day" :
-                         checkinInterval === 24 ? "Every day" :
+                        {checkinInterval === 24 ? "Every day" :
                          checkinInterval === 48 ? "Every 2 days" :
                          checkinInterval === 168 ? "Every week" :
                          `Every ${checkinInterval} hours`}
                       </span>
-                      {[12, 24].includes(checkinInterval) && timeOptions.find(t => t.value === preferredTime) && (
-                        <span className="text-muted-foreground">
-                          {" "}starting around <span className="font-medium text-foreground">{timeOptions.find(t => t.value === preferredTime)?.label}</span>
-                          {checkinInterval === 12 ? " and again 12 hours later" : ""}
-                        </span>
+                      {checkinInterval === 24 && timeOptions.find(t => t.value === preferredTime) && (
+                        <span className="text-muted-foreground"> around <span className="font-medium text-foreground">{timeOptions.find(t => t.value === preferredTime)?.label}</span></span>
                       )}
                       <span className="text-muted-foreground">. If you miss it, your safety circle is alerted after </span>
                       <span className="font-medium text-foreground">{graceMinutes} minutes</span>
@@ -948,7 +944,7 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mb-3 ml-7">Pick a rhythm that fits your routine.</p>
                   <RadioGroup
-                    value={showCustomInterval || ![12, 24, 48, 168].includes(checkinInterval) ? "custom" : checkinInterval.toString()}
+                    value={showCustomInterval || ![24, 48, 168].includes(checkinInterval) ? "custom" : checkinInterval.toString()}
                     onValueChange={(v) => {
                       if (v === "custom") {
                         setShowCustomInterval(true);
@@ -960,16 +956,6 @@ export default function SettingsPage() {
                     }}
                     className="space-y-2 ml-7"
                   >
-                    <Label htmlFor="twice-daily" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 12 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-twice-daily">
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="12" id="twice-daily" data-testid="radio-twice-daily" />
-                        <div>
-                          <div className="text-sm font-medium">Twice a day</div>
-                          <div className="text-xs text-muted-foreground">Your preferred time, then 12 hours later</div>
-                        </div>
-                      </div>
-                      <span className="text-xs text-muted-foreground">12h</span>
-                    </Label>
                     <Label htmlFor="daily" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${checkinInterval === 24 ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-daily">
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="24" id="daily" data-testid="radio-daily" />
@@ -1000,26 +986,26 @@ export default function SettingsPage() {
                       </div>
                       <span className="text-xs text-muted-foreground">168h</span>
                     </Label>
-                    <Label htmlFor="custom" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${(showCustomInterval || ![12, 24, 48, 168].includes(checkinInterval)) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-custom">
+                    <Label htmlFor="custom" className={`flex items-center justify-between rounded-md border p-3 cursor-pointer transition ${(showCustomInterval || ![24, 48, 168].includes(checkinInterval)) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`} data-testid="card-frequency-custom">
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="custom" id="custom" data-testid="radio-custom" />
                         <div>
                           <div className="text-sm font-medium">Custom</div>
                           <div className="text-xs text-muted-foreground">
-                            {![12, 24, 48, 168].includes(checkinInterval) ? `Currently every ${checkinInterval} hours` : "Set your own interval in hours"}
+                            {![24, 48, 168].includes(checkinInterval) ? `Currently every ${checkinInterval} hours` : "Set your own interval in hours"}
                           </div>
                         </div>
                       </div>
                     </Label>
                   </RadioGroup>
                   {/* Custom input only shows when Custom is selected */}
-                  {(showCustomInterval || ![12, 24, 48, 168].includes(checkinInterval)) && (
+                  {(showCustomInterval || ![24, 48, 168].includes(checkinInterval)) && (
                     <div className="flex items-center gap-2 mt-2 ml-7" data-testid="custom-interval-input">
                       <Input
                         type="number"
                         min={12}
                         max={720}
-                        placeholder={![12, 24, 48, 168].includes(checkinInterval) ? checkinInterval.toString() : "Hours"}
+                        placeholder={![24, 48, 168].includes(checkinInterval) ? checkinInterval.toString() : "Hours"}
                         value={customInterval}
                         onChange={(e) => setCustomInterval(e.target.value)}
                         className="w-28 h-9 text-sm"
