@@ -9,7 +9,7 @@ import { useDocumentMeta } from "@/hooks/use-document-meta";
 export default function TrustPage() {
   const [, setLocation] = useLocation();
   useDocumentMeta({
-    title: "Trust & Safety — StillHere",
+    title: "Trust & Safety | StillHere",
     description: "How StillHere keeps your data private and what we do (and don't) promise about safety alerts.",
   });
 

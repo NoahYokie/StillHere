@@ -60,6 +60,10 @@ const toneConfig = {
 
 function getTimelineIcon(text: string) {
   if (text.includes("SOS") || text.includes("Crash")) return AlertTriangle;
+  if (text.includes("Push")) return Shield;
+  if (text.includes("SMS") || text.includes("text")) return Shield;
+  if (text.includes("call") || text.includes("Call") || text.includes("voicemail")) return Shield;
+  if (text.includes("contact") || text.includes("Safety Circle")) return ShieldAlert;
   if (text.includes("Missed") || text.includes("expired") || text.includes("Late")) return Clock;
   if (text.includes("Arrived") || text.includes("Left")) return MapPin;
   if (text.includes("Confirmed") || text.includes("Resolved")) return CheckCircle2;
@@ -68,6 +72,10 @@ function getTimelineIcon(text: string) {
 
 function getTimelineColor(text: string) {
   if (text.includes("SOS") || text.includes("Crash")) return "text-red-500";
+  if (text.includes("Push")) return "text-blue-500";
+  if (text.includes("SMS") || text.includes("text")) return "text-green-500";
+  if (text.includes("call") || text.includes("Call") || text.includes("voicemail")) return "text-purple-500";
+  if (text.includes("contact") || text.includes("Safety Circle")) return "text-orange-500";
   if (text.includes("Missed") || text.includes("expired") || text.includes("Late") || text.includes("Awaiting")) return "text-amber-500";
   if (text.includes("Arrived") || text.includes("Left") || text.includes("trip")) return "text-blue-500";
   if (text.includes("Confirmed") || text.includes("Resolved")) return "text-emerald-500";

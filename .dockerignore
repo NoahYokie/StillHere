@@ -1,0 +1,43 @@
+.git
+.gitignore
+.agents
+.canvas
+.config
+.local
+node_modules
+dist
+server/public
+coverage
+.DS_Store
+*.log
+*.tar.gz
+
+# Replit/local artifacts
+.replit
+artifacts
+screenshots
+iphone_screenshots
+ipad_screenshots
+
+attached_assets/*
+!attached_assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png
+
+# Native build outputs are produced by Codemagic, not Cloud Run.
+ios
+android
+apple-watch
+ios-app-store
+
+# Docs and planning artifacts are not needed in the runtime image.
+*.md
+Council_Report_Task1_LocationRefactor.md
+FULL_APP_REPORT.md
+NATIVE_BUILD_GUIDE.md
+STILLHERE_FULL_BRIEFING.md
+StillHere_Full_Report_For_AI_Council.md
+STORE_SUBMISSION.md
+
+# Test and local scripts are not needed in the runtime image.
+test
+script/test_*.ts
+scripts

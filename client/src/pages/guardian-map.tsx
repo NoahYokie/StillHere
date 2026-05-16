@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,12 +20,17 @@ import {
   Maximize2,
   MessageSquare,
   Phone,
+  ShieldCheck,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import GoogleMap from "@/components/google-map";
 import type { WatchedUser } from "@shared/schema";
 import { getSocket } from "@/lib/socket";
 import { formatDistanceToNow } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type MapPerson = {
   id: string;
@@ -35,6 +40,7 @@ type MapPerson = {
   activity?: string | null;
   speed?: number | null;
   heading?: number | null;
+  accuracy?: number | null;
   lastUpdated?: string;
   isMe?: boolean;
   safetyState?: string | null;
@@ -49,8 +55,17 @@ type LiveSnapshot = Record<string, {
   activity?: string | null;
   speed?: number | null;
   heading?: number | null;
+  accuracy?: number | null;
   timestamp: string;
 }>;
+
+type WatcherRequest = {
+  contactId: string;
+  ownerName: string;
+  contactName: string;
+  role: string;
+  requestedAt: string | Date | null;
+};
 
 const ACTIVITY_LABEL: Record<string, string> = {
   stationary: "Still",
@@ -111,15 +126,16 @@ function stateColor(state: string | null | undefined, hasIncident: boolean): {
 
 export default function GuardianMapPage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [threeD, setThreeD] = useState(false);
   const [mapType, setMapType] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
-  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(() => {
+  const [myPos, setMyPos] = useState<{ lat: number; lng: number; accuracy?: number | null } | null>(() => {
     try {
       const cached = localStorage.getItem("stillhere_watcher_pos");
       if (cached) {
         const parsed = JSON.parse(cached);
         if (typeof parsed?.lat === "number" && typeof parsed?.lng === "number") {
-          return { lat: parsed.lat, lng: parsed.lng };
+          return { lat: parsed.lat, lng: parsed.lng, accuracy: parsed.accuracy ?? null };
         }
       }
     } catch {}
@@ -135,12 +151,46 @@ export default function GuardianMapPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: watcherRequests } = useQuery<{ requests: WatcherRequest[] }>({
+    queryKey: ["/api/watcher-requests"],
+    refetchInterval: 30_000,
+  });
+
+  const acceptRequestMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/watcher-requests/${contactId}/accept`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watcher-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      toast({ title: "Request accepted", description: "They now appear in your watcher area." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not accept request", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const declineRequestMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/watcher-requests/${contactId}/decline`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watcher-requests"] });
+      toast({ title: "Request declined" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not decline request", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
   // Watch the watcher's own browser location continuously so fit-bounds always
   // includes both the watcher and the watched users (Life360-style overview).
   useEffect(() => {
     if (!navigator.geolocation) return;
     const onPos = (pos: GeolocationPosition) => {
-      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null };
       setMyPos(next);
       try {
         localStorage.setItem("stillhere_watcher_pos", JSON.stringify(next));
@@ -149,11 +199,12 @@ export default function GuardianMapPage() {
     navigator.geolocation.getCurrentPosition(onPos, () => {}, {
       enableHighAccuracy: true,
       timeout: 8000,
-      maximumAge: 60_000,
+      maximumAge: 10_000,
     });
     const watchId = navigator.geolocation.watchPosition(onPos, () => {}, {
       enableHighAccuracy: true,
-      maximumAge: 30_000,
+      timeout: 12_000,
+      maximumAge: 10_000,
     });
     return () => {
       navigator.geolocation.clearWatch(watchId);
@@ -169,6 +220,7 @@ export default function GuardianMapPage() {
       lng: number;
       speed: number | null;
       heading: number | null;
+      accuracy?: number | null;
       activity: string;
       timestamp: string;
     }) => {
@@ -181,6 +233,7 @@ export default function GuardianMapPage() {
           activity: data.activity,
           speed: data.speed,
           heading: data.heading,
+          accuracy: data.accuracy ?? null,
           timestamp: data.timestamp || new Date().toISOString(),
         },
       }));
@@ -209,6 +262,7 @@ export default function GuardianMapPage() {
       const activity = live?.activity ?? w.lastActivity ?? "stationary";
       const speed = live?.speed ?? w.lastSpeed ?? null;
       const heading = live?.heading ?? null;
+      const accuracy = live?.accuracy ?? w.lastLocationAcc ?? w.lastHeartbeatAcc ?? null;
       const lastUpdated =
         live?.timestamp ??
         (w.lastLocationAt ? new Date(w.lastLocationAt).toISOString() : undefined) ??
@@ -222,6 +276,7 @@ export default function GuardianMapPage() {
         activity,
         speed,
         heading,
+        accuracy,
         lastUpdated,
         safetyState: w.safetyState,
         hasSafetyEvent: w.hasOpenIncident || w.safetyState === "concern",
@@ -235,6 +290,7 @@ export default function GuardianMapPage() {
         name: "You",
         lat: myPos.lat,
         lng: myPos.lng,
+        accuracy: myPos.accuracy ?? null,
         isMe: true,
         safetyState: "active",
       });
@@ -280,6 +336,8 @@ export default function GuardianMapPage() {
   const concernCount = (watchedUsers || []).filter(
     (w) => w.hasOpenIncident || w.safetyState === "concern",
   ).length;
+  const pendingRequests = watcherRequests?.requests || [];
+  const requestActionPending = acceptRequestMutation.isPending || declineRequestMutation.isPending;
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col" data-testid="page-guardian-map">
@@ -343,8 +401,63 @@ export default function GuardianMapPage() {
           className="w-full h-full"
         />
 
+        {pendingRequests.length > 0 && !focusedId && (
+          <div className="absolute top-20 left-0 right-0 z-20 px-3 pointer-events-none">
+            <Card className="pointer-events-auto max-w-3xl mx-auto p-3 shadow-xl border-primary/30">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold text-sm">Safety Circle request</p>
+                    <Badge variant="outline" className="text-[10px]">
+                      {pendingRequests.length}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {pendingRequests[0].ownerName} asked you to be their StillHere contact.
+                    {pendingRequests.length > 1 ? ` ${pendingRequests.length - 1} more request${pendingRequests.length > 2 ? "s" : ""} waiting.` : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => declineRequestMutation.mutate(pendingRequests[0].contactId)}
+                  disabled={requestActionPending}
+                  data-testid={`button-map-decline-request-${pendingRequests[0].contactId}`}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Decline
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => acceptRequestMutation.mutate(pendingRequests[0].contactId)}
+                  disabled={requestActionPending}
+                  data-testid={`button-map-accept-request-${pendingRequests[0].contactId}`}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Accept
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSheetOpen(true);
+                  }}
+                  data-testid="button-map-review-requests"
+                >
+                  Review
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
         {/* Quick legend */}
-        <div className="absolute top-20 right-3 z-10">
+        <div className={`absolute ${pendingRequests.length > 0 && !focusedId ? "top-52" : "top-20"} right-3 z-10`}>
           <Card className="p-2 shadow-lg flex flex-col gap-1 text-xs">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -368,6 +481,10 @@ export default function GuardianMapPage() {
           const colors = stateColor(w.safetyState, w.hasOpenIncident);
           const live = liveSnap[w.userId];
           const activity = (live?.activity ?? w.lastActivity ?? "stationary") as string;
+          const accuracy = live?.accuracy ?? w.lastLocationAcc ?? w.lastHeartbeatAcc ?? null;
+          const batteryLabel = w.batteryLevel != null
+            ? `${Math.round(w.batteryLevel * 100)}%${w.batteryCharging ? " charging" : ""}`
+            : null;
           const lastTs =
             live?.timestamp ??
             (w.lastLocationAt ? new Date(w.lastLocationAt).toISOString() : undefined) ??
@@ -402,6 +519,18 @@ export default function GuardianMapPage() {
                         <>
                           <span>·</span>
                           <span>{formatDistanceToNow(new Date(lastTs), { addSuffix: true })}</span>
+                        </>
+                      )}
+                      {accuracy != null && Number.isFinite(Number(accuracy)) && Number(accuracy) > 0 && (
+                        <>
+                          <span>Â·</span>
+                          <span>Accurate to ~{Math.round(Number(accuracy))}m</span>
+                        </>
+                      )}
+                      {batteryLabel && (
+                        <>
+                          <span>Â·</span>
+                          <span>Battery {batteryLabel}</span>
                         </>
                       )}
                     </div>
@@ -489,9 +618,53 @@ export default function GuardianMapPage() {
                   </Badge>
                 </div>
 
-                {(watchedUsers || []).length === 0 && (
+                {pendingRequests.length > 0 && (
+                  <div className="space-y-2" data-testid="sheet-watcher-requests">
+                    {pendingRequests.map((request) => (
+                      <div
+                        key={request.contactId}
+                        className="rounded-xl border border-primary/30 bg-primary/5 p-3"
+                        data-testid={`card-sheet-request-${request.contactId}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                            <ShieldCheck className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium">Safety Circle request</p>
+                            <p className="text-sm text-muted-foreground">
+                              {request.ownerName} asked you to be their StillHere contact.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => declineRequestMutation.mutate(request.contactId)}
+                            disabled={requestActionPending}
+                            data-testid={`button-sheet-decline-request-${request.contactId}`}
+                          >
+                            Decline
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => acceptRequestMutation.mutate(request.contactId)}
+                            disabled={requestActionPending}
+                            data-testid={`button-sheet-accept-request-${request.contactId}`}
+                          >
+                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                            Accept
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(watchedUsers || []).length === 0 && pendingRequests.length === 0 && (
                   <p className="text-sm text-muted-foreground py-6 text-center">
-                    No one to watch yet.
+                    No one to watch yet. Safety Circle requests will appear here.
                   </p>
                 )}
 

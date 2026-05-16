@@ -54,7 +54,7 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function formatDays(csv: string): string {
   const days = csv.split(",").map(d => parseInt(d, 10)).filter(n => Number.isInteger(n)).sort();
   if (days.length === 7) return "Every day";
-  if (days.length === 5 && days.join(",") === "1,2,3,4,5") return "Mon–Fri";
+  if (days.length === 5 && days.join(",") === "1,2,3,4,5") return "Mon to Fri";
   if (days.length === 2 && days.join(",") === "0,6") return "Weekends";
   return days.map(d => DAY_LABELS[d]).join(", ");
 }
@@ -392,13 +392,13 @@ export default function FamilyPage() {
         sendHeartbeat(lat, lng, accuracy);
       },
       () => {},
-      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 15_000 },
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 },
     );
     // Also poke immediately so the first pin shows up fast.
     navigator.geolocation.getCurrentPosition(
       (pos) => sendHeartbeat(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
       () => {},
-      { maximumAge: 60_000, timeout: 10_000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10_000 },
     );
     return () => navigator.geolocation.clearWatch(watch);
   }, [family?.id]);
@@ -411,6 +411,7 @@ export default function FamilyPage() {
         name: m.name + (m.userId === myUserId ? " (You)" : ""),
         lat: m.lastLat as number,
         lng: m.lastLng as number,
+        accuracy: m.lastAccuracy ?? null,
         safetyState: (m.safetyState as any) || "active",
         activity: (m.lastActivity as any) || "stationary",
         isMe: m.userId === myUserId,
@@ -424,6 +425,7 @@ export default function FamilyPage() {
         name: `${myMember.name} (You)`,
         lat: myDeviceLoc.lat,
         lng: myDeviceLoc.lng,
+        accuracy: myDeviceLoc.acc ?? null,
         safetyState: "active" as any,
         activity: "stationary" as any,
         isMe: true,
@@ -702,7 +704,7 @@ export default function FamilyPage() {
               <div>
                 <h2 className="text-xl font-bold">Create your family</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Watch over each other. Map, chat, and one-tap safety pings - all in one place.
+                  Watch over each other. Map, chat, and one-tap safety pings in one place.
                 </p>
               </div>
               <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -1361,7 +1363,7 @@ export default function FamilyPage() {
 
           {places.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-4">
-              No places yet. Add Home first - it's the most useful one.
+              No places yet. Add Home first. It's the most useful one.
             </p>
           )}
 
@@ -1419,7 +1421,7 @@ export default function FamilyPage() {
                                 {member?.name || "Member"} · {formatDays(s.daysOfWeek)}
                               </div>
                               <div className="text-muted-foreground">
-                                {formatMinutes(s.expectedStartMinutes)} – {formatMinutes(s.expectedEndMinutes)}
+                                {formatMinutes(s.expectedStartMinutes)} to {formatMinutes(s.expectedEndMinutes)}
                                 {s.graceMinutes > 0 && ` · ${s.graceMinutes}m grace`}
                               </div>
                             </div>
@@ -1625,7 +1627,7 @@ export default function FamilyPage() {
                   </Select>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Make sure you're physically at this spot - it uses your phone's current GPS.
+                  Make sure you're physically at this spot. It uses your phone's current GPS.
                 </p>
               </div>
               <DialogFooter>
@@ -1655,7 +1657,7 @@ export default function FamilyPage() {
                   <Heart className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
                   <div>
                     <strong>Family Pulse</strong>
-                    <p className="text-muted-foreground text-xs">One-tap "I'm OK" - everyone sees it in chat.</p>
+                    <p className="text-muted-foreground text-xs">One-tap "I'm OK". Everyone sees it in chat.</p>
                   </div>
                 </li>
                 <li className="flex items-start gap-2">

@@ -422,7 +422,7 @@ export default function Home() {
       apiRequest("POST", "/api/sos", sosBody).then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
-          title: "Fall sensed - SOS sent",
+          title: "Fall sensed. SOS sent",
           description: sosBody.lat != null
             ? "We attempted to reach your emergency contacts with your location."
             : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",

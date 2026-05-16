@@ -239,7 +239,7 @@ export function GuardianViewPreview() {
               ) : preview.sharingMode === "area" ? (
                 <div className="flex items-center gap-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30">
                   <MapPin className="h-3.5 w-3.5 text-blue-500" />
-                  <span className="text-xs text-blue-700 dark:text-blue-300">General area visible (approx. 1km radius  -  not your exact location)</span>
+                  <span className="text-xs text-blue-700 dark:text-blue-300">General area visible (approx. 1km radius, not your exact location)</span>
                 </div>
               ) : preview.lastHeartbeatLat ? (
                 <div className="flex items-center gap-2 p-2 rounded bg-muted/50">

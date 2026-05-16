@@ -716,7 +716,7 @@ export default function LiveLocationViewPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                  <span>{format(new Date(seg.startTime), "h:mm a")} - {format(new Date(seg.endTime), "h:mm a")}</span>
+                                  <span>{format(new Date(seg.startTime), "h:mm a")} to {format(new Date(seg.endTime), "h:mm a")}</span>
                                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{formatDuration(seg.durationMin)}</Badge>
                                 </div>
                               </div>
@@ -736,7 +736,7 @@ export default function LiveLocationViewPage() {
                                   </div>
                                 )}
                                 <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                                  <span>{format(new Date(seg.startTime), "h:mm a")} - {format(new Date(seg.endTime), "h:mm a")}</span>
+                                  <span>{format(new Date(seg.startTime), "h:mm a")} to {format(new Date(seg.endTime), "h:mm a")}</span>
                                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{formatDuration(seg.durationMin)}</Badge>
                                 </div>
                                 {seg.maxSpeed != null && seg.maxSpeed > 5 && (
@@ -774,7 +774,7 @@ export default function LiveLocationViewPage() {
                         <div className="flex-1 min-w-0">
                           <span className="text-muted-foreground">{formatActivity(point.activity)}</span>
                           {point.speed != null && point.speed > 0.5 && (
-                            <span className="text-muted-foreground"> - {formatSpeed(point.speed)}</span>
+                            <span className="text-muted-foreground">, {formatSpeed(point.speed)}</span>
                           )}
                         </div>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">

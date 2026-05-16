@@ -260,13 +260,13 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
             <strong style="color:#334155;">Why am I receiving this?</strong> ${whyReceiving}
           </p>
           <p style="margin:0;font-size:11px;line-height:1.55;color:#94a3b8;">
-            StillHere only emails you about a possible safety event, a report you signed up for, or when someone in your Safety Circle asks for help. Your details are never shared. Reply STOP to be removed, or ask <strong>${safeName}</strong> to remove you in their app.
+            StillHere only emails you about a possible safety event, a report you signed up for, or when someone in your Safety Circle asks for help. Your details are never shared. To stop these emails, ask <strong>${safeName}</strong> to remove or update your contact details in StillHere.
           </p>
         </td></tr>
 
         <tr><td align="center" style="padding:14px 24px 18px 24px;">
           <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">
-            <a href="${esc(BRAND_BASE_URL)}" style="color:#94a3b8;text-decoration:none;">stillhere.health</a> · Personal safety check ins
+            <a href="${esc(BRAND_BASE_URL)}" style="color:#94a3b8;text-decoration:none;">stillhere.health</a> &middot; Personal safety check-ins
           </p>
         </td></tr>
       </table>
@@ -377,17 +377,17 @@ export async function sendEmergencyEmail(
   const level: AlertLevel = issos ? "emergency" : "warning";
   const subject = safeSubject(issos
     ? `Urgent: ${userName} needs help (StillHere)`
-    : `Safety alert: ${userName} missed a check in (StillHere)`);
-  const title = issos ? "Emergency SOS activated" : "Missed safety check in";
+    : `Safety alert: ${userName} missed a check-in (StillHere)`);
+  const title = issos ? "Emergency SOS activated" : "Missed safety check-in";
   const eventLine = issos
-    ? `<strong>${safeName}</strong> just activated an emergency SOS. We are attempting to reach their Safety Circle now through app, SMS, phone call, and email.`
-    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check in. We are attempting to reach their Safety Circle now through app, SMS, phone call, and email.`;
+    ? `<strong>${safeName}</strong> just activated an emergency SOS. StillHere is notifying their Safety Circle now using the available contact methods on their account.`
+    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check-in. StillHere is notifying their Safety Circle now using the available contact methods on their account.`;
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to attempt to reach you when a possible safety event is detected. StillHere is not an emergency response service.`;
 
   const enriched = await enrichContext(context);
   const body = renderEmail({
     level, title, userName, eventLine,
-    ctaUrl: link, ctaLabel: "View live location",
+    ctaUrl: link, ctaLabel: "View live status",
     whyReceiving, emergencyHint: true,
     expiryNote: "This link expires in 24 hours for your safety and privacy.",
     context: enriched,
@@ -404,6 +404,7 @@ export async function sendCrashEmail(
   link: string,
   speedKmh?: number,
   context?: EmailContext,
+  options: SendEmailOptions = {},
 ): Promise<SendEmailResult> {
   const safeName = esc(userName);
   const speedInfo = speedKmh ? ` while travelling at about <strong>${Math.round(speedKmh)} km/h</strong>` : "";
@@ -415,12 +416,15 @@ export async function sendCrashEmail(
   const body = renderEmail({
     level: "emergency", title: "Possible vehicle crash detected",
     userName, eventLine,
-    ctaUrl: link, ctaLabel: "View live location",
+    ctaUrl: link, ctaLabel: "View live status",
     whyReceiving, emergencyHint: true,
     expiryNote: "This link expires in 24 hours for your safety and privacy.",
     context: enriched,
   });
-  return sendEmail(contactEmail, subject, body);
+  return sendEmail(contactEmail, subject, body, {
+    purpose: "drive_crash",
+    ...options,
+  });
 }
 
 export async function sendGeofenceEmail(
@@ -428,6 +432,7 @@ export async function sendGeofenceEmail(
   userName: string,
   zoneName: string,
   context?: EmailContext,
+  options: SendEmailOptions = {},
 ): Promise<SendEmailResult> {
   const safeName = esc(userName);
   const safeZone = esc(zoneName);
@@ -439,8 +444,11 @@ export async function sendGeofenceEmail(
   const body = renderEmail({
     level: "info", title: `Left "${zoneName}" zone`,
     userName, eventLine,
-    ctaUrl: `${BRAND_BASE_URL}/family`, ctaLabel: "View live location",
+    ctaUrl: `${BRAND_BASE_URL}/family`, ctaLabel: "Open StillHere",
     whyReceiving, emergencyHint: false, context: enriched,
   });
-  return sendEmail(contactEmail, subject, body);
+  return sendEmail(contactEmail, subject, body, {
+    purpose: "geofence",
+    ...options,
+  });
 }

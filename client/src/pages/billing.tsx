@@ -246,7 +246,7 @@ export default function BillingPage() {
               <PlanCard
                 title="Yearly"
                 priceLabel={`${formatPrice(yearlyPrice.unitAmount, yearlyPrice.currency)} / year`}
-                helper="Best value - the equivalent of $5/mo."
+                helper="Best value. The equivalent of $5/mo."
                 badge="Best value"
                 disabled={isPremium || checkoutMutation.isPending}
                 onSelect={() => checkoutMutation.mutate(yearlyPrice.id)}

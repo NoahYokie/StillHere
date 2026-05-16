@@ -122,7 +122,7 @@ function SafetyHealthCard() {
       partial: false,
       denied: health.notifications === "denied",
       unknown: health.notifications === "unknown" && !isPermissionMarkedEnabled("notifications"),
-      description: notifStickyOk ? "Enabled" : health.notifications === "denied" ? "Blocked  -  update in phone Settings" : "Not enabled",
+      description: notifStickyOk ? "Enabled" : health.notifications === "denied" ? "Blocked. Update in phone Settings" : "Not enabled",
       fix: async () => { setFixing(true); await requestNotificationPermission(); health.refresh(); setFixing(false); },
     },
     {
@@ -1015,13 +1015,13 @@ export default function SettingsPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="40">40 km/h - School zone</SelectItem>
-                          <SelectItem value="50">50 km/h - Urban</SelectItem>
-                          <SelectItem value="60">60 km/h - City</SelectItem>
-                          <SelectItem value="80">80 km/h - Suburban</SelectItem>
-                          <SelectItem value="100">100 km/h - Highway</SelectItem>
-                          <SelectItem value="110">110 km/h - Freeway</SelectItem>
-                          <SelectItem value="120">120 km/h - Motorway</SelectItem>
+                          <SelectItem value="40">40 km/h, school zone</SelectItem>
+                          <SelectItem value="50">50 km/h, urban</SelectItem>
+                          <SelectItem value="60">60 km/h, city</SelectItem>
+                          <SelectItem value="80">80 km/h, suburban</SelectItem>
+                          <SelectItem value="100">100 km/h, highway</SelectItem>
+                          <SelectItem value="110">110 km/h, freeway</SelectItem>
+                          <SelectItem value="120">120 km/h, motorway</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

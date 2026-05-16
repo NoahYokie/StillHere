@@ -14,7 +14,7 @@ export default function LimitationsPage() {
   const { auth } = useAuth();
   const { toast } = useToast();
   useDocumentMeta({
-    title: "Limitations of Service — StillHere",
+    title: "Limitations of Service | StillHere",
     description: "What StillHere is, what it isn't, and the limits of our best-effort safety alerts.",
   });
   const scrollRef = useRef<HTMLDivElement | null>(null);

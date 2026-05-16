@@ -171,6 +171,7 @@ export function computeNextCheckinDue(opts: {
   intervalHours: number;
   preferredCheckinTime: string | null | undefined;
   timezone: string | null | undefined;
+  lastTimeIsCheckin?: boolean;
 }): Date {
   const { lastTime, intervalHours } = opts;
   const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
@@ -195,6 +196,11 @@ export function computeNextCheckinDue(opts: {
     dayStart = startOfDayInTimezone(probe, tz);
     candidate = new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
     safety++;
+  }
+  if (opts.lastTimeIsCheckin && startOfDayInTimezone(candidate, tz).getTime() === startOfDayInTimezone(lastTime, tz).getTime()) {
+    const probe = new Date(candidate.getTime() + stepMs + 3_600_000);
+    const nextDayStart = startOfDayInTimezone(probe, tz);
+    candidate = new Date(nextDayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
   }
   return candidate;
 }
@@ -343,6 +349,7 @@ export interface IStorage {
   getSatelliteDevices(userId: string): Promise<SatelliteDevice[]>;
   registerSatelliteDevice(userId: string, data: { deviceType: string; deviceId: string; name: string }): Promise<SatelliteDevice>;
   getSatelliteDeviceByDeviceId(deviceId: string): Promise<(SatelliteDevice & { user: User }) | undefined>;
+  recordSatelliteDeviceSeen(id: string): Promise<void>;
   deleteSatelliteDevice(id: string, userId: string): Promise<void>;
 
   // SMS Checkin
@@ -798,6 +805,11 @@ export class DatabaseStorage implements IStorage {
             phone: contactData.phone,
             email: contactData.email || null,
             canViewLocation: true,
+            linkedUserId: existingMatch.phone === contactData.phone ? existingMatch.linkedUserId : null,
+            watcherConsentStatus: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentStatus : "pending",
+            watcherConsentRequestedAt: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentRequestedAt : new Date(),
+            watcherConsentAcceptedAt: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentAcceptedAt : null,
+            watcherConsentDeclinedAt: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentDeclinedAt : null,
           })
           .where(eq(contacts.id, existingMatch.id))
           .returning();
@@ -813,6 +825,8 @@ export class DatabaseStorage implements IStorage {
           email: contactData.email || null,
           priority: contactData.priority,
           canViewLocation: true,
+          watcherConsentStatus: "pending",
+          watcherConsentRequestedAt: new Date(),
         }).returning();
         result.push(newContact);
         await this.generateToken(newContact.id);
@@ -1600,6 +1614,7 @@ export class DatabaseStorage implements IStorage {
       intervalHours: userSettings.checkinIntervalHours,
       preferredCheckinTime: userSettings.preferredCheckinTime,
       timezone: user.timezone,
+      lastTimeIsCheckin: !!lastCheckin,
     });
 
     const contactLimit = await this.getContactLimit(userId);
@@ -1637,7 +1652,7 @@ export class DatabaseStorage implements IStorage {
         // The allclear page only needs the subject's first name to display the
         // confirmation; everything else is omitted so a forwarded link cannot
         // be used to fingerprint the user or watcher.
-        user: { id: "", name: user.name, phone: null },
+        user: { id: "", name: user.name, phone: null, timezone: user.timezone || null },
         contact: { id: "", name: contact.name, phone: "", email: null, userId: "", priority: 0 } as unknown as Contact,
         lastCheckin: null,
         incident: null,
@@ -1679,7 +1694,7 @@ export class DatabaseStorage implements IStorage {
         return {
           mode: "resolved",
           // Minimal projection: name only, plus the resolution time.
-          user: { id: "", name: user.name, phone: null },
+          user: { id: "", name: user.name, phone: null, timezone: user.timezone || null },
           contact: { id: "", name: contact.name, phone: "", email: null, userId: "", priority: 0 } as unknown as Contact,
           lastCheckin: null,
           incident: null,
@@ -1755,6 +1770,7 @@ export class DatabaseStorage implements IStorage {
         id: user.id,
         name: user.name,
         phone: user.phone,
+        timezone: user.timezone || null,
       },
       contact,
       lastCheckin: lastCheckin || null,
@@ -1794,6 +1810,7 @@ export class DatabaseStorage implements IStorage {
         intervalHours: userSettings.checkinIntervalHours,
         preferredCheckinTime: userSettings.preferredCheckinTime,
         timezone: user.timezone,
+        lastTimeIsCheckin: !!lastCheckin,
       });
       const graceTime = new Date(dueTime.getTime() + userSettings.graceMinutes * 60 * 1000);
 
@@ -2005,7 +2022,12 @@ export class DatabaseStorage implements IStorage {
 
   async linkContactToUser(contactId: string, linkedUserId: string | null): Promise<Contact> {
     const [contact] = await db.update(contacts)
-      .set({ linkedUserId })
+      .set({
+        linkedUserId,
+        watcherConsentStatus: linkedUserId ? "accepted" : "pending",
+        watcherConsentAcceptedAt: linkedUserId ? new Date() : null,
+        watcherConsentDeclinedAt: null,
+      })
       .where(eq(contacts.id, contactId))
       .returning();
     return contact;
@@ -2016,7 +2038,11 @@ export class DatabaseStorage implements IStorage {
     if (!watcherUser?.phone) return [];
 
     const linkedContacts = await db.select().from(contacts).where(
-      and(eq(contacts.linkedUserId, watcherUserId), isNull(contacts.softDeletedAt))
+      and(
+        eq(contacts.linkedUserId, watcherUserId),
+        eq(contacts.watcherConsentStatus, "accepted"),
+        isNull(contacts.softDeletedAt),
+      )
     );
 
     const result: WatchedUser[] = [];
@@ -2034,11 +2060,13 @@ export class DatabaseStorage implements IStorage {
         intervalHours: userSettings?.checkinIntervalHours || 24,
         preferredCheckinTime: userSettings?.preferredCheckinTime,
         timezone: user.timezone,
+        lastTimeIsCheckin: !!lastCheckin,
       });
 
       let lastLocationAt: Date | null = null;
       let lastLocationLat: number | null = null;
       let lastLocationLng: number | null = null;
+      let lastLocationAcc: number | null = null;
       let lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null = null;
       let lastSpeed: number | null = null;
       const activeSession = await db.select().from(locationSessions).where(
@@ -2048,6 +2076,7 @@ export class DatabaseStorage implements IStorage {
         lastLocationAt = activeSession[0].updatedAt;
         lastLocationLat = activeSession[0].lastLat;
         lastLocationLng = activeSession[0].lastLng;
+        lastLocationAcc = activeSession[0].lastAccuracy ?? null;
       }
       const liveShare = await db.select().from(liveLocationShares).where(
         and(eq(liveLocationShares.userId, user.id), eq(liveLocationShares.active, true))
@@ -2060,6 +2089,7 @@ export class DatabaseStorage implements IStorage {
             lastLocationAt = liveShare[0].lastUpdatedAt;
             lastLocationLat = liveShare[0].lastLat;
             lastLocationLng = liveShare[0].lastLng;
+            lastLocationAcc = liveShare[0].lastAccuracy ?? null;
           }
         }
       }
@@ -2146,6 +2176,7 @@ export class DatabaseStorage implements IStorage {
         lastLocationAt: hideLocation ? null : lastLocationAt,
         lastLocationLat: hideLocation ? null : obfuscateLocation && lastLocationLat ? obfuscateCoord(Number(lastLocationLat), user.id + "lat") : lastLocationLat,
         lastLocationLng: hideLocation ? null : obfuscateLocation && lastLocationLng ? obfuscateCoord(Number(lastLocationLng), user.id + "lng") : lastLocationLng,
+        lastLocationAcc: hideLocation ? null : obfuscateLocation ? null : lastLocationAcc,
         lastActivity: hideLocation ? null : lastActivity,
         lastSpeed: hideLocation ? null : lastSpeed,
         batteryLevel: user.batteryLevel ?? null,
@@ -2168,7 +2199,11 @@ export class DatabaseStorage implements IStorage {
 
   async getContactsLinkedToUser(linkedUserId: string): Promise<Contact[]> {
     return db.select().from(contacts).where(
-      and(eq(contacts.linkedUserId, linkedUserId), isNull(contacts.softDeletedAt))
+      and(
+        eq(contacts.linkedUserId, linkedUserId),
+        eq(contacts.watcherConsentStatus, "accepted"),
+        isNull(contacts.softDeletedAt),
+      )
     );
   }
 
@@ -2383,6 +2418,12 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUser(device.userId);
     if (!user) return undefined;
     return { ...device, user };
+  }
+
+  async recordSatelliteDeviceSeen(id: string): Promise<void> {
+    await db.update(satelliteDevices)
+      .set({ lastSeenAt: new Date() })
+      .where(eq(satelliteDevices.id, id));
   }
 
   async deleteSatelliteDevice(id: string, userId: string): Promise<void> {
@@ -2713,6 +2754,7 @@ export class DatabaseStorage implements IStorage {
     const watcherContacts = await db.select().from(contacts)
       .where(and(
         eq(contacts.linkedUserId, watcherUserId),
+        eq(contacts.watcherConsentStatus, "accepted"),
         isNull(contacts.softDeletedAt)
       ));
 
@@ -3070,6 +3112,7 @@ export class DatabaseStorage implements IStorage {
         lastSeenAt: (adminUser as any).lastHeartbeatAt || null,
         lastLat: adminLoc.lat,
         lastLng: adminLoc.lng,
+        lastAccuracy: adminMode === "precise" ? ((adminUser as any).lastHeartbeatAcc ?? null) : null,
         lastActivity: (adminUser as any).lastActivity ?? null,
         hasActiveIncident: false,
         timezone: (adminUser as any).timezone || null,
@@ -3083,6 +3126,7 @@ export class DatabaseStorage implements IStorage {
       let lastSeenAt: Date | null = null;
       let lastLat: number | null = null;
       let lastLng: number | null = null;
+      let lastAccuracy: number | null = null;
       let lastActivity: any = null;
       let timezone: string | null = null;
       let resolvedSharingMode: any = row.sharingMode;
@@ -3102,6 +3146,7 @@ export class DatabaseStorage implements IStorage {
           lastSeenAt = (u as any).lastHeartbeatAt || null;
           lastLat = (u as any).lastHeartbeatLat ?? null;
           lastLng = (u as any).lastHeartbeatLng ?? null;
+          lastAccuracy = (u as any).lastHeartbeatAcc ?? null;
           lastActivity = (u as any).lastActivity ?? null;
           timezone = (u as any).timezone || null;
           resolvedSharingMode = row.sharingMode;
@@ -3110,6 +3155,7 @@ export class DatabaseStorage implements IStorage {
           const memberLoc = redactLocation(resolvedSharingMode, row.userId || "", lastLat, lastLng);
           lastLat = memberLoc.lat;
           lastLng = memberLoc.lng;
+          if (resolvedSharingMode !== "precise") lastAccuracy = null;
         }
       } else if (row.userId) {
         // Pending invitee already has an account — show their display name so
@@ -3140,6 +3186,7 @@ export class DatabaseStorage implements IStorage {
         lastSeenAt,
         lastLat,
         lastLng,
+        lastAccuracy,
         lastActivity,
         hasActiveIncident: false,
         timezone,

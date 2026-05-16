@@ -140,7 +140,7 @@ export function ConcernTimelinePanel({ userId, isWatcher }: { userId: string; is
         </div>
         <p className="text-xs text-green-600 dark:text-green-400" data-testid="text-resolved-detail">
           {resolvedBy === "auto"
-            ? "Connection restored  -  no further action needed"
+            ? "Connection restored. No further action needed"
             : resolvedBy === "watcher"
               ? `Marked safe${resolvedAt ? ` at ${format(new Date(resolvedAt), "h:mm a")}` : ""}`
               : resolvedBy === "you"

@@ -370,7 +370,7 @@ export default function LiveLocationPage() {
                         {getActivityIcon(currentActivity)}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">You - {formatActivity(currentActivity)}</p>
+                        <p className="text-sm font-medium">You: {formatActivity(currentActivity)}</p>
                         <p className="text-xs text-muted-foreground">{formatSpeed(currentSpeed)}</p>
                       </div>
                     </div>

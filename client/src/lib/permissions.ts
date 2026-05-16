@@ -113,9 +113,9 @@ export function getOverallLevel(health: Omit<PermissionHealth, "loading">): Perm
 export function getLocationLabel(state: PermissionHealth["location"]): string {
   switch (state) {
     case "always": return "Always Allow";
-    case "when_in_use": return "While Using  -  tap to update to Always Allow";
+    case "when_in_use": return "While Using. Tap to update to Always Allow";
     case "granted": return "Enabled";
-    case "denied": return "Blocked  -  update in phone Settings";
+    case "denied": return "Blocked. Update in phone Settings";
     case "prompt": return "Not enabled";
     default: return "Unknown";
   }

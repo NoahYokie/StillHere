@@ -235,7 +235,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 export default function HelpPage() {
   const [, setLocation] = useLocation();
   useDocumentMeta({
-    title: "Help & FAQ — StillHere",
+    title: "Help & FAQ | StillHere",
     description: "Common questions about safety check-ins, missed check-ins, SOS, and the Safety Circle on StillHere.",
   });
 

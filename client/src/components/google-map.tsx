@@ -284,10 +284,15 @@ function clusterPeople(input: MapPerson[]): MapPerson[] {
     if (cluster.length === 1) {
       result.push(seed);
     } else {
-      // Merge into one virtual person at the centroid
-      const lat = cluster.reduce((s, p) => s + p.lat, 0) / cluster.length;
-      const lng = cluster.reduce((s, p) => s + p.lng, 0) / cluster.length;
+      // Merge into one virtual moving marker. Use the freshest/fastest member's
+      // exact pin instead of an averaged midpoint so a shared car stays pinned
+      // to a real device location.
       const fastest = cluster.reduce((m, p) => ((p.speed ?? 0) > (m.speed ?? 0) ? p : m), cluster[0]);
+      const freshest = cluster.reduce((m, p) => {
+        const mt = m.lastUpdated ? new Date(m.lastUpdated).getTime() : 0;
+        const pt = p.lastUpdated ? new Date(p.lastUpdated).getTime() : 0;
+        return pt > mt ? p : m;
+      }, fastest);
       const worstState = cluster.find(p => p.safetyState === "concern")
         ?? cluster.find(p => p.hasSafetyEvent)
         ?? cluster.find(p => p.safetyState === "quiet")
@@ -295,11 +300,12 @@ function clusterPeople(input: MapPerson[]): MapPerson[] {
       result.push({
         id: "group:" + cluster.map(p => p.id).sort().join("+"),
         name: cluster.map(p => p.name).join(", "),
-        lat,
-        lng,
+        lat: freshest.lat,
+        lng: freshest.lng,
         activity: seed.activity,
         speed: fastest.speed,
         heading: fastest.heading,
+        accuracy: freshest.accuracy ?? fastest.accuracy ?? null,
         lastUpdated: cluster.map(p => p.lastUpdated).filter(Boolean).sort().pop(),
         safetyState: worstState.safetyState,
         hasSafetyEvent: cluster.some(p => p.hasSafetyEvent),

@@ -103,7 +103,7 @@ export default function DriveHistoryPage() {
                   <div className="flex items-center justify-between mt-3 pt-3 border-t text-sm text-muted-foreground">
                     <span>
                       {format(new Date(session.startedAt), "h:mm a")}
-                      {session.endedAt && ` - ${format(new Date(session.endedAt), "h:mm a")}`}
+                      {session.endedAt && ` to ${format(new Date(session.endedAt), "h:mm a")}`}
                     </span>
                     {sessionAlerts.length > 0 && (
                       <span className="text-orange-500" data-testid={`text-alerts-count-${session.id}`}>

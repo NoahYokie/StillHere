@@ -179,10 +179,10 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
         smsSuccess++;
         smsDedup.add(normalizedPhone);
         console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms, ttlHours: 4)`);
-        console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactName: contact.name, userId, method, timestamp: new Date().toISOString() }));
+        console.log(JSON.stringify({ event: "CONTACT_SENT", type: "recovery", role: "WATCHER", contactId: contact.id, userId, method, timestamp: new Date().toISOString() }));
       } catch (err: any) {
         smsFailed++;
-        console.error(`[ALL-CLEAR] FAILED to ${contact.name} (***${contact.phone.slice(-4)}): ${err?.message || err}`);
+        console.error(`[ALL-CLEAR] FAILED to contact=${contact.id} (phone ***${contact.phone.slice(-4)}): ${err?.message || err}`);
       }
     }
     console.log(`[ALL-CLEAR] Complete: ${smsSuccess} success, ${smsFailed} failed`);
@@ -261,8 +261,14 @@ interface NotifyContactSummary {
   smsDelivered: boolean;
 }
 
+function isAcceptedWatcherLink(contact: { linkedUserId?: string | null; watcherConsentStatus?: string | null }, linkedUserId?: string | null): boolean {
+  if (!contact.linkedUserId) return false;
+  if (linkedUserId && contact.linkedUserId !== linkedUserId) return false;
+  return contact.watcherConsentStatus === "accepted";
+}
+
 async function notifyContact(
-  contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null },
+  contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null; watcherConsentStatus?: string | null },
   userName: string,
   link: string,
   reason: "sos" | "missed_checkin",
@@ -345,10 +351,11 @@ async function notifyContact(
   }
 
   // Channels 3 + 4: Push + in-app message (linked-user only)
-  if (contact.linkedUserId) {
+  const linkedUserId = contact.linkedUserId;
+  if (linkedUserId && isAcceptedWatcherLink(contact, linkedUserId)) {
     summary.attempted.push("push");
     try {
-      const pushRes = await sendPushNotification(contact.linkedUserId, {
+      const pushRes = await sendPushNotification(linkedUserId, {
         title: reason === "sos" ? `SOS from ${userName}` : `Safety Alert: ${userName} has not checked in`,
         body: reason === "sos"
           ? `${userName} has activated an emergency SOS and needs immediate assistance. Open the app to respond.`
@@ -358,7 +365,7 @@ async function notifyContact(
       }, {
         purpose: reason === "sos" ? "sos_alert" : "missed_checkin_alert",
         incidentId,
-        dedupeKey: incidentId ? `contact_push:${incidentId}:${contact.linkedUserId}` : null,
+        dedupeKey: incidentId ? `contact_push:${incidentId}:${linkedUserId}` : null,
       });
       if (pushRes && pushRes.sent > 0) {
         summary.delivered.push("push");
@@ -373,8 +380,8 @@ async function notifyContact(
       const alertContent = reason === "sos"
         ? `${userName} has activated an emergency SOS. Please check on them immediately.`
         : `${userName} has not completed their safety checkin. Please check on them.`;
-      await storage.saveMessage(contact.userId, contact.linkedUserId, alertContent);
-      emitToUser(contact.linkedUserId, "message:new", {
+      await storage.saveMessage(contact.userId, linkedUserId, alertContent);
+      emitToUser(linkedUserId, "message:new", {
         type: "emergency-alert",
         userName,
         reason,
@@ -533,11 +540,7 @@ export async function registerRoutes(
       if (result.userId) {
         try {
           const allContacts = await storage.findContactsByPhone(normalizedPhone);
-          for (const contact of allContacts) {
-            if (contact.userId !== result.userId && !contact.linkedUserId) {
-              await storage.linkContactToUser(contact.id, result.userId);
-            }
-          }
+          console.log(`[AUTH] Found ${allContacts.filter((c) => c.userId !== result.userId && !c.linkedUserId).length} pending watcher request(s) for user=${result.userId}`);
         } catch (err: any) {
           const maskedPhone = normalizedPhone ? `***${normalizedPhone.slice(-4)}` : "(no phone)";
           console.error(`[AUTH] Contact backfill failed for ${maskedPhone}:`, err?.message || err);
@@ -595,6 +598,88 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error getting auth status:", error);
       res.status(500).json({ error: "Failed to get auth status" });
+    }
+  });
+
+  app.get("/api/watcher-requests", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user?.phone) return res.json({ requests: [] });
+      const matches = await storage.findContactsByPhone(normalizePhone(user.phone));
+      const requests = [];
+      for (const contact of matches) {
+        if (contact.userId === userId || contact.linkedUserId || contact.softDeletedAt) continue;
+        if (contact.watcherConsentStatus === "declined") continue;
+        const owner = await storage.getUser(contact.userId);
+        requests.push({
+          contactId: contact.id,
+          ownerName: owner?.name || "Someone",
+          contactName: contact.name,
+          role: contact.circleRole || "primary",
+          requestedAt: contact.watcherConsentRequestedAt || contact.createdAt,
+        });
+      }
+      res.json({ requests });
+    } catch (error) {
+      console.error("[WATCHER_REQUESTS] list failed:", (error as any)?.message || error);
+      res.status(500).json({ error: "Failed to load watcher requests" });
+    }
+  });
+
+  app.post("/api/watcher-requests/:contactId/accept", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      const contact = await storage.getContact(req.params.contactId);
+      if (!user?.phone || !contact || contact.softDeletedAt) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+      if (contact.userId === userId || normalizePhone(contact.phone) !== normalizePhone(user.phone)) {
+        return res.status(403).json({ error: "You can only accept watcher requests sent to your phone number" });
+      }
+      if (contact.linkedUserId && contact.linkedUserId !== userId) {
+        return res.status(409).json({ error: "This watcher request is already linked to another account" });
+      }
+      const updated = await storage.linkContactToUser(contact.id, userId);
+      await sendPushNotification(contact.userId, {
+        title: "Safety Circle accepted",
+        body: `${user.name || contact.name} accepted your StillHere Safety Circle request.`,
+        url: "/safety-circle",
+        tag: `watcher-request-accepted-${contact.id}`,
+      }).catch(() => {});
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("[WATCHER_REQUESTS] accept failed:", (error as any)?.message || error);
+      res.status(500).json({ error: "Failed to accept watcher request" });
+    }
+  });
+
+  app.post("/api/watcher-requests/:contactId/decline", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      const contact = await storage.getContact(req.params.contactId);
+      if (!user?.phone || !contact || contact.softDeletedAt) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+      if (contact.userId === userId || normalizePhone(contact.phone) !== normalizePhone(user.phone)) {
+        return res.status(403).json({ error: "You can only decline watcher requests sent to your phone number" });
+      }
+      await db.update(contacts)
+        .set({
+          linkedUserId: null,
+          watcherConsentStatus: "declined",
+          watcherConsentDeclinedAt: new Date(),
+        })
+        .where(eq(contacts.id, contact.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[WATCHER_REQUESTS] decline failed:", (error as any)?.message || error);
+      res.status(500).json({ error: "Failed to decline watcher request" });
     }
   });
   
@@ -979,6 +1064,11 @@ export async function registerRoutes(
         typeof chg === "boolean" ? chg : undefined,
         typeof net === "string" ? net : undefined,
       );
+      if (safeLat !== undefined && safeLng !== undefined) {
+        evaluateGeofenceTransitions(userId, safeLat, safeLng).catch((err: any) => {
+          console.error(`[GEOFENCE] heartbeat evaluation failed for user=${userId}:`, err?.message || err);
+        });
+      }
       let user = await storage.getUser(userId);
       if (typeof tz === "string" && tz.includes("/") && user && user.timezone !== tz) {
         await storage.updateUser(userId, { timezone: tz });
@@ -1091,10 +1181,10 @@ export async function registerRoutes(
           type: "state_change",
           time: user.safetyStateChangedAt.toISOString(),
           detail: user.safetyState === "concern"
-            ? "Concern triggered  -  no heartbeat received"
+            ? "Concern triggered. No heartbeat received"
             : user.safetyState === "quiet"
-              ? "Went quiet  -  waiting for response"
-              : `Status: ${user.safetyState}  -  ${user.safetyStateReason || ""}`,
+              ? "Went quiet. Waiting for response"
+              : `Status: ${user.safetyState}. ${user.safetyStateReason || ""}`,
         });
       }
 
@@ -1341,7 +1431,7 @@ export async function registerRoutes(
         "panic",
         hasLocation ? { lat: sosLat, lng: sosLng, kind: "sos" } : { kind: "sos" },
         {
-          title: `SOS - ${sosUser?.name || "Family member"}`,
+          title: `SOS: ${sosUser?.name || "Family member"}`,
           body: "SOS triggered. Tap to open the family map.",
           url: "/family",
           tag: "family-sos",
@@ -1449,8 +1539,8 @@ export async function registerRoutes(
       }
       const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports, drivingSafety, speedLimitKmh, autoWellnessCall } = req.body;
       
-      if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 48)) {
-        return res.status(400).json({ error: "Checkin interval must be between 12 and 48 hours" });
+      if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 168)) {
+        return res.status(400).json({ error: "Checkin interval must be between 12 and 168 hours" });
       }
       if (graceMinutes !== undefined && (typeof graceMinutes !== "number" || graceMinutes < 10 || graceMinutes > 30)) {
         return res.status(400).json({ error: "Grace period must be between 10 and 30 minutes" });
@@ -1702,7 +1792,12 @@ export async function registerRoutes(
       if (incident[0].claimedByContactId) return res.status(400).json({ error: "Already claimed" });
 
       const linkedContacts = await db.select().from(contacts).where(
-        and(eq(contacts.userId, incident[0].userId), eq(contacts.linkedUserId, userId), isNull(contacts.softDeletedAt))
+        and(
+          eq(contacts.userId, incident[0].userId),
+          eq(contacts.linkedUserId, userId),
+          eq(contacts.watcherConsentStatus, "accepted"),
+          isNull(contacts.softDeletedAt),
+        )
       );
       if (!linkedContacts.length) return res.status(403).json({ error: "Not authorized" });
 
@@ -1802,7 +1897,7 @@ export async function registerRoutes(
               if (wc.linkedUserId && wc.linkedUserId !== userId) {
                 await sendPushNotification(wc.linkedUserId, {
                   title: "Safety Circle ready",
-                  body: `You're all set. If ${user.name} ever needs you, we'll guide you  -  just like this.`,
+                  body: `You're all set. If ${user.name} ever needs you, we'll guide you just like this.`,
                   url: "/watched",
                   tag: `drill-done-${drill.id}`,
                 });
@@ -1845,7 +1940,9 @@ export async function registerRoutes(
 
         const contactList = await storage.getContacts(locked.user_id);
         const watcherContact = contactList.find(c => c.linkedUserId === userId);
-        if (!watcherContact) return { error: { status: 403, body: { error: "Not a linked watcher for this user" } } };
+        if (!watcherContact || watcherContact.watcherConsentStatus !== "accepted") {
+          return { error: { status: 403, body: { error: "Not an accepted watcher for this user" } } };
+        }
 
         let responses: Array<{ contactId: string; contactName: string; role: string; respondedAt: string; responseTimeMs: number }> = [];
         try {
@@ -1927,7 +2024,7 @@ export async function registerRoutes(
       let isLinkedWatcher = false;
       if (!isOwner) {
         const contactList = await storage.getContacts(drill.userId);
-        isLinkedWatcher = contactList.some(c => c.linkedUserId === userId);
+        isLinkedWatcher = contactList.some(c => c.linkedUserId === userId && c.watcherConsentStatus === "accepted");
       }
       if (!isOwner && !isLinkedWatcher) return res.status(403).json({ error: "Forbidden" });
 
@@ -1938,7 +2035,7 @@ export async function registerRoutes(
       } catch { responses = [] }
 
       const allContacts = await storage.getContacts(drill.userId);
-      const watchersWithLink = allContacts.filter(c => c.linkedUserId);
+      const watchersWithLink = allContacts.filter(c => c.linkedUserId && c.watcherConsentStatus === "accepted");
 
       const guardians = watchersWithLink.map(c => {
         const r = responses.find(x => x.contactId === c.id);
@@ -2131,15 +2228,18 @@ export async function registerRoutes(
           const normalizedContactPhone = normalizePhone(contact.phone);
           const linkedUser = await storage.getUserByPhone(normalizedContactPhone);
           if (linkedUser && linkedUser.id !== userId) {
-            await storage.linkContactToUser(contact.id, linkedUser.id);
+            if (isAcceptedWatcherLink(contact, linkedUser.id)) {
+              console.log(`[GUARDIAN] Accepted watcher link already exists for contact=${contact.id}`);
+              continue;
+            }
             const roleLabel = contact.priority === 1 ? "Primary" : contact.priority === 2 ? "Backup" : "Support";
             await sendPushNotification(linkedUser.id, {
-              title: "You're now a guardian",
-              body: `${ownerUser?.name || "Someone"} added you as their ${roleLabel} Guardian. If we can't reach them, we'll guide you. You won't need to figure anything out.`,
+              title: "Safety Circle request",
+              body: `${ownerUser?.name || "Someone"} asked you to be their ${roleLabel} Safety Circle contact. Open StillHere to accept or decline.`,
               url: "/watched",
-              tag: `guardian-briefing-${contact.id}`,
+              tag: `guardian-request-${contact.id}`,
             });
-            console.log(`[GUARDIAN] Briefing sent to linkedUser=${linkedUser.id} (${roleLabel}) for owner=${userId}`);
+            console.log(`[GUARDIAN] Consent request sent to linkedUser=${linkedUser.id} (${roleLabel}) for owner=${userId}`);
           } else {
             await storage.linkContactToUser(contact.id, null);
           }
@@ -2892,8 +2992,8 @@ export async function registerRoutes(
         const myContacts = await storage.getContacts(currentUserId);
         const theirContacts = await storage.getContacts(targetUserId);
         const hasRelationship =
-          myContacts.some((c) => c.linkedUserId === targetUserId) ||
-          theirContacts.some((c) => c.linkedUserId === currentUserId);
+        myContacts.some((c) => isAcceptedWatcherLink(c, targetUserId)) ||
+        theirContacts.some((c) => isAcceptedWatcherLink(c, currentUserId));
         if (!hasRelationship) return res.status(403).json({ error: "Not authorized" });
       }
 
@@ -2944,8 +3044,8 @@ export async function registerRoutes(
       const myContacts = await storage.getContacts(currentUserId);
       const theirContacts = await storage.getContacts(receiverId);
       const hasRelationship =
-        myContacts.some((c) => c.linkedUserId === receiverId) ||
-        theirContacts.some((c) => c.linkedUserId === currentUserId);
+        myContacts.some((c) => isAcceptedWatcherLink(c, receiverId)) ||
+        theirContacts.some((c) => isAcceptedWatcherLink(c, currentUserId));
       if (!hasRelationship) {
         return res.status(403).json({ error: "Not authorized to share location with this user" });
       }
@@ -3035,10 +3135,10 @@ export async function registerRoutes(
         return res.json({ id: user.id, name: user.name });
       }
       const myContacts = await storage.getContacts(currentUserId);
-      const hasAsContact = myContacts.some(c => c.linkedUserId === targetUserId);
+      const hasAsContact = myContacts.some(c => isAcceptedWatcherLink(c, targetUserId));
       if (!hasAsContact) {
         const theirContacts = await storage.getContacts(targetUserId);
-        const isContactOf = theirContacts.some(c => c.linkedUserId === currentUserId);
+        const isContactOf = theirContacts.some(c => isAcceptedWatcherLink(c, currentUserId));
         if (!isContactOf) {
           return res.status(403).json({ error: "Not authorized" });
         }
@@ -3349,8 +3449,8 @@ export async function registerRoutes(
 
       const myContacts = await storage.getContacts(currentUserId);
       const theirContacts = await storage.getContacts(receiverId);
-      const hasRelationship = myContacts.some(c => c.linkedUserId === receiverId) ||
-                               theirContacts.some(c => c.linkedUserId === currentUserId);
+      const hasRelationship = myContacts.some(c => isAcceptedWatcherLink(c, receiverId)) ||
+                               theirContacts.some(c => isAcceptedWatcherLink(c, currentUserId));
       if (!hasRelationship) {
         return res.status(403).json({ error: "Not authorized to message this user" });
       }
@@ -3401,8 +3501,8 @@ export async function registerRoutes(
       const myContacts = await storage.getContacts(currentUserId);
       const theirContacts = await storage.getContacts(receiverId);
       const hasRelationship =
-        myContacts.some((c) => c.linkedUserId === receiverId) ||
-        theirContacts.some((c) => c.linkedUserId === currentUserId);
+        myContacts.some((c) => isAcceptedWatcherLink(c, receiverId)) ||
+        theirContacts.some((c) => isAcceptedWatcherLink(c, currentUserId));
       if (!hasRelationship) {
         return res.status(403).json({ error: "Not authorized to message this user" });
       }
@@ -3626,7 +3726,7 @@ export async function registerRoutes(
         "panic",
         lat != null && lng != null ? { lat, lng, kind: "crash" } : { kind: "crash" },
         {
-          title: `Possible crash - ${user.name}`,
+          title: `Possible crash: ${user.name}`,
           body: "A possible vehicle crash was detected. Tap to open the family map.",
           url: "/family",
           tag: "family-crash",
@@ -3677,13 +3777,18 @@ export async function registerRoutes(
                 lng: hasFreshGps ? lng : (user.lastLng ?? null),
                 locationAt: hasFreshGps ? new Date() : (user.lastLocationAt ?? null),
                 timezone: user.timezone ?? null,
+              },
+              {
+                userId: user.id,
+                incidentId: incident.id,
+                dedupeKey: `crash_email:${incident.id}:${contact.id}`,
               }
             );
           }
 
           if (contact.linkedUserId) {
             await sendPushNotification(contact.linkedUserId, {
-              title: `Urgent: Possible vehicle crash - ${user.name}`,
+              title: `Urgent: Possible vehicle crash involving ${user.name}`,
               body: `A possible vehicle crash has been detected for ${user.name}. Open the app to respond immediately.`,
               url: "/watched",
               tag: "crash-alert",
@@ -4070,11 +4175,78 @@ export async function registerRoutes(
         console.log(`[SMS-CHECKIN] Unknown phone: ***${normalized.slice(-4)}`);
         return res.type("text/xml").send('<Response><Message>This number is not registered with StillHere.</Message></Response>');
       }
-      
+
       const userSettings = await storage.getSettings(user.id);
-      
+
+      const negatives = ["no", "n", "nope", "not ok", "not okay", "not safe", "unsafe", "need help", "help me", "emergency"];
+      const isNegative = negatives.some(a => body === a || body.includes(a));
+
+      if (isNegative || body === "help" || body === "sos") {
+        let incident = await storage.getOpenIncident(user.id);
+        const now = new Date();
+        if (incident) {
+          incident = await storage.updateIncident(incident.id, {
+            reason: "sos",
+            status: "open",
+            handledByContactId: null,
+          });
+        } else {
+          incident = await storage.createIncident(user.id, "sos");
+        }
+
+        await storage.updateSafetyState(user.id, "concern", isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.");
+        emitTrackingPolicyChanged(user.id, isNegative ? "sms_no_help" : "sms_help").catch(() => {});
+
+        const allContacts = await storage.getContacts(user.id);
+        const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
+        const tokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
+        const baseUrl = getBaseUrl();
+        const notifiedIds: string[] = [];
+
+        for (const contact of sorted) {
+          const tok = tokens.find(t => t.contact.id === contact.id);
+          if (!tok) continue;
+          const link = `${baseUrl}/emergency/${tok.token}`;
+          try {
+            await notifyContact(contact, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
+            notifiedIds.push(contact.id);
+          } catch (err: any) {
+            console.error(`[SMS-CHECKIN] Help escalation failed for contact=${contact.id}:`, err?.message || err);
+          }
+        }
+
+        let existingTimeline: any[] = [];
+        try { existingTimeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
+        existingTimeline.push({
+          type: isNegative ? "sms_help" : "sms_sos",
+          time: now.toISOString(),
+          detail: isNegative ? `User replied NO to SMS check-in. Notified ${notifiedIds.length} contact(s)` : `User requested help by SMS. Notified ${notifiedIds.length} contact(s)`,
+        });
+
+        await storage.updateIncident(incident.id, {
+          escalationLevel: notifiedIds.length,
+          lastEscalationStep: `contact_${Math.max(1, notifiedIds.length)}`,
+          notifiedContactIds: JSON.stringify(notifiedIds),
+          lastContactNotifiedAt: now,
+          contact1NotifiedAt: notifiedIds.length > 0 ? now : null,
+          contact2NotifiedAt: notifiedIds.length > 1 ? now : null,
+          allContactsNotifiedAt: notifiedIds.length >= sorted.length && sorted.length > 0 ? now : null,
+          nextActionAt: addMinutes(now, userSettings?.escalationMinutes || 20),
+          escalationTimeline: JSON.stringify(existingTimeline),
+        });
+
+        notifyConcern(user.id, user.name, "sos").catch((err) => {
+          console.error(`[SMS-CHECKIN] notifyConcern failed:`, err?.message || err);
+        });
+
+        const reply = notifiedIds.length > 0
+          ? "StillHere: We hear you. We are contacting your Safety Circle now. If this is life-threatening, call emergency services now."
+          : "StillHere: We hear you. No Safety Circle contacts are available on your account. If this is life-threatening, call emergency services now.";
+        return res.type("text/xml").send(`<Response><Message>${escapeXml(reply)}</Message></Response>`);
+      }
+
       const affirmatives = ["yes", "ok", "y", "yep", "yeah", "im ok", "i'm ok", "safe", "good", "fine", "here", "alive", "checkin", "check in"];
-      const isCheckin = affirmatives.some(a => body.includes(a));
+      const isCheckin = affirmatives.some(a => body === a || body.includes(a));
       
       if (isCheckin) {
         const result = await resolveCheckin(user.id, "sms");
@@ -4096,36 +4268,7 @@ export async function registerRoutes(
         return res.type("text/xml").send(`<Response><Message>${replyMsg}</Message></Response>`);
       }
       
-      if (body === "help" || body === "sos") {
-        const existingIncident = await storage.getOpenIncident(user.id);
-        if (!existingIncident) {
-          const incident = await storage.createIncident(user.id, "sos");
-          const allContacts = await storage.getContacts(user.id);
-          const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
-          // Phase 2: incident-scoped token for this brand-new incident.
-          const tokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
-          const baseUrl = getBaseUrl();
-          const first = sorted[0];
-          if (first) {
-            const tok = tokens.find(t => t.contact.id === first.id);
-            if (tok) {
-              const link = `${baseUrl}/emergency/${tok.token}`;
-              await notifyContact(first, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
-            }
-          }
-          await storage.updateIncident(incident.id, {
-            escalationLevel: 1,
-            lastEscalationStep: "contact_1",
-            notifiedContactIds: JSON.stringify(first ? [first.id] : []),
-            lastContactNotifiedAt: new Date(),
-            contact1NotifiedAt: new Date(),
-            nextActionAt: addMinutes(new Date(), userSettings?.escalationMinutes || 20),
-          });
-        }
-        return res.type("text/xml").send('<Response><Message>SOS alert sent. We are attempting to reach your emergency contacts now. SMS delivery is best-effort.</Message></Response>');
-      }
-      
-      return res.type("text/xml").send('<Response><Message>Reply YES to check in, or HELP for SOS. StillHere is part of your safety loop.</Message></Response>');
+      return res.type("text/xml").send('<Response><Message>Reply YES to check in, or NO if you need help. StillHere is part of your safety loop.</Message></Response>');
     } catch (error) {
       console.error("Error in SMS incoming webhook:", error);
       res.type("text/xml").send('<Response><Message>Something went wrong. Please try again.</Message></Response>');
@@ -4605,15 +4748,23 @@ export async function registerRoutes(
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { name, lat, lng, radiusMeters, type } = req.body;
-      if (!name || lat == null || lng == null) {
+      const cleanName = typeof name === "string" ? name.trim().slice(0, 80) : "";
+      const cleanLat = typeof lat === "number" ? lat : Number(lat);
+      const cleanLng = typeof lng === "number" ? lng : Number(lng);
+      const cleanRadius = Math.max(50, Math.min(1000, Number(radiusMeters) || 200));
+      const cleanType = ["home", "work", "custom"].includes(type) ? type : "custom";
+      if (!cleanName || !Number.isFinite(cleanLat) || !Number.isFinite(cleanLng)) {
         return res.status(400).json({ error: "name, lat, and lng are required" });
       }
+      if (cleanLat < -90 || cleanLat > 90 || cleanLng < -180 || cleanLng > 180) {
+        return res.status(400).json({ error: "lat/lng out of range" });
+      }
       const fence = await storage.createGeofence(userId, {
-        name,
-        lat,
-        lng,
-        radiusMeters: radiusMeters || 200,
-        type: type || "home",
+        name: cleanName,
+        lat: cleanLat,
+        lng: cleanLng,
+        radiusMeters: cleanRadius,
+        type: cleanType,
       });
       res.json(fence);
     } catch (error) {
@@ -4626,7 +4777,24 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const fence = await storage.updateGeofence(req.params.id as string, userId, req.body);
+      const updates: any = {};
+      if (typeof req.body?.name === "string") {
+        const cleanName = req.body.name.trim().slice(0, 80);
+        if (!cleanName) return res.status(400).json({ error: "name is required" });
+        updates.name = cleanName;
+      }
+      if (req.body?.radiusMeters !== undefined) {
+        updates.radiusMeters = Math.max(50, Math.min(1000, Number(req.body.radiusMeters) || 200));
+      }
+      if (req.body?.type !== undefined) {
+        if (!["home", "work", "custom"].includes(req.body.type)) return res.status(400).json({ error: "Invalid type" });
+        updates.type = req.body.type;
+      }
+      if (req.body?.active !== undefined) {
+        if (typeof req.body.active !== "boolean") return res.status(400).json({ error: "active must be boolean" });
+        updates.active = req.body.active;
+      }
+      const fence = await storage.updateGeofence(req.params.id as string, userId, updates);
       res.json(fence);
     } catch (error) {
       console.error("Error updating geofence:", error);
@@ -4651,15 +4819,12 @@ export async function registerRoutes(
   // making it global.
   geofenceStateRef = geofenceState;
 
-  app.post("/api/geofences/check", async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) return res.status(401).json({ error: "Not authenticated" });
-      const { lat, lng } = req.body;
-      if (lat == null || lng == null || typeof lat !== "number" || typeof lng !== "number") {
-        return res.status(400).json({ error: "lat and lng must be numbers" });
-      }
-      
+  async function evaluateGeofenceTransitions(userId: string, lat: number, lng: number): Promise<{
+    zones: Array<{ id: string; name: string; type: string; inside: boolean; distanceMeters: number }>;
+    newDepartures: string[];
+    placeArrivals: string[];
+    placeDepartures: string[];
+  }> {
       const fences = await storage.getGeofences(userId);
       const activeFences = fences.filter(f => f.active);
       const results = activeFences.map(fence => {
@@ -4672,12 +4837,12 @@ export async function registerRoutes(
           distanceMeters: Math.round(distance),
         };
       });
-      
+
       if (!geofenceState.has(userId)) {
         geofenceState.set(userId, new Map());
       }
       const userState = geofenceState.get(userId)!;
-      
+
       const newDepartures: typeof results = [];
       const newArrivals: typeof results = [];
       for (const r of results) {
@@ -4692,6 +4857,26 @@ export async function registerRoutes(
         const allContacts = await storage.getContacts(userId);
         for (const zone of newDepartures) {
           for (const contact of allContacts) {
+            if (contact.linkedUserId && isAcceptedWatcherLink(contact, contact.linkedUserId)) {
+              const body = `${user?.name || "Someone"} left ${zone.name}. Open StillHere for current status.`;
+              sendPushNotification(contact.linkedUserId, {
+                title: "Saved place alert",
+                body,
+                url: "/watched",
+                tag: `geofence-${zone.id}`,
+              }, {
+                purpose: "geofence",
+                dedupeKey: `geofence_push:${zone.id}:${contact.linkedUserId}:${Math.floor(Date.now() / 300000)}`,
+              }).catch((err: any) => {
+                console.error(`[GEOFENCE] Push to contact=${contact.id} about zone=${zone.id} failed:`, err?.message || err);
+              });
+              storage.saveMessage(userId, contact.linkedUserId, body, {
+                messageType: "system_alert",
+                meta: { kind: "geofence_departure", place: zone.name },
+              }).catch((err: any) => {
+                console.error(`[GEOFENCE] In-app message to contact=${contact.id} about zone=${zone.id} failed:`, err?.message || err);
+              });
+            }
             if (contact.email) {
               try {
                 await sendGeofenceEmail(contact.email, user?.name || "User", zone.name, {
@@ -4699,6 +4884,9 @@ export async function registerRoutes(
                   lng,
                   locationAt: new Date(),
                   timezone: user?.timezone ?? null,
+                }, {
+                  userId,
+                  dedupeKey: `geofence_email:${zone.id}:${contact.id}:${Math.floor(Date.now() / 300000)}`,
                 });
               } catch (err: any) {
                 console.error(`[GEOFENCE] Email to contact=${contact.id} about zone=${zone.id} failed:`, err?.message || err);
@@ -4740,12 +4928,27 @@ export async function registerRoutes(
         }
       }
 
-      res.json({
+      return {
         zones: results,
         newDepartures: newDepartures.map(d => d.name),
         placeArrivals: placeArrivals.map(p => p.name),
         placeDepartures: placeDepartures.map(p => p.name),
-      });
+      };
+  }
+
+  app.post("/api/geofences/check", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ error: "Not authenticated" });
+      const { lat, lng } = req.body;
+      if (lat == null || lng == null || typeof lat !== "number" || typeof lng !== "number") {
+        return res.status(400).json({ error: "lat and lng must be numbers" });
+      }
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return res.status(400).json({ error: "lat/lng out of range" });
+      }
+
+      res.json(await evaluateGeofenceTransitions(userId, lat, lng));
     } catch (error) {
       console.error("Error checking geofences:", error);
       res.status(500).json({ error: "Failed" });
@@ -4885,10 +5088,14 @@ export async function registerRoutes(
         share.id, userId, lat, lng,
         accuracy ?? null, speed ?? null, heading ?? null, detectedActivity
       );
+      const geofenceResultPromise = evaluateGeofenceTransitions(userId, lat, lng).catch((err: any) => {
+        console.error(`[GEOFENCE] live-location evaluation failed for user=${userId}:`, err?.message || err);
+      });
 
       emitToUser(userId, "live-location:updated", { lat, lng, speed, heading, activity: detectedActivity });
 
-      const [,watcherContacts, updatedUser, openIncidentForEmit] = await Promise.all([
+      const [,,watcherContacts, updatedUser, openIncidentForEmit] = await Promise.all([
+        geofenceResultPromise,
         processLocationContext(userId, lat, lng, speed ?? null, detectedActivity).catch((err) => {
           console.error(`[LOCATION] processLocationContext failed for ${userId}:`, err?.message || err);
         }),
@@ -5081,6 +5288,16 @@ export async function registerRoutes(
   // ============================================
   // SATELLITE DEVICE ENDPOINTS
   // ============================================
+  const allowedSatelliteDeviceTypes = new Set(["garmin_inreach", "spot", "somewear", "zoleo", "other"]);
+  const allowedSatelliteActions = new Set(["checkin", "sos"]);
+
+  function normalizeSatelliteCoordinate(value: unknown, min: number, max: number): number | null {
+    if (value == null || value === "") return null;
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num) || num < min || num > max) return null;
+    return num;
+  }
+
   app.get("/api/satellite/devices", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -5098,10 +5315,26 @@ export async function registerRoutes(
       const userId = getUserId(req);
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { deviceType, deviceId, name } = req.body;
-      if (!deviceType || !deviceId || !name) {
+      const cleanDeviceType = typeof deviceType === "string" ? deviceType.trim() : "";
+      const cleanDeviceId = typeof deviceId === "string" ? deviceId.trim() : "";
+      const cleanName = typeof name === "string" ? name.trim() : "";
+      if (!cleanDeviceType || !cleanDeviceId || !cleanName) {
         return res.status(400).json({ error: "deviceType, deviceId, and name are required" });
       }
-      const device = await storage.registerSatelliteDevice(userId, { deviceType, deviceId, name });
+      if (!allowedSatelliteDeviceTypes.has(cleanDeviceType)) {
+        return res.status(400).json({ error: "Unsupported satellite device type" });
+      }
+      if (cleanDeviceId.length < 3 || cleanDeviceId.length > 80 || !/^[A-Za-z0-9._:-]+$/.test(cleanDeviceId)) {
+        return res.status(400).json({ error: "Device ID must be 3-80 characters and use only letters, numbers, dots, dashes, underscores, or colons" });
+      }
+      if (cleanName.length > 80) {
+        return res.status(400).json({ error: "Device nickname must be 80 characters or fewer" });
+      }
+      const device = await storage.registerSatelliteDevice(userId, {
+        deviceType: cleanDeviceType,
+        deviceId: cleanDeviceId,
+        name: cleanName,
+      });
       res.json(device);
     } catch (error) {
       console.error("Error registering satellite device:", error);
@@ -5140,18 +5373,29 @@ export async function registerRoutes(
       }
 
       const { deviceId, action, lat, lng } = req.body;
-      if (!deviceId || !action) {
+      const cleanDeviceId = typeof deviceId === "string" ? deviceId.trim() : "";
+      const cleanAction = typeof action === "string" ? action.trim().toLowerCase() : "";
+      if (!cleanDeviceId || !cleanAction) {
         return res.status(400).json({ error: "deviceId and action required" });
       }
+      if (!allowedSatelliteActions.has(cleanAction)) {
+        return res.status(400).json({ error: "Unknown action. Use 'checkin' or 'sos'" });
+      }
+      const satLat = normalizeSatelliteCoordinate(lat, -90, 90);
+      const satLng = normalizeSatelliteCoordinate(lng, -180, 180);
+      if ((lat != null && satLat == null) || (lng != null && satLng == null)) {
+        return res.status(400).json({ error: "lat and lng must be valid coordinates" });
+      }
       
-      const deviceWithUser = await storage.getSatelliteDeviceByDeviceId(deviceId);
+      const deviceWithUser = await storage.getSatelliteDeviceByDeviceId(cleanDeviceId);
       if (!deviceWithUser) {
         return res.status(404).json({ error: "Device not registered" });
       }
+      await storage.recordSatelliteDeviceSeen(deviceWithUser.id);
       
       const user = deviceWithUser.user;
       
-      if (action === "checkin") {
+      if (cleanAction === "checkin") {
         await storage.createCheckin(user.id, "auto");
         await storage.resetReminderState(user.id);
         if (user.safetyState === "concern" || user.safetyState === "quiet") {
@@ -5162,23 +5406,23 @@ export async function registerRoutes(
             await resolveCheckin(user.id, "app", { skipCreateCheckin: true });
           }
         }
-        if (lat != null && lng != null) {
+        if (satLat != null && satLng != null) {
           // Even satellite devices respect the user's tracking policy for
           // coordinate persistence. The check-in itself always lands.
           const satPolicy = await getTrackingPolicyForUser(user.id);
           if (satPolicy.nativeTrackingAllowed) {
             const session = await storage.getActiveLocationSession(user.id);
             if (session) {
-              await storage.updateLocationSession(session.id, lat, lng, 50);
+              await storage.updateLocationSession(session.id, satLat, satLng, 50);
             }
-            await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+            await storage.saveBreadcrumb(user.id, null, satLat, satLng, 50);
           } else {
             console.log(`[TRACKING_POLICY] satellite checkin coords stripped (policy deny)`);
           }
         }
-        console.log(`[SATELLITE] Checkin from device ${deviceId} for user ${user.id}`);
+        console.log(`[SATELLITE] Checkin from device ${deviceWithUser.id} for user ${user.id}`);
         res.json({ ok: true, action: "checkin_recorded" });
-      } else if (action === "sos") {
+      } else if (cleanAction === "sos") {
         const existing = await storage.getOpenIncident(user.id);
         if (!existing) {
           const incident = await storage.createIncident(user.id, "sos");
@@ -5205,18 +5449,18 @@ export async function registerRoutes(
             nextActionAt: addMinutes(new Date(), userSettings?.escalationMinutes || 20),
           });
         }
-        if (lat != null && lng != null) {
+        if (satLat != null && satLng != null) {
           // After createIncident above, the open SOS counts as a real safety
           // purpose, so policy will normally allow. We still re-check to honor
           // explicit paused/off settings.
           const satSosPolicy = await getTrackingPolicyForUser(user.id);
           if (satSosPolicy.nativeTrackingAllowed) {
-            await storage.saveBreadcrumb(user.id, null, lat, lng, 50);
+            await storage.saveBreadcrumb(user.id, null, satLat, satLng, 50);
           } else {
             console.log(`[TRACKING_POLICY] satellite SOS coords stripped (policy deny)`);
           }
         }
-        console.log(`[SATELLITE] SOS from device ${deviceId} for user ${user.id}`);
+        console.log(`[SATELLITE] SOS from device ${deviceWithUser.id} for user ${user.id}`);
         res.json({ ok: true, action: "sos_triggered" });
       } else {
         res.status(400).json({ error: "Unknown action. Use 'checkin' or 'sos'" });
@@ -5349,6 +5593,19 @@ export async function registerRoutes(
           category: "incident",
           count: 1,
         });
+
+        for (const entry of parseEscalationTimeline(inc.escalationTimeline)) {
+          const entryTime = new Date(entry.time);
+          if (entryTime < weekAgo || Number.isNaN(entryTime.getTime())) continue;
+          rawTimeline.push({
+            text: entry.detail,
+            baseText: `${entry.type}:${entry.detail}`,
+            time: formatReportTime(entryTime),
+            rawTime: entryTime,
+            category: "incident",
+            count: 1,
+          });
+        }
       }
 
       for (const ctx of weekContext) {
@@ -5561,6 +5818,18 @@ export async function registerRoutes(
         }
         const entryText = `${reasonText}${resolutionText}`;
         rawTimeline.push({ text: entryText, baseText: entryText, time: formatReportTime(inc.startedAt), rawTime: inc.startedAt, category: "incident", count: 1 });
+        for (const entry of parseEscalationTimeline(inc.escalationTimeline)) {
+          const entryTime = new Date(entry.time);
+          if (entryTime < weekAgo || Number.isNaN(entryTime.getTime())) continue;
+          rawTimeline.push({
+            text: entry.detail,
+            baseText: `${entry.type}:${entry.detail}`,
+            time: formatReportTime(entryTime),
+            rawTime: entryTime,
+            category: "incident",
+            count: 1,
+          });
+        }
       }
 
       for (const ctx of weekContext) {
@@ -5742,6 +6011,10 @@ export async function registerRoutes(
           duration: i.resolvedAt
             ? `${Math.round((i.resolvedAt.getTime() - i.startedAt.getTime()) / 60000)} min`
             : null,
+          escalationTimeline: parseEscalationTimeline(i.escalationTimeline).map((entry) => ({
+            ...entry,
+            time: fmtDate(new Date(entry.time), "yyyy-MM-dd h:mm a"),
+          })),
         })),
         // Omit `heartRateSummary` entirely (not even the key) when the user
         // has not opted in to monitoring. The frontend treats it as optional.
@@ -6138,18 +6411,83 @@ export async function registerRoutes(
   // phone, and prosody rate=92% gives a measured, professional pace.
   const calm = (text: string) => `<prosody rate="92%">${text}</prosody>`;
 
+  async function appendWellnessTimeline(userId: string, type: string, detail: string): Promise<void> {
+    const incident = await storage.getLatestRealOpenIncident(userId);
+    if (!incident || incident.isDrill) return;
+    let timeline: any[] = [];
+    try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
+    timeline.push({ type, time: new Date().toISOString(), detail });
+    await storage.updateIncident(incident.id, { escalationTimeline: JSON.stringify(timeline) });
+  }
+
+  async function updateWellnessCallStatusForPhone(phone: string | null, status: string, detail?: string): Promise<void> {
+    if (!phone) return;
+    const normalizedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+    const user = await storage.getUserByPhone(normalizedPhone);
+    if (!user) {
+      console.error(`[WELLNESS CALL] No user found for callback phone ***${normalizedPhone.slice(-4)}`);
+      return;
+    }
+    const incident = await storage.getLatestRealOpenIncident(user.id);
+    if (!incident || incident.isDrill) return;
+    if (incident.wellnessCallStatus === "safe" || incident.wellnessCallStatus === "help") return;
+    await storage.updateIncident(incident.id, { wellnessCallStatus: status as any });
+    if (detail) await appendWellnessTimeline(user.id, `wellness_call_${status}`, detail);
+    try {
+      const watcherContacts = await storage.getContactsLinkedToUser(user.id);
+      for (const c of watcherContacts) {
+        if (c.linkedUserId) emitToUser(c.linkedUserId, "watched-users:invalidate", { userId: user.id });
+      }
+    } catch {}
+  }
+
+  app.post("/api/wellness-call/status", verifyTwilioSignature, async (req, res) => {
+    try {
+      const callStatus = String(req.body.CallStatus || "").toLowerCase();
+      const answeredBy = String(req.body.AnsweredBy || "").toLowerCase();
+      const to = req.body.To ? String(req.body.To) : null;
+
+      if (answeredBy.includes("machine")) {
+        await updateWellnessCallStatusForPhone(to, "voicemail_left", `Wellness call reached voicemail (${answeredBy})`);
+      } else if (answeredBy === "human") {
+        await updateWellnessCallStatusForPhone(to, "answered_human", "Wellness call answered by user");
+      } else if (["no-answer", "busy", "failed", "canceled"].includes(callStatus)) {
+        await updateWellnessCallStatusForPhone(to, callStatus === "no-answer" ? "no_response" : "failed", `Wellness call ended with status: ${callStatus}`);
+      }
+
+      res.type("text/xml").send("<Response></Response>");
+    } catch (error) {
+      console.error("Error in wellness call status callback:", error);
+      res.type("text/xml").send("<Response></Response>");
+    }
+  });
+
   app.post("/api/wellness-call/respond", verifyTwilioSignature, async (req, res) => {
     try {
+      const answeredBy = String(req.body.AnsweredBy || "").toLowerCase();
+      const calledNumber = req.body.To ? String(req.body.To) : null;
+      if (answeredBy.includes("machine")) {
+        await updateWellnessCallStatusForPhone(calledNumber, "voicemail_left", `Wellness call reached voicemail (${answeredBy})`);
+        const twimlVoicemail = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${calm("Hi, this is StillHere calling for your scheduled check-in. We could not reach you directly. Please open StillHere or reply to your check-in message as soon as you can.")}</Say>
+  <Hangup/>
+</Response>`;
+        return res.type("text/xml").send(twimlVoicemail);
+      }
+      if (answeredBy === "human") {
+        await updateWellnessCallStatusForPhone(calledNumber, "answered_human", "Wellness call answered by user");
+      }
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="15">
+  <Gather numDigits="1" action="/api/wellness-call/gather" method="POST" timeout="15" actionOnEmptyResult="true">
     <Say voice="Polly.Joanna-Neural">${calm("Hello, this is StillHere. We noticed you missed your safety check-in.")}</Say>
     <Pause length="1"/>
     <Say voice="Polly.Joanna-Neural">${calm("Press 1 if you're okay. Press 2 if you need help.")}</Say>
     <Pause length="3"/>
     <Say voice="Polly.Joanna-Neural">${calm("Take your time. Press 1 if you're safe. Press 2 if you need help.")}</Say>
   </Gather>
-  <Say voice="Polly.Joanna-Neural">${calm("No response was received. We will attempt to reach your safety circle shortly. Take care.")}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("No response was received. We will continue the safety flow and attempt to reach your safety circle shortly. Take care.")}</Say>
   <Hangup/>
 </Response>`;
       res.type("text/xml").send(twiml);
@@ -6252,7 +6590,7 @@ export async function registerRoutes(
         existingTimeline.push({
           type: "wellness_call_help",
           time: now.toISOString(),
-          detail: `User pressed 2 on wellness call  -  notified ${notifiedIds.length} contact(s)`,
+          detail: `User pressed 2 on wellness call. Notified ${notifiedIds.length} contact(s)`,
         });
         await storage.updateIncident(incident.id, {
           escalationLevel: Math.max(incident.escalationLevel || 0, 1),
@@ -6315,7 +6653,7 @@ export async function registerRoutes(
           title: "We're with you",
           body: `${notifiedIds.length} contact${notifiedIds.length === 1 ? "" : "s"} alerted. Tap for one-tap ${emergency.number}, contact call, and live location.`,
           tag: "sos-active",
-          url: "/sos",
+          url: "/",
         }).catch((err: any) => {
           console.error(`[WELLNESS CALL] User push failed:`, err?.message || err);
         });
@@ -6326,18 +6664,27 @@ export async function registerRoutes(
         const safePrimary = escapeXml(primaryName);
         const safeUserName = escapeXml(user.name);
         const safeEmergency = escapeXml(emergency.number);
+        const supportIntro = notifiedIds.length > 0
+          ? `We hear you, ${safeUserName}. You are not alone. We are reaching out to your safety circle right now.`
+          : `We hear you, ${safeUserName}. You are not alone. We are starting your safety flow right now.`;
+        const contactAttemptLine = notifiedIds.length > 0
+          ? `We are attempting to reach ${notifiedIds.length} ${notifiedIds.length === 1 ? "person" : "people"}, including ${safePrimary}. We are also sending you a text message with their names.`
+          : "We do not have a reachable Safety Circle contact on file yet. We are sending you a text message with next steps.";
+        const connectPrompt = sortedSos[0]?.phone
+          ? `To be connected directly to ${safePrimary} right now, press 1.`
+          : "We do not have a contact phone number to connect you to right now.";
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm(`We hear you, ${safeUserName}. You are not alone. We are reaching out to your safety circle right now.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(supportIntro)}</Say>
   <Pause length="1"/>
-  <Say voice="Polly.Joanna-Neural">${calm(`We are attempting to reach ${notifiedIds.length} ${notifiedIds.length === 1 ? "person" : "people"}, including ${safePrimary}. We are also sending you a text message with their names.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(contactAttemptLine)}</Say>
   <Pause length="1"/>
-  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="15">
-    <Say voice="Polly.Joanna-Neural">${calm(`To be connected directly to ${safePrimary} right now, press 1.`)}</Say>
+  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="15" actionOnEmptyResult="true">
+    <Say voice="Polly.Joanna-Neural">${calm(connectPrompt)}</Say>
     <Pause length="1"/>
     <Say voice="Polly.Joanna-Neural">${calm(`If this is life-threatening, please hang up and dial ${safeEmergency} now. Or, press 0 for guidance.`)}</Say>
     <Pause length="1"/>
-    <Say voice="Polly.Joanna-Neural">${calm("Or simply stay on the line. We will stay with you until help arrives.")}</Say>
+    <Say voice="Polly.Joanna-Neural">${calm("Or simply stay on the line. We will stay with you for a few minutes while we keep trying your Safety Circle.")}</Say>
   </Gather>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
 </Response>`;
@@ -6513,7 +6860,7 @@ export async function registerRoutes(
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm(`Welcome back. We're glad you got through to ${safeName}.`)}</Say>
   <Pause length="1"/>
-  <Gather numDigits="1" action="/api/wellness-call/post-contact-followup" method="POST" timeout="15">
+  <Gather numDigits="1" action="/api/wellness-call/post-contact-followup" method="POST" timeout="15" actionOnEmptyResult="true">
     <Say voice="Polly.Joanna-Neural">${calm(`Is everything okay now? Press 1 if you're safe and the situation is resolved. Press 2 if you still need more help.`)}</Say>
     <Pause length="2"/>
     <Say voice="Polly.Joanna-Neural">${calm(`Take your time. Press 1 if you're safe. Press 2 if you still need help.`)}</Say>
@@ -6650,7 +6997,7 @@ export async function registerRoutes(
       if (cycle >= 3) {
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm(`We need to end this call now so the line stays open for ${safePrimary}, but we are not leaving you. We have reached out to your safety circle, you have a text message from us, and we will check on you again very soon.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(`We need to end this call now so the line stays open for ${safePrimary}, but the safety flow is still active. We have reached out to your safety circle, and you have a text message from us with next steps.`)}</Say>
   <Pause length="1"/>
   <Say voice="Polly.Joanna-Neural">${calm(`If you are in danger right now, please call ${safeEmergency}. You are not alone. Take care.`)}</Say>
   <Hangup/>
@@ -6671,7 +7018,7 @@ export async function registerRoutes(
   <Pause length="2"/>
   <Say voice="Polly.Joanna-Neural">${calm("And gently breathe out. You are doing great.")}</Say>
   <Pause length="2"/>
-  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="20">
+  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="20" actionOnEmptyResult="true">
     <Say voice="Polly.Joanna-Neural">${calm(`Press 1 anytime to be connected directly to ${safePrimary}. Press 0 for emergency services guidance. Or just stay on the line with us.`)}</Say>
   </Gather>
   <Redirect method="POST">/api/wellness-call/comfort?cycle=${cycle + 1}</Redirect>
@@ -6860,11 +7207,11 @@ export async function registerRoutes(
           const checkInLink = `${baseUrl}/`;
           if (user.phone) {
             await sendReminderSms(user.phone, checkInLink, !!userSettings?.smsCheckinEnabled);
-            existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user  -  still trying to reach them" });
+            existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user. Still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: SMS sent to user=${user.id} (phone ***${user.phone.slice(-4)})`);
           } else {
             await sendReminderPush(user.id, user.name);
-            existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent (no phone)  -  still trying to reach them" });
+            existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent because no phone is available. Still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: Push sent to user=${user.id} (no phone for SMS)`);
           }
           await storage.updateIncident(incident.id, {
@@ -6925,12 +7272,17 @@ export async function registerRoutes(
               } else {
               const twilio = (await import("twilio")).default;
               const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
-              const callResult = await client.calls.create({
+              const callParams: any = {
                 to: user.phone,
                 from: process.env.TWILIO_PHONE_NUMBER!,
                 url: `${baseUrl}/api/wellness-call/respond`,
                 method: "POST",
-              });
+                machineDetection: "DetectMessageEnd",
+                statusCallback: `${baseUrl}/api/wellness-call/status`,
+                statusCallbackMethod: "POST",
+                statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+              };
+              const callResult = await client.calls.create(callParams);
               await voicePolicy.markSendProviderResult(voiceAttemptId, "sent", { providerId: callResult.sid });
               existingTimeline.push({ type: "call", time: timeStr, detail: "Wellness call placed" });
               console.log(`[ESCALATION] Call placed (SID: ${callResult.sid})`);
@@ -6946,6 +7298,7 @@ export async function registerRoutes(
               await storage.updateIncident(incident.id, {
                 lastEscalationStep: "call",
                 callSentAt: now,
+                wellnessCallStatus: "placed",
                 nextActionAt: addMinutes(now, 2),
                 escalationTimeline: JSON.stringify(existingTimeline),
               });
@@ -6974,10 +7327,10 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === firstContact.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
+              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: firstContact.id, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted  -  emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted. Emergency contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -7002,10 +7355,10 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === firstContact.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: firstContact.name, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
+              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: firstContact.id, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted  -  emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted. Emergency contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -7019,6 +7372,19 @@ export async function registerRoutes(
             contact1NotifiedAt: now,
             nextActionAt: addMinutes(now, escalationMinutes),
             escalationTimeline: JSON.stringify(existingTimeline),
+          });
+          escalations++;
+          continue;
+        }
+
+        if (step === "wellness_call_help") {
+          const notifiedCount = notifiedIds.length;
+          const allKnownNotified = sortedContacts.length > 0 && notifiedCount >= sortedContacts.length;
+          await storage.updateIncident(incident.id, {
+            escalationLevel: notifiedCount || incident.escalationLevel || 1,
+            lastEscalationStep: `contact_${Math.max(1, notifiedCount || incident.escalationLevel || 1)}`,
+            allContactsNotifiedAt: allKnownNotified ? (incident.allContactsNotifiedAt || incident.lastContactNotifiedAt || now) : incident.allContactsNotifiedAt,
+            nextActionAt: allKnownNotified ? addMinutes(now, 30) : now,
           });
           escalations++;
           continue;
@@ -7051,7 +7417,7 @@ export async function registerRoutes(
             const token = tokens.find(t => t.contact.id === nextSequential.id);
             if (token) {
               const link = `${baseUrl}/emergency/${token.token}`;
-              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactName: nextSequential.name, reason: incident.reason, userId: user.id, step: `escalation_contact_${notifiedIds.length + 1}`, timestamp: timeStr }));
+              console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: nextSequential.id, reason: incident.reason, userId: user.id, step: `escalation_contact_${notifiedIds.length + 1}`, timestamp: timeStr }));
               const reason = incident.reason as "sos" | "missed_checkin";
               await notifyContact(nextSequential, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
             }
@@ -7179,15 +7545,19 @@ export async function registerRoutes(
               const checkinRows = checkinList.map(c =>
                 `<tr><td>${fmtDate(c.createdAt, "MMM d, yyyy")}</td><td>${fmtDate(c.createdAt, "h:mm a")}</td><td>${escHtml(c.method)}</td></tr>`
               ).join("");
-              const incidentRows = incidentList.map(i =>
-                `<tr><td>${fmtDate(i.startedAt, "MMM d, yyyy")}</td><td>${i.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</td><td>${i.status === "resolved" ? "Resolved" : "Open"}</td></tr>`
-              ).join("");
+              const incidentRows = incidentList.map(i => {
+                const timeline = parseEscalationTimeline(i.escalationTimeline);
+                const activity = timeline.length > 0
+                  ? `<ul style="margin:0;padding-left:18px;">${timeline.map(entry => `<li>${fmtDate(new Date(entry.time), "h:mm a")}: ${escHtml(entry.detail)}</li>`).join("")}</ul>`
+                  : "No escalation steps recorded";
+                return `<tr><td>${fmtDate(i.startedAt, "MMM d, yyyy")}</td><td>${i.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</td><td>${i.status === "resolved" ? "Resolved" : "Open"}</td><td>${activity}</td></tr>`;
+              }).join("");
 
               const complianceRate = Math.min(100, Math.round((checkinList.length / Math.max(1, periodDays)) * 100));
 
               const html = `
                 <h2>StillHere Safety Report for ${safeWatchedName}</h2>
-                <p>Report period: ${fmtDate(from, "MMM d, yyyy")} - ${fmtDate(now, "MMM d, yyyy")}</p>
+                <p>Report period: ${fmtDate(from, "MMM d, yyyy")} to ${fmtDate(now, "MMM d, yyyy")}</p>
                 <h3>Summary</h3>
                 <ul>
                   <li>Total checkins: ${checkinList.length}</li>
@@ -7195,7 +7565,7 @@ export async function registerRoutes(
                   <li>Incidents: ${incidentList.length}</li>
                 </ul>
                 ${checkinList.length > 0 ? `<h3>Checkin History</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Time</th><th>Method</th></tr>${checkinRows}</table>` : ""}
-                ${incidentList.length > 0 ? `<h3>Incidents</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Type</th><th>Status</th></tr>${incidentRows}</table>` : ""}
+                ${incidentList.length > 0 ? `<h3>Incidents</h3><table border="1" cellpadding="6"><tr><th>Date</th><th>Type</th><th>Status</th><th>Safety flow</th></tr>${incidentRows}</table>` : ""}
                 <p style="color:#888;font-size:12px;margin-top:20px;">This report was generated automatically by StillHere. ${safeWatchedName} has consented to share this information.</p>
               `;
 
@@ -7404,7 +7774,7 @@ export async function registerRoutes(
             if (!user) continue;
 
             const incident = await storage.createIncident(walk.userId, "sos");
-            await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue  -  not responding");
+            await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue. Not responding");
             emitTrackingPolicyChanged(walk.userId, "safe_walk_escalated").catch(() => {});
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for user=${walk.userId}:`, err?.message || err);
@@ -8572,4 +8942,22 @@ function formatReportTime(date: Date): string {
   if (diffDays === 1) return `Yesterday, ${timeStr}`;
   const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
   return `${dayName}, ${timeStr}`;
+}
+
+function parseEscalationTimeline(value: string | null | undefined): Array<{ type: string; time: string; detail: string }> {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        type: typeof entry?.type === "string" ? entry.type : "event",
+        time: typeof entry?.time === "string" ? entry.time : "",
+        detail: typeof entry?.detail === "string" ? entry.detail : "",
+      }))
+      .filter((entry) => entry.time && entry.detail && !Number.isNaN(new Date(entry.time).getTime()))
+      .slice(0, 30);
+  } catch {
+    return [];
+  }
 }

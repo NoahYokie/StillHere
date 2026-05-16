@@ -21,11 +21,13 @@ import type { ContactPageData } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { formatDualTime, getViewerTimezone } from "@/lib/timezone";
 
 export default function ContactPage() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
   useDocumentMeta({ noindex: true });
+  const viewerTimezone = getViewerTimezone();
   const [showHandleConfirm, setShowHandleConfirm] = useState(false);
   const [showEscalateConfirm, setShowEscalateConfirm] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export default function ContactPage() {
   // the resolution SMS handles the "they're safe" receipt separately.
   if (data.mode === "resolved") {
     const resolvedTime = data.resolvedAt
-      ? new Date(data.resolvedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      ? formatDualTime(data.resolvedAt, data.user.timezone || viewerTimezone, viewerTimezone)
       : null;
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12" data-testid="page-resolved">
@@ -157,7 +159,7 @@ export default function ContactPage() {
   // no history, and no actions. Triggered when the link came from an all-clear SMS.
   if (data.mode === "allclear") {
     const resolvedTime = data.resolvedAt
-      ? new Date(data.resolvedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      ? formatDualTime(data.resolvedAt, data.user.timezone || viewerTimezone, viewerTimezone)
       : null;
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12" data-testid="page-allclear">
@@ -308,7 +310,7 @@ export default function ContactPage() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium">{entry.detail}</p>
                             <p className="text-xs text-muted-foreground">
-                              {new Date(entry.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true })}
+                              {formatDualTime(entry.time, user.timezone || viewerTimezone, viewerTimezone)}
                               {" \u2022 "}
                               {new Date(entry.time).toLocaleDateString([], { month: "short", day: "numeric" })}
                             </p>
@@ -536,11 +538,11 @@ export default function ContactPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-base" data-testid="text-get-app-title">Get the StillHere app</h3>
+                  <h3 className="font-semibold text-base" data-testid="text-get-app-title">Help faster with StillHere</h3>
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Be the first to know, and the fastest to help, when {user.name} needs you.
+                  This link works without an account. The app gives you faster alerts and a clearer way to support {user.name}.
                 </p>
               </div>
             </div>
@@ -548,19 +550,19 @@ export default function ContactPage() {
             <ul className="space-y-2 mb-4 text-sm">
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong>Instant push alerts</strong> the moment something happens. No waiting on SMS</span>
+                <span><strong>Instant push alerts</strong> when something needs attention.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong>Live location</strong> with directions and speed, not just a static pin</span>
+                <span><strong>Live status</strong> with location, directions, and safety updates in one place.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong>One-tap voice call</strong> and in-app chat, even if their phone has no signal for SMS</span>
+                <span><strong>One-tap response</strong> so other contacts know when you are checking on them.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-primary mt-0.5">•</span>
-                <span><strong>"I've got this"</strong> button so other contacts know you're handling it</span>
+                <span><strong>Safety reports</strong> that show what StillHere tried before contacts were alerted.</span>
               </li>
             </ul>
 

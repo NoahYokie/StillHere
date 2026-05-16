@@ -1,10 +1,17 @@
-// Stripe + StripeSync client. Credentials are fetched fresh from the
-// Replit connector proxy on every call so rotated keys are picked up.
+// Stripe + StripeSync client. In production outside Replit, credentials come
+// from environment secrets. The Replit connector path remains as a fallback for
+// legacy/dev deployments.
 import Stripe from "stripe";
 
 let connectionSettings: any;
 
 async function getCredentials() {
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (publishableKey && secretKey) {
+    return { publishableKey, secretKey };
+  }
+
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? "repl " + process.env.REPL_IDENTITY
@@ -12,6 +19,7 @@ async function getCredentials() {
     ? "depl " + process.env.WEB_REPL_RENEWAL
     : null;
 
+  if (!hostname) throw new Error("Stripe credentials not configured");
   if (!xReplitToken) throw new Error("X-Replit-Token not found for repl/depl");
 
   const isProduction = process.env.REPLIT_DEPLOYMENT === "1";

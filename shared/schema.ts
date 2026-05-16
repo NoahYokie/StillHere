@@ -215,6 +215,10 @@ export const contacts = pgTable("contacts", {
   canViewLocation: boolean("can_view_location").notNull().default(true),
   circleRole: circleRoleEnum("circle_role").notNull().default("primary"),
   linkedUserId: uuid("linked_user_id").references(() => users.id),
+  watcherConsentStatus: text("watcher_consent_status").notNull().default("pending"),
+  watcherConsentRequestedAt: timestamp("watcher_consent_requested_at").defaultNow(),
+  watcherConsentAcceptedAt: timestamp("watcher_consent_accepted_at"),
+  watcherConsentDeclinedAt: timestamp("watcher_consent_declined_at"),
   softDeletedAt: timestamp("soft_deleted_at"),
   softDeletedBy: text("soft_deleted_by"),
   // SMS opt-out for this contact (replies STOP/CANCEL/etc to our service).
@@ -1213,6 +1217,7 @@ export interface FamilyMemberView {
   lastSeenAt: Date | null;
   lastLat: number | null;
   lastLng: number | null;
+  lastAccuracy: number | null;
   lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
   hasActiveIncident: boolean;
   // IANA timezone (e.g. "America/New_York") so the family UI can show each
@@ -1310,6 +1315,12 @@ export type InsertSafeWalk = z.infer<typeof insertSafeWalkSchema>;
 export type TripPoint = typeof tripPoints.$inferSelect;
 export type InsertTripPoint = z.infer<typeof insertTripPointSchema>;
 
+export interface EscalationTimelineEntry {
+  type: string;
+  time: string;
+  detail: string;
+}
+
 export interface ReportData {
   userName: string;
   periodStart: string;
@@ -1318,7 +1329,7 @@ export interface ReportData {
   totalCheckins: number;
   missedCheckins: number;
   complianceRate: number;
-  incidents: { date: string; reason: string; resolved: boolean; duration: string | null }[];
+  incidents: { date: string; reason: string; resolved: boolean; duration: string | null; escalationTimeline: EscalationTimelineEntry[] }[];
   // Omitted entirely when the user has not opted in to heart-rate monitoring.
   heartRateSummary?: { avgBpm: number; minBpm: number; maxBpm: number; alerts: number };
   drivingSummary: { totalDrives: number; totalDistanceKm: number; topSpeedKmh: number; speedingEvents: number; crashEvents: number } | null;
@@ -1358,7 +1369,7 @@ export interface WatchedUser {
   lastCheckinAt: Date | null;
   lastCheckinMethod: string | null;
   nextCheckinDue: Date;
-  wellnessCallStatus: "placed" | "safe" | "help" | "no_response" | null;
+  wellnessCallStatus: "placed" | "answered_human" | "voicemail_left" | "safe" | "help" | "no_response" | "failed" | null;
   wellnessCallAt: Date | null;
   reminderStage: "none" | "push" | "sms" | "calling" | null;
   hasOpenIncident: boolean;
@@ -1380,6 +1391,7 @@ export interface WatchedUser {
   lastLocationAt: Date | null;
   lastLocationLat: number | null;
   lastLocationLng: number | null;
+  lastLocationAcc: number | null;
   lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
   lastSpeed: number | null;
   batteryLevel: number | null;
@@ -1408,6 +1420,7 @@ export interface ContactPageData {
     id: string;
     name: string;
     phone: string | null;
+    timezone: string | null;
   };
   contact: Contact;
   lastCheckin: Checkin | null;

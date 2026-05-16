@@ -921,7 +921,7 @@ export default function TourPage() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(0);
   useDocumentMeta({
-    title: "Take the Tour — StillHere",
+    title: "Take the Tour | StillHere",
     description: "A quick walkthrough of how StillHere check-ins, SOS alerts, and the Safety Circle work.",
   });
 

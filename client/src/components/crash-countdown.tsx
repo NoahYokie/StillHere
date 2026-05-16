@@ -69,7 +69,7 @@ export default function CrashCountdown({ impactForce, onCancel, onConfirmSos }: 
           data-testid="button-im-ok-crash"
         >
           <X className="w-6 h-6 mr-2" />
-          I'm OK - Cancel
+          I'm OK. Cancel
         </Button>
 
         <Button

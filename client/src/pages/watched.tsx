@@ -32,6 +32,14 @@ interface RemovedContact extends Contact {
   ownerName: string;
 }
 
+interface WatcherRequest {
+  contactId: string;
+  ownerName: string;
+  contactName: string;
+  role: string;
+  requestedAt: string | Date | null;
+}
+
 function WellnessCallBadge({ user }: { user: WatchedUser }) {
   if (user.wellnessCallStatus === "help") {
     return (
@@ -46,6 +54,22 @@ function WellnessCallBadge({ user }: { user: WatchedUser }) {
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
         <Phone className="w-3.5 h-3.5 text-amber-600" />
         <span className="text-xs text-amber-700 dark:text-amber-400">Called {user.wellnessCallAt ? formatDistanceToNow(new Date(user.wellnessCallAt), { addSuffix: true }) : ""} . No answer</span>
+      </div>
+    );
+  }
+  if (user.wellnessCallStatus === "voicemail_left" && user.hasOpenIncident) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
+        <Phone className="w-3.5 h-3.5 text-amber-600" />
+        <span className="text-xs text-amber-700 dark:text-amber-400">Reached voicemail</span>
+      </div>
+    );
+  }
+  if (user.wellnessCallStatus === "failed" && user.hasOpenIncident) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
+        <Phone className="w-3.5 h-3.5 text-amber-600" />
+        <span className="text-xs text-amber-700 dark:text-amber-400">Call could not connect</span>
       </div>
     );
   }
@@ -142,7 +166,7 @@ function DrillAcknowledgeButton({ drillId, userName, userId }: { drillId: string
       data-testid={`button-drill-ack-${userId}`}
     >
       <ShieldCheck className="w-4 h-4 mr-1.5" />
-      {ackMutation.isPending ? "Confirming..." : "I'm ready  -  got you"}
+      {ackMutation.isPending ? "Confirming..." : "I'm ready. Got you"}
     </Button>
   );
 }
@@ -179,6 +203,40 @@ export default function WatchedPage() {
 
   const { data: removedContacts } = useQuery<RemovedContact[]>({
     queryKey: ["/api/watched-users/removed"],
+  });
+
+  const { data: watcherRequests } = useQuery<{ requests: WatcherRequest[] }>({
+    queryKey: ["/api/watcher-requests"],
+    refetchInterval: 30000,
+  });
+
+  const acceptRequestMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/watcher-requests/${contactId}/accept`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watcher-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      toast({ title: "Request accepted", description: "You can now see this person in your watcher dashboard." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not accept request", description: err.message || "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const declineRequestMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("POST", `/api/watcher-requests/${contactId}/decline`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watcher-requests"] });
+      toast({ title: "Request declined" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not decline request", description: err.message || "Please try again.", variant: "destructive" });
+    },
   });
 
   const optOutMutation = useMutation({
@@ -232,7 +290,7 @@ export default function WatchedPage() {
           <div className="flex-1">
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Watcher Dashboard</h1>
             <p className="text-sm text-muted-foreground">
-              {watchedUsers ? `Monitoring ${watchedUsers.length} ${watchedUsers.length === 1 ? "person" : "people"}` : "Loading..."}
+              {watchedUsers ? `Watching ${watchedUsers.length} ${watchedUsers.length === 1 ? "person" : "people"}` : "Loading..."}
             </p>
           </div>
           {watchedUsers && watchedUsers.length > 0 && (
@@ -255,13 +313,53 @@ export default function WatchedPage() {
           </div>
         )}
 
-        {!isLoading && (!watchedUsers || watchedUsers.length === 0) && (
+        {(watcherRequests?.requests?.length || 0) > 0 && (
+          <div className="mb-4 space-y-3" data-testid="section-watcher-requests">
+            {watcherRequests!.requests.map((request) => (
+              <Card key={request.contactId} className="border-primary/30">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold">Safety Circle request</p>
+                      <p className="text-sm text-muted-foreground">
+                        {request.ownerName} asked you to be their StillHere contact. Accept only if you agree to see their safety status and receive alerts.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => declineRequestMutation.mutate(request.contactId)}
+                      disabled={declineRequestMutation.isPending || acceptRequestMutation.isPending}
+                      data-testid={`button-decline-request-${request.contactId}`}
+                    >
+                      Decline
+                    </Button>
+                    <Button
+                      onClick={() => acceptRequestMutation.mutate(request.contactId)}
+                      disabled={declineRequestMutation.isPending || acceptRequestMutation.isPending}
+                      data-testid={`button-accept-request-${request.contactId}`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                      Accept
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {!isLoading && (!watchedUsers || watchedUsers.length === 0) && !(watcherRequests?.requests?.length || 0) && (
           <Card>
             <CardContent className="py-12 text-center">
               <Shield className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="font-medium text-lg mb-2" data-testid="text-empty-state">No one to watch yet</h3>
               <p className="text-muted-foreground text-sm">
-                When someone adds your phone number as an emergency contact in StillHere, they'll appear here automatically.
+                When someone asks you to be in their Safety Circle, you can accept or decline here.
               </p>
             </CardContent>
           </Card>
@@ -329,7 +427,7 @@ export default function WatchedPage() {
                         <div>
                           <p className="font-medium text-sm" data-testid={`text-removed-name-${rc.id}`}>{rc.ownerName}</p>
                           <p className="text-xs text-muted-foreground">
-                            Removed {formatDistanceToNow(deletedAt, { addSuffix: true })} - {daysLeft} {daysLeft === 1 ? "day" : "days"} to restore
+                            Removed {formatDistanceToNow(deletedAt, { addSuffix: true })}. {daysLeft} {daysLeft === 1 ? "day" : "days"} to restore
                           </p>
                         </div>
                         <Button
@@ -826,6 +924,10 @@ const weeklyToneConfig = {
 
 function getWeeklyTimelineIcon(text: string) {
   if (text.includes("SOS") || text.includes("Crash")) return AlertTriangle;
+  if (text.includes("Push")) return Shield;
+  if (text.includes("SMS") || text.includes("text")) return Shield;
+  if (text.includes("call") || text.includes("Call") || text.includes("voicemail")) return Shield;
+  if (text.includes("contact") || text.includes("Safety Circle")) return ShieldAlert;
   if (text.includes("Missed") || text.includes("expired") || text.includes("Late")) return Clock;
   if (text.includes("Arrived") || text.includes("Left")) return MapPin;
   if (text.includes("Confirmed") || text.includes("Resolved")) return CheckCircle2;
@@ -834,6 +936,10 @@ function getWeeklyTimelineIcon(text: string) {
 
 function getWeeklyTimelineColor(text: string) {
   if (text.includes("SOS") || text.includes("Crash")) return "text-red-500";
+  if (text.includes("Push")) return "text-blue-500";
+  if (text.includes("SMS") || text.includes("text")) return "text-green-500";
+  if (text.includes("call") || text.includes("Call") || text.includes("voicemail")) return "text-purple-500";
+  if (text.includes("contact") || text.includes("Safety Circle")) return "text-orange-500";
   if (text.includes("Missed") || text.includes("expired") || text.includes("Late") || text.includes("Awaiting")) return "text-amber-500";
   if (text.includes("Arrived") || text.includes("Left") || text.includes("trip")) return "text-blue-500";
   if (text.includes("Confirmed") || text.includes("Resolved")) return "text-emerald-500";

@@ -56,6 +56,62 @@ function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityTy
   return "driving";
 }
 
+function distanceMeters(a: GeolocationPosition, b: GeolocationPosition): number {
+  const R = 6371000;
+  const dLat = ((b.coords.latitude - a.coords.latitude) * Math.PI) / 180;
+  const dLng = ((b.coords.longitude - a.coords.longitude) * Math.PI) / 180;
+  const lat1 = (a.coords.latitude * Math.PI) / 180;
+  const lat2 = (b.coords.latitude * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function bearingDegrees(a: GeolocationPosition, b: GeolocationPosition): number {
+  const lat1 = (a.coords.latitude * Math.PI) / 180;
+  const lat2 = (b.coords.latitude * Math.PI) / 180;
+  const dLng = ((b.coords.longitude - a.coords.longitude) * Math.PI) / 180;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2)
+    - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function inferMotion(position: GeolocationPosition): { speed: number | null; heading: number | null } {
+  const reportedSpeed = position.coords.speed;
+  const reportedHeading = position.coords.heading;
+  if (!lastPosition) {
+    return {
+      speed: reportedSpeed ?? null,
+      heading: reportedHeading ?? null,
+    };
+  }
+
+  const elapsedSeconds = (position.timestamp - lastPosition.timestamp) / 1000;
+  if (elapsedSeconds < 2 || elapsedSeconds > 90) {
+    return {
+      speed: reportedSpeed ?? null,
+      heading: reportedHeading ?? null,
+    };
+  }
+
+  const distance = distanceMeters(lastPosition, position);
+  const accuracyFloor = Math.max(
+    8,
+    ((position.coords.accuracy || 0) + (lastPosition.coords.accuracy || 0)) / 2,
+  );
+  const estimatedSpeed = distance > accuracyFloor ? distance / elapsedSeconds : 0;
+
+  return {
+    speed: reportedSpeed != null && reportedSpeed >= 0 ? reportedSpeed : estimatedSpeed,
+    heading: reportedHeading != null && reportedHeading >= 0
+      ? reportedHeading
+      : distance > 10
+      ? bearingDegrees(lastPosition, position)
+      : null,
+  };
+}
+
 function startSilentAudio() {
   try {
     if (silentAudioEl) {
@@ -117,7 +173,7 @@ async function showPersistentNotification() {
     if ("Notification" in window && Notification.permission === "granted") {
       const reg = await navigator.serviceWorker?.ready;
       if (reg) {
-        await reg.showNotification("StillHere - Location sharing active", {
+        await reg.showNotification("StillHere: Location sharing active", {
           body: "Your emergency contacts can see your location. Tap to open.",
           icon: "/icons/icon-192x192.png",
           badge: "/icons/icon-96x96.png",
@@ -151,7 +207,8 @@ async function sendLocationUpdate(position: GeolocationPosition, force = false):
   }
 
   const now = Date.now();
-  const activity = detectActivityFromSpeed(position.coords.speed);
+  const motion = inferMotion(position);
+  const activity = detectActivityFromSpeed(motion.speed);
 
   const accuracy = position.coords.accuracy;
   if (accuracy != null && accuracy > 150 && !force) return;
@@ -168,8 +225,8 @@ async function sendLocationUpdate(position: GeolocationPosition, force = false):
     lat: position.coords.latitude,
     lng: position.coords.longitude,
     accuracy: position.coords.accuracy,
-    speed: position.coords.speed,
-    heading: position.coords.heading,
+    speed: motion.speed,
+    heading: motion.heading,
     activity,
   };
 

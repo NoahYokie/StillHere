@@ -5,9 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Printer, CheckCircle2, AlertTriangle, Heart, MapPin, Activity, Car, Gauge, Zap } from "lucide-react";
+import { Printer, CheckCircle2, AlertTriangle, Heart, MapPin, Activity, Car, Gauge, Zap, Bell, MessageCircleMore, PhoneCall, Shield, Clock } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import type { ReportData } from "@shared/schema";
+
+function getEscalationIcon(type: string) {
+  if (type === "push") return Bell;
+  if (type === "sms") return MessageCircleMore;
+  if (type === "call" || type === "call_failed" || type.startsWith("wellness_call")) return PhoneCall;
+  if (type === "contact_alert" || type === "contact_escalation") return Shield;
+  return Clock;
+}
+
+function getEscalationColor(type: string) {
+  if (type === "push") return "text-blue-600 bg-blue-50 border-blue-100";
+  if (type === "sms") return "text-green-600 bg-green-50 border-green-100";
+  if (type === "call" || type.startsWith("wellness_call")) return "text-purple-600 bg-purple-50 border-purple-100";
+  if (type === "call_failed") return "text-red-600 bg-red-50 border-red-100";
+  if (type === "contact_alert" || type === "contact_escalation") return "text-orange-600 bg-orange-50 border-orange-100";
+  return "text-muted-foreground bg-muted border-border";
+}
 
 export default function ReportPage() {
   const { userId } = useParams<{ userId: string }>();
@@ -129,13 +146,33 @@ export default function ReportPage() {
                 <CardContent>
                   <div className="space-y-1">
                     {report.incidents.map((inc, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0" data-testid={`row-incident-${i}`}>
-                        <span>{inc.date}</span>
-                        <span>{inc.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</span>
-                        <Badge variant={inc.resolved ? "secondary" : "destructive"} className="text-xs">
-                          {inc.resolved ? "Resolved" : "Open"}
-                        </Badge>
-                        {inc.duration && <span className="text-xs text-muted-foreground">{inc.duration}</span>}
+                      <div key={i} className="py-3 border-b border-border last:border-0" data-testid={`row-incident-${i}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                          <span>{inc.date}</span>
+                          <span>{inc.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</span>
+                          <Badge variant={inc.resolved ? "secondary" : "destructive"} className="text-xs">
+                            {inc.resolved ? "Resolved" : "Open"}
+                          </Badge>
+                          {inc.duration && <span className="text-xs text-muted-foreground">{inc.duration}</span>}
+                        </div>
+                        {inc.escalationTimeline.length > 0 && (
+                          <div className="mt-3 space-y-2" data-testid={`incident-timeline-${i}`}>
+                            {inc.escalationTimeline.map((entry, entryIndex) => {
+                              const Icon = getEscalationIcon(entry.type);
+                              return (
+                                <div key={entryIndex} className="flex items-start gap-2 text-xs">
+                                  <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${getEscalationColor(entry.type)}`}>
+                                    <Icon className="h-3.5 w-3.5" />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block font-medium text-foreground">{entry.detail}</span>
+                                    <span className="block text-muted-foreground">{entry.time}</span>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

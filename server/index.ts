@@ -204,10 +204,13 @@ app.use((req, res, next) => {
       await runMigrations({ connectionString: process.env.DATABASE_URL!, max: 1 } as any);
       const { getStripeSync } = await import("./stripeClient");
       const sync = await getStripeSync();
-      const proto = process.env.REPLIT_DEPLOYMENT === "1" ? "https" : "https";
-      const host = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0];
-      if (host && typeof sync.findOrCreateManagedWebhook === "function") {
-        await sync.findOrCreateManagedWebhook(`${proto}://${host}/api/stripe/webhook`);
+      const appBaseUrl =
+        process.env.BASE_URL ||
+        process.env.BRAND_BASE_URL ||
+        (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) ||
+        (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(",")[0].trim()}` : null);
+      if (appBaseUrl && typeof sync.findOrCreateManagedWebhook === "function") {
+        await sync.findOrCreateManagedWebhook(`${appBaseUrl.replace(/\/$/, "")}/api/stripe/webhook`);
         log("stripe webhook ensured", "stripe");
       }
       if (typeof sync.syncBackfill === "function") {

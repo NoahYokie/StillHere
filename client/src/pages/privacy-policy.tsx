@@ -7,7 +7,7 @@ import { useDocumentMeta } from "@/hooks/use-document-meta";
 export default function PrivacyPolicyPage() {
   const [, setLocation] = useLocation();
   useDocumentMeta({
-    title: "Privacy Policy — StillHere",
+    title: "Privacy Policy | StillHere",
     description: "How StillHere collects, uses, and protects your personal and location data.",
   });
 

@@ -70,14 +70,14 @@ async function checkCommunicationPermission(userId: string, targetUserId: string
 
   try {
     const userContacts = await storage.getContacts(userId);
-    const hasAsContact = userContacts.some(c => c.linkedUserId === targetUserId);
+    const hasAsContact = userContacts.some(c => c.linkedUserId === targetUserId && c.watcherConsentStatus === "accepted");
     if (hasAsContact) {
       permissionCache.set(cacheKey, { result: true, timestamp: Date.now() });
       return true;
     }
 
     const targetContacts = await storage.getContacts(targetUserId);
-    const isContactOf = targetContacts.some(c => c.linkedUserId === userId);
+    const isContactOf = targetContacts.some(c => c.linkedUserId === userId && c.watcherConsentStatus === "accepted");
     permissionCache.set(cacheKey, { result: isContactOf, timestamp: Date.now() });
     return isContactOf;
   } catch (err) {

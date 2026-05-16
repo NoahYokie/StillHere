@@ -119,10 +119,10 @@ export default function SatellitePage() {
               <div>
                 <h3 className="font-medium mb-1">How it works</h3>
                 <p className="text-sm text-muted-foreground">
-                  Connect your satellite communicator (Garmin inReach, SPOT, etc.) to StillHere. 
-                  When you're out of cell range, your device can send checkins and SOS alerts 
-                  through its satellite network, and we'll attempt to reach your emergency contacts just 
-                  like a regular in-app alert.
+                  Register your satellite communicator, then connect your provider or automation service
+                  to the StillHere webhook. When you are out of cell range, supported messages can record
+                  a check-in or start an SOS alert. StillHere will attempt to reach your Safety Circle using
+                  the same alert flow as an in-app alert.
                 </p>
               </div>
             </div>
@@ -138,8 +138,8 @@ export default function SatellitePage() {
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground mb-2">
-              Configure your satellite device to send messages to this URL. 
-              Use action "checkin" for safety checkins and "sos" for emergencies.
+              Use this URL in Garmin, SPOT, Somewear, ZOLEO, or an automation service that can send a POST request.
+              The request must include the StillHere satellite webhook secret as the x-satellite-secret header.
             </p>
             <div className="flex gap-2">
               <Input
@@ -156,13 +156,20 @@ export default function SatellitePage() {
               <p className="text-xs font-medium mb-1">Webhook payload format:</p>
               <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
 {`POST ${webhookUrl}
+Header: x-satellite-secret: [StillHere webhook secret]
+
 {
   "deviceId": "your-device-id",
   "action": "checkin" or "sos",
-  "lat": 51.5074,  // optional
-  "lng": -0.1278   // optional
+  "lat": 51.5074,
+  "lng": -0.1278
 }`}
               </pre>
+              <p className="text-xs text-muted-foreground mt-2">
+                Use "checkin" when the satellite device reports you are okay. Use "sos" only when you want
+                StillHere to start the emergency contact flow. Latitude and longitude are optional, but adding
+                them helps your contacts understand where the message came from.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -206,7 +213,8 @@ export default function SatellitePage() {
                   data-testid="input-device-id"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Found in your device settings or on the device itself
+                  Use the exact ID your provider sends in the webhook payload. Usually this is the IMEI,
+                  unit ID, or device serial shown in your satellite account.
                 </p>
               </div>
               <div>

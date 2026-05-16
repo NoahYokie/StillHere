@@ -410,7 +410,7 @@ export default function SavedPlacesPage() {
             </div>
             <h2 className="font-semibold text-lg">No saved places yet</h2>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              Save your frequently visited places like home, work, or gym. They'll appear as quick picks in Safe Walk.
+              Save places like home, work, school, or gym. StillHere uses them for Safe Walk shortcuts and saved-place alerts when location sharing is active.
             </p>
             <Button onClick={() => { resetForm(); setShowAdd(true); }} data-testid="button-add-first-place">
               <Plus className="h-4 w-4 mr-2" />
@@ -449,7 +449,7 @@ export default function SavedPlacesPage() {
         )}
 
         <p className="text-xs text-muted-foreground text-center leading-relaxed px-4">
-          Saved places appear as quick-pick destinations in Safe Walk so you don't have to search every time.
+          Saved places are used for Safe Walk shortcuts and saved-place alerts while StillHere is allowed to receive location updates.
         </p>
       </div>
 

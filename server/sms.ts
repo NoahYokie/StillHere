@@ -352,7 +352,7 @@ export async function sendReminderSms(
 ): Promise<SendSmsResult> {
   let body = `StillHere Check-in Reminder\n\nYou haven't completed your safety check-in yet.`;
   if (smsCheckinEnabled) {
-    body += `\n\nReply YES to confirm you are safe, or open the app. If you don't have the app handy, you can also check in from this link:\n${link}`;
+    body += `\n\nReply YES to confirm you are safe. Reply NO if you need help and want StillHere to alert your Safety Circle. You can also check in from this link:\n${link}`;
   } else {
     body += `\n\nPlease open the app to check in. If you don't have the app handy, you can also check in from this link:\n${link}`;
   }
