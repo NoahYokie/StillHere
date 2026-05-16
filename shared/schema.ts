@@ -188,7 +188,7 @@ export const settings = pgTable("settings", {
   smsCheckinEnabled: boolean("sms_checkin_enabled").notNull().default(true),
   drivingSafety: boolean("driving_safety").notNull().default(false),
   speedLimitKmh: integer("speed_limit_kmh").notNull().default(120),
-  autoWellnessCall: boolean("auto_wellness_call").notNull().default(false),
+  autoWellnessCall: boolean("auto_wellness_call").notNull().default(true),
   allowReports: boolean("allow_reports").notNull().default(true),
   remindersSent: integer("reminders_sent").notNull().default(0),
   lastReminderAt: timestamp("last_reminder_at"),
@@ -219,6 +219,8 @@ export const contacts = pgTable("contacts", {
   watcherConsentRequestedAt: timestamp("watcher_consent_requested_at").defaultNow(),
   watcherConsentAcceptedAt: timestamp("watcher_consent_accepted_at"),
   watcherConsentDeclinedAt: timestamp("watcher_consent_declined_at"),
+  pausedUntil: timestamp("paused_until"),
+  pausedBy: text("paused_by"),
   softDeletedAt: timestamp("soft_deleted_at"),
   softDeletedBy: text("soft_deleted_by"),
   // SMS opt-out for this contact (replies STOP/CANCEL/etc to our service).

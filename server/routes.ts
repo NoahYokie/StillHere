@@ -30,6 +30,7 @@ import {
   sendSosAlert,
   sendMissedCheckinAlert,
   sendTestMessage,
+  sendSafetyCircleRequest,
   sendReminderSms,
   sendAllClearNotification,
   sendEscalationAlert,
@@ -70,6 +71,12 @@ const getBaseUrl = (): string => {
     return `https://${firstDomain}`;
   }
   return "https://stillhere.health";
+};
+
+const getTwilioVoiceFromNumber = (): string | null => {
+  const value = process.env.TWILIO_VOICE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER || null;
+  if (!value || value === "+15555550123") return null;
+  return value;
 };
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -155,13 +162,12 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
 
     const baseUrl = getBaseUrl();
     const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-    const allContacts = await storage.getContacts(userId);
+    const allContacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
     console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contacts=${allContacts.length}`);
 
     const smsDedup = new Set<string>();
 
     for (const contact of allContacts) {
-      if (contact.softDeletedAt) continue;
       const normalizedPhone = normalizePhone(contact.phone);
       if (smsDedup.has(normalizedPhone)) {
         console.log(`[NOTIFY] Suppressed RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, reason: duplicate phone)`);
@@ -265,6 +271,12 @@ function isAcceptedWatcherLink(contact: { linkedUserId?: string | null; watcherC
   if (!contact.linkedUserId) return false;
   if (linkedUserId && contact.linkedUserId !== linkedUserId) return false;
   return contact.watcherConsentStatus === "accepted";
+}
+
+function isContactActiveForAlerts(contact: { softDeletedAt?: Date | string | null; pausedUntil?: Date | string | null }): boolean {
+  if (contact.softDeletedAt) return false;
+  if (!contact.pausedUntil) return true;
+  return new Date(contact.pausedUntil).getTime() <= Date.now();
 }
 
 async function notifyContact(
@@ -1456,7 +1468,7 @@ export async function registerRoutes(
       }
 
       // Get contacts sorted by priority
-      const contacts = await storage.getContacts(userId);
+      const contacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
       const settings = await storage.getSettings(userId);
 
       // Create location session if allowed, seeded with the moment-of-SOS coordinates
@@ -2208,6 +2220,8 @@ export async function registerRoutes(
         }
 
         const ownerUser = await storage.getUser(userId);
+        const previousContacts = await storage.getContacts(userId);
+        const previousByPriority = new Map(previousContacts.map((c) => [c.priority, c]));
         // Guard: a contact cannot be the user's own phone (would cause an infinite loopback on emergency dial)
         const ownerPhoneNorm = ownerUser?.phone ? normalizePhone(ownerUser.phone) : null;
         if (ownerPhoneNorm) {
@@ -2223,6 +2237,15 @@ export async function registerRoutes(
           email: isValidEmail(c.email) ? c.email!.trim() : null,
           priority: c.priority || (i + 1),
         })));
+        const tokens = await storage.getContactTokensForUser(userId);
+        const shouldNotifyRequest = (contact: typeof savedContacts[number]) => {
+          const previous = previousByPriority.get(contact.priority);
+          if (!previous) return true;
+          if (normalizePhone(previous.phone) !== normalizePhone(contact.phone)) return true;
+          if (contact.watcherConsentStatus !== "pending") return false;
+          const requestedAt = previous.watcherConsentRequestedAt ? new Date(previous.watcherConsentRequestedAt).getTime() : 0;
+          return !requestedAt || Date.now() - requestedAt > 30 * 60 * 1000;
+        };
 
         for (const contact of savedContacts) {
           const normalizedContactPhone = normalizePhone(contact.phone);
@@ -2233,15 +2256,38 @@ export async function registerRoutes(
               continue;
             }
             const roleLabel = contact.priority === 1 ? "Primary" : contact.priority === 2 ? "Backup" : "Support";
-            await sendPushNotification(linkedUser.id, {
-              title: "Safety Circle request",
-              body: `${ownerUser?.name || "Someone"} asked you to be their ${roleLabel} Safety Circle contact. Open StillHere to accept or decline.`,
-              url: "/watched",
-              tag: `guardian-request-${contact.id}`,
-            });
-            console.log(`[GUARDIAN] Consent request sent to linkedUser=${linkedUser.id} (${roleLabel}) for owner=${userId}`);
+            if (shouldNotifyRequest(contact)) {
+              await sendPushNotification(linkedUser.id, {
+                title: "Safety Circle request",
+                body: `${ownerUser?.name || "Someone"} asked you to be their ${roleLabel} Safety Circle contact. Open StillHere to accept or decline.`,
+                url: "/watched/list",
+                tag: `guardian-request-${contact.id}`,
+              });
+              await db.update(contacts)
+                .set({ watcherConsentRequestedAt: new Date() })
+                .where(eq(contacts.id, contact.id));
+              console.log(`[GUARDIAN] Consent request sent to linkedUser=${linkedUser.id} (${roleLabel}) for owner=${userId}`);
+            }
           } else {
             await storage.linkContactToUser(contact.id, null);
+            if (shouldNotifyRequest(contact)) {
+              const token = tokens.find((t) => t.contact.id === contact.id);
+              if (token) {
+                const link = `${getBaseUrl()}/emergency/${token.token}`;
+                const requestSms = await sendSafetyCircleRequest(normalizedContactPhone, ownerUser?.name || "Someone", link, {
+                  userId,
+                  dedupeKey: `watcher_request:${userId}:${contact.id}:${Math.floor(Date.now() / (30 * 60 * 1000))}`,
+                });
+                if (requestSms.success) {
+                  await db.update(contacts)
+                    .set({ watcherConsentRequestedAt: new Date() })
+                    .where(eq(contacts.id, contact.id));
+                  console.log(`[GUARDIAN] SMS request link sent to contact=${contact.id} for owner=${userId}`);
+                } else {
+                  console.warn(`[GUARDIAN] SMS request link failed for contact=${contact.id}: ${requestSms.error || "unknown"}`);
+                }
+              }
+            }
           }
         }
 
@@ -2259,7 +2305,6 @@ export async function registerRoutes(
 
         const updatedContacts = await storage.getContacts(userId);
 
-        const tokens = await storage.getContactTokensForUser(userId);
         if (tokens.length > 0) {
           console.log(`[CONTACTS] ${tokens.length} contact token(s) generated`);
         }
@@ -2347,7 +2392,7 @@ export async function registerRoutes(
       const incident = await storage.createIncident(userId, "test");
 
       // Get contacts
-      const contacts = await storage.getContacts(userId);
+      const contacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
 
       // Get user
       const user = await storage.getUser(userId);
@@ -2756,7 +2801,7 @@ export async function registerRoutes(
       
       const now = new Date();
       
-      const contacts = await storage.getContacts(data.user.id);
+      const contacts = (await storage.getContacts(data.user.id)).filter(isContactActiveForAlerts);
       // Phase 2: incident-scoped tokens for the active incident.
       const tokens = await storage.getOrMintIncidentTokensForUser(data.user.id, data.incident.startedAt);
       const baseUrl = getBaseUrl();
@@ -3311,6 +3356,57 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/contacts/:contactId/pause", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { contactId } = req.params;
+      const contact = await storage.getContact(contactId);
+      if (!contact || contact.userId !== userId || contact.softDeletedAt) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      const rawPauseUntil = req.body?.pauseUntil;
+      const pauseUntil = rawPauseUntil ? new Date(rawPauseUntil) : null;
+      if (pauseUntil && (!Number.isFinite(pauseUntil.getTime()) || pauseUntil.getTime() <= Date.now())) {
+        return res.status(400).json({ error: "Pause time must be in the future" });
+      }
+      const updated = await storage.pauseContact(contactId, pauseUntil, "owner");
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("Error pausing contact:", error);
+      res.status(500).json({ error: "Failed to update contact pause" });
+    }
+  });
+
+  app.delete("/api/contacts/:contactId", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const { contactId } = req.params;
+      const contact = await storage.getContact(contactId);
+      if (!contact || contact.userId !== userId || contact.softDeletedAt) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      const updated = await storage.softDeleteContact(contactId, "owner");
+      if (contact.linkedUserId) {
+        await sendPushNotification(contact.linkedUserId, {
+          title: "Safety Circle update",
+          body: "You were removed from a StillHere Safety Circle.",
+          url: "/watched/list",
+          tag: `contact-removed-${contactId}`,
+        }).catch(() => {});
+      }
+      res.json({ success: true, contact: updated });
+    } catch (error) {
+      console.error("Error removing contact:", error);
+      res.status(500).json({ error: "Failed to remove contact" });
+    }
+  });
+
   app.post("/api/contacts/:contactId/restore", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -3734,7 +3830,7 @@ export async function registerRoutes(
       ).catch(() => {});
 
       await storage.revokeAllTokensForUser(userId);
-      const contactsRaw = await storage.getContacts(userId);
+      const contactsRaw = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
       const sortedContacts = contactsRaw.sort((a, b) => a.priority - b.priority);
       const baseUrl = getBaseUrl();
 
@@ -6746,7 +6842,7 @@ export async function registerRoutes(
           const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm(`Connecting you to ${safeName} now. Please hold.`)}</Say>
-  <Dial timeout="25" callerId="${process.env.TWILIO_PHONE_NUMBER || ""}" answerOnBridge="true" action="/api/wellness-call/dial-result?contactId=${safeContactId}" method="POST">
+  <Dial timeout="25" callerId="${escapeXml(getTwilioVoiceFromNumber() || "")}" answerOnBridge="true" action="/api/wellness-call/dial-result?contactId=${safeContactId}" method="POST">
     <Number>${escapeXml(primary.phone)}</Number>
   </Dial>
 </Response>`;
@@ -7157,7 +7253,7 @@ export async function registerRoutes(
         const escalationMinutes = userSettings?.escalationMinutes || 20;
         const graceMs = (userSettings?.graceMinutes || 15) * 60 * 1000;
 
-        const contacts = await storage.getContacts(incident.userId);
+        const contacts = (await storage.getContacts(incident.userId)).filter(isContactActiveForAlerts);
         // Phase 2: incident-scoped tokens. Reused within this incident across
         // every escalation branch below (paused, sms_fallthrough, call_unanswered,
         // sequential, blast, legacy).
@@ -7272,9 +7368,13 @@ export async function registerRoutes(
               } else {
               const twilio = (await import("twilio")).default;
               const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
+              const voiceFromNumber = getTwilioVoiceFromNumber();
+              if (!voiceFromNumber) {
+                throw new Error("Twilio voice caller number is not configured. Set TWILIO_VOICE_PHONE_NUMBER to a verified or purchased Twilio voice number.");
+              }
               const callParams: any = {
                 to: user.phone,
-                from: process.env.TWILIO_PHONE_NUMBER!,
+                from: voiceFromNumber,
                 url: `${baseUrl}/api/wellness-call/respond`,
                 method: "POST",
                 machineDetection: "DetectMessageEnd",
@@ -7781,7 +7881,7 @@ export async function registerRoutes(
             });
             // Phase 2: incident-scoped tokens for the safe-walk incident.
             const tokens = await storage.getOrMintIncidentTokensForUser(walk.userId, incident.startedAt);
-            const contacts = await storage.getContacts(walk.userId);
+            const contacts = (await storage.getContacts(walk.userId)).filter(isContactActiveForAlerts);
             const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
             const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
             const noteInfo = walk.note ? `\nNote: ${walk.note}` : "";

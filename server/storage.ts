@@ -261,6 +261,7 @@ export interface IStorage {
   upsertContacts(userId: string, contactsData: { contact1: InsertContact; contact2?: InsertContact }): Promise<Contact[]>;
   saveContactsList(userId: string, contactsList: { name: string; phone: string; email?: string | null; priority: number }[]): Promise<Contact[]>;
   deleteContact(contactId: string): Promise<void>;
+  pauseContact(contactId: string, pausedUntil: Date | null, pausedBy: string): Promise<Contact>;
   softDeleteContact(contactId: string, deletedBy: string): Promise<Contact>;
   restoreContact(contactId: string): Promise<Contact>;
   getSoftDeletedContacts(userId: string): Promise<Contact[]>;
@@ -831,6 +832,8 @@ export class DatabaseStorage implements IStorage {
             watcherConsentRequestedAt: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentRequestedAt : new Date(),
             watcherConsentAcceptedAt: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentAcceptedAt : null,
             watcherConsentDeclinedAt: existingMatch.phone === contactData.phone ? existingMatch.watcherConsentDeclinedAt : null,
+            pausedUntil: existingMatch.phone === contactData.phone ? existingMatch.pausedUntil : null,
+            pausedBy: existingMatch.phone === contactData.phone ? existingMatch.pausedBy : null,
           })
           .where(eq(contacts.id, existingMatch.id))
           .returning();
@@ -875,12 +878,23 @@ export class DatabaseStorage implements IStorage {
     await db.delete(contacts).where(eq(contacts.id, contactId));
   }
 
+  async pauseContact(contactId: string, pausedUntil: Date | null, pausedBy: string): Promise<Contact> {
+    const [updated] = await db.update(contacts)
+      .set({
+        pausedUntil,
+        pausedBy: pausedUntil ? pausedBy : null,
+      })
+      .where(eq(contacts.id, contactId))
+      .returning();
+    return updated;
+  }
+
   async softDeleteContact(contactId: string, deletedBy: string): Promise<Contact> {
     await db.update(contactTokens)
       .set({ revoked: true })
       .where(eq(contactTokens.contactId, contactId));
     const [updated] = await db.update(contacts)
-      .set({ softDeletedAt: new Date(), softDeletedBy: deletedBy })
+      .set({ softDeletedAt: new Date(), softDeletedBy: deletedBy, pausedUntil: null, pausedBy: null })
       .where(eq(contacts.id, contactId))
       .returning();
     return updated;
@@ -888,7 +902,7 @@ export class DatabaseStorage implements IStorage {
 
   async restoreContact(contactId: string): Promise<Contact> {
     const [updated] = await db.update(contacts)
-      .set({ softDeletedAt: null, softDeletedBy: null })
+      .set({ softDeletedAt: null, softDeletedBy: null, pausedUntil: null, pausedBy: null })
       .where(eq(contacts.id, contactId))
       .returning();
     return updated;
@@ -1269,6 +1283,7 @@ export class DatabaseStorage implements IStorage {
     const contact = await this.getContact(tokenRecord.contactId);
     if (!contact) return undefined;
     if (contact.softDeletedAt) return undefined;
+    if (contact.pausedUntil && new Date(contact.pausedUntil).getTime() > Date.now()) return undefined;
 
     const user = await this.getUser(contact.userId);
     if (!user) return undefined;
@@ -1314,8 +1329,10 @@ export class DatabaseStorage implements IStorage {
     // and mint fresh standing tokens. Used by Settings -> "Rotate watcher links".
     const userContacts = await this.getContacts(userId);
     const out: { contact: Contact; token: string }[] = [];
+    const now = new Date();
     for (const contact of userContacts) {
       if (contact.softDeletedAt) continue;
+      if (contact.pausedUntil && new Date(contact.pausedUntil).getTime() > now.getTime()) continue;
       await db.update(contactTokens)
         .set({ revoked: true })
         .where(and(eq(contactTokens.contactId, contact.id), eq(contactTokens.revoked, false)));
@@ -1345,6 +1362,7 @@ export class DatabaseStorage implements IStorage {
     const minCreatedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     for (const contact of userContacts) {
       if (contact.softDeletedAt) continue;
+      if (contact.pausedUntil && new Date(contact.pausedUntil).getTime() > now.getTime()) continue;
       const [existing] = await db.select().from(contactTokens)
         .where(and(
           eq(contactTokens.contactId, contact.id),
@@ -1390,6 +1408,7 @@ export class DatabaseStorage implements IStorage {
     const incidentFloor = incidentStartedAt > minCreatedAt ? incidentStartedAt : minCreatedAt;
     for (const contact of userContacts) {
       if (contact.softDeletedAt) continue;
+      if (contact.pausedUntil && new Date(contact.pausedUntil).getTime() > now.getTime()) continue;
       const [existing] = await db.select().from(contactTokens)
         .where(and(
           eq(contactTokens.contactId, contact.id),
@@ -1862,6 +1881,7 @@ export class DatabaseStorage implements IStorage {
 
     for (const contact of userContacts) {
       if (contact.softDeletedAt) continue;
+      if (contact.pausedUntil && new Date(contact.pausedUntil).getTime() > now.getTime()) continue;
       // Only return live, standing tokens still within the 24h hard cap.
       const [tokenRecord] = await db
         .select()

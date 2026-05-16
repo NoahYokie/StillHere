@@ -330,6 +330,26 @@ export default function ContactPage() {
 
         {/* Status Card — only show when no active alert (the alert banner is the headline otherwise) */}
         {!(hasActiveIncident && !isBeingHandled) && (
+          <>
+          <Card className="border-primary/30 bg-primary/5" data-testid="card-safety-circle-request">
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+                  <Shield className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-foreground">Safety Circle request</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {user.name} listed you as a StillHere Safety Circle contact. This secure link lets you see their safety status if they miss a check-in or request help.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-xl bg-background border p-3 text-sm text-foreground">
+                No account is needed to use this link. To accept or decline the request and receive app alerts, sign in with the phone number where you received the request.
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-2">
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -358,6 +378,7 @@ export default function ContactPage() {
               </div>
             </CardContent>
           </Card>
+          </>
         )}
 
         {hasTrip && (
@@ -572,12 +593,12 @@ export default function ContactPage() {
               asChild
               data-testid="button-install-app"
             >
-              <a href="/" target="_blank" rel="noopener noreferrer">
-                Install StillHere (free)
+              <a href="/login" target="_blank" rel="noopener noreferrer">
+                Open StillHere
               </a>
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-3">
-              Free to install. You'll be added automatically as {user.name}'s contact when you sign in.
+              App Store and Google Play links can be added here after launch. For now, sign in on the web to accept the request.
             </p>
           </CardContent>
         </Card>

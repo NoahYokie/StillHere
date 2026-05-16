@@ -51,9 +51,13 @@ import { requestMotionPermission } from "@/lib/fall-detection";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
 interface ContactEntry {
+  id?: string;
   name: string;
   phone: string;
   email: string;
+  pausedUntil?: string | Date | null;
+  pausedBy?: string | null;
+  linkedUserId?: string | null;
 }
 
 function SafetyHealthCard() {
@@ -258,6 +262,43 @@ export default function SettingsPage() {
     },
   });
 
+  const pauseContactMutation = useMutation({
+    mutationFn: async ({ contactId, pauseUntil }: { contactId: string; pauseUntil: Date | null }) => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/pause`, { pauseUntil });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      if (data?.contact?.id) {
+        setContactEntries((entries) => entries.map((entry) => (
+          entry.id === data.contact.id
+            ? { ...entry, pausedUntil: data.contact.pausedUntil || null, pausedBy: data.contact.pausedBy || null }
+            : entry
+        )));
+      }
+      toast({ title: "Contact updated" });
+    },
+    onError: () => {
+      toast({ title: "Could not update contact", variant: "destructive" });
+    },
+  });
+
+  const removeContactMutation = useMutation({
+    mutationFn: async (contactId: string) => {
+      const res = await apiRequest("DELETE", `/api/contacts/${contactId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts/removed"] });
+      toast({ title: "Contact removed" });
+      setEditingContactIndex(null);
+    },
+    onError: () => {
+      toast({ title: "Could not remove contact", variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (status) {
       setCheckinInterval(status.settings?.checkinIntervalHours || 24);
@@ -279,7 +320,15 @@ export default function SettingsPage() {
 
       if (!contactsInitialized && status.contacts?.length) {
         const sorted = [...status.contacts].sort((a, b) => a.priority - b.priority);
-        setContactEntries(sorted.map(c => ({ name: c.name, phone: c.phone, email: (c as any).email || "" })));
+        setContactEntries(sorted.map(c => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: (c as any).email || "",
+          pausedUntil: (c as any).pausedUntil || null,
+          pausedBy: (c as any).pausedBy || null,
+          linkedUserId: (c as any).linkedUserId || null,
+        })));
         setContactsInitialized(true);
       } else if (!contactsInitialized && (!status.contacts || status.contacts.length === 0)) {
         setContactEntries([{ name: "", phone: "", email: "" }]);
@@ -320,7 +369,7 @@ export default function SettingsPage() {
 
   const contactsMutation = useMutation({
     mutationFn: async (contactsList: ContactEntry[]) => {
-      return apiRequest("POST", "/api/contacts", {
+      const res = await apiRequest("POST", "/api/contacts", {
         contacts: contactsList.map((c, i) => ({
           name: c.name,
           phone: c.phone,
@@ -328,9 +377,22 @@ export default function SettingsPage() {
           priority: i + 1,
         })),
       });
+      return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      if (Array.isArray(data?.contacts)) {
+        const sorted = [...data.contacts].sort((a, b) => a.priority - b.priority);
+        setContactEntries(sorted.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: c.email || "",
+          pausedUntil: c.pausedUntil || null,
+          pausedBy: c.pausedBy || null,
+          linkedUserId: c.linkedUserId || null,
+        })));
+      }
       toast({ title: "Contacts saved" });
       setEditingContactIndex(null);
     },
@@ -512,17 +574,31 @@ export default function SettingsPage() {
   const contactLimit = status?.contactLimit ?? 2;
   const hasUnlimitedContacts = contactLimit >= 999;
   const trialEndsAt = status?.trialEndsAt ? new Date(status.trialEndsAt) : null;
+  const isContactPaused = (contact: ContactEntry) =>
+    !!contact.pausedUntil && new Date(contact.pausedUntil).getTime() > Date.now();
+  const pauseContact = (contact: ContactEntry, pauseUntil: Date | null) => {
+    if (!contact.id) {
+      toast({ title: "Save this contact first", description: "Pause is available after the contact is saved." });
+      return;
+    }
+    pauseContactMutation.mutate({ contactId: contact.id, pauseUntil });
+  };
 
   const addContactEntry = () => {
     if (contactEntries.length >= contactLimit) return;
-    const newEntries = [...contactEntries, { name: "", phone: "", email: "" }];
+    const newEntries = [...contactEntries, { name: "", phone: "", email: "", pausedUntil: null, pausedBy: null }];
     setContactEntries(newEntries);
     setEditingContactIndex(newEntries.length - 1);
   };
 
   const removeContactEntry = (index: number) => {
-    if (contactEntries.length <= 1) return;
-    setContactEntries(contactEntries.filter((_, i) => i !== index));
+    const contact = contactEntries[index];
+    if (contactEntries.length <= 1 && !contact.id) return;
+    if (contact.id) {
+      removeContactMutation.mutate(contact.id);
+    }
+    const nextEntries = contactEntries.filter((_, i) => i !== index);
+    setContactEntries(nextEntries.length > 0 ? nextEntries : [{ name: "", phone: "", email: "", pausedUntil: null, pausedBy: null }]);
     setEditingContactIndex(null);
   };
 
@@ -601,9 +677,11 @@ export default function SettingsPage() {
             <div className="space-y-2">
               {contactEntries.map((contact, index) => {
                 const savedContact = status?.contacts?.find(c => c.priority === index + 1);
-                const linkedUserId = savedContact?.linkedUserId;
+                const linkedUserId = contact.linkedUserId || savedContact?.linkedUserId;
                 const isEditing = editingContactIndex === index;
                 const hasData = contact.name.trim() || contact.phone.trim();
+                const paused = isContactPaused(contact);
+                const pausedUntil = paused ? new Date(contact.pausedUntil!) : null;
 
                 return (
                   <div key={index} className="rounded-lg border bg-card" data-testid={`contact-row-${index}`}>
@@ -649,6 +727,11 @@ export default function SettingsPage() {
                             <span className="text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 capitalize" data-testid={`badge-role-${index}`}>
                               {index === 0 ? "Primary" : index === 1 ? "Backup" : "Support"}
                             </span>
+                            {paused && (
+                              <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full px-2 py-0.5" data-testid={`badge-contact-paused-${index}`}>
+                                Paused
+                              </span>
+                            )}
                             {linkedUserId ? (
                               <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5" data-testid={`badge-on-stillhere-${index}`}>
                                 On StillHere
@@ -694,6 +777,40 @@ export default function SettingsPage() {
                         <Input placeholder="Name" value={contact.name} onChange={(e) => updateContactEntry(index, "name", e.target.value)} className="h-9 text-sm" data-testid={`input-contact-name-${index}`} />
                         <Input placeholder="Mobile number" type="tel" value={contact.phone} onChange={(e) => updateContactEntry(index, "phone", e.target.value)} className="h-9 text-sm" data-testid={`input-contact-phone-${index}`} />
                         <Input placeholder="Email (optional)" type="email" value={contact.email} onChange={(e) => updateContactEntry(index, "email", e.target.value)} className="h-9 text-sm" data-testid={`input-contact-email-${index}`} />
+                        {savedContact && (
+                          <div className="rounded-lg border bg-muted/30 p-2.5 space-y-2" data-testid={`contact-state-${index}`}>
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-medium">{paused ? "Paused" : "Active"}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {pausedUntil
+                                    ? `Skipped during alerts until ${format(pausedUntil, "MMM d, h:mm a")}`
+                                    : "Will receive Safety Circle alerts when needed"}
+                                </p>
+                              </div>
+                              {paused ? (
+                                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pauseContact(contact, null)} disabled={pauseContactMutation.isPending} data-testid={`button-resume-contact-${index}`}>
+                                  Active
+                                </Button>
+                              ) : (
+                                <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full px-2 py-0.5">Active</span>
+                              )}
+                            </div>
+                            {!paused && (
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pauseContact(contact, addHours(new Date(), 2))} disabled={pauseContactMutation.isPending} data-testid={`button-pause-contact-2h-${index}`}>
+                                  Pause 2h
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => pauseContact(contact, setHours(startOfTomorrow(), 7))} disabled={pauseContactMutation.isPending} data-testid={`button-pause-contact-tomorrow-${index}`}>
+                                  Until tomorrow
+                                </Button>
+                              </div>
+                            )}
+                            <Button type="button" variant="ghost" size="sm" className="h-7 w-full text-xs justify-start text-destructive hover:text-destructive" onClick={() => removeContactEntry(index)} disabled={removeContactMutation.isPending} data-testid={`button-remove-saved-contact-${index}`}>
+                              <Trash2 className="h-3 w-3 mr-1.5" /> Remove from Safety Circle
+                            </Button>
+                          </div>
+                        )}
                         {savedContact && linkedUserId && (
                           <div className="flex gap-2 pt-1">
                             <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs flex-1" onClick={() => setLocation(`/chat/${linkedUserId}`)} data-testid={`button-message-contact-${index}`}>

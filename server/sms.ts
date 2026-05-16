@@ -344,6 +344,16 @@ export async function sendTestMessage(
   return sendSms(contactPhone, body, { purpose: "contact_test", ...options });
 }
 
+export async function sendSafetyCircleRequest(
+  contactPhone: string,
+  userName: string,
+  link: string,
+  options: SendSmsOptions = {},
+): Promise<SendSmsResult> {
+  const body = `StillHere Safety Circle Request\n\n${userName} added you as a Safety Circle contact. If they miss a check-in or request help, StillHere may send you alerts.\n\nYou can view their secure contact link here:\n${link}\n\nNo account is required for this link. To accept or decline the request and receive app alerts, sign in to StillHere with this phone number.\n\nLink expires in 24 hours.`;
+  return sendSms(contactPhone, body, { purpose: "contact_test", ...options });
+}
+
 export async function sendReminderSms(
   userPhone: string,
   link: string,
