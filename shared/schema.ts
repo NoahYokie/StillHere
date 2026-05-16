@@ -1360,6 +1360,8 @@ export interface UserStatus {
   activeLocationSession: LocationSession | null;
   contactLimit: number;
   isPremium: boolean;
+  isTrialActive?: boolean;
+  trialEndsAt?: Date | string | null;
 }
 
 export interface WatchedUser {

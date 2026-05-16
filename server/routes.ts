@@ -2199,7 +2199,7 @@ export async function registerRoutes(
           return res.status(400).json({ error: "At least one contact is required" });
         }
         if (contactsList.length > contactLimit) {
-          return res.status(403).json({ error: `Free plan allows ${contactLimit} contacts. Upgrade to premium for unlimited contacts.`, contactLimit });
+          return res.status(403).json({ error: `Your trial has ended. Choose a monthly or yearly plan to add more than ${contactLimit} contacts.`, contactLimit });
         }
         for (const c of contactsList) {
           if (!c.name?.trim() || !c.phone?.trim()) {
@@ -3335,7 +3335,7 @@ export async function registerRoutes(
       const activeContacts = await storage.getContacts(userId);
       const contactLimit = await storage.getContactLimit(userId);
       if (activeContacts.length >= contactLimit) {
-        return res.status(409).json({ error: "Contact limit reached. Remove an existing contact before restoring." });
+        return res.status(409).json({ error: "Your trial has ended. Choose a monthly or yearly plan to restore more contacts." });
       }
       const priorityConflict = activeContacts.find(c => c.priority === contact.priority);
       if (priorityConflict) {

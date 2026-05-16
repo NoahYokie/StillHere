@@ -7,6 +7,8 @@ import { eq } from "drizzle-orm";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { isPremium } from "./billing";
 
+const TRIAL_DAYS = 14;
+
 function getUserId(req: Request): string | undefined {
   return (req as any).user?.id || (req as any).userId;
 }
@@ -64,10 +66,15 @@ export function registerStripeRoutes(app: Express) {
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const [u] = await db.select().from(users).where(eq(users.id, userId));
     if (!u) return res.status(404).json({ error: "User not found" });
+    const trialEndsAt = u.createdAt ? new Date(new Date(u.createdAt).getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000) : null;
+    const trialActive = !!trialEndsAt && trialEndsAt.getTime() > Date.now();
+    const subscriptionActive = isPremium(u as any);
     res.json({
-      premium: isPremium(u as any),
+      premium: subscriptionActive || trialActive,
       premiumUntil: u.premiumUntil,
       premiumSource: u.premiumSource,
+      trialActive,
+      trialEndsAt,
       hasStripeSubscription: !!u.stripeSubscriptionId,
     });
   });

@@ -510,6 +510,8 @@ export default function SettingsPage() {
   };
 
   const contactLimit = status?.contactLimit ?? 2;
+  const hasUnlimitedContacts = contactLimit >= 999;
+  const trialEndsAt = status?.trialEndsAt ? new Date(status.trialEndsAt) : null;
 
   const addContactEntry = () => {
     if (contactEntries.length >= contactLimit) return;
@@ -581,10 +583,20 @@ export default function SettingsPage() {
                 <Users className="h-5 w-5 text-primary" />
                 <h2 className="font-semibold">Emergency Contacts</h2>
               </div>
-              <span className="text-xs text-muted-foreground">{contactEntries.filter(c => c.name.trim()).length}/{contactLimit}</span>
+              <span className="text-xs text-muted-foreground">
+                {contactEntries.filter(c => c.name.trim()).length}/{hasUnlimitedContacts ? "unlimited" : contactLimit}
+              </span>
             </div>
-            {!status?.isPremium && contactLimit <= 2 && (
-              <p className="text-xs text-muted-foreground mb-2">Free plan: up to {contactLimit} contacts</p>
+            {status?.isTrialActive ? (
+              <p className="text-xs text-muted-foreground mb-2">
+                14-day trial active{trialEndsAt ? ` until ${trialEndsAt.toLocaleDateString()}` : ""}. Unlimited contacts while you test StillHere.
+              </p>
+            ) : status?.isPremium ? (
+              <p className="text-xs text-muted-foreground mb-2">Subscription active. Unlimited Safety Circle contacts.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mb-2">
+                Trial ended. Choose monthly or yearly to add more than {contactLimit} contacts.
+              </p>
             )}
             <div className="space-y-2">
               {contactEntries.map((contact, index) => {

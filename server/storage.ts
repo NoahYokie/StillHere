@@ -109,6 +109,27 @@ function isEffectivelyActiveFamilyMember(row: {
   return eff === "active" || eff === "active_legacy";
 }
 
+const TRIAL_DAYS = 14;
+
+function isSubscriptionActive(user: { isPremium?: boolean | null; premiumUntil?: Date | string | null } | null | undefined): boolean {
+  if (!user) return false;
+  if (user.isPremium) return true;
+  if (!user.premiumUntil) return false;
+  return new Date(user.premiumUntil).getTime() > Date.now();
+}
+
+function trialEndsAt(user: { createdAt?: Date | string | null } | null | undefined): Date | null {
+  if (!user?.createdAt) return null;
+  const createdAt = new Date(user.createdAt);
+  if (Number.isNaN(createdAt.getTime())) return null;
+  return new Date(createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+}
+
+function isTrialActive(user: { createdAt?: Date | string | null } | null | undefined): boolean {
+  const endsAt = trialEndsAt(user);
+  return !!endsAt && endsAt.getTime() > Date.now();
+}
+
 export interface PendingFamilyInvitation {
   memberId: string;
   familyId: string;
@@ -787,7 +808,7 @@ export class DatabaseStorage implements IStorage {
 
   async getContactLimit(userId: string): Promise<number> {
     const user = await this.getUser(userId);
-    return user?.isPremium ? 999 : 2;
+    return isSubscriptionActive(user) || isTrialActive(user) ? 999 : 2;
   }
 
   async saveContactsList(userId: string, contactsList: { name: string; phone: string; email?: string | null; priority: number }[]): Promise<Contact[]> {
@@ -1619,6 +1640,10 @@ export class DatabaseStorage implements IStorage {
 
     const contactLimit = await this.getContactLimit(userId);
 
+    const trialEnd = trialEndsAt(user);
+    const trialActive = isTrialActive(user);
+    const subscriptionActive = isSubscriptionActive(user);
+
     return {
       user,
       settings: userSettings,
@@ -1628,7 +1653,9 @@ export class DatabaseStorage implements IStorage {
       openIncident: openIncident || null,
       activeLocationSession: activeLocationSession || null,
       contactLimit,
-      isPremium: user.isPremium,
+      isPremium: subscriptionActive || trialActive,
+      isTrialActive: trialActive,
+      trialEndsAt: trialEnd,
     };
   }
 

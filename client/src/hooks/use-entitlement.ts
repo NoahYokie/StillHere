@@ -4,6 +4,8 @@ export interface EntitlementSnapshot {
   premium: boolean;
   premiumUntil: string | null;
   premiumSource: "stripe" | "appstore" | "playstore" | "manual" | null;
+  trialActive?: boolean;
+  trialEndsAt?: string | null;
   hasStripeSubscription: boolean;
 }
 
@@ -19,6 +21,8 @@ export function useEntitlement() {
     isPremium: !!q.data?.premium,
     premiumUntil: q.data?.premiumUntil ? new Date(q.data.premiumUntil) : null,
     source: q.data?.premiumSource || null,
+    trialActive: !!q.data?.trialActive,
+    trialEndsAt: q.data?.trialEndsAt ? new Date(q.data.trialEndsAt) : null,
     hasStripeSubscription: !!q.data?.hasStripeSubscription,
     isLoading: q.isLoading,
   };
