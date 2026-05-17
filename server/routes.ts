@@ -6630,6 +6630,25 @@ export async function registerRoutes(
     await storage.updateIncident(incident.id, { escalationTimeline: JSON.stringify(timeline) });
   }
 
+  function wellnessStatusRank(status: string | null | undefined): number {
+    switch (status) {
+      case "safe":
+      case "help":
+        return 100;
+      case "voicemail_left":
+        return 60;
+      case "no_response":
+      case "failed":
+        return 40;
+      case "answered_human":
+        return 30;
+      case "placed":
+        return 10;
+      default:
+        return 0;
+    }
+  }
+
   async function updateWellnessCallStatusForPhone(phone: string | null, status: string, detail?: string): Promise<void> {
     if (!phone) return;
     const normalizedPhone = phone.startsWith("+") ? phone : `+${phone}`;
@@ -6641,6 +6660,10 @@ export async function registerRoutes(
     const incident = await storage.getLatestRealOpenIncident(user.id);
     if (!incident || incident.isDrill) return;
     if (incident.wellnessCallStatus === "safe" || incident.wellnessCallStatus === "help") return;
+    if (wellnessStatusRank(status) < wellnessStatusRank(incident.wellnessCallStatus)) {
+      console.log(`[WELLNESS CALL] Keeping existing status ${incident.wellnessCallStatus} over lower-priority ${status} for incident=${incident.id}`);
+      return;
+    }
     await storage.updateIncident(incident.id, { wellnessCallStatus: status as any });
     if (detail) await appendWellnessTimeline(user.id, `wellness_call_${status}`, detail);
     try {
@@ -6656,13 +6679,16 @@ export async function registerRoutes(
       const callStatus = String(req.body.CallStatus || "").toLowerCase();
       const answeredBy = String(req.body.AnsweredBy || "").toLowerCase();
       const to = req.body.To ? String(req.body.To) : null;
+      const duration = String(req.body.CallDuration || req.body.Duration || "");
 
-      if (answeredBy.includes("machine")) {
-        await updateWellnessCallStatusForPhone(to, "voicemail_left", `Wellness call reached voicemail (${answeredBy})`);
+      if (answeredBy.includes("machine") || answeredBy === "fax") {
+        await updateWellnessCallStatusForPhone(to, "voicemail_left", `Wellness call reached voicemail (${answeredBy || "machine"})`);
       } else if (answeredBy === "human") {
         await updateWellnessCallStatusForPhone(to, "answered_human", "Wellness call answered by user");
       } else if (["no-answer", "busy", "failed", "canceled"].includes(callStatus)) {
         await updateWellnessCallStatusForPhone(to, callStatus === "no-answer" ? "no_response" : "failed", `Wellness call ended with status: ${callStatus}`);
+      } else if (callStatus === "completed" && duration === "0") {
+        await updateWellnessCallStatusForPhone(to, "no_response", "Wellness call completed with no connected duration");
       }
 
       res.type("text/xml").send("<Response></Response>");
@@ -6676,8 +6702,8 @@ export async function registerRoutes(
     try {
       const answeredBy = String(req.body.AnsweredBy || "").toLowerCase();
       const calledNumber = req.body.To ? String(req.body.To) : null;
-      if (answeredBy.includes("machine")) {
-        await updateWellnessCallStatusForPhone(calledNumber, "voicemail_left", `Wellness call reached voicemail (${answeredBy})`);
+      if (answeredBy.includes("machine") || answeredBy === "fax") {
+        await updateWellnessCallStatusForPhone(calledNumber, "voicemail_left", `Wellness call reached voicemail (${answeredBy || "machine"})`);
         const twimlVoicemail = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm("Hi, this is StillHere calling for your scheduled check-in. We could not reach you directly. Please open StillHere or reply to your check-in message as soon as you can.")}</Say>
@@ -6907,7 +6933,7 @@ export async function registerRoutes(
         // Never mutate drill incidents from the wellness flow.
         const noResponseIncident = await storage.getLatestRealOpenIncident(user.id);
         if (noResponseIncident && noResponseIncident.wellnessCallStatus !== "safe" && noResponseIncident.wellnessCallStatus !== "help") {
-          await storage.updateIncident(noResponseIncident.id, { wellnessCallStatus: "no_response" });
+          await updateWellnessCallStatusForPhone(calledNumber, "no_response", "Wellness call ended without keypad response");
           try {
             const watcherContacts = await storage.getContactsLinkedToUser(user.id);
             for (const c of watcherContacts) {

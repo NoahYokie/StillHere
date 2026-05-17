@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { eq, desc, and, ne, gt, gte, lt, or, isNull, isNotNull, inArray } from "drizzle-orm";
+import { eq, desc, and, ne, gt, gte, lt, lte, or, isNull, isNotNull, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -152,7 +152,6 @@ export const DECLINE_REINVITE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 // treated as pending and lose visibility.
 export const LEGACY_CONFIRM_WINDOW_DAYS = 21;
 import { addHours, startOfDay, format } from "date-fns";
-import { lte } from "drizzle-orm";
 
 function startOfDayInTimezone(date: Date, tz: string): Date {
   try {
@@ -255,7 +254,7 @@ export interface IStorage {
   hasActiveSafetyEvent(userId: string): Promise<boolean>;
   recordHeartbeat(userId: string, lat?: number, lng?: number, acc?: number, batt?: number, chg?: boolean, net?: string): Promise<void>;
   updateSafetyState(userId: string, newState: string, reason: string): Promise<void>;
-  getStaleActiveUsers(thresholdSeconds: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]>;
+  getStaleActiveUsers(thresholdSeconds: number, limit?: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]>;
   
   // Settings
   getSettings(userId: string): Promise<Settings | undefined>;
@@ -298,8 +297,8 @@ export interface IStorage {
   
   // Incidents
   getOpenIncident(userId: string): Promise<Incident | undefined>;
-  getIncidentsNeedingEscalation(): Promise<Incident[]>;
-  getStaleOpenIncidents(stalenessMs: number): Promise<Incident[]>;
+  getIncidentsNeedingEscalation(limit?: number): Promise<Incident[]>;
+  getStaleOpenIncidents(stalenessMs: number, limit?: number): Promise<Incident[]>;
   createIncident(userId: string, reason: IncidentReason): Promise<Incident>;
   updateIncident(id: string, updates: Partial<Incident>): Promise<Incident>;
   
@@ -636,7 +635,7 @@ export class DatabaseStorage implements IStorage {
     console.log(`[SafetyState] user ${userId} ${oldState} -> ${newState} (${reason})`);
   }
 
-  async getStaleActiveUsers(thresholdSeconds: number): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]> {
+  async getStaleActiveUsers(thresholdSeconds: number, limit = 1000): Promise<{ id: string; safetyState: string; lastHeartbeatAt: Date }[]> {
     const cutoff = new Date(Date.now() - thresholdSeconds * 1000);
     const results = await db
       .select({ id: users.id, safetyState: users.safetyState, lastHeartbeatAt: users.lastHeartbeatAt })
@@ -647,7 +646,9 @@ export class DatabaseStorage implements IStorage {
           isNotNull(users.lastHeartbeatAt),
           lte(users.lastHeartbeatAt, cutoff)
         )
-      );
+      )
+      .orderBy(users.lastHeartbeatAt)
+      .limit(limit);
     return results
       .filter((r) => r.lastHeartbeatAt !== null)
       .map((r) => ({ id: r.id, safetyState: r.safetyState as string, lastHeartbeatAt: r.lastHeartbeatAt as Date }));
@@ -1500,7 +1501,7 @@ export class DatabaseStorage implements IStorage {
     return incident || undefined;
   }
 
-  async getIncidentsNeedingEscalation(): Promise<Incident[]> {
+  async getIncidentsNeedingEscalation(limit = 500): Promise<Incident[]> {
     const now = new Date();
     // Get incidents where:
     // 1. Status is not resolved AND
@@ -1523,7 +1524,9 @@ export class DatabaseStorage implements IStorage {
             isNull(incidents.nextActionAt)
           )
         )
-      );
+      )
+      .orderBy(incidents.nextActionAt, incidents.startedAt)
+      .limit(limit);
     return result;
   }
 
@@ -1536,7 +1539,7 @@ export class DatabaseStorage implements IStorage {
     return incident;
   }
 
-  async getStaleOpenIncidents(stalenessMs: number): Promise<Incident[]> {
+  async getStaleOpenIncidents(stalenessMs: number, limit = 500): Promise<Incident[]> {
     // Returns incidents that are not resolved AND have not had any escalation
     // activity for at least `stalenessMs`. Used by the cron sweeper to
     // auto-archive incidents that got stuck open (e.g. resolve path failed
@@ -1562,7 +1565,9 @@ export class DatabaseStorage implements IStorage {
             ),
           ),
         ),
-      );
+      )
+      .orderBy(incidents.lastContactNotifiedAt, incidents.startedAt)
+      .limit(limit);
     return result;
   }
 
@@ -1883,14 +1888,47 @@ export class DatabaseStorage implements IStorage {
 
   async getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean }[]> {
     const now = new Date();
-    const allUsers = await db.select().from(users);
     const results: { user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean }[] = [];
+    const latestCheckins = db
+      .select({
+        userId: checkins.userId,
+        lastCheckinAt: sql<Date>`max(${checkins.createdAt})`.as("last_checkin_at"),
+      })
+      .from(checkins)
+      .groupBy(checkins.userId)
+      .as("latest_checkins");
 
-    for (const user of allUsers) {
-      const userSettings = await this.getSettings(user.id);
-      if (!userSettings) continue;
+    // Production hardening: do not scan every user on every cron tick. Pull a
+    // bounded set of plausible candidates only, then do the precise
+    // timezone/preferred-time calculation in application code below. A future
+    // migration should persist next_checkin_due_at and index it, but this
+    // removes the immediate N+1 full-table scan risk.
+    const candidateCutoff = new Date(now.getTime() - 20 * 60 * 60 * 1000);
+    const candidateRows = await db
+      .select({
+        user: users,
+        settings,
+        lastCheckinAt: latestCheckins.lastCheckinAt,
+      })
+      .from(users)
+      .innerJoin(settings, eq(settings.userId, users.id))
+      .leftJoin(latestCheckins, eq(latestCheckins.userId, users.id))
+      .where(and(
+        or(isNull(settings.pauseUntil), lte(settings.pauseUntil, now)),
+        sql`coalesce(${latestCheckins.lastCheckinAt}, ${users.createdAt}) <= ${candidateCutoff}`,
+      ))
+      .orderBy(sql`coalesce(${latestCheckins.lastCheckinAt}, ${users.createdAt}) asc`)
+      .limit(2000);
 
-      // Skip if paused
+    for (const row of candidateRows) {
+      const user = row.user as User;
+      const userSettings = {
+        ...(row.settings as Settings),
+        checkinIntervalHours: normalizeCheckinIntervalHours(row.settings.checkinIntervalHours),
+      };
+
+      // Skip if paused. This is also in the SQL filter, but keep the guard so
+      // the behavior remains correct if the query is changed later.
       if (userSettings.pauseUntil && userSettings.pauseUntil > now) continue;
 
       // Skip if already has open incident
@@ -1899,14 +1937,13 @@ export class DatabaseStorage implements IStorage {
 
       // Check timing — honor the user's preferred local time-of-day so a
       // missed 7pm check-in doesn't fire its reminder at the wrong hour.
-      const lastCheckin = await this.getLastCheckin(user.id);
-      const lastTime = lastCheckin?.createdAt || user.createdAt;
+      const lastTime = row.lastCheckinAt || user.createdAt;
       const dueTime = computeNextCheckinDue({
         lastTime,
         intervalHours: userSettings.checkinIntervalHours,
         preferredCheckinTime: userSettings.preferredCheckinTime,
         timezone: user.timezone,
-        lastTimeIsCheckin: !!lastCheckin,
+        lastTimeIsCheckin: !!row.lastCheckinAt,
       });
       const graceTime = new Date(dueTime.getTime() + userSettings.graceMinutes * 60 * 1000);
 
