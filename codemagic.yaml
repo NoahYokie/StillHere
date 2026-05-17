@@ -9,6 +9,7 @@ workflows:
         bundle_identifier: com.daudabangoura.stillhere.app
       vars:
         XCODE_SCHEME: "App"
+        IOS_BUILD_NUMBER: "14"
       node: v22.0.0
     integrations:
       app_store_connect: BrainSprout Kids
@@ -65,17 +66,19 @@ workflows:
       - name: Bump build number
         script: |
           cd ios/App
-          LATEST_TESTFLIGHT_BUILD=0
-          if [ -n "$APP_STORE_APP_ID" ]; then
-            LATEST_TESTFLIGHT_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo 0)
-          fi
-          FALLBACK_BUILD_NUMBER=${CM_BUILD_NUMBER:-13}
-          BUILD_NUMBER=$((LATEST_TESTFLIGHT_BUILD + 1))
-          if [ "$BUILD_NUMBER" -lt "$FALLBACK_BUILD_NUMBER" ]; then
-            BUILD_NUMBER=$FALLBACK_BUILD_NUMBER
-          fi
-          if [ "$BUILD_NUMBER" -le 12 ]; then
-            BUILD_NUMBER=13
+          if [ -n "$IOS_BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$IOS_BUILD_NUMBER"
+            LATEST_TESTFLIGHT_BUILD="not-checked"
+          else
+            LATEST_TESTFLIGHT_BUILD=0
+            if [ -n "$APP_STORE_APP_ID" ]; then
+              LATEST_TESTFLIGHT_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo 0)
+            fi
+            FALLBACK_BUILD_NUMBER=${CM_BUILD_NUMBER:-14}
+            BUILD_NUMBER=$((LATEST_TESTFLIGHT_BUILD + 1))
+            if [ "$BUILD_NUMBER" -lt "$FALLBACK_BUILD_NUMBER" ]; then
+              BUILD_NUMBER=$FALLBACK_BUILD_NUMBER
+            fi
           fi
           agvtool new-version -all $BUILD_NUMBER
           agvtool new-marketing-version 1.0
