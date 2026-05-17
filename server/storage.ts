@@ -230,10 +230,10 @@ export function computeNextCheckinDue(opts: {
 function normalizeCheckinIntervalHours(value: number | null | undefined): number {
   if (!Number.isFinite(value)) return 24;
   const hours = Math.round(Number(value));
-  // Current settings validation allows 12-168 hours. Some migrated rows may
-  // still contain older sub-daily values, which would restart missed-checkin
-  // alerting far more often than the product supports.
-  return Math.max(12, Math.min(168, hours));
+  // The check-in product is daily-or-longer. Some migrated rows may still
+  // contain older sub-daily values (for example 3 hours), which makes the
+  // scheduler remind a user again even after they checked in that same day.
+  return Math.max(24, Math.min(168, hours));
 }
 
 function obfuscateCoord(value: number, seed: string): number {

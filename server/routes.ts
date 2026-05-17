@@ -1579,8 +1579,8 @@ export async function registerRoutes(
       }
       const { checkinIntervalHours, graceMinutes, locationMode, reminderMode, preferredCheckinTime, timezone, autoCheckin, fallDetection, discreetSos, smsCheckinEnabled, escalationMinutes, allowReports, drivingSafety, speedLimitKmh, autoWellnessCall } = req.body;
       
-      if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 12 || checkinIntervalHours > 168)) {
-        return res.status(400).json({ error: "Checkin interval must be between 12 and 168 hours" });
+      if (checkinIntervalHours !== undefined && (typeof checkinIntervalHours !== "number" || checkinIntervalHours < 24 || checkinIntervalHours > 168)) {
+        return res.status(400).json({ error: "Checkin interval must be between 24 and 168 hours" });
       }
       if (graceMinutes !== undefined && (typeof graceMinutes !== "number" || graceMinutes < 10 || graceMinutes > 30)) {
         return res.status(400).json({ error: "Grace period must be between 10 and 30 minutes" });

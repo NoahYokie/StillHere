@@ -556,7 +556,7 @@ export default function SettingsPage() {
 
   const handleIntervalChange = (value: string) => {
     const hours = parseInt(value);
-    if (isNaN(hours) || hours < 1) return;
+    if (isNaN(hours) || hours < 24) return;
     setCheckinInterval(hours);
     settingsMutation.mutate({ checkinIntervalHours: hours });
   };
@@ -1003,7 +1003,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2 mt-2 ml-7" data-testid="custom-interval-input">
                       <Input
                         type="number"
-                        min={12}
+                        min={24}
                         max={720}
                         placeholder={![24, 48, 168].includes(checkinInterval) ? checkinInterval.toString() : "Hours"}
                         value={customInterval}
@@ -1016,17 +1016,17 @@ export default function SettingsPage() {
                         className="h-9"
                         onClick={() => {
                           const hrs = parseInt(customInterval);
-                          if (isNaN(hrs) || hrs < 12) return;
+                          if (isNaN(hrs) || hrs < 24) return;
                           handleIntervalChange(customInterval);
                           setCustomInterval("");
                           setShowCustomInterval(false);
                         }}
-                        disabled={!customInterval || parseInt(customInterval) < 12}
+                        disabled={!customInterval || parseInt(customInterval) < 24}
                         data-testid="button-set-custom"
                       >
                         Apply
                       </Button>
-                      <span className="text-xs text-muted-foreground">hours between check-ins (minimum 12)</span>
+                      <span className="text-xs text-muted-foreground">hours between check-ins (minimum 24)</span>
                     </div>
                   )}
                 </div>
