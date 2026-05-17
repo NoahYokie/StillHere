@@ -62,7 +62,6 @@
 		<string>location</string>
 		<string>fetch</string>
 		<string>remote-notification</string>
-		<string>processing</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
