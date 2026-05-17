@@ -15,7 +15,7 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install
+          npm ci
       - name: Install Transistorsoft plugin (if licensed)
         script: |
           if [ -n "$TRANSISTORSOFT_LICENSE_KEY" ]; then
@@ -45,9 +45,6 @@ workflows:
       - name: Sync Capacitor
         script: |
           npx cap sync ios
-      - name: Install CocoaPods
-        script: |
-          cd ios/App && pod install --repo-update
       - name: Verify iOS project configuration
         script: |
           echo "=== Checking background modes ==="
@@ -75,7 +72,7 @@ workflows:
       - name: Build iOS app
         script: |
           xcode-project build-ipa \
-            --workspace "ios/App/App.xcworkspace" \
+            --project "ios/App/App.xcodeproj" \
             --scheme "$XCODE_SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa

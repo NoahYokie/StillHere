@@ -107,6 +107,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
     allowedOrigins.push(`https://${process.env.REPLIT_DEV_DOMAIN}`);
   }
   allowedOrigins.push(
+    "capacitor://localhost",
+    "ionic://localhost",
+    "https://localhost",
     /^https?:\/\/localhost(:\d+)?$/,
     /\.replit\.dev$/,
     /\.repl\.co$/,

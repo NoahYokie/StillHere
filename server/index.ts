@@ -12,6 +12,12 @@ import { pool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
+const nativeAllowedOrigins = new Set([
+  "capacitor://localhost",
+  "ionic://localhost",
+  "https://localhost",
+  "http://localhost",
+]);
 
 declare module "http" {
   interface IncomingMessage {
@@ -58,6 +64,19 @@ app.use((_req, res, next) => {
 });
 
 app.set("trust proxy", 1);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && nativeAllowedOrigins.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.setHeader("Vary", "Origin");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 
 // Stripe webhook MUST be registered before express.json() so the raw Buffer
 // body reaches stripe-replit-sync for signature verification. It also needs

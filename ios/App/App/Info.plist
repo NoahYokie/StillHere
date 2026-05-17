@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CAPACITOR_DEBUG</key>
+	<string>$(CAPACITOR_DEBUG)</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+        <string>StillHere</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>StillHere uses the camera only for video calls you start or answer with your Safety Circle.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>StillHere uses the microphone only for voice and video calls you start or answer with your Safety Circle.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>StillHere uses your location only when you choose to share it or when you start a safety feature like a check-in, Safe Walk, Safety Timer, Drive Safety, or SOS. Location sharing is off by default.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>StillHere uses background location only when you turn on a feature that needs it, such as Safe Walk, Safety Timer, Drive Safety, active sharing with your Safety Circle, or an SOS in progress. If a check-in is missed or you trigger help, we will attempt to share your location with the contacts you chose so they can reach you. StillHere is not a continuous tracking app and does not collect location during calm time when you are in Presence mode or have sharing paused.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are best-effort sensor signals, not medical-grade detection.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+		<string>processing</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.daudabangoura.stillhere.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>stillhere</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

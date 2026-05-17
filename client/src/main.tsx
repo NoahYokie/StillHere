@@ -2,8 +2,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { resumeLiveTrackingIfNeeded } from "./lib/live-location";
+import { installNativeFetchBridge, isNativeApp } from "./lib/native-api";
 
-if ('serviceWorker' in navigator) {
+installNativeFetchBridge();
+
+if (!isNativeApp() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then(async (registration) => {
