@@ -194,7 +194,8 @@ export function computeNextCheckinDue(opts: {
   timezone: string | null | undefined;
   lastTimeIsCheckin?: boolean;
 }): Date {
-  const { lastTime, intervalHours } = opts;
+  const { lastTime } = opts;
+  const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
   const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
   if (!isDailyLike) {
     return addHours(lastTime, intervalHours);
@@ -224,6 +225,15 @@ export function computeNextCheckinDue(opts: {
     candidate = new Date(nextDayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
   }
   return candidate;
+}
+
+function normalizeCheckinIntervalHours(value: number | null | undefined): number {
+  if (!Number.isFinite(value)) return 24;
+  const hours = Math.round(Number(value));
+  // Current settings validation allows 12-168 hours. Some migrated rows may
+  // still contain older sub-daily values, which would restart missed-checkin
+  // alerting far more often than the product supports.
+  return Math.max(12, Math.min(168, hours));
 }
 
 function obfuscateCoord(value: number, seed: string): number {
@@ -645,10 +655,20 @@ export class DatabaseStorage implements IStorage {
 
   async getSettings(userId: string): Promise<Settings | undefined> {
     const [result] = await db.select().from(settings).where(eq(settings.userId, userId));
-    return result || undefined;
+    if (!result) return undefined;
+    return {
+      ...result,
+      checkinIntervalHours: normalizeCheckinIntervalHours(result.checkinIntervalHours),
+    };
   }
 
   async updateSettings(userId: string, updates: Partial<InsertSettings>): Promise<Settings> {
+    if (updates.checkinIntervalHours !== undefined) {
+      updates = {
+        ...updates,
+        checkinIntervalHours: normalizeCheckinIntervalHours(updates.checkinIntervalHours),
+      };
+    }
     const existing = await this.getSettings(userId);
     
     if (!existing) {
@@ -1810,6 +1830,36 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    const contactCanViewLocation = contact.canViewLocation !== false;
+    const hasSafetyLocationReason = !!incident || !!locationSession || !!safetyTimer || !!safeWalk || !!crashDrive;
+    const canExposeLocation = contactCanViewLocation && hasSafetyLocationReason;
+
+    const visibleLastCheckin = lastCheckin
+      ? {
+          ...lastCheckin,
+          lat: canExposeLocation ? lastCheckin.lat : null,
+          lng: canExposeLocation ? lastCheckin.lng : null,
+        }
+      : null;
+    const visibleSafetyTimer = safetyTimer && !canExposeLocation
+      ? { ...safetyTimer, lastLat: null, lastLng: null, lastSpeed: null, lastActivity: null, lastLocationAt: null }
+      : safetyTimer;
+    const visibleSafeWalk = safeWalk && !canExposeLocation
+      ? {
+          ...safeWalk,
+          destinationLat: null,
+          destinationLng: null,
+          lastLat: null,
+          lastLng: null,
+          lastSpeed: null,
+          lastActivity: null,
+          lastLocationAt: null,
+        } as any
+      : safeWalk;
+    const visibleCrashDrive = crashDrive && !canExposeLocation
+      ? { ...crashDrive, startLat: null, startLng: null, endLat: null, endLng: null }
+      : crashDrive;
+
     return {
       mode: "live",
       user: {
@@ -1819,14 +1869,14 @@ export class DatabaseStorage implements IStorage {
         timezone: user.timezone || null,
       },
       contact,
-      lastCheckin: lastCheckin || null,
+      lastCheckin: visibleLastCheckin,
       incident: incident || null,
-      locationSession: locationSession || null,
+      locationSession: canExposeLocation ? locationSession || null : null,
       handlingContact,
-      safetyTimer: safetyTimer || null,
-      safeWalk: safeWalk || null,
-      crashDrive: crashDrive || null,
-      tripTrail,
+      safetyTimer: visibleSafetyTimer || null,
+      safeWalk: visibleSafeWalk || null,
+      crashDrive: visibleCrashDrive || null,
+      tripTrail: canExposeLocation ? tripTrail : [],
       resolvedAt: null,
     };
   }
@@ -1861,6 +1911,22 @@ export class DatabaseStorage implements IStorage {
       const graceTime = new Date(dueTime.getTime() + userSettings.graceMinutes * 60 * 1000);
 
       if (now > dueTime) {
+        // If this due window already produced a missed-checkin incident, do
+        // not create another one just because the stale-incident sweeper later
+        // archived the open incident. A new missed-checkin flow starts only
+        // after the user checks in and creates a new due window.
+        const [sameDueIncident] = await db
+          .select({ id: incidents.id })
+          .from(incidents)
+          .where(and(
+            eq(incidents.userId, user.id),
+            eq(incidents.reason, "missed_checkin"),
+            eq(incidents.isDrill, false),
+            gte(incidents.startedAt, dueTime),
+          ))
+          .limit(1);
+        if (sameDueIncident) continue;
+
         results.push({ user, settings: userSettings, isDueForReminder: true, isDueForAlert: now > graceTime });
       }
     }
@@ -2145,7 +2211,7 @@ export class DatabaseStorage implements IStorage {
 
       const mode = (user.sharingMode as "precise" | "area" | "presence" | "paused") || "precise";
       const isConcern = user.safetyState === "concern";
-      const hideLocation = (mode === "presence" || mode === "paused") && !isConcern;
+      const hideLocation = contact.canViewLocation === false || ((mode === "presence" || mode === "paused") && !isConcern);
       const obfuscateLocation = mode === "area" && !isConcern;
       const isLearning = user.learningModeUntil ? new Date() < user.learningModeUntil : false;
 
@@ -2807,6 +2873,8 @@ export class DatabaseStorage implements IStorage {
 
     const results: (LiveLocationShare & { userName: string; safetyState: string; hasSafetyEvent: boolean; safetyStateReason: string | null; incidentReason: string | null; hasOpenIncident: boolean })[] = [];
     for (const contact of watcherContacts) {
+      if (contact.canViewLocation === false) continue;
+
       const [share] = await db.select().from(liveLocationShares)
         .where(and(eq(liveLocationShares.userId, contact.userId), eq(liveLocationShares.active, true)))
         .limit(1);

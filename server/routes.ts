@@ -4075,13 +4075,17 @@ export async function registerRoutes(
       if (currentUserId !== targetUserId) {
         const canView = await checkWatcherPermission(currentUserId, targetUserId);
         if (!canView) return res.status(403).json({ error: "Not authorized" });
+        const canViewLocation = await checkWatcherLocationPermission(currentUserId, targetUserId);
         const watchedSettings = await storage.getSettings(targetUserId);
         if (watchedSettings && !watchedSettings.allowReports) {
           return res.status(403).json({ error: "User has disabled report sharing" });
         }
+        const periodParam = (req.query.period as string) || "week";
+        const report = await buildDriveReport(targetUserId, periodParam, { includeLocation: canViewLocation });
+        return res.json(report);
       }
       const periodParam = (req.query.period as string) || "week";
-      const report = await buildDriveReport(targetUserId, periodParam);
+      const report = await buildDriveReport(targetUserId, periodParam, { includeLocation: true });
       res.json(report);
     } catch (error) {
       console.error("Error generating drive report:", error);
@@ -4096,7 +4100,7 @@ export async function registerRoutes(
       const session = await storage.getDriveSession(req.params.sessionId);
       if (!session) return res.status(404).json({ error: "Session not found" });
       if (session.userId !== currentUserId) {
-        const canView = await checkWatcherPermission(currentUserId, session.userId);
+        const canView = await checkWatcherLocationPermission(currentUserId, session.userId);
         if (!canView) return res.status(403).json({ error: "Not authorized" });
         const watchedSettings = await storage.getSettings(session.userId);
         if (watchedSettings && !watchedSettings.allowReports) {
@@ -4110,7 +4114,7 @@ export async function registerRoutes(
     }
   });
 
-  async function buildDriveReport(userId: string, periodParam: string) {
+  async function buildDriveReport(userId: string, periodParam: string, options?: { includeLocation?: boolean }) {
     const now = new Date();
     let from: Date;
     switch (periodParam) {
@@ -4145,6 +4149,7 @@ export async function registerRoutes(
 
     const { format: fmtDate } = await import("date-fns");
 
+    const includeLocation = options?.includeLocation !== false;
     const driveDetails = sessions.map(s => {
       const sessionAlerts = alerts.filter(a => a.sessionId === s.id);
       const durationMs = s.endedAt
@@ -4161,10 +4166,10 @@ export async function registerRoutes(
         avgSpeedKmh: s.avgSpeedKmh || 0,
         crashDetected: s.crashDetected || false,
         speedAlerts: sessionAlerts.length,
-        startLat: s.startLat,
-        startLng: s.startLng,
-        endLat: s.endLat,
-        endLng: s.endLng,
+        startLat: includeLocation ? s.startLat : null,
+        startLng: includeLocation ? s.startLng : null,
+        endLat: includeLocation ? s.endLat : null,
+        endLng: includeLocation ? s.endLng : null,
       };
     });
 
@@ -4927,9 +4932,10 @@ export async function registerRoutes(
       const requesterId = getUserId(req);
       if (!requesterId) return res.status(401).json({ error: "Not authenticated" });
       const targetUserId = req.params.userId;
-      const linkedContacts = await storage.getContactsLinkedToUser(requesterId);
-      const isWatcher = linkedContacts.some(c => c.userId === targetUserId);
-      if (!isWatcher && requesterId !== targetUserId) {
+      const canViewLocation = requesterId === targetUserId
+        ? true
+        : await checkWatcherLocationPermission(requesterId, targetUserId);
+      if (!canViewLocation) {
         return res.status(403).json({ error: "Not authorized" });
       }
       const fences = await storage.getGeofences(targetUserId);
@@ -5179,9 +5185,10 @@ export async function registerRoutes(
       const requesterId = getUserId(req);
       if (!requesterId) return res.status(401).json({ error: "Not authenticated" });
       const targetUserId = req.params.userId as string;
-      const linkedContacts = await storage.getContactsLinkedToUser(requesterId);
-      const isWatcher = linkedContacts.some(c => c.userId === targetUserId);
-      if (!isWatcher && requesterId !== targetUserId) {
+      const canViewLocation = requesterId === targetUserId
+        ? true
+        : await checkWatcherLocationPermission(requesterId, targetUserId);
+      if (!canViewLocation) {
         return res.status(403).json({ error: "Not authorized" });
       }
       const sessionId = req.query.sessionId as string | undefined;
@@ -5431,9 +5438,10 @@ export async function registerRoutes(
       if (!currentUserId) return res.status(401).json({ error: "Not authenticated" });
       const targetUserId = req.params.userId;
 
-      const linkedContacts = await storage.getContactsLinkedToUser(currentUserId);
-      const isWatcher = linkedContacts.some(c => c.userId === targetUserId);
-      if (!isWatcher && targetUserId !== currentUserId) {
+      const canViewLocation = targetUserId === currentUserId
+        ? true
+        : await checkWatcherLocationPermission(currentUserId, targetUserId);
+      if (!canViewLocation) {
         return res.status(403).json({ error: "Not authorized to view this location" });
       }
 
@@ -6228,9 +6236,18 @@ export async function registerRoutes(
     }
   });
 
-  async function checkWatcherPermission(watcherUserId: string, watchedUserId: string): Promise<boolean> {
+  async function getWatcherContact(watcherUserId: string, watchedUserId: string) {
     const linkedContacts = await storage.getContactsLinkedToUser(watcherUserId);
-    return linkedContacts.some(c => c.userId === watchedUserId);
+    return linkedContacts.find(c => c.userId === watchedUserId);
+  }
+
+  async function checkWatcherPermission(watcherUserId: string, watchedUserId: string): Promise<boolean> {
+    return !!(await getWatcherContact(watcherUserId, watchedUserId));
+  }
+
+  async function checkWatcherLocationPermission(watcherUserId: string, watchedUserId: string): Promise<boolean> {
+    const contact = await getWatcherContact(watcherUserId, watchedUserId);
+    return !!contact && contact.canViewLocation !== false;
   }
 
   // ===== SAFETY TIMER (Dead Man's Switch) =====
@@ -6490,11 +6507,8 @@ export async function registerRoutes(
     if (!watcherId) return res.status(401).json({ error: "Not authenticated" });
     try {
       const targetUserId = String(req.params.userId);
-      const contacts = await storage.getContacts(targetUserId);
-      const watcher = await storage.getUser(watcherId);
-      if (!watcher) return res.status(403).json({ error: "Forbidden" });
-      const isContact = contacts.some((c: any) => c.phone === watcher.phone);
-      if (!isContact) return res.status(403).json({ error: "Not authorized to view this user's safe walk" });
+      const canViewLocation = await checkWatcherLocationPermission(watcherId, targetUserId);
+      if (!canViewLocation) return res.status(403).json({ error: "Not authorized to view this user's safe walk" });
 
       const walk = await storage.getActiveSafeWalk(targetUserId);
       if (!walk) return res.json(null);
