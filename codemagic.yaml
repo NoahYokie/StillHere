@@ -6,10 +6,10 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.daudabangoura.stillhere.app
+        bundle_identifier: com.daudabangoura.stillhere.safety
       vars:
         XCODE_SCHEME: "App"
-        IOS_BUILD_NUMBER: "16"
+        IOS_BUILD_NUMBER: "1"
       node: v22.0.0
     integrations:
       app_store_connect: BrainSprout Kids

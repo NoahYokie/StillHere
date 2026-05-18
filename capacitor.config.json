@@ -1,6 +1,6 @@
 {
-  "appId": "com.daudabangoura.stillhere.app",
-  "appName": "StillHere",
+  "appId": "com.daudabangoura.stillhere.safety",
+  "appName": "StillHere Safety",
   "webDir": "dist/public",
   "server": {
     "iosScheme": "capacitor",

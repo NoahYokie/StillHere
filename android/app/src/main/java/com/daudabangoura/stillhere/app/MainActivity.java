@@ -1,4 +1,4 @@
-package com.daudabangoura.stillhere.app;
+package com.daudabangoura.stillhere.safety;
 
 import com.getcapacitor.BridgeActivity;
 

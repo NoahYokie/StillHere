@@ -44,7 +44,7 @@ async function sendAPNsVoipPush(
   const apnsKey = process.env.APNS_AUTH_KEY;
   // Must match capacitor.config.json `appId`. APNs `apns-topic` for VoIP
   // pushes is `${bundleId}.voip`, and APNs rejects mismatched topics.
-  const bundleId = "com.daudabangoura.stillhere.app";
+  const bundleId = "com.daudabangoura.stillhere.safety";
 
   if (!apnsKeyId || !apnsTeamId || !apnsKey) {
     console.log("[VOIP-PUSH] APNs not configured (APNS_KEY_ID, APNS_TEAM_ID, APNS_AUTH_KEY required). Skipping VoIP push.");
