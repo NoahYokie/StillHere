@@ -9,7 +9,7 @@ workflows:
         bundle_identifier: com.daudabangoura.stillhere.app
       vars:
         XCODE_SCHEME: "App"
-        IOS_BUILD_NUMBER: "15"
+        IOS_BUILD_NUMBER: "16"
       node: v22.0.0
     integrations:
       app_store_connect: BrainSprout Kids
