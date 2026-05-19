@@ -7294,9 +7294,14 @@ export async function registerRoutes(
         return res.json({ skipped: true, reason: "cron already running on another instance" });
       }
 
-      const normalizedLegacyIntervals = await storage.normalizeLegacyCheckinIntervals();
-      if (normalizedLegacyIntervals > 0) {
-        console.log(`[CRON] Normalized ${normalizedLegacyIntervals} legacy check-in interval setting(s) to daily-or-longer`);
+      let normalizedLegacyIntervals = 0;
+      try {
+        normalizedLegacyIntervals = await storage.normalizeLegacyCheckinIntervals();
+        if (normalizedLegacyIntervals > 0) {
+          console.log(`[CRON] Normalized ${normalizedLegacyIntervals} legacy check-in interval setting(s) to daily-or-longer`);
+        }
+      } catch (err: any) {
+        console.error("[CRON] Legacy check-in interval cleanup failed:", err?.message || err);
       }
 
       const overdueUsers = await storage.getOverdueUsersWithSettings();
