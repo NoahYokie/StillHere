@@ -259,6 +259,7 @@ export interface IStorage {
   // Settings
   getSettings(userId: string): Promise<Settings | undefined>;
   updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
+  normalizeLegacyCheckinIntervals(limit?: number): Promise<number>;
   incrementRemindersSent(userId: string): Promise<Settings>;
   addReminderTimelineEntry(userId: string, entry: { type: string; time: string; detail: string }): Promise<void>;
   getReminderTimeline(userId: string): Promise<{ type: string; time: string; detail: string }[]>;
@@ -657,10 +658,58 @@ export class DatabaseStorage implements IStorage {
   async getSettings(userId: string): Promise<Settings | undefined> {
     const [result] = await db.select().from(settings).where(eq(settings.userId, userId));
     if (!result) return undefined;
+    const normalizedInterval = normalizeCheckinIntervalHours(result.checkinIntervalHours);
+    if (result.checkinIntervalHours !== normalizedInterval) {
+      await db
+        .update(settings)
+        .set({ checkinIntervalHours: normalizedInterval, updatedAt: new Date() })
+        .where(eq(settings.userId, userId));
+    }
     return {
       ...result,
-      checkinIntervalHours: normalizeCheckinIntervalHours(result.checkinIntervalHours),
+      checkinIntervalHours: normalizedInterval,
     };
+  }
+
+  async normalizeLegacyCheckinIntervals(limit = 500): Promise<number> {
+    // Some Replit-era rows used sub-daily check-in intervals such as 3 hours.
+    // The product is now daily-or-longer, so persist the normalized value.
+    // Returning a count lets cron/build logs prove whether stale rows existed.
+    const staleRows = await db
+      .select({ userId: settings.userId, checkinIntervalHours: settings.checkinIntervalHours })
+      .from(settings)
+      .where(or(lt(settings.checkinIntervalHours, 24), gt(settings.checkinIntervalHours, 168)))
+      .limit(limit);
+
+    if (staleRows.length === 0) return 0;
+
+    const lowUserIds = staleRows
+      .filter((row) => row.checkinIntervalHours < 24)
+      .map((row) => row.userId);
+    const highUserIds = staleRows
+      .filter((row) => row.checkinIntervalHours > 168)
+      .map((row) => row.userId);
+
+    let changed = 0;
+    const now = new Date();
+    if (lowUserIds.length > 0) {
+      const rows = await db
+        .update(settings)
+        .set({ checkinIntervalHours: 24, updatedAt: now })
+        .where(inArray(settings.userId, lowUserIds))
+        .returning({ userId: settings.userId });
+      changed += rows.length;
+    }
+    if (highUserIds.length > 0) {
+      const rows = await db
+        .update(settings)
+        .set({ checkinIntervalHours: 168, updatedAt: now })
+        .where(inArray(settings.userId, highUserIds))
+        .returning({ userId: settings.userId });
+      changed += rows.length;
+    }
+
+    return changed;
   }
 
   async updateSettings(userId: string, updates: Partial<InsertSettings>): Promise<Settings> {

@@ -7294,6 +7294,11 @@ export async function registerRoutes(
         return res.json({ skipped: true, reason: "cron already running on another instance" });
       }
 
+      const normalizedLegacyIntervals = await storage.normalizeLegacyCheckinIntervals();
+      if (normalizedLegacyIntervals > 0) {
+        console.log(`[CRON] Normalized ${normalizedLegacyIntervals} legacy check-in interval setting(s) to daily-or-longer`);
+      }
+
       const overdueUsers = await storage.getOverdueUsersWithSettings();
       const baseUrl = getBaseUrl();
       
@@ -8257,7 +8262,7 @@ export async function registerRoutes(
         releaseCronLock = null;
       }
       cronRunning = false;
-      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, walkEscalations, placeScheduleAlerts, processorCleanup, staleArchived });
+      res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, placeScheduleAlerts, processorCleanup, staleArchived, normalizedLegacyIntervals });
     } catch (error) {
       if (releaseCronLock) {
         await releaseCronLock().catch((unlockError) => console.error("[CRON] Failed to release advisory lock:", unlockError));
