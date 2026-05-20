@@ -3,8 +3,17 @@ import App from "./App";
 import "./index.css";
 import { resumeLiveTrackingIfNeeded } from "./lib/live-location";
 import { installNativeFetchBridge, isNativeApp } from "./lib/native-api";
+import { isIOS } from "./lib/capacitor";
 
 installNativeFetchBridge();
+
+if (isNativeApp()) {
+  document.documentElement.classList.add("capacitor-native");
+  if (isIOS()) {
+    document.documentElement.classList.add("capacitor-ios");
+    document.body.classList.add("capacitor-ios");
+  }
+}
 
 if (!isNativeApp() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
