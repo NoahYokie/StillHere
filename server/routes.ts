@@ -6680,6 +6680,7 @@ export async function registerRoutes(
       const answeredBy = String(req.body.AnsweredBy || "").toLowerCase();
       const to = req.body.To ? String(req.body.To) : null;
       const duration = String(req.body.CallDuration || req.body.Duration || "");
+      const durationSeconds = Number.parseInt(duration || "0", 10) || 0;
 
       if (answeredBy.includes("machine") || answeredBy === "fax") {
         await updateWellnessCallStatusForPhone(to, "voicemail_left", `Wellness call reached voicemail (${answeredBy || "machine"})`);
@@ -6687,8 +6688,16 @@ export async function registerRoutes(
         await updateWellnessCallStatusForPhone(to, "answered_human", "Wellness call answered by user");
       } else if (["no-answer", "busy", "failed", "canceled"].includes(callStatus)) {
         await updateWellnessCallStatusForPhone(to, callStatus === "no-answer" ? "no_response" : "failed", `Wellness call ended with status: ${callStatus}`);
-      } else if (callStatus === "completed" && duration === "0") {
+      } else if (callStatus === "completed" && durationSeconds === 0) {
         await updateWellnessCallStatusForPhone(to, "no_response", "Wellness call completed with no connected duration");
+      } else if (callStatus === "completed" && durationSeconds > 0 && !answeredBy) {
+        // Some carriers/Twilio AMD results do not include AnsweredBy on the
+        // final callback even when the call rolled to voicemail. If the user
+        // pressed 1 or 2, the incident is already terminal and this helper will
+        // not override it. Otherwise, treat a connected call with no keypad
+        // response as voicemail/no direct contact so watcher screens do not
+        // imply the user personally answered.
+        await updateWellnessCallStatusForPhone(to, "voicemail_left", "Wellness call connected but received no keypad response; likely voicemail");
       }
 
       res.type("text/xml").send("<Response></Response>");
@@ -7534,6 +7543,9 @@ export async function registerRoutes(
                 url: `${baseUrl}/api/wellness-call/respond`,
                 method: "POST",
                 machineDetection: "DetectMessageEnd",
+                asyncAmd: true,
+                asyncAmdStatusCallback: `${baseUrl}/api/wellness-call/status`,
+                asyncAmdStatusCallbackMethod: "POST",
                 statusCallback: `${baseUrl}/api/wellness-call/status`,
                 statusCallbackMethod: "POST",
                 statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
