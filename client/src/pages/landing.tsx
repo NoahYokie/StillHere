@@ -321,7 +321,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       {/* NAVIGATION */}
       <header className="hidden md:block bg-background/80 backdrop-blur-md border-b border-border sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
@@ -357,21 +357,21 @@ export default function LandingPage() {
           <div className="absolute bottom-32 right-4 md:bottom-10 md:right-20 w-48 md:w-96 h-48 md:h-96 rounded-full bg-white/15 blur-3xl" />
         </div>
 
-        <div className="relative flex-1 md:flex-none flex flex-col md:block px-6 pt-12 pb-6 md:py-20 max-w-6xl md:mx-auto md:w-full">
-          <div className="flex items-center gap-2 md:hidden mb-6">
+        <div className="relative flex-1 md:flex-none flex flex-col md:block px-6 pt-12 pb-6 md:py-20 max-w-6xl md:mx-auto w-full min-w-0">
+          <div className="flex items-center gap-2 md:hidden mb-6 min-w-0 max-w-full">
             <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
             <span className="text-lg font-semibold tracking-tight" data-testid="text-landing-title-mobile">StillHere</span>
           </div>
 
-          <div className="md:grid md:grid-cols-2 md:gap-12 md:items-center flex-1 flex flex-col md:flex-none">
+          <div className="md:grid md:grid-cols-2 md:gap-12 md:items-center flex-1 flex flex-col md:flex-none min-w-0">
             {/* COPY */}
-            <div className="flex-1 flex flex-col justify-end md:justify-center md:block order-2 md:order-1 pt-2 md:pt-0">
+            <div className="flex-1 flex flex-col justify-end md:justify-center md:block order-2 md:order-1 pt-2 md:pt-0 min-w-0 max-w-full">
               <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/15 rounded-full text-white text-xs font-medium mb-5">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 <span>Personal safety, check in, and SOS in one app</span>
               </div>
               <h1
-                className="text-[1.85rem] md:text-5xl lg:text-[3.4rem] leading-[1.1] font-bold tracking-tight mb-3 md:mb-5 text-center md:text-left"
+                className="text-[1.65rem] min-[375px]:text-[1.75rem] md:text-5xl lg:text-[3.4rem] leading-[1.1] font-bold tracking-tight mb-3 md:mb-5 text-center md:text-left break-words max-w-[calc(100vw-3rem)] md:max-w-none mx-auto md:mx-0"
                 data-testid="text-hero-title"
               >
                 <span className="block text-white/85 text-[1.25rem] md:text-2xl lg:text-3xl font-semibold tracking-tight mb-2 md:mb-3">
@@ -380,17 +380,17 @@ export default function LandingPage() {
                 When you can't check in,{" "}
                 <span className="text-white/90">StillHere checks on you.</span>
               </h1>
-              <p className="text-[1rem] md:text-xl text-white/85 leading-relaxed mb-4 md:mb-5 text-center md:text-left">
+              <p className="text-[0.95rem] min-[375px]:text-[1rem] md:text-xl text-white/85 leading-relaxed mb-4 md:mb-5 text-center md:text-left break-words max-w-[calc(100vw-3rem)] md:max-w-none mx-auto md:mx-0">
                 One tap tells your people you're okay. If you don't respond, StillHere escalates. Notification, SMS, phone call. Then attempts to reach your Safety Circle.
               </p>
               <p className="hidden md:block text-sm text-white/70 leading-relaxed mb-6 md:mb-8 text-left">
                 Built for families, seniors, solo livers, and lone workers. Daily safety check ins, panic SOS button, fall sensing, live GPS location sharing, and a Safety Circle that gets clear next steps.
               </p>
 
-              <div className="space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3">
+              <div className="space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3 max-w-[calc(100vw-3rem)] md:max-w-none mx-auto md:mx-0">
                 <Button
                   size="lg"
-                  className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 text-base md:text-lg font-semibold bg-white text-primary hover:bg-white/90 rounded-xl shadow-lg shadow-black/10"
+                  className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 px-3 text-base md:text-lg font-semibold bg-white text-primary hover:bg-white/90 rounded-xl shadow-lg shadow-black/10 whitespace-normal leading-tight"
                   onClick={() => setLocation("/login")}
                   data-testid="button-get-started"
                 >
@@ -399,7 +399,7 @@ export default function LandingPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 text-base md:text-lg font-semibold border-white/25 text-white bg-white/10 hover:bg-white/20 rounded-xl"
+                  className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 px-3 text-base md:text-lg font-semibold border-white/25 text-white bg-white/10 hover:bg-white/20 rounded-xl whitespace-normal leading-tight"
                   onClick={() => scrollTo("how-it-works")}
                   data-testid="button-see-how"
                 >
@@ -425,8 +425,8 @@ export default function LandingPage() {
             </div>
 
             {/* DEVICE MOCKUPS */}
-            <div className="flex flex-col items-center order-1 md:order-2 mb-2 md:mb-0 relative">
-              <div className="relative flex items-end gap-2.5 md:gap-4">
+            <div className="flex flex-col items-center order-1 md:order-2 mb-2 md:mb-0 relative min-w-0 max-w-full">
+              <div className="relative flex items-end justify-center gap-2.5 md:gap-4 max-w-full">
                 <div
                   className="w-[180px] h-[360px] md:w-[270px] md:h-[540px] bg-gray-900 rounded-[2rem] md:rounded-[3rem] border-[3px] border-gray-700 shadow-2xl shadow-black/40 p-1.5 md:p-2 flex flex-col relative"
                   data-testid="phone-mockup-animated"
@@ -482,7 +482,7 @@ export default function LandingPage() {
       </section>
 
       {/* HERO FEATURE STRIP (visible up to xl, replaces floating cards on smaller screens) */}
-      <section className="2xl:hidden px-6 -mt-6 md:-mt-10 relative z-10">
+      <section className="2xl:hidden px-6 -mt-6 md:-mt-10 relative z-10 overflow-hidden">
         <div className="max-w-6xl md:mx-auto grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { icon: Bell, title: "Smart reminders", body: "Notification, SMS, and call. One step at a time.", color: "bg-primary" },

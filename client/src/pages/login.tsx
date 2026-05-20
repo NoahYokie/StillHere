@@ -116,8 +116,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <Card className="w-full max-w-md shadow-md shadow-primary/5 border-border/60">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6 sm:p-6 overflow-x-hidden">
+      <Card className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md min-w-0 overflow-hidden shadow-md shadow-primary/5 border-border/60">
         <CardHeader className="text-center pt-8 pb-2">
           <div className="relative mx-auto mb-5">
             <div className="absolute inset-0 rounded-full bg-primary/15 blur-xl" aria-hidden="true" />
@@ -130,13 +130,13 @@ export default function LoginPage() {
             {showPhoneLogin ? "Your safety starts here" : "Fast, secure access"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-6 pb-8">
+        <CardContent className="pt-6 pb-8 px-5 sm:px-6">
           {!showPhoneLogin ? (
             <div className="space-y-5">
               {supportsPasskey && (
                 <div className="space-y-2">
                   <Button
-                    className="w-full h-14 text-base font-semibold rounded-xl shadow-sm shadow-primary/20 active:scale-[0.99] transition-transform"
+                    className="w-full h-14 px-3 sm:px-8 text-base font-semibold rounded-xl shadow-sm shadow-primary/20 active:scale-[0.99] transition-transform whitespace-normal leading-tight"
                     size="lg"
                     onClick={() => passkeyLoginMutation.mutate()}
                     disabled={passkeyLoginMutation.isPending}
@@ -165,7 +165,7 @@ export default function LoginPage() {
 
               <Button
                 variant="outline"
-                className="w-full h-12 rounded-xl font-medium"
+                className="w-full h-12 px-3 sm:px-8 rounded-xl font-medium whitespace-normal leading-tight"
                 size="lg"
                 onClick={() => setShowPhoneLogin(true)}
                 data-testid="button-phone-login"
@@ -188,7 +188,7 @@ export default function LoginPage() {
                     onChange={(e) => setPhone(e.target.value)}
                     autoComplete="tel"
                     autoFocus
-                    className="h-12 rounded-xl text-base focus-visible:ring-primary"
+                    className="h-12 rounded-xl text-base focus-visible:ring-primary min-w-0"
                     data-testid="input-phone"
                   />
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -204,7 +204,7 @@ export default function LoginPage() {
                 )}
                 <Button
                   type="submit"
-                  className="w-full h-14 text-base font-semibold rounded-xl shadow-sm shadow-primary/20 active:scale-[0.99] transition-transform"
+                  className="w-full h-14 px-3 sm:px-8 text-base font-semibold rounded-xl shadow-sm shadow-primary/20 active:scale-[0.99] transition-transform whitespace-normal leading-tight"
                   size="lg"
                   disabled={!phone.trim() || sendCodeMutation.isPending || cooldownSeconds > 0}
                   data-testid="button-send-code"
