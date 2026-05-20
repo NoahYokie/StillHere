@@ -52,6 +52,7 @@
       "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses background location only when you turn on a feature that needs it, such as Safe Walk, Safety Timer, Drive Safety, active sharing with your Safety Circle, or an SOS in progress. If a check-in is missed or you trigger help, we will attempt to share your location with the contacts you chose so they can reach you. StillHere is not a continuous tracking app and does not collect location during calm time when you are in Presence mode or have sharing paused.",
       "NSMotionUsageDescription": "StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are best-effort sensor signals, not medical-grade detection. If a possible event is detected we will attempt to notify your Safety Circle.",
       "NSMicrophoneUsageDescription": "StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle.",
+      "ITSAppUsesNonExemptEncryption": false,
       "UIBackgroundModes": ["location", "fetch", "remote-notification"]
     }
   },
