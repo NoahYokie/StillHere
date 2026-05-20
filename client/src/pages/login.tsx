@@ -11,19 +11,21 @@ import { HelpCircle, ArrowLeft, Fingerprint, Smartphone } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
+import { isNative } from "@/lib/capacitor";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
-  const [showPhoneLogin, setShowPhoneLogin] = useState(false);
+  const nativeLogin = isNative();
+  const [showPhoneLogin, setShowPhoneLogin] = useState(nativeLogin);
   const [supportsPasskey, setSupportsPasskey] = useState(false);
   const [sendError, setSendError] = useState("");
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
   useEffect(() => {
-    setSupportsPasskey(browserSupportsWebAuthn());
-  }, []);
+    setSupportsPasskey(!nativeLogin && browserSupportsWebAuthn());
+  }, [nativeLogin]);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -217,17 +219,19 @@ export default function LoginPage() {
                 </Button>
               </form>
               <div className="mt-5 flex justify-center">
-                <BackButton
-                  onClick={() => setShowPhoneLogin(false)}
-                  label="Back to sign in options"
-                  testId="button-back-to-options"
-                />
+                {!nativeLogin && (
+                  <BackButton
+                    onClick={() => setShowPhoneLogin(false)}
+                    label="Back to sign in options"
+                    testId="button-back-to-options"
+                  />
+                )}
               </div>
             </div>
           )}
 
           <div className="mt-7 flex flex-col items-center gap-3">
-            {!showPhoneLogin && (
+            {!showPhoneLogin && !nativeLogin && (
               <BackButton to="/" testId="link-back" />
             )}
             <button

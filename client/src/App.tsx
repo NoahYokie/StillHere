@@ -66,6 +66,9 @@ function LandingOrHome() {
     if (!isLoading && auth?.authenticated && auth?.needsSetup) {
       setLocation("/setup");
     }
+    if (!isLoading && !auth?.authenticated && isNative()) {
+      setLocation("/login");
+    }
   }, [auth, isLoading, setLocation]);
 
   if (isLoading) {
@@ -81,6 +84,10 @@ function LandingOrHome() {
 
   if (auth?.authenticated && !auth?.needsSetup) {
     return <Home />;
+  }
+
+  if (isNative()) {
+    return null;
   }
 
   return <LandingPage />;
