@@ -28,6 +28,9 @@
       "resize": "body",
       "resizeOnFullScreen": true
     },
+    "CapacitorCookies": {
+      "enabled": true
+    },
     "BackgroundGeolocation": {
       "_TODO_ALWAYS_ESCALATION": "App Store Phase 1 ships with WhenInUse only. Safe Walk, Safety Timer, Drive Safety, active Safety-Circle sharing, and SOS may require Always Location for reliable background updates. The app should request/escalate to Always at the moment the user enables one of those features (NOT upfront).",
       "locationAuthorizationRequest": "WhenInUse",
@@ -53,6 +56,7 @@
       "NSMotionUsageDescription": "StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are best-effort sensor signals, not medical-grade detection. If a possible event is detected we will attempt to notify your Safety Circle.",
       "NSMicrophoneUsageDescription": "StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle.",
       "ITSAppUsesNonExemptEncryption": false,
+      "WKAppBoundDomains": ["stillhere.health"],
       "UIBackgroundModes": ["location", "fetch", "remote-notification"]
     }
   },

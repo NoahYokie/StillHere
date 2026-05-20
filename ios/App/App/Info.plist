@@ -70,5 +70,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>stillhere.health</string>
+	</array>
 </dict>
 </plist>

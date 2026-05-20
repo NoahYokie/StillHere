@@ -10,6 +10,9 @@ import { Heart, ArrowLeft, Fingerprint, Check } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
+import { CapacitorCookies } from "@capacitor/core";
+import { isNative } from "@/lib/capacitor";
+import { NATIVE_API_ORIGIN, nativeAuthLog } from "@/lib/native-api";
 
 export default function LoginCodePage() {
   const [, setLocation] = useLocation();
@@ -30,6 +33,7 @@ export default function LoginCodePage() {
 
   const params = new URLSearchParams(search);
   const phone = params.get("phone") || "";
+  const nativeLogin = isNative();
 
   useEffect(() => {
     if (!phone) {
@@ -51,7 +55,13 @@ export default function LoginCodePage() {
       // the age-gate screen. For routine logins we omit the field entirely.
       const body: { phone: string; code: string; ageConfirmed?: boolean } = { phone, code };
       if (showAgeGate && ageConfirmed) body.ageConfirmed = true;
+      nativeAuthLog("otp_verify_started", { endpoint: "/api/auth/verify-code" });
       const res = await apiRequest("POST", "/api/auth/verify-code", body);
+      nativeAuthLog("otp_verify_finished", {
+        endpoint: "/api/auth/verify-code",
+        status: res.status,
+        ok: res.ok,
+      });
       return res.json();
     },
     onSuccess: async (data: any) => {
@@ -60,7 +70,38 @@ export default function LoginCodePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLoginResult(data);
 
-      if (browserSupportsWebAuthn()) {
+      if (nativeLogin) {
+        try {
+          const cookieMap = await CapacitorCookies.getCookies({ url: NATIVE_API_ORIGIN });
+          nativeAuthLog("cookie_probe_after_verify", {
+            authStoragePresent: Object.prototype.hasOwnProperty.call(cookieMap, "stillhere_session"),
+          });
+        } catch {
+          nativeAuthLog("cookie_probe_after_verify_failed");
+        }
+
+        try {
+          const meRes = await fetch("/api/auth/me", { credentials: "include" });
+          const me = await meRes.json();
+          nativeAuthLog("auth_me_after_verify", {
+            status: meRes.status,
+            ok: meRes.ok,
+            authenticated: me?.authenticated === true,
+          });
+          if (!me?.authenticated) {
+            toast({
+              title: "Sign in could not be completed",
+              description: "The code was accepted, but the app could not keep your session. Please try again.",
+              variant: "destructive",
+            });
+            return;
+          }
+        } catch {
+          nativeAuthLog("auth_me_after_verify_failed");
+        }
+      }
+
+      if (!nativeLogin && browserSupportsWebAuthn()) {
         try {
           const pkRes = await fetch("/api/auth/passkeys", { credentials: "include" });
           const existingPasskeys = await pkRes.json();
@@ -228,6 +269,120 @@ export default function LoginCodePage() {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  if (nativeLogin) {
+    return (
+      <main className="min-h-screen bg-background px-6 py-8 flex flex-col">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setLocation("/login")}
+            className="text-sm font-medium text-muted-foreground"
+            data-testid="button-native-code-back"
+          >
+            Change number
+          </button>
+          <button
+            type="button"
+            onClick={() => setLocation("/help")}
+            className="text-sm font-medium text-muted-foreground"
+            data-testid="button-native-code-help"
+          >
+            Help
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-8">
+            <Heart className="h-8 w-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            {showAgeGate ? "Before you continue" : "Enter your code"}
+          </h1>
+          <p className="mt-3 text-base leading-7 text-muted-foreground">
+            {showAgeGate
+              ? "Confirm your age to finish creating your StillHere account."
+              : `We sent a 6-digit code to ${formatPhone(phone)}.`}
+          </p>
+
+          {!showAgeGate ? (
+            <form onSubmit={handleSubmit} className="mt-9 space-y-6">
+              <div className="flex justify-start">
+                <InputOTP
+                  maxLength={6}
+                  value={code}
+                  onChange={setCode}
+                  data-testid="input-otp"
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+              <Button
+                type="submit"
+                className="w-full h-14 rounded-2xl text-base font-semibold"
+                disabled={code.length !== 6 || verifyCodeMutation.isPending}
+                data-testid="button-verify"
+              >
+                {verifyCodeMutation.isPending ? "Verifying..." : "Continue"}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-9 space-y-6">
+              <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-muted/40 p-4">
+                <Checkbox
+                  id="age-confirm"
+                  checked={ageConfirmed}
+                  onCheckedChange={(v) => {
+                    setAgeConfirmed(v === true);
+                    if (v === true) setAgeGateRefused(false);
+                  }}
+                  className="mt-0.5"
+                  data-testid="checkbox-age-confirm"
+                />
+                <label
+                  htmlFor="age-confirm"
+                  className="text-sm leading-relaxed text-foreground cursor-pointer select-none"
+                >
+                  I confirm I am 13 or older.
+                </label>
+              </div>
+              {ageGateRefused && (
+                <p className="text-sm text-destructive" data-testid="text-age-gate-error">
+                  StillHere is not available for users under 13.
+                </p>
+              )}
+              <Button
+                type="submit"
+                className="w-full h-14 rounded-2xl text-base font-semibold"
+                disabled={!ageConfirmed || verifyCodeMutation.isPending}
+                data-testid="button-age-confirm-continue"
+              >
+                {verifyCodeMutation.isPending ? "Creating account..." : "Continue"}
+              </Button>
+            </form>
+          )}
+        </div>
+
+        {!showAgeGate && (
+          <button
+            onClick={() => resendMutation.mutate()}
+            disabled={resendMutation.isPending || resendCooldown > 0}
+            className="text-center text-sm font-medium text-primary disabled:text-muted-foreground"
+            data-testid="button-resend"
+          >
+            {resendMutation.isPending ? "Sending..." : resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+          </button>
+        )}
+      </main>
     );
   }
 

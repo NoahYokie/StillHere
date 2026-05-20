@@ -12,6 +12,7 @@ import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813
 import { BackButton } from "@/components/back-button";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { isNative } from "@/lib/capacitor";
+import { nativeAuthLog } from "@/lib/native-api";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -84,11 +85,17 @@ export default function LoginPage() {
   const sendCodeMutation = useMutation({
     mutationFn: async () => {
       setSendError("");
+      nativeAuthLog("otp_request_started", { endpoint: "/api/auth/send-code" });
       const response = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone }),
         credentials: "include",
+      });
+      nativeAuthLog("otp_request_finished", {
+        endpoint: "/api/auth/send-code",
+        status: response.status,
+        ok: response.ok,
       });
       if (!response.ok) {
         const errBody = await response.json();
@@ -116,6 +123,81 @@ export default function LoginPage() {
       sendCodeMutation.mutate();
     }
   };
+
+  if (nativeLogin) {
+    return (
+      <main className="min-h-screen bg-background px-6 py-8 flex flex-col">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setLocation("/")}
+            className="text-sm font-medium text-muted-foreground"
+            data-testid="button-native-login-back"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={() => setLocation("/help")}
+            className="text-sm font-medium text-muted-foreground"
+            data-testid="button-native-login-help"
+          >
+            Help
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+          <img src={logoPath} alt="StillHere" className="w-16 h-16 object-contain mb-8" />
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            Sign in to StillHere
+          </h1>
+          <p className="mt-3 text-base leading-7 text-muted-foreground">
+            Enter your mobile number and we will send a secure sign-in code.
+          </p>
+
+          <form onSubmit={handlePhoneSubmit} className="mt-9 space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-sm font-medium">Mobile number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="0412 345 678 or +61 412 345 678"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+                autoFocus
+                className="h-14 rounded-2xl text-base px-4 bg-card"
+                data-testid="input-phone"
+              />
+            </div>
+            {sendError && (
+              <p className="text-sm text-destructive" data-testid="text-send-error">
+                {cooldownSeconds > 0
+                  ? `Please wait ${cooldownSeconds}s before requesting another code.`
+                  : sendError}
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="w-full h-14 rounded-2xl text-base font-semibold"
+              disabled={!phone.trim() || sendCodeMutation.isPending || cooldownSeconds > 0}
+              data-testid="button-send-code"
+            >
+              {sendCodeMutation.isPending
+                ? "Sending..."
+                : cooldownSeconds > 0
+                  ? `Wait ${cooldownSeconds}s`
+                  : "Continue"}
+            </Button>
+          </form>
+        </div>
+
+        <p className="text-center text-xs leading-5 text-muted-foreground max-w-xs mx-auto">
+          We only use this number for sign-in, check-ins, and alerts you control.
+        </p>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6 sm:p-6 overflow-x-hidden">

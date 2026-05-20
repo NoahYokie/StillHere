@@ -19,6 +19,14 @@ export function toApiUrl(input: string): string {
   return input;
 }
 
+export function nativeAuthLog(event: string, details: Record<string, unknown> = {}): void {
+  if (!isNativeApp()) return;
+  const safeDetails = Object.fromEntries(
+    Object.entries(details).filter(([key]) => !/code|token|session|cookie|phone/i.test(key)),
+  );
+  console.info(`[StillHere native auth] ${event}`, safeDetails);
+}
+
 export function installNativeFetchBridge(): void {
   if (!isNativeApp()) return;
   const originalFetch = window.fetch.bind(window);

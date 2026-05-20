@@ -57,6 +57,50 @@ import LimitationsPage from "@/pages/limitations";
 import { LimitationsGate } from "@/lib/limitations-gate";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
+import { Button } from "@/components/ui/button";
+
+function NativeWelcome() {
+  const [, setLocation] = useLocation();
+
+  return (
+    <main className="min-h-screen bg-background px-6 py-8 flex flex-col">
+      <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+        <div className="mb-10">
+          <img src={logoPath} alt="StillHere" className="w-20 h-20 object-contain mb-7" />
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            StillHere
+          </h1>
+          <p className="mt-3 text-base leading-7 text-muted-foreground">
+            A calm safety check-in app that helps your trusted people know when you are okay.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <Button
+            className="w-full h-14 rounded-2xl text-base font-semibold"
+            onClick={() => setLocation("/login?mode=signin")}
+            data-testid="button-native-sign-in"
+          >
+            Sign in
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full h-14 rounded-2xl text-base font-semibold"
+            onClick={() => setLocation("/login?mode=create")}
+            data-testid="button-native-create-account"
+          >
+            Create account
+          </Button>
+        </div>
+      </div>
+
+      <p className="text-center text-xs leading-5 text-muted-foreground max-w-xs mx-auto">
+        StillHere is not an emergency service. Alerts go to the people you choose.
+      </p>
+    </main>
+  );
+}
 
 function LandingOrHome() {
   const { auth, isLoading } = useAuth();
@@ -65,9 +109,6 @@ function LandingOrHome() {
   useEffect(() => {
     if (!isLoading && auth?.authenticated && auth?.needsSetup) {
       setLocation("/setup");
-    }
-    if (!isLoading && !auth?.authenticated && isNative()) {
-      setLocation("/login");
     }
   }, [auth, isLoading, setLocation]);
 
@@ -87,7 +128,7 @@ function LandingOrHome() {
   }
 
   if (isNative()) {
-    return null;
+    return <NativeWelcome />;
   }
 
   return <LandingPage />;
