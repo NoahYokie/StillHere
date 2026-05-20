@@ -39,6 +39,28 @@ body,
   overflow-x: hidden;
 }
 
+.login-card {
+  width: calc(100vw - 2rem);
+  max-width: 28rem;
+}
+
+.login-card,
+.login-card * {
+  min-width: 0;
+}
+
+.mobile-copy-width {
+  width: calc(100vw - 3rem);
+  max-width: calc(100vw - 3rem);
+}
+
+@media (min-width: 768px) {
+  .mobile-copy-width {
+    width: auto;
+    max-width: none;
+  }
+}
+
 body.capacitor-ios {
   -webkit-touch-callout: none;
   -webkit-user-select: none;

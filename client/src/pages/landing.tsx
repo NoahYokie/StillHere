@@ -371,7 +371,7 @@ export default function LandingPage() {
                 <span>Personal safety, check in, and SOS in one app</span>
               </div>
               <h1
-                className="text-[1.65rem] min-[375px]:text-[1.75rem] md:text-5xl lg:text-[3.4rem] leading-[1.1] font-bold tracking-tight mb-3 md:mb-5 text-center md:text-left break-words max-w-[calc(100vw-3rem)] md:max-w-none mx-auto md:mx-0"
+                className="mobile-copy-width text-[1.65rem] min-[375px]:text-[1.75rem] md:text-5xl lg:text-[3.4rem] leading-[1.1] font-bold tracking-tight mb-3 md:mb-5 text-center md:text-left break-words mx-auto md:mx-0"
                 data-testid="text-hero-title"
               >
                 <span className="block text-white/85 text-[1.25rem] md:text-2xl lg:text-3xl font-semibold tracking-tight mb-2 md:mb-3">
@@ -380,14 +380,14 @@ export default function LandingPage() {
                 When you can't check in,{" "}
                 <span className="text-white/90">StillHere checks on you.</span>
               </h1>
-              <p className="text-[0.95rem] min-[375px]:text-[1rem] md:text-xl text-white/85 leading-relaxed mb-4 md:mb-5 text-center md:text-left break-words max-w-[calc(100vw-3rem)] md:max-w-none mx-auto md:mx-0">
+              <p className="mobile-copy-width text-[0.95rem] min-[375px]:text-[1rem] md:text-xl text-white/85 leading-relaxed mb-4 md:mb-5 text-center md:text-left break-words mx-auto md:mx-0">
                 One tap tells your people you're okay. If you don't respond, StillHere escalates. Notification, SMS, phone call. Then attempts to reach your Safety Circle.
               </p>
               <p className="hidden md:block text-sm text-white/70 leading-relaxed mb-6 md:mb-8 text-left">
                 Built for families, seniors, solo livers, and lone workers. Daily safety check ins, panic SOS button, fall sensing, live GPS location sharing, and a Safety Circle that gets clear next steps.
               </p>
 
-              <div className="space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3 max-w-[calc(100vw-3rem)] md:max-w-none mx-auto md:mx-0">
+              <div className="mobile-copy-width space-y-2.5 md:space-y-0 md:flex md:flex-wrap md:gap-3 mx-auto md:mx-0">
                 <Button
                   size="lg"
                   className="w-full md:w-auto h-14 md:h-auto md:py-6 md:px-8 px-3 text-base md:text-lg font-semibold bg-white text-primary hover:bg-white/90 rounded-xl shadow-lg shadow-black/10 whitespace-normal leading-tight"

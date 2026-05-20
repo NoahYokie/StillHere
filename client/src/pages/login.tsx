@@ -117,7 +117,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-6 sm:p-6 overflow-x-hidden">
-      <Card className="w-full max-w-[calc(100vw-2rem)] sm:max-w-md min-w-0 overflow-hidden shadow-md shadow-primary/5 border-border/60">
+      <Card className="login-card overflow-hidden shadow-md shadow-primary/5 border-border/60">
         <CardHeader className="text-center pt-8 pb-2">
           <div className="relative mx-auto mb-5">
             <div className="absolute inset-0 rounded-full bg-primary/15 blur-xl" aria-hidden="true" />
