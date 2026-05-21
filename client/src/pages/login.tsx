@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [supportsPasskey, setSupportsPasskey] = useState(false);
   const [sendError, setSendError] = useState("");
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [nativeAuthStatus, setNativeAuthStatus] = useState("");
 
   useEffect(() => {
     setSupportsPasskey(!nativeLogin && browserSupportsWebAuthn());
@@ -85,6 +86,7 @@ export default function LoginPage() {
   const sendCodeMutation = useMutation({
     mutationFn: async () => {
       setSendError("");
+      if (nativeLogin) setNativeAuthStatus("Contacting StillHere...");
       nativeAuthLog("otp_request_started", { endpoint: "/api/auth/send-code" });
       const response = await fetch("/api/auth/send-code", {
         method: "POST",
@@ -102,8 +104,10 @@ export default function LoginPage() {
         if (errBody.waitSeconds) {
           setCooldownSeconds(errBody.waitSeconds);
         }
+        if (nativeLogin) setNativeAuthStatus(`Code request failed (${response.status})`);
         throw new Error(errBody.error || "Failed to send code");
       }
+      if (nativeLogin) setNativeAuthStatus("Code request accepted");
       return response.json();
     },
     onSuccess: (data: any) => {
@@ -114,6 +118,7 @@ export default function LoginPage() {
     },
     onError: (error: Error) => {
       setSendError(error.message);
+      if (nativeLogin && !nativeAuthStatus) setNativeAuthStatus("Code request failed");
     },
   });
 
@@ -175,6 +180,11 @@ export default function LoginPage() {
                 {cooldownSeconds > 0
                   ? `Please wait ${cooldownSeconds}s before requesting another code.`
                   : sendError}
+              </p>
+            )}
+            {nativeAuthStatus && (
+              <p className="text-xs text-muted-foreground" data-testid="text-native-auth-status">
+                {nativeAuthStatus}
               </p>
             )}
             <Button

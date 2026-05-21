@@ -30,6 +30,7 @@ export default function LoginCodePage() {
   const [showAgeGate, setShowAgeGate] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [ageGateRefused, setAgeGateRefused] = useState(false);
+  const [nativeAuthStatus, setNativeAuthStatus] = useState("");
 
   const params = new URLSearchParams(search);
   const phone = params.get("phone") || "";
@@ -55,6 +56,7 @@ export default function LoginCodePage() {
       // the age-gate screen. For routine logins we omit the field entirely.
       const body: { phone: string; code: string; ageConfirmed?: boolean } = { phone, code };
       if (showAgeGate && ageConfirmed) body.ageConfirmed = true;
+      if (nativeLogin) setNativeAuthStatus("Verifying code...");
       nativeAuthLog("otp_verify_started", { endpoint: "/api/auth/verify-code" });
       const res = await apiRequest("POST", "/api/auth/verify-code", body);
       nativeAuthLog("otp_verify_finished", {
@@ -73,11 +75,12 @@ export default function LoginCodePage() {
       if (nativeLogin) {
         try {
           const cookieMap = await CapacitorCookies.getCookies({ url: NATIVE_API_ORIGIN });
-          nativeAuthLog("cookie_probe_after_verify", {
-            authStoragePresent: Object.prototype.hasOwnProperty.call(cookieMap, "stillhere_session"),
-          });
+          const authStoragePresent = Object.prototype.hasOwnProperty.call(cookieMap, "stillhere_session");
+          nativeAuthLog("cookie_probe_after_verify", { authStoragePresent });
+          setNativeAuthStatus(authStoragePresent ? "Session stored. Checking account..." : "Code accepted, but session was not stored");
         } catch {
           nativeAuthLog("cookie_probe_after_verify_failed");
+          setNativeAuthStatus("Could not inspect app session storage");
         }
 
         try {
@@ -89,6 +92,7 @@ export default function LoginCodePage() {
             authenticated: me?.authenticated === true,
           });
           if (!me?.authenticated) {
+            setNativeAuthStatus("Code accepted, but app is still signed out");
             toast({
               title: "Sign in could not be completed",
               description: "The code was accepted, but the app could not keep your session. Please try again.",
@@ -98,6 +102,7 @@ export default function LoginCodePage() {
           }
         } catch {
           nativeAuthLog("auth_me_after_verify_failed");
+          setNativeAuthStatus("Could not confirm signed-in session");
         }
       }
 
@@ -139,6 +144,7 @@ export default function LoginCodePage() {
         description: "Try again.",
         variant: "destructive",
       });
+      if (nativeLogin) setNativeAuthStatus("Code verification failed");
       setCode("");
     },
   });
@@ -334,6 +340,11 @@ export default function LoginCodePage() {
               >
                 {verifyCodeMutation.isPending ? "Verifying..." : "Continue"}
               </Button>
+              {nativeAuthStatus && (
+                <p className="text-xs text-muted-foreground" data-testid="text-native-auth-status">
+                  {nativeAuthStatus}
+                </p>
+              )}
             </form>
           ) : (
             <form onSubmit={handleSubmit} className="mt-9 space-y-6">
