@@ -92,6 +92,11 @@ function formatRemaining(expiresAt: Date): { label: string; expired: boolean } {
   return { label: remMins ? `${hrs}h ${remMins}m left` : `${hrs}h left`, expired: false };
 }
 
+function messageTimeValue(message: Pick<LocalMessage, "createdAt">): number {
+  const value = new Date(message.createdAt).getTime();
+  return Number.isFinite(value) ? value : Date.now();
+}
+
 export default function ChatPage() {
   const { userId: otherUserId } = useParams<{ userId: string }>();
   const [, setLocation] = useLocation();
@@ -155,7 +160,14 @@ export default function ChatPage() {
         ...m,
         displayContent: m.content,
       }));
-      return [...server, ...optimistic];
+      const merged = new Map<string, LocalMessage>();
+      for (const msg of server) merged.set(msg.id, msg);
+      for (const msg of prev) {
+        if (msg.id.startsWith("optimistic-")) continue;
+        if (!merged.has(msg.id)) merged.set(msg.id, msg);
+      }
+      for (const msg of optimistic) merged.set(msg.id, msg);
+      return Array.from(merged.values()).sort((a, b) => messageTimeValue(a) - messageTimeValue(b));
     });
   }, [serverMessages]);
 
@@ -167,7 +179,8 @@ export default function ChatPage() {
       if (msg.senderId === otherUserId || msg.receiverId === otherUserId) {
         setLocalMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
-          return [...prev, { ...msg, displayContent: msg.content }];
+          return [...prev, { ...msg, displayContent: msg.content }]
+            .sort((a, b) => messageTimeValue(a) - messageTimeValue(b));
         });
         if (msg.senderId === otherUserId) {
           setIsOtherTyping(false);
@@ -184,8 +197,9 @@ export default function ChatPage() {
           const oldest = prev.find((m) => m.id.startsWith("optimistic-"));
           const plainContent = oldest?.displayContent || msg.content;
           const updated = oldest ? prev.filter((m) => m !== oldest) : prev;
-          if (updated.some((m) => m.id === msg.id)) return updated;
-          return [...updated, { ...msg, displayContent: plainContent }];
+        if (updated.some((m) => m.id === msg.id)) return updated;
+          return [...updated, { ...msg, displayContent: plainContent }]
+            .sort((a, b) => messageTimeValue(a) - messageTimeValue(b));
         });
         queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       }
@@ -341,6 +355,17 @@ export default function ChatPage() {
 
     const socket = getSocket();
     socket.emit("message:send", { receiverId: otherUserId, content: text }, (response: any) => {
+      if (response?.success && response.message) {
+        const saved = response.message;
+        setLocalMessages((prev) => {
+          const updated = prev.filter((m) => m.id !== optimisticId && m.id !== saved.id);
+          return [...updated, { ...saved, displayContent: text }]
+            .sort((a, b) => messageTimeValue(a) - messageTimeValue(b));
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+        return;
+      }
+
       if (!response?.success) {
         setLocalMessages((prev) =>
           prev.map((m) => (m.id === optimisticId ? { ...m, sendFailed: true } : m)),
