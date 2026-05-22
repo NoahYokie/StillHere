@@ -1,13 +1,24 @@
 import { io, Socket } from "socket.io-client";
-import { isNativeApp, NATIVE_API_ORIGIN } from "./native-api";
+import { getNativeSessionToken, isNativeApp, NATIVE_API_ORIGIN } from "./native-api";
 
 let socket: Socket | null = null;
+let lastNativeSessionToken: string | null = null;
+
+function getSocketAuth(): Record<string, string> | undefined {
+  if (!isNativeApp()) return undefined;
+  const token = getNativeSessionToken();
+  return token ? { nativeSessionToken: token } : undefined;
+}
 
 export function getSocket(): Socket {
+  const nativeSessionToken = isNativeApp() ? getNativeSessionToken() : null;
+
   if (!socket) {
+    lastNativeSessionToken = nativeSessionToken;
     socket = io(isNativeApp() ? NATIVE_API_ORIGIN : undefined, {
       path: "/socket.io",
       withCredentials: true,
+      auth: getSocketAuth(),
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
@@ -36,6 +47,14 @@ export function getSocket(): Socket {
     socket.io.on("reconnect_attempt", (attempt: number) => {
       console.log("[SOCKET] Reconnecting attempt:", attempt);
     });
+  }
+
+  if (isNativeApp() && socket && nativeSessionToken !== lastNativeSessionToken) {
+    lastNativeSessionToken = nativeSessionToken;
+    socket.auth = getSocketAuth() || {};
+    socket.disconnect();
+  } else if (isNativeApp() && socket) {
+    socket.auth = getSocketAuth() || {};
   }
 
   if (!socket.connected) {

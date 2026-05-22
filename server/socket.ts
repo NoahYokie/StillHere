@@ -44,7 +44,10 @@ export function emitToUser(userId: string, event: string, data: any): boolean {
 async function authenticateSocket(socket: Socket): Promise<string | null> {
   try {
     const cookies = cookie.parse(socket.handshake.headers.cookie || "");
-    const token = cookies["stillhere_session"];
+    const authToken = socket.handshake.auth?.nativeSessionToken;
+    const token = typeof authToken === "string" && /^[a-f0-9]{64}$/i.test(authToken)
+      ? authToken
+      : cookies["stillhere_session"];
     if (!token) return null;
 
     const [session] = await db.select().from(authSessions).where(
