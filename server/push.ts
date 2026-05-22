@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:support@stillhere.health";
+const IOS_BUNDLE_ID = "com.daudabangoura.stillhere.safety";
 
 let configured = false;
 
@@ -77,12 +78,6 @@ export async function sendPushNotification(
     }
   }
 
-  if (!configured) {
-    console.log(`[PUSH] Not configured - would send to user ${userId}: ${payload.title}`);
-    await recordOutcome("provider_unconfigured", "vapid_missing");
-    return { sent: 0, failed: 0 };
-  }
-
   // Store-review safety net: never push to a review account, and never
   // fan out to a review account's contacts. The DB lookup is cheap and
   // fails open (real users still get pushed if the lookup throws).
@@ -112,6 +107,33 @@ export async function sendPushNotification(
   }
 
   for (const sub of subscriptions) {
+    if (sub.endpoint.startsWith("apns://")) {
+      const token = sub.endpoint.slice("apns://".length);
+      try {
+        const result = await sendAPNsAlertPush(token, payload);
+        if (result.ok) {
+          sent++;
+        } else {
+          if (result.removeSubscription) {
+            await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+            console.log(`[PUSH] Removed expired APNs token ${sub.id}`);
+          }
+          console.error(`[PUSH] Failed to send APNs push ${sub.id}: ${result.errorMessage}`);
+          failed++;
+        }
+      } catch (error: any) {
+        console.error(`[PUSH] APNs push failed ${sub.id}:`, error?.message || error);
+        failed++;
+      }
+      continue;
+    }
+
+    if (!configured) {
+      console.log(`[PUSH] Web push not configured - skipping web subscription ${sub.id} for user ${userId}: ${payload.title}`);
+      failed++;
+      continue;
+    }
+
     const pushSubscription = {
       endpoint: sub.endpoint,
       keys: {
@@ -144,6 +166,85 @@ export async function sendPushNotification(
   }
 
   return { sent, failed };
+}
+
+async function sendAPNsAlertPush(
+  deviceToken: string,
+  payload: { title: string; body: string; url?: string; tag?: string },
+): Promise<{ ok: boolean; removeSubscription?: boolean; errorMessage?: string }> {
+  const apnsKeyId = process.env.APNS_KEY_ID;
+  const apnsTeamId = process.env.APNS_TEAM_ID;
+  const apnsKey = process.env.APNS_AUTH_KEY;
+
+  if (!apnsKeyId || !apnsTeamId || !apnsKey) {
+    return { ok: false, errorMessage: "apns_not_configured" };
+  }
+
+  const jwt = await generateAPNsJWT(apnsKeyId, apnsTeamId, apnsKey);
+  const host = process.env.APNS_ENV === "sandbox" || process.env.NODE_ENV !== "production"
+    ? "api.sandbox.push.apple.com"
+    : "api.push.apple.com";
+
+  const response = await fetch(`https://${host}/3/device/${deviceToken}`, {
+    method: "POST",
+    headers: {
+      authorization: `bearer ${jwt}`,
+      "apns-topic": IOS_BUNDLE_ID,
+      "apns-push-type": "alert",
+      "apns-priority": "10",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      aps: {
+        alert: {
+          title: payload.title,
+          body: payload.body,
+        },
+        sound: "default",
+      },
+      url: payload.url || "/",
+      tag: payload.tag,
+    }),
+  });
+
+  if (response.ok) return { ok: true };
+
+  const body = await response.text().catch(() => "");
+  let reason = body;
+  try {
+    const parsed = JSON.parse(body);
+    reason = parsed?.reason || body;
+  } catch {}
+
+  const removeSubscription = response.status === 410 ||
+    reason === "BadDeviceToken" ||
+    reason === "Unregistered";
+
+  return {
+    ok: false,
+    removeSubscription,
+    errorMessage: `apns_${response.status}${reason ? `_${reason}` : ""}`,
+  };
+}
+
+async function generateAPNsJWT(keyId: string, teamId: string, key: string): Promise<string> {
+  const crypto = await import("crypto");
+  const header = Buffer.from(JSON.stringify({ alg: "ES256", kid: keyId })).toString("base64url");
+  const now = Math.floor(Date.now() / 1000);
+  const claims = Buffer.from(JSON.stringify({ iss: teamId, iat: now })).toString("base64url");
+  const unsignedToken = `${header}.${claims}`;
+
+  const privateKey = crypto.createPrivateKey({
+    key: key.includes("BEGIN") ? key : `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----`,
+    format: "pem",
+  });
+
+  const signature = crypto.sign("sha256", Buffer.from(unsignedToken), {
+    key: privateKey,
+    dsaEncoding: "ieee-p1363",
+  });
+
+  return `${unsignedToken}.${signature.toString("base64url")}`;
 }
 
 export async function sendReminderPush(userId: string, userName: string): Promise<void> {

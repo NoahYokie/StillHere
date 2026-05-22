@@ -2958,6 +2958,39 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/push/native-token", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+
+      const { token, platform } = req.body || {};
+      const normalizedPlatform = String(platform || "").toLowerCase();
+      if (normalizedPlatform !== "ios") {
+        return res.status(400).json({ error: "Unsupported native push platform" });
+      }
+
+      const rawToken = String(token || "").trim();
+      if (!/^[a-fA-F0-9]{32,}$/.test(rawToken)) {
+        return res.status(400).json({ error: "Invalid native push token" });
+      }
+
+      await storage.savePushSubscription(
+        userId,
+        `apns://${rawToken}`,
+        "native",
+        "ios",
+      );
+
+      console.log(`[PUSH] Native iOS notification token saved for user ${userId}`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving native push token:", error);
+      res.status(500).json({ error: "Failed to save native push token" });
+    }
+  });
+
   app.post("/api/push/unsubscribe", async (req, res) => {
     try {
       const userId = getUserId(req);

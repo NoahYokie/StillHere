@@ -30,7 +30,7 @@ import { useAuth } from "@/lib/auth";
 import { AppDrawer } from "@/components/app-drawer";
 import { AppTour } from "@/components/app-tour";
 import { isNative } from "@/lib/capacitor";
-import { requestNotificationPermission } from "@/lib/permissions";
+import { openNativeAppSettings, registerNativeNotifications } from "@/lib/native-notifications";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -244,22 +244,19 @@ function PushNotificationBanner() {
   const subscribeToPush = useCallback(async () => {
     try {
       if (isNative()) {
-        const granted = await requestNotificationPermission();
-        if (!granted) {
-          setPushState("denied");
+        const result = await registerNativeNotifications();
+        if (!result.ok) {
+          setPushState(result.status === "denied" ? "denied" : "prompt");
+          const description = result.status === "denied"
+            ? "Turn them on in iPhone Settings to receive StillHere alerts."
+            : result.message || "Your iPhone did not finish notification registration.";
           toast({
-            title: "Notifications are off",
-            description: "Turn them on in iPhone Settings to receive StillHere alerts.",
+            title: result.status === "denied" ? "Notifications are off" : "Could not enable notifications",
+            description,
             variant: "destructive",
           });
           return;
         }
-
-        try {
-          const pushPkg = "@capacitor/push-notifications";
-          const Push = await import(/* @vite-ignore */ pushPkg);
-          await Push.PushNotifications?.register?.();
-        } catch {}
 
         setPushState("granted");
         toast({ title: "Notifications enabled", description: "StillHere can now alert you on this phone." });
@@ -297,12 +294,43 @@ function PushNotificationBanner() {
     }
   }, [toast]);
 
-  if (pushState === "loading" || pushState === "unsupported" || pushState === "denied") {
+  if (pushState === "loading" || pushState === "unsupported") {
     return null;
   }
 
   if (pushState === "granted") {
     return null;
+  }
+
+  if (pushState === "denied") {
+    return (
+      <Card data-testid="card-push-denied">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Bell className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-sm" data-testid="text-push-denied-title">
+                Notifications are off
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Turn on StillHere notifications in iPhone Settings so safety alerts can reach you.
+              </p>
+              {isNative() && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => void openNativeAppSettings()}
+                  data-testid="button-open-notification-settings"
+                >
+                  Open Settings
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
