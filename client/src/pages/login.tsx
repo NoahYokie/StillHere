@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { HelpCircle, ArrowLeft, Fingerprint, Smartphone } from "lucide-react";
+import { HelpCircle, ArrowLeft, Fingerprint, Smartphone, ShieldCheck } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
@@ -16,6 +16,7 @@ import { nativeAuthLog } from "@/lib/native-api";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const { toast } = useToast();
   const [phone, setPhone] = useState("");
   const nativeLogin = isNative();
@@ -24,6 +25,20 @@ export default function LoginPage() {
   const [sendError, setSendError] = useState("");
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [nativeAuthStatus, setNativeAuthStatus] = useState("");
+  const nativeMode = new URLSearchParams(search).get("mode") === "create" ? "create" : "signin";
+  const nativeCopy = nativeMode === "create"
+    ? {
+        title: "Create your account",
+        body: "Start with your mobile number. We will send a secure code, then guide you through your safety setup.",
+        button: "Send setup code",
+        footer: "Already have an account? This same code will sign you in.",
+      }
+    : {
+        title: "Sign in to StillHere",
+        body: "Enter your mobile number and we will send a secure sign-in code.",
+        button: "Send sign-in code",
+        footer: "New to StillHere? Go back and choose Start setup.",
+      };
 
   useEffect(() => {
     setSupportsPasskey(!nativeLogin && browserSupportsWebAuthn());
@@ -114,7 +129,7 @@ export default function LoginPage() {
       setSendError("");
       setCooldownSeconds(0);
       const normalizedPhone = data.phone || phone;
-      setLocation(`/login/code?phone=${encodeURIComponent(normalizedPhone)}`);
+      setLocation(`/login/code?phone=${encodeURIComponent(normalizedPhone)}&mode=${nativeMode}`);
     },
     onError: (error: Error) => {
       setSendError(error.message);
@@ -152,12 +167,18 @@ export default function LoginPage() {
         </div>
 
         <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-          <img src={logoPath} alt="StillHere" className="w-16 h-16 object-contain mb-8" />
+          <div className="mb-8">
+            <img src={logoPath} alt="StillHere" className="w-16 h-16 object-contain mb-6" />
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary mb-5">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              Secure phone verification
+            </div>
+          </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            Sign in to StillHere
+            {nativeCopy.title}
           </h1>
           <p className="mt-3 text-base leading-7 text-muted-foreground">
-            Enter your mobile number and we will send a secure sign-in code.
+            {nativeCopy.body}
           </p>
 
           <form onSubmit={handlePhoneSubmit} className="mt-9 space-y-5">
@@ -171,9 +192,12 @@ export default function LoginPage() {
                 onChange={(e) => setPhone(e.target.value)}
                 autoComplete="tel"
                 autoFocus
-                className="h-14 rounded-2xl text-base px-4 bg-card"
+                className="h-14 rounded-2xl text-base px-4 bg-card border-border/70 shadow-sm"
                 data-testid="input-phone"
               />
+              <p className="text-xs leading-5 text-muted-foreground">
+                Use the mobile number connected to your StillHere account.
+              </p>
             </div>
             {sendError && (
               <p className="text-sm text-destructive" data-testid="text-send-error">
@@ -197,13 +221,13 @@ export default function LoginPage() {
                 ? "Sending..."
                 : cooldownSeconds > 0
                   ? `Wait ${cooldownSeconds}s`
-                  : "Continue"}
+                  : nativeCopy.button}
             </Button>
           </form>
         </div>
 
         <p className="text-center text-xs leading-5 text-muted-foreground max-w-xs mx-auto">
-          We only use this number for sign-in, check-ins, and alerts you control.
+          {nativeCopy.footer}
         </p>
       </main>
     );

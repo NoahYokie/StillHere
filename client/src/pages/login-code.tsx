@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Heart, ArrowLeft, Fingerprint, Check } from "lucide-react";
+import { Heart, ArrowLeft, Fingerprint, Check, ShieldCheck } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
@@ -34,7 +34,25 @@ export default function LoginCodePage() {
 
   const params = new URLSearchParams(search);
   const phone = params.get("phone") || "";
+  const nativeMode = params.get("mode") === "create" ? "create" : "signin";
   const nativeLogin = isNative();
+  const formatPhone = (p: string) => {
+    if (p.startsWith("+61")) {
+      return "0" + p.slice(3);
+    }
+    return p;
+  };
+  const nativeCodeCopy = nativeMode === "create"
+    ? {
+        title: "Confirm your number",
+        body: `Enter the 6-digit code sent to ${formatPhone(phone)} to start your StillHere setup.`,
+        pending: "Creating account...",
+      }
+    : {
+        title: "Enter your sign-in code",
+        body: `We sent a 6-digit code to ${formatPhone(phone)}.`,
+        pending: "Signing in...",
+      };
 
   useEffect(() => {
     if (!phone) {
@@ -239,13 +257,6 @@ export default function LoginCodePage() {
     }
   }, [code, showAgeGate]);
 
-  const formatPhone = (p: string) => {
-    if (p.startsWith("+61")) {
-      return "0" + p.slice(3);
-    }
-    return p;
-  };
-
   if (showPasskeySetup) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -310,16 +321,16 @@ export default function LoginCodePage() {
         </div>
 
         <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-8">
-            <Heart className="h-8 w-8 text-primary-foreground" />
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6">
+            <ShieldCheck className="h-8 w-8" />
           </div>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            {showAgeGate ? "Before you continue" : "Enter your code"}
+            {showAgeGate ? "Before you continue" : nativeCodeCopy.title}
           </h1>
           <p className="mt-3 text-base leading-7 text-muted-foreground">
             {showAgeGate
               ? "Confirm your age to finish creating your StillHere account."
-              : `We sent a 6-digit code to ${formatPhone(phone)}.`}
+              : nativeCodeCopy.body}
           </p>
 
           {!showAgeGate ? (
@@ -347,7 +358,7 @@ export default function LoginCodePage() {
                 disabled={code.length !== 6 || verifyCodeMutation.isPending}
                 data-testid="button-verify"
               >
-                {verifyCodeMutation.isPending ? "Verifying..." : "Continue"}
+                {verifyCodeMutation.isPending ? nativeCodeCopy.pending : "Continue"}
               </Button>
               {nativeAuthStatus && (
                 <p className="text-xs text-muted-foreground" data-testid="text-native-auth-status">

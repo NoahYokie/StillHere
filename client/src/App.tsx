@@ -59,21 +59,39 @@ import { useLocation } from "wouter";
 import { useEffect } from "react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { Button } from "@/components/ui/button";
+import { BellRing, CheckCircle2, Users } from "lucide-react";
 
 function NativeWelcome() {
   const [, setLocation] = useLocation();
+  const highlights = [
+    { icon: CheckCircle2, label: "Daily check-ins" },
+    { icon: BellRing, label: "Missed check-in alerts" },
+    { icon: Users, label: "Safety Circle support" },
+  ];
 
   return (
     <main className="min-h-screen bg-background px-6 py-8 flex flex-col">
       <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-        <div className="mb-10">
-          <img src={logoPath} alt="StillHere" className="w-20 h-20 object-contain mb-7" />
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+        <div className="mb-8">
+          <img src={logoPath} alt="StillHere" className="w-20 h-20 object-contain mb-6" />
+          <p className="text-sm font-semibold text-primary mb-3">Personal safety check-ins</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">
             StillHere
           </h1>
-          <p className="mt-3 text-base leading-7 text-muted-foreground">
-            A calm safety check-in app that helps your trusted people know when you are okay.
+          <p className="mt-4 text-base leading-7 text-muted-foreground">
+            Stay connected with the people you trust. Check in on schedule, and StillHere helps alert them if you miss one.
           </p>
+        </div>
+
+        <div className="space-y-3 mb-9">
+          {highlights.map(({ icon: Icon, label }) => (
+            <div key={label} className="flex items-center gap-3 text-sm text-foreground">
+              <span className="w-9 h-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Icon className="w-4 h-4" aria-hidden="true" />
+              </span>
+              <span className="font-medium">{label}</span>
+            </div>
+          ))}
         </div>
 
         <div className="space-y-3">
@@ -90,7 +108,7 @@ function NativeWelcome() {
             onClick={() => setLocation("/login?mode=create")}
             data-testid="button-native-create-account"
           >
-            Create account
+            Start setup
           </Button>
         </div>
       </div>
