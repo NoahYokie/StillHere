@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { startLiveTracking, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
+import { startLiveTrackingAsync, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
 import { subscribe as subscribeLocation, subscribeLocating, getOneShotPosition } from "@/lib/location-service";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
@@ -120,7 +120,7 @@ export default function LiveLocationPage() {
         }
       }
       if (!isLiveTrackingActive()) {
-        startLiveTracking();
+        startLiveTrackingAsync().catch(() => {});
       }
     } else if (myStatus && !myStatus.active) {
       setSharingActive(false);
@@ -177,11 +177,11 @@ export default function LiveLocationPage() {
       const durationMinutes = duration === "0" ? null : parseInt(duration);
       return apiRequest("POST", "/api/live-location/start", { durationMinutes });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setLocationDenied(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
 
-      const started = startLiveTracking({
+      const started = await startLiveTrackingAsync({
         onError: (err) => {
           if (err.toLowerCase().includes("denied") || err.toLowerCase().includes("permission")) {
             setLocationDenied(true);

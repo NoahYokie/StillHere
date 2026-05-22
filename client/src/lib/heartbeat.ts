@@ -1,7 +1,7 @@
-import { getCurrentPosition } from "./location-service";
+import { getCurrentPosition, getOneShotPosition } from "./location-service";
 import { Capacitor } from "@capacitor/core";
 import { Device } from "@capacitor/device";
-import { isNativeTrackingAllowed } from "./tracking-policy-cache";
+import { isNativeTrackingAllowed, refreshPolicy } from "./tracking-policy-cache";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const STALE_THRESHOLD_MS = 300_000;
@@ -62,6 +62,7 @@ function reschedule(newIntervalMs: number): void {
 
 async function sendHeartbeat(): Promise<void> {
   try {
+    await refreshPolicy().catch(() => null);
     const cached = getCurrentPosition();
     const body: Record<string, any> = { ts: Math.floor(Date.now() / 1000) };
     try {
@@ -72,14 +73,17 @@ async function sendHeartbeat(): Promise<void> {
     // says native tracking is allowed. Server still strips these fields when
     // the policy denies, but the client cooperates as a first line of defense.
     const trackingAllowed = isNativeTrackingAllowed();
-    if (
-      trackingAllowed &&
-      cached &&
-      (Date.now() - cached.timestamp) < STALE_THRESHOLD_MS
-    ) {
-      body.lat = cached.lat;
-      body.lng = cached.lng;
-      body.acc = cached.accuracy;
+    if (trackingAllowed) {
+      const location =
+        cached && (Date.now() - cached.timestamp) < STALE_THRESHOLD_MS
+          ? cached
+          : await getOneShotPosition().catch(() => null);
+
+      if (location && (Date.now() - location.timestamp) < STALE_THRESHOLD_MS) {
+        body.lat = location.lat;
+        body.lng = location.lng;
+        body.acc = location.accuracy;
+      }
     }
     const battInfo = await getBatteryInfo();
     if (battInfo) {

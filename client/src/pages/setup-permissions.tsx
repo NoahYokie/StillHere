@@ -8,6 +8,7 @@ import {
   requestNotificationPermission,
   requestMotionPermissionWrapper,
 } from "@/lib/permissions";
+import { apiRequest } from "@/lib/queryClient";
 
 type Step = "location" | "notifications" | "motion" | "done";
 
@@ -56,6 +57,9 @@ export default function SetupPermissionsPage() {
     try {
       if (step.key === "location") {
         granted = await requestLocationPermission();
+        if (granted) {
+          await apiRequest("POST", "/api/settings", { locationMode: "both" }).catch(() => {});
+        }
       } else if (step.key === "notifications") {
         granted = await requestNotificationPermission();
       } else if (step.key === "motion") {
