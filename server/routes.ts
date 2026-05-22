@@ -306,6 +306,34 @@ function isContactActiveForAlerts(contact: { softDeletedAt?: Date | string | nul
   return new Date(contact.pausedUntil).getTime() <= Date.now();
 }
 
+async function sendLinkedWatcherPresencePush(
+  userId: string,
+  title: string,
+  body: string,
+  tag: string,
+  url = "/watched",
+): Promise<void> {
+  const watcherContacts = await storage.getContactsLinkedToUser(userId);
+  const sentTo = new Set<string>();
+  await Promise.allSettled(
+    watcherContacts.map(async (contact) => {
+      const linkedUserId = contact.linkedUserId;
+      if (!linkedUserId || linkedUserId === userId || sentTo.has(linkedUserId)) return;
+      if (!isAcceptedWatcherLink(contact, linkedUserId) || !isContactActiveForAlerts(contact)) return;
+      sentTo.add(linkedUserId);
+      await sendPushNotification(linkedUserId, {
+        title,
+        body,
+        url,
+        tag,
+      }, {
+        purpose: "presence",
+        dedupeKey: `${tag}:${userId}:${linkedUserId}:${Math.floor(Date.now() / 300000)}`,
+      });
+    }),
+  );
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null; watcherConsentStatus?: string | null },
   userName: string,
@@ -3810,6 +3838,13 @@ export async function registerRoutes(
       const validLng = lng !== undefined && isValidLng(lng) ? lng : undefined;
       const session = await storage.createDriveSession(userId, validLat, validLng);
       emitTrackingPolicyChanged(userId, "drive_start").catch(() => {});
+      const user = await storage.getUser(userId);
+      sendLinkedWatcherPresencePush(
+        userId,
+        `${user?.name || "Someone"} started Drive Safety`,
+        "They are sharing driving status with StillHere.",
+        "drive-start",
+      ).catch((err) => console.warn("[DRIVE] watcher push failed:", err?.message || err));
       res.json(session);
     } catch (error) {
       console.error("Error starting drive session:", error);
@@ -6305,6 +6340,13 @@ export async function registerRoutes(
       }
       const timer = await storage.createSafetyTimer(userId, durationMinutes, note);
       emitTrackingPolicyChanged(userId, "safety_timer_start").catch(() => {});
+      const user = await storage.getUser(userId);
+      sendLinkedWatcherPresencePush(
+        userId,
+        `${user?.name || "Someone"} started a Safety Timer`,
+        `StillHere will alert contacts if they do not confirm they are safe in ${durationMinutes} minutes.`,
+        "safety-timer-start",
+      ).catch((err) => console.warn("[TIMER] watcher push failed:", err?.message || err));
       res.json(timer);
     } catch (error) {
       console.error("Error starting safety timer:", error);
@@ -6421,6 +6463,14 @@ export async function registerRoutes(
         arrivalRadiusMeters: arrivalRadiusMeters || 200,
       });
       emitTrackingPolicyChanged(userId, "safe_walk_start").catch(() => {});
+      const user = await storage.getUser(userId);
+      const destLabel = destinationName ? ` to ${destinationName}` : "";
+      sendLinkedWatcherPresencePush(
+        userId,
+        `${user?.name || "Someone"} started Safe Walk`,
+        `They are on their way${destLabel}. StillHere will alert contacts if they do not arrive.`,
+        "safe-walk-start",
+      ).catch((err) => console.warn("[SAFE-WALK] watcher push failed:", err?.message || err));
       res.json(walk);
     } catch (error) {
       console.error("Error starting safe walk:", error);
@@ -8697,6 +8747,15 @@ export async function registerRoutes(
             },
           );
           emitToUser(r.userId!, "message:new", { message: msg, fromUserId: userId });
+          await sendPushNotification(r.userId!, {
+            title: `${myName} started Watch Me`,
+            body: `${myName} is sharing live location with the family for ${durationLabel}.`,
+            url: "/family",
+            tag: "family-watch-start",
+          }, {
+            purpose: "presence",
+            dedupeKey: `family_watch_start:${share.id}:${r.userId}`,
+          });
         } catch (err: any) {
           console.warn(
             `[family] watch-me notify failed for user:${r.userId?.slice(0, 8)}:`,

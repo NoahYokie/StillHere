@@ -494,7 +494,7 @@ export default function GoogleMapComponent({
   points,
   people,
   zoom = 16,
-  className = "w-full h-64",
+  className = "w-full h-full min-h-64",
   showTrail = true,
   fitTrailBounds = true,
   followMarker = false,
