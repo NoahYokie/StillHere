@@ -13,6 +13,7 @@ import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/brow
 import { CapacitorCookies } from "@capacitor/core";
 import { isNative } from "@/lib/capacitor";
 import { NATIVE_API_ORIGIN, nativeAuthLog, setNativeSessionToken } from "@/lib/native-api";
+import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 
 export default function LoginCodePage() {
   const [, setLocation] = useLocation();
@@ -321,17 +322,21 @@ export default function LoginCodePage() {
         </div>
 
         <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6">
-            <ShieldCheck className="h-8 w-8" />
+          <div className="mb-8 text-center">
+            <img src={logoPath} alt="StillHere" className="w-16 h-16 object-contain mb-5 mx-auto" />
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary mb-5">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              Secure verification
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              {showAgeGate ? "Before you continue" : nativeCodeCopy.title}
+            </h1>
+            <p className="mt-3 text-base leading-7 text-muted-foreground">
+              {showAgeGate
+                ? "Confirm your age to finish creating your StillHere account."
+                : nativeCodeCopy.body}
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            {showAgeGate ? "Before you continue" : nativeCodeCopy.title}
-          </h1>
-          <p className="mt-3 text-base leading-7 text-muted-foreground">
-            {showAgeGate
-              ? "Confirm your age to finish creating your StillHere account."
-              : nativeCodeCopy.body}
-          </p>
 
           {!showAgeGate ? (
             <form onSubmit={handleSubmit} className="mt-9 space-y-6">

@@ -72,8 +72,8 @@ function NativeWelcome() {
   return (
     <main className="min-h-screen bg-background px-6 py-8 flex flex-col">
       <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-        <div className="mb-8">
-          <img src={logoPath} alt="StillHere" className="w-20 h-20 object-contain mb-6" />
+        <div className="mb-8 text-center">
+          <img src={logoPath} alt="StillHere" className="w-20 h-20 object-contain mb-5 mx-auto" />
           <p className="text-sm font-semibold text-primary mb-3">Personal safety check-ins</p>
           <h1 className="text-4xl font-semibold tracking-tight text-foreground">
             StillHere

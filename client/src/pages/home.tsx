@@ -29,6 +29,8 @@ import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
 import { AppDrawer } from "@/components/app-drawer";
 import { AppTour } from "@/components/app-tour";
+import { isNative } from "@/lib/capacitor";
+import { requestNotificationPermission } from "@/lib/permissions";
 
 const triggerHaptic = (pattern: number | number[] = 50) => {
   if ("vibrate" in navigator) {
@@ -206,6 +208,25 @@ function PushNotificationBanner() {
   const [pushState, setPushState] = useState<"loading" | "unsupported" | "denied" | "granted" | "prompt">("loading");
 
   useEffect(() => {
+    if (isNative()) {
+      let mounted = true;
+      (async () => {
+        try {
+          const pushPkg = "@capacitor/push-notifications";
+          const Push = await import(/* @vite-ignore */ pushPkg);
+          const PushNotifications = Push.PushNotifications;
+          const permission = await PushNotifications?.checkPermissions?.();
+          if (!mounted) return;
+          setPushState(permission?.receive === "granted" ? "granted" : "prompt");
+        } catch {
+          if (mounted) setPushState("prompt");
+        }
+      })();
+      return () => {
+        mounted = false;
+      };
+    }
+
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setPushState("unsupported");
       return;
@@ -222,6 +243,29 @@ function PushNotificationBanner() {
 
   const subscribeToPush = useCallback(async () => {
     try {
+      if (isNative()) {
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+          setPushState("denied");
+          toast({
+            title: "Notifications are off",
+            description: "Turn them on in iPhone Settings to receive StillHere alerts.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        try {
+          const pushPkg = "@capacitor/push-notifications";
+          const Push = await import(/* @vite-ignore */ pushPkg);
+          await Push.PushNotifications?.register?.();
+        } catch {}
+
+        setPushState("granted");
+        toast({ title: "Notifications enabled", description: "StillHere can now alert you on this phone." });
+        return;
+      }
+
       const res = await fetch("/api/push/vapid-key");
       const { key, configured } = await res.json();
       if (!configured || !key) {

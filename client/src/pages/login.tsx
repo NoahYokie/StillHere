@@ -167,19 +167,19 @@ export default function LoginPage() {
         </div>
 
         <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
-          <div className="mb-8">
-            <img src={logoPath} alt="StillHere" className="w-16 h-16 object-contain mb-6" />
+          <div className="mb-8 text-center">
+            <img src={logoPath} alt="StillHere" className="w-16 h-16 object-contain mb-5 mx-auto" />
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary mb-5">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
               Secure phone verification
             </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+              {nativeCopy.title}
+            </h1>
+            <p className="mt-3 text-base leading-7 text-muted-foreground">
+              {nativeCopy.body}
+            </p>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            {nativeCopy.title}
-          </h1>
-          <p className="mt-3 text-base leading-7 text-muted-foreground">
-            {nativeCopy.body}
-          </p>
 
           <form onSubmit={handlePhoneSubmit} className="mt-9 space-y-5">
             <div className="space-y-2">
