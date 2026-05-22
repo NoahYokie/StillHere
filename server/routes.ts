@@ -470,6 +470,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const isNativeAuthRequest = (req: Request) =>
+    req.get("Origin") === "capacitor://localhost" || req.get("X-StillHere-Native") === "1";
   
   // ============================================
   // HEALTH CHECK (public)
@@ -586,12 +588,18 @@ export async function registerRoutes(
         }
       }
       
-      res.json({
+      const payload: Record<string, unknown> = {
         success: true,
         userId: result.userId,
         isNewUser: result.isNewUser,
         needsSetup: result.needsSetup,
-      });
+      };
+
+      if (isNativeAuthRequest(req)) {
+        payload.nativeSessionToken = result.sessionToken;
+      }
+
+      res.json(payload);
     } catch (error) {
       console.error("Error verifying OTP:", error);
       res.status(500).json({ error: "Failed to verify code" });

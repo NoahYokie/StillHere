@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { CapacitorCookies } from "@capacitor/core";
 import { isNative } from "@/lib/capacitor";
-import { NATIVE_API_ORIGIN, nativeAuthLog } from "@/lib/native-api";
+import { NATIVE_API_ORIGIN, nativeAuthLog, setNativeSessionToken } from "@/lib/native-api";
 
 export default function LoginCodePage() {
   const [, setLocation] = useLocation();
@@ -69,18 +69,24 @@ export default function LoginCodePage() {
     onSuccess: async (data: any) => {
       setShowAgeGate(false);
       setAgeGateRefused(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLoginResult(data);
 
       if (nativeLogin) {
+        if (typeof data?.nativeSessionToken === "string" && data.nativeSessionToken.length > 0) {
+          setNativeSessionToken(data.nativeSessionToken);
+          nativeAuthLog("native_session_saved");
+          setNativeAuthStatus("App session saved. Checking account...");
+        } else {
+          nativeAuthLog("native_session_missing");
+          setNativeAuthStatus("Code accepted, but app session was not returned");
+        }
+
         try {
           const cookieMap = await CapacitorCookies.getCookies({ url: NATIVE_API_ORIGIN });
           const authStoragePresent = Object.prototype.hasOwnProperty.call(cookieMap, "stillhere_session");
           nativeAuthLog("cookie_probe_after_verify", { authStoragePresent });
-          setNativeAuthStatus(authStoragePresent ? "Session stored. Checking account..." : "Code accepted, but session was not stored");
         } catch {
           nativeAuthLog("cookie_probe_after_verify_failed");
-          setNativeAuthStatus("Could not inspect app session storage");
         }
 
         try {
@@ -103,8 +109,11 @@ export default function LoginCodePage() {
         } catch {
           nativeAuthLog("auth_me_after_verify_failed");
           setNativeAuthStatus("Could not confirm signed-in session");
+          return;
         }
       }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
 
       if (!nativeLogin && browserSupportsWebAuthn()) {
         try {

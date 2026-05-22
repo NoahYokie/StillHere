@@ -639,7 +639,19 @@ export function clearSessionCookie(res: Response): void {
 
 // Get session token from request
 export function getSessionToken(req: Request): string | null {
-  return req.cookies?.[SESSION_COOKIE_NAME] || null;
+  const cookieToken = req.cookies?.[SESSION_COOKIE_NAME];
+  if (cookieToken) return cookieToken;
+
+  const authorization = req.headers.authorization;
+  if (typeof authorization === "string") {
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    const bearerToken = match?.[1]?.trim();
+    if (bearerToken && /^[a-f0-9]{64}$/i.test(bearerToken)) {
+      return bearerToken;
+    }
+  }
+
+  return null;
 }
 
 // Auth middleware - attaches user to request
