@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { PushNotifications } from "@capacitor/push-notifications";
 import { subscribe as subscribeLocation, getOneShotPosition, getCurrentPosition as getCachedPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -212,9 +213,6 @@ function PushNotificationBanner() {
       let mounted = true;
       (async () => {
         try {
-          const pushPkg = "@capacitor/push-notifications";
-          const Push = await import(/* @vite-ignore */ pushPkg);
-          const PushNotifications = Push.PushNotifications;
           const permission = await PushNotifications?.checkPermissions?.();
           if (!mounted) return;
           setPushState(permission?.receive === "granted" ? "granted" : "prompt");

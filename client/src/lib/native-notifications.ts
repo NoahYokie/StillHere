@@ -1,3 +1,5 @@
+import { App } from "@capacitor/app";
+import { PushNotifications } from "@capacitor/push-notifications";
 import { apiRequest } from "@/lib/queryClient";
 
 type NativeNotificationResult =
@@ -10,9 +12,6 @@ function isPermissionGranted(value: unknown): boolean {
 
 export async function registerNativeNotifications(): Promise<NativeNotificationResult> {
   try {
-    const pushPkg = "@capacitor/push-notifications";
-    const Push = await import(/* @vite-ignore */ pushPkg);
-    const PushNotifications = Push.PushNotifications;
     if (!PushNotifications?.requestPermissions || !PushNotifications?.register) {
       return { ok: false, status: "unsupported", message: "Native push plugin unavailable" };
     }
@@ -93,9 +92,7 @@ export async function registerNativeNotifications(): Promise<NativeNotificationR
 
 export async function openNativeAppSettings(): Promise<void> {
   try {
-    const appPkg = "@capacitor/app";
-    const App = await import(/* @vite-ignore */ appPkg);
-    await (App.App as any)?.openUrl?.({ url: "app-settings:" });
+    await (App as any)?.openUrl?.({ url: "app-settings:" });
   } catch {
     try { window.location.href = "app-settings:"; } catch {}
   }

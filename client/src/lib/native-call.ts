@@ -1,3 +1,5 @@
+import { PushNotifications } from "@capacitor/push-notifications";
+
 let voipToken: string | null = null;
 let onCallAnsweredCallback: ((callId: string, callerId: string) => void) | null = null;
 let onCallEndedCallback: ((callId: string) => void) | null = null;
@@ -82,9 +84,6 @@ async function initIOSCallKit(): Promise<string | null> {
 
 async function initAndroidPush(): Promise<string | null> {
   try {
-    const mod = await new Function('return import("@capacitor/push-notifications")')();
-    const PushNotifications = mod.PushNotifications;
-
     const result = await PushNotifications.requestPermissions();
     if (result.receive !== "granted") {
       console.warn("[NativeCall] Android push permission denied");

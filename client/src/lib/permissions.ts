@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { PushNotifications } from "@capacitor/push-notifications";
 
 export interface PermissionHealth {
   location: "granted" | "prompt" | "denied" | "always" | "when_in_use" | "unknown";
@@ -67,9 +68,6 @@ async function checkLocationPermission(): Promise<PermissionHealth["location"]> 
 async function checkNotificationPermission(): Promise<PermissionHealth["notifications"]> {
   if (isNativePlatform()) {
     try {
-      const pushPkg = "@capacitor/push-notifications";
-      const Push = await import(/* @vite-ignore */ pushPkg);
-      const PushNotifications = Push.PushNotifications;
       if (PushNotifications?.checkPermissions) {
         const perms = await PushNotifications.checkPermissions();
         if (perms.receive === "granted") return "granted";
@@ -243,9 +241,6 @@ export async function requestLocationPermission(): Promise<boolean> {
 export async function requestNotificationPermission(): Promise<boolean> {
   if (isNativePlatform()) {
     try {
-      const pushPkg = "@capacitor/push-notifications";
-      const Push = await import(/* @vite-ignore */ pushPkg);
-      const PushNotifications = Push.PushNotifications;
       if (PushNotifications?.requestPermissions) {
         const result = await PushNotifications.requestPermissions();
         const ok = result.receive === "granted";
