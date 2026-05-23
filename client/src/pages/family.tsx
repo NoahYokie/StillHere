@@ -43,7 +43,6 @@ const PLACE_LABELS: { value: string; label: string }[] = [
   { value: "work", label: "Work" }, { value: "gym", label: "Gym" },
   { value: "park", label: "Park" }, { value: "pin", label: "Other" },
 ];
-const DEFAULT_MAP_CENTER = { lat: -31.9523, lng: 115.8613 };
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin", adult: "Member", teen: "Member", child: "Member",
@@ -524,8 +523,16 @@ export default function FamilyPage() {
     }
     if (mapPeople.length > 0) return { lat: mapPeople[0].lat, lng: mapPeople[0].lng };
     if (places.length > 0) return { lat: places[0].lat, lng: places[0].lng };
-    return DEFAULT_MAP_CENTER;
+    return null;
   }, [mapPeople, places, focusedMemberId]);
+
+  const membersWithoutLocation = useMemo(
+    () => members.filter((m) =>
+      (m.status === "active" || m.status === "active_legacy") &&
+      !mapPeople.some((p) => p.id === m.id)
+    ),
+    [members, mapPeople],
+  );
 
   // ---- Per-member place schedules (parent assigns "Sarah at School Mon-Fri") ----
   const { data: schedulesData } = useQuery<{ schedules: FamilyPlaceSchedule[] }>({
@@ -883,25 +890,50 @@ export default function FamilyPage() {
           sees their own dot the moment they open Family, even before anyone
           has started Watch Me. */}
       <div className="relative" style={{ height: "55vh", minHeight: 320 }}>
-        <GoogleMap
-          center={mapCenter}
-          people={mapPeople}
-          geofences={placeGeofences}
-          smartCamera={true}
-          darkMode={false}
-          focusPersonId={focusedMemberId}
-          onPersonTap={(id) => {
-            // Marker-cluster taps emit synthetic ids like "group:abc..." which
-            // aren't real member ids - ignore those and leave the cluster
-            // expansion to the user zooming in manually.
-            if (id.startsWith("group:")) return;
-            setFocusedMemberId(id);
-          }}
-        />
-        {mapPeople.length === 0 && placeGeofences.length === 0 && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-card/95 backdrop-blur border border-border rounded-full px-3 py-1.5 shadow-sm text-xs text-muted-foreground flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5" />
-            Tap <strong className="text-foreground">Watch Me</strong> to share live location
+        {mapCenter ? (
+          <GoogleMap
+            center={mapCenter}
+            people={mapPeople}
+            geofences={placeGeofences}
+            smartCamera={true}
+            darkMode={false}
+            focusPersonId={focusedMemberId}
+            onPersonTap={(id) => {
+              // Marker-cluster taps emit synthetic ids like "group:abc..." which
+              // aren't real member ids - ignore those and leave the cluster
+              // expansion to the user zooming in manually.
+              if (id.startsWith("group:")) return;
+              setFocusedMemberId(id);
+            }}
+          />
+        ) : (
+          <div className="w-full h-full bg-muted/40 flex items-center justify-center px-5" data-testid="family-map-empty">
+            <div className="max-w-sm text-center space-y-3">
+              <div className="mx-auto w-14 h-14 rounded-full bg-card border border-border flex items-center justify-center shadow-sm">
+                <MapPin className="w-7 h-7 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">No live location available</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Family locations appear here only when someone shares location or allows StillHere to update it.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        {membersWithoutLocation.length > 0 && (
+          <div className="absolute top-3 left-3 right-3 bg-card/95 backdrop-blur border border-border rounded-xl px-3 py-2 shadow-sm text-xs text-muted-foreground" data-testid="family-location-unavailable">
+            <div className="flex items-start gap-2">
+              <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-foreground">Location not shared</p>
+                <p>
+                  {membersWithoutLocation.slice(0, 2).map((m) => m.name).join(", ")}
+                  {membersWithoutLocation.length > 2 ? ` and ${membersWithoutLocation.length - 2} more` : ""}
+                  {" "}may have location sharing paused, phone location off, or have not opened StillHere recently.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

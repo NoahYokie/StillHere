@@ -312,7 +312,7 @@ export default function GuardianMapPage() {
     return list;
   }, [watchedUsers, liveSnap, myPos]);
 
-  // Initial center: average of all known coords, or watcher's own position, or Melbourne fallback.
+  // Initial center: average of all known real coordinates, or the watcher's own position.
   const initialCenter = useMemo(() => {
     if (people.length > 0) {
       const lat = people.reduce((s, p) => s + p.lat, 0) / people.length;
@@ -320,7 +320,7 @@ export default function GuardianMapPage() {
       return { lat, lng };
     }
     if (myPos) return myPos;
-    return { lat: -37.8136, lng: 144.9631 };
+    return null;
   }, [people, myPos]);
 
   // Auto-fit once when we first have coords.
@@ -397,26 +397,60 @@ export default function GuardianMapPage() {
 
       {/* Map */}
       <div className="flex-1 relative">
-        <GoogleMap
-          center={initialCenter}
-          zoom={people.length > 1 ? 11 : 14}
-          people={people}
-          smartCamera
-          focusPersonId={focusedId}
-          mapType={threeD && mapType === "roadmap" ? "satellite" : mapType}
-          tilt={threeD ? 67.5 : 0}
-          heading={threeD ? 30 : 0}
-          showMapTypeControl={false}
-          showMyLocation={false}
-          onPersonTap={(id) => {
-            if (id === "__me__") return;
-            setLocation(`/live-location/${id}`);
-          }}
-          className="w-full h-full"
-        />
+        {initialCenter ? (
+          <GoogleMap
+            center={initialCenter}
+            zoom={people.length > 1 ? 11 : 14}
+            people={people}
+            smartCamera
+            focusPersonId={focusedId}
+            mapType={threeD && mapType === "roadmap" ? "satellite" : mapType}
+            tilt={threeD ? 67.5 : 0}
+            heading={threeD ? 30 : 0}
+            showMapTypeControl={false}
+            showMyLocation={false}
+            onPersonTap={(id) => {
+              if (id === "__me__") return;
+              setLocation(`/live-location/${id}`);
+            }}
+            className="w-full h-full"
+          />
+        ) : (
+          <div className="w-full h-full bg-muted/40 flex items-center justify-center px-5" data-testid="guardian-map-empty">
+            <div className="max-w-sm text-center space-y-3">
+              <div className="mx-auto w-14 h-14 rounded-full bg-card border border-border flex items-center justify-center shadow-sm">
+                <MapPin className="w-7 h-7 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">No live location available</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Locations appear here only when a person shares location or has an active safety event.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!focusedId && hiddenWatched.length > 0 && (
+          <div className="absolute top-20 left-3 right-3 z-20 pointer-events-none">
+            <Card className="pointer-events-auto max-w-3xl mx-auto px-3 py-2 shadow-lg">
+              <div className="flex items-start gap-2 text-xs">
+                <MapPin className="w-3.5 h-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="font-medium text-foreground">Location not shared</p>
+                  <p className="text-muted-foreground">
+                    {hiddenWatched.slice(0, 2).map((w) => w.userName).join(", ")}
+                    {hiddenWatched.length > 2 ? ` and ${hiddenWatched.length - 2} more` : ""}
+                    {" "}may have location sharing paused, phone location off, or have not opened StillHere recently.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {pendingRequests.length > 0 && !focusedId && (
-          <div className="absolute top-20 left-0 right-0 z-20 px-3 pointer-events-none">
+          <div className={`absolute ${hiddenWatched.length > 0 ? "top-40" : "top-20"} left-0 right-0 z-20 px-3 pointer-events-none`}>
             <Card className="pointer-events-auto max-w-3xl mx-auto p-3 shadow-xl border-primary/30">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
