@@ -43,6 +43,7 @@ const PLACE_LABELS: { value: string; label: string }[] = [
   { value: "work", label: "Work" }, { value: "gym", label: "Gym" },
   { value: "park", label: "Park" }, { value: "pin", label: "Other" },
 ];
+const DEFAULT_MAP_CENTER = { lat: -31.9523, lng: 115.8613 };
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin", adult: "Member", teen: "Member", child: "Member",
@@ -396,7 +397,11 @@ export default function FamilyPage() {
     );
     // Also poke immediately so the first pin shows up fast.
     navigator.geolocation.getCurrentPosition(
-      (pos) => sendHeartbeat(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+      (pos) => {
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+        setMyDeviceLoc({ lat, lng, acc: accuracy });
+        sendHeartbeat(lat, lng, accuracy);
+      },
       () => {},
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10_000 },
     );
@@ -519,7 +524,7 @@ export default function FamilyPage() {
     }
     if (mapPeople.length > 0) return { lat: mapPeople[0].lat, lng: mapPeople[0].lng };
     if (places.length > 0) return { lat: places[0].lat, lng: places[0].lng };
-    return { lat: 0, lng: 0 };
+    return DEFAULT_MAP_CENTER;
   }, [mapPeople, places, focusedMemberId]);
 
   // ---- Per-member place schedules (parent assigns "Sarah at School Mon-Fri") ----
