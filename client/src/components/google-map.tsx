@@ -373,7 +373,9 @@ function formatInfoSpeed(speed: number | null | undefined): string {
   return `${Math.round(speed * 3.6)} km/h`;
 }
 
-const MIN_ZOOM = 14;
+const FOCUS_MIN_ZOOM = 14;
+const OVERVIEW_MIN_ZOOM = 3;
+const OVERVIEW_MAX_ZOOM = 16;
 const MAX_ZOOM = 18;
 
 function isPersonCameraEligible(p: MapPerson): boolean {
@@ -801,21 +803,21 @@ export default function GoogleMapComponent({
           if (hasSafetyPriority && focus) {
             const vZoom = getVelocityZoom([focus]);
             map.panTo({ lat: focus.lat, lng: focus.lng });
-            map.setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+            map.setZoom(Math.max(FOCUS_MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
           } else if (eligible.length > 1) {
             const bounds = new google.maps.LatLngBounds();
             eligible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
             map.fitBounds(bounds, 50);
             const listener = map.addListener("idle", () => {
               const z = map.getZoom();
-              if (z != null && z < MIN_ZOOM) map.setZoom(MIN_ZOOM);
-              if (z != null && z > MAX_ZOOM) map.setZoom(MAX_ZOOM);
+              if (z != null && z < OVERVIEW_MIN_ZOOM) map.setZoom(OVERVIEW_MIN_ZOOM);
+              if (z != null && z > OVERVIEW_MAX_ZOOM) map.setZoom(OVERVIEW_MAX_ZOOM);
               google.maps.event.removeListener(listener);
             });
           } else if (focus) {
             const vZoom = getVelocityZoom(eligible.length ? eligible : [focus]);
             map.panTo({ lat: focus.lat, lng: focus.lng });
-            map.setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+            map.setZoom(Math.max(FOCUS_MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
           }
 
           initialFitDoneRef.current = true;
@@ -1237,14 +1239,14 @@ export default function GoogleMapComponent({
         map.fitBounds(bounds, 50);
         const listener = map.addListener("idle", () => {
           const z = map.getZoom();
-          if (z != null && z < MIN_ZOOM) map.setZoom(MIN_ZOOM);
-          if (z != null && z > MAX_ZOOM) map.setZoom(MAX_ZOOM);
+          if (z != null && z < OVERVIEW_MIN_ZOOM) map.setZoom(OVERVIEW_MIN_ZOOM);
+          if (z != null && z > OVERVIEW_MAX_ZOOM) map.setZoom(OVERVIEW_MAX_ZOOM);
           google.maps.event.removeListener(listener);
         });
       } else if (focus) {
         const vZoom = getVelocityZoom(eligible.length ? eligible : [focus]);
         map.panTo({ lat: focus.lat, lng: focus.lng });
-        map.setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+        map.setZoom(Math.max(FOCUS_MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
       }
     } else if (people && people.length > 1) {
       const bounds = new google.maps.LatLngBounds();

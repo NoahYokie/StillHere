@@ -313,7 +313,7 @@ export default function GuardianMapPage() {
   }, [watchedUsers, liveSnap, myPos]);
 
   // Initial center: average of all known real coordinates, or the watcher's own position.
-  const initialCenter = useMemo(() => {
+  const rawInitialCenter = useMemo(() => {
     if (people.length > 0) {
       const lat = people.reduce((s, p) => s + p.lat, 0) / people.length;
       const lng = people.reduce((s, p) => s + p.lng, 0) / people.length;
@@ -322,6 +322,11 @@ export default function GuardianMapPage() {
     if (myPos) return myPos;
     return null;
   }, [people, myPos]);
+  const [lastInitialCenter, setLastInitialCenter] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (rawInitialCenter) setLastInitialCenter(rawInitialCenter);
+  }, [rawInitialCenter]);
+  const initialCenter = rawInitialCenter || lastInitialCenter;
 
   // Auto-fit once when we first have coords.
   useEffect(() => {

@@ -423,10 +423,10 @@ export default function FamilyPage() {
     // If I have no server-side location yet, drop a "You" pin from the live
     // device GPS so the map opens with at least my own dot, like 360.
     const meAlreadyOnMap = fromMembers.some(p => p.isMe);
-    if (!meAlreadyOnMap && myDeviceLoc && myMember) {
+    if (!meAlreadyOnMap && myDeviceLoc && myUserId) {
       fromMembers.push({
-        id: myMember.id,
-        name: `${myMember.name} (You)`,
+        id: myMember?.id || `self:${myUserId}`,
+        name: `${myMember?.name || auth?.user?.name || "You"} (You)`,
         lat: myDeviceLoc.lat,
         lng: myDeviceLoc.lng,
         accuracy: myDeviceLoc.acc ?? null,
@@ -436,7 +436,7 @@ export default function FamilyPage() {
       });
     }
     return fromMembers;
-  }, [members, myUserId, myDeviceLoc, myMember]);
+  }, [members, myUserId, myDeviceLoc, myMember, auth?.user?.name]);
 
   // ---- Family Places ----
   const { data: placesData } = useQuery<{ places: FamilyPlace[] }>({
@@ -516,7 +516,7 @@ export default function FamilyPage() {
   }, [mapPeople, focusedMemberId]);
 
   // Center on the focused member if any, else first person, else first place.
-  const mapCenter = useMemo(() => {
+  const rawMapCenter = useMemo(() => {
     if (focusedMemberId) {
       const f = mapPeople.find(p => p.id === focusedMemberId);
       if (f) return { lat: f.lat, lng: f.lng };
@@ -525,6 +525,11 @@ export default function FamilyPage() {
     if (places.length > 0) return { lat: places[0].lat, lng: places[0].lng };
     return null;
   }, [mapPeople, places, focusedMemberId]);
+  const [lastMapCenter, setLastMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (rawMapCenter) setLastMapCenter(rawMapCenter);
+  }, [rawMapCenter]);
+  const mapCenter = rawMapCenter || lastMapCenter;
 
   const membersWithoutLocation = useMemo(
     () => members.filter((m) =>
