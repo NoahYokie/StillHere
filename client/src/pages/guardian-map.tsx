@@ -23,6 +23,8 @@ import {
   ShieldCheck,
   CheckCircle2,
   X,
+  CloudSun,
+  Wind,
 } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import GoogleMap from "@/components/google-map";
@@ -122,6 +124,18 @@ function stateColor(state: string | null | undefined, hasIncident: boolean): {
     ring: "ring-emerald-500/30",
     label: "Calm",
   };
+}
+
+function weatherTone(risk?: string | null): string {
+  if (risk === "high") return "text-red-600 dark:text-red-400";
+  if (risk === "moderate") return "text-amber-600 dark:text-amber-400";
+  return "text-muted-foreground";
+}
+
+function compactWeather(weather: WatchedUser["weather"]): string | null {
+  if (!weather) return null;
+  const temp = weather.temperatureC != null ? `${weather.temperatureC}°C` : null;
+  return [temp, weather.summary].filter(Boolean).join(" · ") || null;
 }
 
 export default function GuardianMapPage() {
@@ -546,6 +560,18 @@ export default function GuardianMapPage() {
                         </span>
                       </div>
                     )}
+                    {compactWeather(w.weather) && (
+                      <div className={`flex items-center gap-2 mt-1 text-xs ${weatherTone(w.weather?.risk)}`} data-testid={`text-weather-${w.userId}`}>
+                        <CloudSun className="w-3.5 h-3.5" />
+                        <span className="font-medium">{compactWeather(w.weather)}</span>
+                        {w.weather?.windKmh != null && (
+                          <span className="inline-flex items-center gap-1 text-muted-foreground">
+                            <Wind className="w-3 h-3" />
+                            {w.weather.windKmh} km/h
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <Button
                     variant="ghost"
@@ -743,8 +769,14 @@ export default function GuardianMapPage() {
                                   ? "SOS triggered"
                                   : w.incidentReason === "missed_checkin"
                                   ? "Missed check-in"
-                                  : "Needs attention"}
+                                : "Needs attention"}
                               </span>
+                            </div>
+                          )}
+                          {compactWeather(w.weather) && (
+                            <div className={`flex items-center gap-1 mt-1 text-xs ${weatherTone(w.weather?.risk)}`}>
+                              <CloudSun className="w-3 h-3" />
+                              <span>{compactWeather(w.weather)}</span>
                             </div>
                           )}
                         </div>

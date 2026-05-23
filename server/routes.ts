@@ -52,6 +52,7 @@ import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
 import { getTrackingPolicyForUser, emitTrackingPolicyChanged } from "./tracking-policy";
 import { deleteUserAccount, drainProcessorCleanupQueue } from "./accountDeletion";
 import { twilioVoiceLimiter } from "./throughput";
+import { getWeatherSummary } from "./weather";
 
 // Helper to get userId from session
 // Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
@@ -99,6 +100,42 @@ const getBaseUrl = (): string => {
   }
   return "https://stillhere.health";
 };
+
+function getContactPageWeatherCoords(data: any): { lat: number; lng: number } | null {
+  const lat =
+    data?.locationSession?.lastLat ??
+    data?.safetyTimer?.lastLat ??
+    data?.safeWalk?.lastLat ??
+    data?.crashDrive?.endLat ??
+    data?.crashDrive?.startLat ??
+    data?.lastCheckin?.lat ??
+    null;
+  const lng =
+    data?.locationSession?.lastLng ??
+    data?.safetyTimer?.lastLng ??
+    data?.safeWalk?.lastLng ??
+    data?.crashDrive?.endLng ??
+    data?.crashDrive?.startLng ??
+    data?.lastCheckin?.lng ??
+    null;
+  return typeof lat === "number" && typeof lng === "number" ? { lat, lng } : null;
+}
+
+function getWatchedUserWeatherCoords(watched: any): { lat: number; lng: number } | null {
+  const lat = watched?.lastLocationLat != null
+    ? Number(watched.lastLocationLat)
+    : watched?.lastHeartbeatLat != null
+    ? Number(watched.lastHeartbeatLat)
+    : null;
+  const lng = watched?.lastLocationLng != null
+    ? Number(watched.lastLocationLng)
+    : watched?.lastHeartbeatLng != null
+    ? Number(watched.lastHeartbeatLng)
+    : null;
+  return typeof lat === "number" && typeof lng === "number" && Number.isFinite(lat) && Number.isFinite(lng)
+    ? { lat, lng }
+    : null;
+}
 
 const getTwilioVoiceFromNumber = (): string | null => {
   const value = process.env.TWILIO_VOICE_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER || null;
@@ -2812,7 +2849,9 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Invalid or expired link" });
       }
       
-      res.json(data);
+      const coords = getContactPageWeatherCoords(data);
+      const weather = coords ? await getWeatherSummary(coords.lat, coords.lng) : null;
+      res.json({ ...data, weather });
     } catch (error) {
       console.error("Error getting contact page data:", error);
       res.status(500).json({ error: "Failed to get data" });
@@ -3362,7 +3401,12 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
       const watched = await storage.getWatchedUsers(userId);
-      res.json(watched);
+      const enriched = await Promise.all(watched.map(async (item: any) => {
+        const coords = getWatchedUserWeatherCoords(item);
+        const weather = coords ? await getWeatherSummary(coords.lat, coords.lng) : null;
+        return { ...item, weather };
+      }));
+      res.json(enriched);
     } catch (error) {
       console.error("Error fetching watched users:", error);
       res.status(500).json({ error: "Failed to fetch watched users" });

@@ -1782,6 +1782,7 @@ export class DatabaseStorage implements IStorage {
         safeWalk: null,
         crashDrive: null,
         tripTrail: [],
+        weather: null,
         resolvedAt: recentResolved?.resolvedAt ? new Date(recentResolved.resolvedAt).toISOString() : null,
       };
     }
@@ -1824,6 +1825,7 @@ export class DatabaseStorage implements IStorage {
           safeWalk: null,
           crashDrive: null,
           tripTrail: [],
+          weather: null,
           resolvedAt: new Date(recentResolved.resolvedAt).toISOString(),
         };
       }
@@ -1931,6 +1933,7 @@ export class DatabaseStorage implements IStorage {
       safeWalk: visibleSafeWalk || null,
       crashDrive: visibleCrashDrive || null,
       tripTrail: canExposeLocation ? tripTrail : [],
+      weather: null,
       resolvedAt: null,
     };
   }
@@ -2390,6 +2393,7 @@ export class DatabaseStorage implements IStorage {
           lastLocationAt: activeWalk.lastLocationAt,
           status: activeWalk.status,
         } : null,
+        weather: null,
       });
     }
 

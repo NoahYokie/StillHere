@@ -1410,6 +1410,25 @@ export interface WatchedUser {
     lastLocationAt: Date | null;
     status: string;
   } | null;
+  weather: WeatherSummary | null;
+}
+
+export interface WeatherSummary {
+  summary: string;
+  temperatureC: number | null;
+  feelsLikeC: number | null;
+  humidityPercent: number | null;
+  windKmh: number | null;
+  precipitationMm: number | null;
+  weatherCode: number;
+  risk: "low" | "moderate" | "high";
+  observedAt: string;
+  source: string;
+  units: {
+    temperature: string;
+    wind: string;
+    precipitation: string;
+  };
 }
 
 export interface ContactPageData {
@@ -1435,6 +1454,7 @@ export interface ContactPageData {
   safeWalk: SafeWalk | null;
   crashDrive: DriveSession | null;
   tripTrail: TripPoint[];
+  weather: WeatherSummary | null;
   // Resolution timestamp for allclear views, set when mode === 'allclear'.
   resolvedAt: string | null;
 }

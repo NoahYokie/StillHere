@@ -15,13 +15,50 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield, Smartphone, Sparkles } from "lucide-react";
+import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield, Smartphone, Sparkles, CloudSun, Wind, Droplets } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
-import type { ContactPageData } from "@shared/schema";
+import type { ContactPageData, WeatherSummary } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { formatDualTime, getViewerTimezone } from "@/lib/timezone";
+
+function WeatherPanel({ weather, name }: { weather: WeatherSummary | null | undefined; name: string }) {
+  if (!weather) return null;
+  const riskLabel = weather.risk === "high" ? "High weather risk" : weather.risk === "moderate" ? "Weather caution" : "Weather looks calm";
+  const riskClass = weather.risk === "high"
+    ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900"
+    : weather.risk === "moderate"
+    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900"
+    : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-900";
+
+  return (
+    <div className={`rounded-xl border p-3 mt-3 ${riskClass}`} data-testid="panel-weather">
+      <div className="flex items-start gap-3">
+        <CloudSun className="h-5 w-5 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Weather near {name}</p>
+            <span className="text-[11px] font-medium">{riskLabel}</span>
+          </div>
+          <p className="text-sm mt-1">
+            {weather.temperatureC != null ? `${weather.temperatureC}°C` : "Current"} · {weather.summary}
+            {weather.feelsLikeC != null ? ` · feels ${weather.feelsLikeC}°C` : ""}
+          </p>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs opacity-90">
+            {weather.windKmh != null && (
+              <span className="inline-flex items-center gap-1"><Wind className="h-3 w-3" />Wind {weather.windKmh} km/h</span>
+            )}
+            {weather.precipitationMm != null && weather.precipitationMm > 0 && (
+              <span className="inline-flex items-center gap-1"><Droplets className="h-3 w-3" />Rain {weather.precipitationMm} mm</span>
+            )}
+            {weather.humidityPercent != null && <span>Humidity {weather.humidityPercent}%</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ContactPage() {
   const { token } = useParams<{ token: string }>();
@@ -461,6 +498,7 @@ export default function ContactPage() {
                   {address}
                 </p>
               )}
+              <WeatherPanel weather={data.weather} name={user.name} />
               <Button
                 variant="default"
                 size="lg"
