@@ -46,7 +46,7 @@ import { ArrowLeft, Clock, AlertCircle, Users, MapPin, Pause, FlaskConical, Help
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
-import type { UserStatus, LocationMode, ReminderMode } from "@shared/schema";
+import type { UserStatus, LocationMode } from "@shared/schema";
 import { requestMotionPermission } from "@/lib/fall-detection";
 import { format, addHours, addDays, startOfTomorrow, setHours } from "date-fns";
 
@@ -220,7 +220,6 @@ export default function SettingsPage() {
   const [preferredTime, setPreferredTime] = useState("09:00");
   const [graceMinutes, setGraceMinutes] = useState(15);
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
-  const [reminderMode, setReminderMode] = useState<ReminderMode>("one");
   const [autoCheckin, setAutoCheckin] = useState(false);
   const [fallDetection, setFallDetection] = useState(false);
   const [discreetSos, setDiscreetSos] = useState(false);
@@ -325,7 +324,6 @@ export default function SettingsPage() {
       setPreferredTime((status.settings as any)?.preferredCheckinTime || "09:00");
       setGraceMinutes(status.settings?.graceMinutes || 15);
       setLocationMode(status.settings?.locationMode || "off");
-      setReminderMode((status.settings as any)?.reminderMode || "one");
       setAutoCheckin((status.settings as any)?.autoCheckin || false);
       setFallDetection((status.settings as any)?.fallDetection || false);
       setDiscreetSos((status.settings as any)?.discreetSos || false);
@@ -358,7 +356,7 @@ export default function SettingsPage() {
   }, [status, contactsInitialized]);
 
   const settingsMutation = useMutation({
-    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; reminderMode?: ReminderMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; drivingSafety?: boolean; speedLimitKmh?: number; escalationMinutes?: number; allowReports?: boolean; autoWellnessCall?: boolean }) => {
+    mutationFn: async (data: { checkinIntervalHours?: number; graceMinutes?: number; locationMode?: LocationMode; preferredCheckinTime?: string; autoCheckin?: boolean; fallDetection?: boolean; discreetSos?: boolean; smsCheckinEnabled?: boolean; drivingSafety?: boolean; speedLimitKmh?: number; escalationMinutes?: number; allowReports?: boolean; autoWellnessCall?: boolean }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -570,11 +568,6 @@ export default function SettingsPage() {
   const handleLocationModeChange = (mode: LocationMode) => {
     setLocationMode(mode);
     settingsMutation.mutate({ locationMode: mode });
-  };
-
-  const handleReminderModeChange = (mode: ReminderMode) => {
-    setReminderMode(mode);
-    settingsMutation.mutate({ reminderMode: mode });
   };
 
   const handlePause = (hoursOrLabel: number | "tomorrow") => {
@@ -1239,27 +1232,16 @@ export default function SettingsPage() {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="space-y-4">
-                <div>
-                  <Label className="text-xs font-medium text-muted-foreground mb-2 block">Reminders before alerting contacts</Label>
-                  <RadioGroup value={reminderMode} onValueChange={(value) => handleReminderModeChange(value as ReminderMode)} className="space-y-1.5">
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="none" id="rem-none" data-testid="radio-reminder-none" />
-                      <Label htmlFor="rem-none" className="text-sm">No reminders</Label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="one" id="rem-one" data-testid="radio-reminder-one" />
-                      <Label htmlFor="rem-one" className="text-sm">One reminder</Label>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <RadioGroupItem value="two" id="rem-two" data-testid="radio-reminder-two" />
-                      <Label htmlFor="rem-two" className="text-sm">Two reminders</Label>
-                    </div>
-                  </RadioGroup>
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <Label className="text-sm font-medium">Missed check-in flow</Label>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                    If you miss your scheduled check-in, StillHere starts one clear flow: push notification, SMS, wellness call, then your Safety Circle if you still do not respond.
+                  </p>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label htmlFor="sms-checkin" className="text-sm font-medium">SMS check-in</Label>
-                    <p className="text-[11px] text-muted-foreground">Reply YES to reminder texts</p>
+                    <p className="text-[11px] text-muted-foreground">Reply YES to StillHere texts to check in</p>
                   </div>
                   <Switch id="sms-checkin" checked={smsCheckinEnabled} onCheckedChange={(checked) => { setSmsCheckinEnabled(checked); settingsMutation.mutate({ smsCheckinEnabled: checked }); }} data-testid="switch-sms-checkin" />
                 </div>

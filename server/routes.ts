@@ -7454,7 +7454,6 @@ export async function registerRoutes(
       let remindersSent = 0;
       let alertsSent = 0;
       const now = new Date();
-      const REMINDER_THROTTLE_MINUTES = 5; // Minimum time between reminders
       
       for (const { user, settings, isDueForAlert } of overdueUsers) {
         if (isDueForAlert) {
@@ -7500,44 +7499,6 @@ export async function registerRoutes(
           alertsSent++;
           await storage.resetReminderState(user.id);
           continue;
-        }
-
-        const remindersSentSoFar = settings.remindersSent || 0;
-        const maxReminders = settings.reminderMode === "none" ? 0
-          : settings.reminderMode === "one" ? 1
-          : 2;
-
-        if (remindersSentSoFar < maxReminders) {
-          const timeSinceLastReminder = settings.lastReminderAt
-            ? (now.getTime() - new Date(settings.lastReminderAt).getTime()) / (1000 * 60)
-            : Infinity;
-
-          if (timeSinceLastReminder >= REMINDER_THROTTLE_MINUTES) {
-            const reminderNumber = remindersSentSoFar + 1;
-            console.log(`[REMINDER] Sending reminder ${reminderNumber}/${maxReminders}`);
-
-            const checkInLink = `${baseUrl}/`;
-            const timeStr = now.toISOString();
-
-            if (reminderNumber === 1) {
-              await sendReminderPush(user.id, user.name);
-              await storage.addReminderTimelineEntry(user.id, { type: "push", time: timeStr, detail: "Push notification sent" });
-              console.log("[REMINDER] Push notification sent");
-            } else {
-              if (user.phone) {
-                await sendReminderSms(user.phone, checkInLink, !!settings.smsCheckinEnabled);
-                await storage.addReminderTimelineEntry(user.id, { type: "sms", time: timeStr, detail: "SMS reminder sent" });
-                console.log("[REMINDER] SMS sent");
-              } else {
-                await sendReminderPush(user.id, user.name);
-                await storage.addReminderTimelineEntry(user.id, { type: "push", time: timeStr, detail: "Push notification sent (no phone)" });
-                console.log("[REMINDER] Push notification sent (no phone for SMS)");
-              }
-            }
-
-            await storage.incrementRemindersSent(user.id);
-            remindersSent++;
-          }
         }
       }
       

@@ -12,6 +12,7 @@ import { pool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
+const INTERNAL_WORKER_LEADER_LOCK_ID = 420_000;
 const nativeAllowedOrigins = new Set([
   "capacitor://localhost",
   "ionic://localhost",
@@ -171,6 +172,104 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+let workerLeaderClient: any = null;
+let workerRetryTimer: NodeJS.Timeout | null = null;
+let cronInterval: NodeJS.Timeout | null = null;
+let safetyStateInterval: NodeJS.Timeout | null = null;
+
+async function startInternalWorkers(port: number, cronSecret: string): Promise<void> {
+  if (workerLeaderClient || cronInterval || safetyStateInterval) return;
+
+  const client = await pool.connect();
+  try {
+    const result = await client.query("SELECT pg_try_advisory_lock($1) AS locked", [INTERNAL_WORKER_LEADER_LOCK_ID]);
+    const locked = result.rows?.[0]?.locked === true;
+    if (!locked) {
+      client.release();
+      scheduleWorkerLeaderRetry(port, cronSecret);
+      log("built-in cron scheduler standby; another instance is leader", "cron");
+      return;
+    }
+  } catch (error) {
+    client.release();
+    scheduleWorkerLeaderRetry(port, cronSecret);
+    throw error;
+  }
+
+  workerLeaderClient = client;
+  client.on?.("error", (error: Error) => {
+    log(`built-in cron leader connection lost: ${error?.message || error}`, "cron");
+    stopInternalWorkers();
+    scheduleWorkerLeaderRetry(port, cronSecret);
+  });
+
+  const CRON_INTERVAL_MS = 2 * 60 * 1000;
+  cronInterval = setInterval(async () => {
+    try {
+      const response = await fetch(`http://localhost:${port}/api/cron/tick`, {
+        headers: { "x-cron-secret": cronSecret },
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        if (data.reminders > 0 || data.alerts > 0 || data.escalations > 0) {
+          log(`cron: ${data.reminders} reminders, ${data.alerts} alerts, ${data.escalations} escalations`, "cron");
+        }
+      }
+    } catch (error) {
+      log(`cron tick failed: ${error}`, "cron");
+    }
+  }, CRON_INTERVAL_MS);
+  log("built-in cron scheduler started (every 2 minutes)", "cron");
+
+  const SAFETY_STATE_INTERVAL_MS = 30 * 1000;
+  const QUIET_THRESHOLD_SECONDS = 180;
+  safetyStateInterval = setInterval(async () => {
+    try {
+      const response = await fetch(`http://localhost:${port}/api/safety-state/tick`, {
+        headers: { "x-cron-secret": cronSecret },
+      });
+      if (response.ok) {
+        const data = await response.json() as any;
+        if (data.transitioned > 0) {
+          log(`safety-state: ${data.transitioned} users moved to quiet`, "cron");
+        }
+      }
+    } catch (error) {
+      log(`safety-state tick failed: ${error}`, "cron");
+    }
+  }, SAFETY_STATE_INTERVAL_MS);
+  log(`safety-state worker started (every ${SAFETY_STATE_INTERVAL_MS / 1000}s, quiet threshold ${QUIET_THRESHOLD_SECONDS}s)`, "cron");
+}
+
+function stopInternalWorkers(): void {
+  if (cronInterval) clearInterval(cronInterval);
+  if (safetyStateInterval) clearInterval(safetyStateInterval);
+  cronInterval = null;
+  safetyStateInterval = null;
+  if (workerLeaderClient) {
+    const client = workerLeaderClient;
+    void Promise.resolve(client.query("SELECT pg_advisory_unlock($1)", [INTERNAL_WORKER_LEADER_LOCK_ID]))
+      .catch(() => {})
+      .finally(() => {
+        try {
+          client.release?.();
+        } catch {}
+      });
+  }
+  workerLeaderClient = null;
+}
+
+function scheduleWorkerLeaderRetry(port: number, cronSecret: string): void {
+  if (workerRetryTimer) return;
+  workerRetryTimer = setTimeout(() => {
+    workerRetryTimer = null;
+    startInternalWorkers(port, cronSecret).catch((error) => {
+      log(`built-in cron leader retry failed: ${error}`, "cron");
+      scheduleWorkerLeaderRetry(port, cronSecret);
+    });
+  }, 60_000);
+}
+
 function sanitizePath(p: string): string {
   return p
     .replace(/\/emergency\/[a-zA-Z0-9_-]+/g, "/emergency/[REDACTED]")
@@ -272,7 +371,6 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
 
-      const CRON_INTERVAL_MS = 2 * 60 * 1000;
       const internalCronEnabled = process.env.INTERNAL_CRON_ENABLED !== "false";
       const cronSecret = process.env.SESSION_SECRET;
       if (!cronSecret) {
@@ -283,41 +381,9 @@ app.use((req, res, next) => {
         log("built-in cron scheduler disabled by INTERNAL_CRON_ENABLED=false", "cron");
         return;
       }
-      setInterval(async () => {
-        try {
-          const response = await fetch(`http://localhost:${port}/api/cron/tick`, {
-            headers: { "x-cron-secret": cronSecret },
-          });
-          if (response.ok) {
-            const data = await response.json() as any;
-            if (data.reminders > 0 || data.alerts > 0 || data.escalations > 0) {
-              log(`cron: ${data.reminders} reminders, ${data.alerts} alerts, ${data.escalations} escalations`, "cron");
-            }
-          }
-        } catch (error) {
-          log(`cron tick failed: ${error}`, "cron");
-        }
-      }, CRON_INTERVAL_MS);
-      log("built-in cron scheduler started (every 2 minutes)", "cron");
-
-      const SAFETY_STATE_INTERVAL_MS = 30 * 1000;
-      const QUIET_THRESHOLD_SECONDS = 180;
-      setInterval(async () => {
-        try {
-          const response = await fetch(`http://localhost:${port}/api/safety-state/tick`, {
-            headers: { "x-cron-secret": cronSecret },
-          });
-          if (response.ok) {
-            const data = await response.json() as any;
-            if (data.transitioned > 0) {
-              log(`safety-state: ${data.transitioned} users moved to quiet`, "cron");
-            }
-          }
-        } catch (error) {
-          log(`safety-state tick failed: ${error}`, "cron");
-        }
-      }, SAFETY_STATE_INTERVAL_MS);
-      log(`safety-state worker started (every ${SAFETY_STATE_INTERVAL_MS / 1000}s, quiet threshold ${QUIET_THRESHOLD_SECONDS}s)`, "cron");
+      startInternalWorkers(port, cronSecret).catch((error) => {
+        log(`built-in cron scheduler failed to start: ${error}`, "cron");
+      });
     },
   );
 
@@ -326,6 +392,7 @@ app.use((req, res, next) => {
     if (shuttingDown) return;
     shuttingDown = true;
     log(`${signal} received, closing server`, "shutdown");
+    stopInternalWorkers();
     httpServer.close(async () => {
       try {
         await pool.end();

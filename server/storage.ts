@@ -1997,8 +1997,6 @@ export class DatabaseStorage implements IStorage {
         timezone: user.timezone,
         lastTimeIsCheckin: !!row.lastCheckinAt,
       });
-      const graceTime = new Date(dueTime.getTime() + userSettings.graceMinutes * 60 * 1000);
-
       if (now > dueTime) {
         // If this due window already produced a missed-checkin incident, do
         // not create another one just because the stale-incident sweeper later
@@ -2016,7 +2014,11 @@ export class DatabaseStorage implements IStorage {
           .limit(1);
         if (sameDueIncident) continue;
 
-        results.push({ user, settings: userSettings, isDueForReminder: true, isDueForAlert: now > graceTime });
+        // A missed check-in now enters one official incident flow immediately:
+        // push -> SMS -> wellness call -> contacts. Older builds had an extra
+        // pre-incident reminder layer, which made users see multiple reminder
+        // systems around the same missed check-in.
+        results.push({ user, settings: userSettings, isDueForReminder: false, isDueForAlert: true });
       }
     }
 
