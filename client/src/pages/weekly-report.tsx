@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Shield, ShieldCheck, ShieldAlert, AlertTriangle, Clock, MapPin, CheckCircle2 } from "lucide-react";
+import { Shield, ShieldCheck, ShieldAlert, AlertTriangle, Clock, MapPin, CheckCircle2, FileText, UserRound, Users } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import { BackButton } from "@/components/back-button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { WatchedUser } from "@shared/schema";
 
 interface TimelineItem {
   text: string;
@@ -100,6 +101,10 @@ export default function WeeklyReportPage() {
   const [, navigate] = useLocation();
   const [period, setPeriod] = useState<ReportPeriod>("week");
 
+  const { data: watchedUsers, isLoading: isLoadingWatchedUsers } = useQuery<WatchedUser[]>({
+    queryKey: ["/api/watched-users"],
+  });
+
   const { data: report, isLoading } = useQuery<WeeklyReport>({
     queryKey: ["/api/reports/weekly", period],
     queryFn: async () => {
@@ -164,6 +169,47 @@ export default function WeeklyReportPage() {
       </div>
 
       <div className="max-w-lg mx-auto p-4 space-y-4 pb-8">
+        {!isLoadingWatchedUsers && watchedUsers && watchedUsers.length > 0 && (
+          <div className="rounded-2xl border border-blue-100 dark:border-blue-900/50 bg-white dark:bg-gray-900 p-4 shadow-sm" data-testid="section-watched-report-list">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 shrink-0">
+                <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white">People you watch</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Open a complete safety report for each person in your safety circle.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {watchedUsers.map((user) => (
+                <button
+                  key={user.userId}
+                  type="button"
+                  onClick={() => navigate(`/report/${user.userId}`)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-3 py-3 text-left transition-colors hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                  data-testid={`button-open-report-${user.userId}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/40">
+                      <UserRound className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{user.userName}</p>
+                      <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                        {user.lastCheckinAt ? `Last check-in ${new Date(user.lastCheckinAt).toLocaleString()}` : "No check-ins yet"}
+                      </p>
+                    </div>
+                    <FileText className="h-4 w-4 text-gray-400" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <Select value={period} onValueChange={(v) => setPeriod(v as ReportPeriod)}>
             <SelectTrigger className="w-[170px]" data-testid="select-period">

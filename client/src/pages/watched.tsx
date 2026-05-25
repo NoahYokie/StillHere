@@ -618,6 +618,17 @@ export default function WatchedPage() {
 
           <WeeklyReportPanel userId={user.userId} />
 
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() => setLocation(`/report/${user.userId}`)}
+            data-testid={`button-full-report-${user.userId}`}
+          >
+            <FileText className="w-4 h-4 mr-1.5" />
+            View complete safety report
+          </Button>
+
           {isExpanded && (
             <>
               <ReportPreferencePanel userId={user.userId} existingPref={userPref} />
