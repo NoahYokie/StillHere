@@ -374,6 +374,7 @@ function formatInfoSpeed(speed: number | null | undefined): string {
 }
 
 const FOCUS_MIN_ZOOM = 14;
+const SELECTED_PERSON_ZOOM = 17;
 const OVERVIEW_MIN_ZOOM = 3;
 const OVERVIEW_MAX_ZOOM = 16;
 const MAX_ZOOM = 18;
@@ -797,10 +798,14 @@ export default function GoogleMapComponent({
           const hasSafetyPriority = people.some(p => p.safetyState === "concern");
           const focus = determineFocusTarget(people, focusPersonId);
           const eligible = people.filter(isPersonCameraEligible);
+          const explicitFocus = focusPersonId ? people.find(p => p.id === focusPersonId) : null;
 
           programmaticMoveRef.current = true;
 
-          if (hasSafetyPriority && focus) {
+          if (explicitFocus) {
+            map.panTo({ lat: explicitFocus.lat, lng: explicitFocus.lng });
+            map.setZoom(SELECTED_PERSON_ZOOM);
+          } else if (hasSafetyPriority && focus) {
             const vZoom = getVelocityZoom([focus]);
             map.panTo({ lat: focus.lat, lng: focus.lng });
             map.setZoom(Math.max(FOCUS_MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
@@ -1233,7 +1238,11 @@ export default function GoogleMapComponent({
     if (smartCamera && people && people.length > 0) {
       const focus = determineFocusTarget(people, focusPersonId);
       const eligible = people.filter(isPersonCameraEligible);
-      if (eligible.length > 1 && !people.some(p => p.safetyState === "concern")) {
+      const explicitFocus = focusPersonId ? people.find(p => p.id === focusPersonId) : null;
+      if (explicitFocus) {
+        map.panTo({ lat: explicitFocus.lat, lng: explicitFocus.lng });
+        map.setZoom(SELECTED_PERSON_ZOOM);
+      } else if (eligible.length > 1 && !people.some(p => p.safetyState === "concern")) {
         const bounds = new google.maps.LatLngBounds();
         eligible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
         map.fitBounds(bounds, 50);

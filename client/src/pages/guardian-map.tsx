@@ -138,6 +138,24 @@ function compactWeather(weather: WatchedUser["weather"]): string | null {
   return [temp, weather.summary].filter(Boolean).join(" · ") || null;
 }
 
+function locationStatusText(
+  person: Pick<WatchedUser, "locationStatus" | "locationStatusReason" | "lastKnownLocationAt" | "lastLocationAt" | "lastHeartbeatAt">,
+): string {
+  const lastKnownAt = person.lastKnownLocationAt || person.lastLocationAt || person.lastHeartbeatAt;
+  const lastKnown = lastKnownAt
+    ? ` Last known ${formatDistanceToNow(new Date(lastKnownAt), { addSuffix: true })}.`
+    : "";
+  if (person.locationStatus === "last_known") {
+    if (person.locationStatusReason === "sharing_paused") return `Location sharing is off.${lastKnown}`;
+    if (person.locationStatusReason === "presence_only") return `Precise location sharing is off.${lastKnown}`;
+    return `Showing last known location.${lastKnown}`;
+  }
+  if (person.locationStatusReason === "permission_denied") return "This contact has not allowed location sharing with you.";
+  if (person.locationStatusReason === "sharing_paused") return "Location sharing is off. No last known location is available yet.";
+  if (person.locationStatusReason === "presence_only") return "Precise location sharing is off. No last known location is available yet.";
+  return "Location is not currently shared.";
+}
+
 export default function GuardianMapPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -416,7 +434,7 @@ export default function GuardianMapPage() {
             showMyLocation={false}
             onPersonTap={(id) => {
               if (id === "__me__") return;
-              setLocation(`/live-location/${id}`);
+              setFocusedId(id);
             }}
             className="w-full h-full"
           />
@@ -446,7 +464,7 @@ export default function GuardianMapPage() {
                   <p className="text-muted-foreground">
                     {hiddenWatched.slice(0, 2).map((w) => w.userName).join(", ")}
                     {hiddenWatched.length > 2 ? ` and ${hiddenWatched.length - 2} more` : ""}
-                    {" "}may have location sharing paused, phone location off, or have not opened StillHere recently.
+                    {" "}are not sharing a current location. If StillHere has a previous location, it will be shown as last known.
                   </p>
                 </div>
               </div>
@@ -587,6 +605,11 @@ export default function GuardianMapPage() {
                         </>
                       )}
                     </div>
+                    {w.locationStatus !== "live" && (
+                      <p className="mt-1 text-xs text-muted-foreground" data-testid={`text-location-status-${w.userId}`}>
+                        {locationStatusText(w)}
+                      </p>
+                    )}
                     {w.hasOpenIncident && (
                       <div className="flex items-center gap-1 mt-1 text-xs text-red-600 dark:text-red-400">
                         <AlertTriangle className="w-3 h-3" />
@@ -752,7 +775,8 @@ export default function GuardianMapPage() {
                       type="button"
                       onClick={() => {
                         if (hasCoords) {
-                          setLocation(`/live-location/${w.userId}`);
+                          setFocusedId(w.userId);
+                          setSheetOpen(false);
                         }
                       }}
                       className={`w-full text-left rounded-xl p-3 transition border ring-1 ${colors.bg} ${colors.ring} ${
@@ -796,7 +820,7 @@ export default function GuardianMapPage() {
                             ) : (
                               <>
                                 <span>·</span>
-                                <span>Location not shared</span>
+                                <span>{locationStatusText(w)}</span>
                               </>
                             )}
                           </div>

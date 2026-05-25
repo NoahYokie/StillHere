@@ -610,6 +610,11 @@ export class DatabaseStorage implements IStorage {
       lastHeartbeatLng: lng ?? null,
       lastHeartbeatAcc: acc ?? null,
     };
+    if (lat !== undefined && lng !== undefined) {
+      updates.lastLat = lat;
+      updates.lastLng = lng;
+      updates.lastLocationAt = new Date();
+    }
     if (batt !== undefined) updates.batteryLevel = batt;
     if (chg !== undefined) updates.batteryCharging = chg;
     if (net !== undefined) updates.networkType = net;
@@ -2305,6 +2310,24 @@ export class DatabaseStorage implements IStorage {
       const hideLocation = contact.canViewLocation === false || ((mode === "presence" || mode === "paused") && !isConcern);
       const obfuscateLocation = mode === "area" && !isConcern;
       const isLearning = user.learningModeUntil ? new Date() < user.learningModeUntil : false;
+      const rawKnownLat = lastLocationLat ?? (user as any).lastLat ?? user.lastHeartbeatLat ?? null;
+      const rawKnownLng = lastLocationLng ?? (user as any).lastLng ?? user.lastHeartbeatLng ?? null;
+      const rawKnownAt = lastLocationAt ?? (user as any).lastLocationAt ?? user.lastHeartbeatAt ?? null;
+      const hasLastKnownLocation = rawKnownLat != null && rawKnownLng != null;
+      const locationStatusReason = contact.canViewLocation === false
+        ? "permission_denied"
+        : mode === "paused"
+        ? "sharing_paused"
+        : mode === "presence"
+        ? "presence_only"
+        : null;
+      const locationStatus = hideLocation
+        ? (hasLastKnownLocation && contact.canViewLocation !== false ? "last_known" : "hidden")
+        : (lastLocationLat != null && lastLocationLng != null ? "live" : hasLastKnownLocation ? "last_known" : "none");
+      const exposeLastKnown = hideLocation && contact.canViewLocation !== false && hasLastKnownLocation;
+      const visibleLastLocationLat = exposeLastKnown ? rawKnownLat : lastLocationLat;
+      const visibleLastLocationLng = exposeLastKnown ? rawKnownLng : lastLocationLng;
+      const visibleLastLocationAt = exposeLastKnown ? rawKnownAt : lastLocationAt;
 
       let claimedByName: string | null = null;
       if (openIncident?.claimedByContactId) {
@@ -2377,10 +2400,13 @@ export class DatabaseStorage implements IStorage {
         lastHeartbeatLat: hideLocation ? null : obfuscateLocation && user.lastHeartbeatLat ? obfuscateCoord(Number(user.lastHeartbeatLat), user.id + "lat") : (user.lastHeartbeatLat || null),
         lastHeartbeatLng: hideLocation ? null : obfuscateLocation && user.lastHeartbeatLng ? obfuscateCoord(Number(user.lastHeartbeatLng), user.id + "lng") : (user.lastHeartbeatLng || null),
         lastHeartbeatAcc: hideLocation ? null : obfuscateLocation ? null : (user.lastHeartbeatAcc || null),
-        lastLocationAt: hideLocation ? null : lastLocationAt,
-        lastLocationLat: hideLocation ? null : obfuscateLocation && lastLocationLat ? obfuscateCoord(Number(lastLocationLat), user.id + "lat") : lastLocationLat,
-        lastLocationLng: hideLocation ? null : obfuscateLocation && lastLocationLng ? obfuscateCoord(Number(lastLocationLng), user.id + "lng") : lastLocationLng,
-        lastLocationAcc: hideLocation ? null : obfuscateLocation ? null : lastLocationAcc,
+        lastLocationAt: hideLocation && !exposeLastKnown ? null : visibleLastLocationAt,
+        lastLocationLat: hideLocation && !exposeLastKnown ? null : obfuscateLocation && visibleLastLocationLat != null ? obfuscateCoord(Number(visibleLastLocationLat), user.id + "lat") : visibleLastLocationLat,
+        lastLocationLng: hideLocation && !exposeLastKnown ? null : obfuscateLocation && visibleLastLocationLng != null ? obfuscateCoord(Number(visibleLastLocationLng), user.id + "lng") : visibleLastLocationLng,
+        lastLocationAcc: hideLocation || obfuscateLocation ? null : lastLocationAcc,
+        locationStatus,
+        locationStatusReason,
+        lastKnownLocationAt: rawKnownAt,
         lastActivity: hideLocation ? null : lastActivity,
         lastSpeed: hideLocation ? null : lastSpeed,
         batteryLevel: user.batteryLevel ?? null,
@@ -3297,12 +3323,20 @@ export class DatabaseStorage implements IStorage {
     const adminUser = await this.getUser(family.adminUserId);
     if (adminUser) {
       const adminMode = (adminUser as any).sharingMode || "precise";
-      const adminLoc = redactLocation(
-        adminMode,
-        adminUser.id,
-        (adminUser as any).lastHeartbeatLat ?? null,
-        (adminUser as any).lastHeartbeatLng ?? null,
-      );
+      const adminRawLat = (adminUser as any).lastHeartbeatLat ?? null;
+      const adminRawLng = (adminUser as any).lastHeartbeatLng ?? null;
+      const adminKnownLat = (adminUser as any).lastLat ?? adminRawLat;
+      const adminKnownLng = (adminUser as any).lastLng ?? adminRawLng;
+      const adminKnownAt = (adminUser as any).lastLocationAt ?? (adminUser as any).lastHeartbeatAt ?? null;
+      const adminHidden = adminMode === "paused" || adminMode === "presence";
+      const adminSourceLat = adminRawLat ?? adminKnownLat;
+      const adminSourceLng = adminRawLng ?? adminKnownLng;
+      const adminLoc = adminHidden
+        ? { lat: adminKnownLat, lng: adminKnownLng }
+        : redactLocation(adminMode, adminUser.id, adminSourceLat, adminSourceLng);
+      const adminLocationStatus = adminHidden
+        ? (adminKnownLat != null && adminKnownLng != null ? "last_known" : "hidden")
+        : (adminRawLat != null && adminRawLng != null ? "live" : adminKnownLat != null && adminKnownLng != null ? "last_known" : "none");
       memberViews.push({
         id: `admin:${adminUser.id}`,
         userId: adminUser.id,
@@ -3319,7 +3353,10 @@ export class DatabaseStorage implements IStorage {
         lastSeenAt: (adminUser as any).lastHeartbeatAt || null,
         lastLat: adminLoc.lat,
         lastLng: adminLoc.lng,
-        lastAccuracy: adminMode === "precise" ? ((adminUser as any).lastHeartbeatAcc ?? null) : null,
+        lastAccuracy: adminLocationStatus === "live" && adminMode === "precise" ? ((adminUser as any).lastHeartbeatAcc ?? null) : null,
+        locationStatus: adminLocationStatus as any,
+        locationStatusReason: adminMode === "paused" ? "sharing_paused" : adminMode === "presence" ? "presence_only" : null,
+        lastKnownLocationAt: adminKnownAt,
         lastActivity: (adminUser as any).lastActivity ?? null,
         hasActiveIncident: false,
         timezone: (adminUser as any).timezone || null,
@@ -3335,6 +3372,8 @@ export class DatabaseStorage implements IStorage {
       let lastLng: number | null = null;
       let lastAccuracy: number | null = null;
       let lastActivity: any = null;
+      let lastKnownLocationAt: Date | null = null;
+      let memberLocationStatus: "live" | "last_known" | "hidden" | "none" = "none";
       let timezone: string | null = null;
       let resolvedSharingMode: any = row.sharingMode;
 
@@ -3359,10 +3398,23 @@ export class DatabaseStorage implements IStorage {
           resolvedSharingMode = row.sharingMode;
 
           // Honor the family-scoped sharing mode for this member's location.
-          const memberLoc = redactLocation(resolvedSharingMode, row.userId || "", lastLat, lastLng);
+          const rawLat = lastLat;
+          const rawLng = lastLng;
+          const knownLat = (u as any).lastLat ?? rawLat;
+          const knownLng = (u as any).lastLng ?? rawLng;
+          const sourceLat = rawLat ?? knownLat;
+          const sourceLng = rawLng ?? knownLng;
+          lastKnownLocationAt = (u as any).lastLocationAt ?? lastSeenAt;
+          const sharingHidden = resolvedSharingMode === "paused" || resolvedSharingMode === "presence";
+          const memberLoc = sharingHidden
+            ? { lat: knownLat, lng: knownLng }
+            : redactLocation(resolvedSharingMode, row.userId || "", sourceLat, sourceLng);
           lastLat = memberLoc.lat;
           lastLng = memberLoc.lng;
-          if (resolvedSharingMode !== "precise") lastAccuracy = null;
+          if (resolvedSharingMode !== "precise" || sharingHidden) lastAccuracy = null;
+          memberLocationStatus = sharingHidden
+            ? (knownLat != null && knownLng != null ? "last_known" : "hidden")
+            : (rawLat != null && rawLng != null ? "live" : knownLat != null && knownLng != null ? "last_known" : "none");
         }
       } else if (row.userId) {
         // Pending invitee already has an account — show their display name so
@@ -3372,6 +3424,7 @@ export class DatabaseStorage implements IStorage {
         if (u) {
           name = u.name || name;
           phone = u.phone || phone;
+          lastKnownLocationAt = (u as any).lastLocationAt ?? null;
         }
       }
 
@@ -3394,6 +3447,15 @@ export class DatabaseStorage implements IStorage {
         lastLat,
         lastLng,
         lastAccuracy,
+        locationStatus: exposeMemberData ? memberLocationStatus : "hidden",
+        locationStatusReason: resolvedSharingMode === "paused"
+          ? "sharing_paused"
+          : resolvedSharingMode === "presence"
+          ? "presence_only"
+          : !exposeMemberData
+          ? "permission_denied"
+          : null,
+        lastKnownLocationAt,
         lastActivity,
         hasActiveIncident: false,
         timezone,

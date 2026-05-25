@@ -1220,6 +1220,9 @@ export interface FamilyMemberView {
   lastLat: number | null;
   lastLng: number | null;
   lastAccuracy: number | null;
+  locationStatus?: "live" | "last_known" | "hidden" | "none";
+  locationStatusReason?: "sharing_paused" | "presence_only" | "location_unavailable" | "permission_denied" | null;
+  lastKnownLocationAt?: Date | null;
   lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
   hasActiveIncident: boolean;
   // IANA timezone (e.g. "America/New_York") so the family UI can show each
@@ -1396,6 +1399,9 @@ export interface WatchedUser {
   lastLocationLat: number | null;
   lastLocationLng: number | null;
   lastLocationAcc: number | null;
+  locationStatus?: "live" | "last_known" | "hidden" | "none";
+  locationStatusReason?: "sharing_paused" | "presence_only" | "location_unavailable" | "permission_denied" | null;
+  lastKnownLocationAt?: Date | null;
   lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
   lastSpeed: number | null;
   batteryLevel: number | null;

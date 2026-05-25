@@ -96,6 +96,22 @@ function safetyTone(m: FamilyMemberView): { label: string; dot: string; tone: st
   return { label: "Not active yet", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
 }
 
+function familyLocationStatusText(m: FamilyMemberView): string {
+  const lastKnownAt = m.lastKnownLocationAt || m.lastSeenAt;
+  const lastKnown = lastKnownAt
+    ? ` Last known ${formatDistanceToNow(new Date(lastKnownAt), { addSuffix: true })}.`
+    : "";
+  if (m.locationStatus === "last_known") {
+    if (m.locationStatusReason === "sharing_paused") return `Location sharing is off.${lastKnown}`;
+    if (m.locationStatusReason === "presence_only") return `Precise location sharing is off.${lastKnown}`;
+    return `Showing last known location.${lastKnown}`;
+  }
+  if (m.locationStatusReason === "sharing_paused") return "Location sharing is off. No last known location is available yet.";
+  if (m.locationStatusReason === "presence_only") return "Precise location sharing is off. No last known location is available yet.";
+  if (m.locationStatusReason === "permission_denied") return "Location sharing is not available for this member.";
+  return "Location has not been shared yet.";
+}
+
 type FamilyMessageWithSender = FamilyMessage & { senderName: string | null };
 
 // Pending invitation surfaced by GET /api/family/invitations. Mirrors the
@@ -416,6 +432,9 @@ export default function FamilyPage() {
         lat: m.lastLat as number,
         lng: m.lastLng as number,
         accuracy: m.lastAccuracy ?? null,
+        lastUpdated: (m.lastKnownLocationAt || m.lastSeenAt)
+          ? new Date(m.lastKnownLocationAt || m.lastSeenAt!).toISOString()
+          : undefined,
         safetyState: (m.safetyState as any) || "active",
         activity: (m.lastActivity as any) || "stationary",
         isMe: m.userId === myUserId,
@@ -430,6 +449,7 @@ export default function FamilyPage() {
         lat: myDeviceLoc.lat,
         lng: myDeviceLoc.lng,
         accuracy: myDeviceLoc.acc ?? null,
+        lastUpdated: new Date().toISOString(),
         safetyState: "active" as any,
         activity: "stationary" as any,
         isMe: true,
@@ -926,7 +946,7 @@ export default function FamilyPage() {
             </div>
           </div>
         )}
-        {membersWithoutLocation.length > 0 && (
+        {membersWithoutLocation.length > 0 && !focusedMemberId && (
           <div className="absolute top-3 left-3 right-3 bg-card/95 backdrop-blur border border-border rounded-xl px-3 py-2 shadow-sm text-xs text-muted-foreground" data-testid="family-location-unavailable">
             <div className="flex items-start gap-2">
               <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -935,12 +955,39 @@ export default function FamilyPage() {
                 <p>
                   {membersWithoutLocation.slice(0, 2).map((m) => m.name).join(", ")}
                   {membersWithoutLocation.length > 2 ? ` and ${membersWithoutLocation.length - 2} more` : ""}
-                  {" "}may have location sharing paused, phone location off, or have not opened StillHere recently.
+                  {" "}are not sharing a current location. StillHere shows a last known pin when a real saved location exists.
                 </p>
               </div>
             </div>
           </div>
         )}
+        {focusedMemberId && (() => {
+          const focused = members.find((m) => m.id === focusedMemberId);
+          if (!focused) return null;
+          return (
+            <div className="absolute top-3 left-3 right-3 bg-card/95 backdrop-blur border border-border rounded-xl px-3 py-2 shadow-sm text-xs" data-testid="family-focused-location-status">
+              <div className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">
+                    {focused.name}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {focused.locationStatus === "live" ? "Showing current shared location." : familyLocationStatusText(focused)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFocusedMemberId(null)}
+                  className="text-xs font-medium text-primary shrink-0"
+                  data-testid="button-family-focused-show-all"
+                >
+                  Show all
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Floating safety button rail */}
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-card/95 backdrop-blur rounded-full shadow-lg border border-border px-2 py-1.5">
@@ -1130,6 +1177,11 @@ export default function FamilyPage() {
                         );
                       })()}
                     </div>
+                    {m.locationStatus && m.locationStatus !== "live" && (m.status === "active" || m.status === "active_legacy") && (
+                      <div className="mt-1 text-xs text-muted-foreground" data-testid={`text-member-location-status-${m.id}`}>
+                        {familyLocationStatusText(m)}
+                      </div>
+                    )}
                   </div>
                   {(isMe || isAdmin) && !m.id.startsWith("admin:") && (
                     <Button
