@@ -46,4 +46,14 @@ export async function initCapacitorPlugins() {
       }
     });
   } catch {}
+
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+    PushNotifications.addListener("pushNotificationActionPerformed", (event: any) => {
+      const url = event?.notification?.data?.url || event?.notification?.data?.link;
+      if (typeof url !== "string" || !url.startsWith("/")) return;
+      window.history.pushState({}, "", url);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+  } catch {}
 }

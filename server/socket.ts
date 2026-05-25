@@ -303,14 +303,22 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
               });
             }
           }
-
-          await sendPushNotification(data.receiverId, {
-            title: `Call from ${caller?.name || "Someone"}`,
-            body: "Tap to answer",
-            url: `/call/${userId}`,
-            tag: "incoming-call",
-          });
         }
+
+        // iOS can keep a socket around briefly after the user backgrounds the
+        // app, which makes the receiver look "online" even though they cannot
+        // see the in-app ringing overlay. Always send an alert push for call
+        // invites so the phone surfaces something outside the app. True
+        // lock-screen incoming-call UI still needs the VoIP/CallKit path.
+        await sendPushNotification(data.receiverId, {
+          title: `Call from ${caller?.name || "Someone"}`,
+          body: "Tap to open StillHere",
+          url: `/call/${userId}`,
+          tag: "incoming-call",
+        }, {
+          purpose: "system_alert",
+          dedupeKey: `call_push:${call.id}`,
+        });
       } catch (error) {
         console.error("[CALL] initiate error:", error);
         if (callback) callback({ success: false, error: "Failed" });
