@@ -9,7 +9,7 @@ workflows:
         bundle_identifier: com.daudabangoura.stillhere.safety
       vars:
         XCODE_SCHEME: "App"
-      node: v22.0.0
+      node: v22.12.0
     integrations:
       app_store_connect: BrainSprout Kids
     scripts:
@@ -18,9 +18,11 @@ workflows:
           npm ci
       - name: Verify Transistorsoft license
         script: |
+          export TRANSISTORSOFT_LICENSE_KEY="${TRANSISTORSOFT_LICENSE_KEY:-${TRANSISTORSOFT_LICENSE:-${BACKGROUND_GEOLOCATION_LICENSE_KEY:-${BACKGROUND_GEOLOCATION_LICENSE:-}}}}"
           if [ -z "$TRANSISTORSOFT_LICENSE_KEY" ]; then
             echo "ERROR: TRANSISTORSOFT_LICENSE_KEY is required for production iOS background location."
             echo "StillHere must not ship a TestFlight/App Store build that claims background sharing without the native plugin license."
+            echo "Add it in Codemagic as TRANSISTORSOFT_LICENSE_KEY. Accepted fallback names: TRANSISTORSOFT_LICENSE, BACKGROUND_GEOLOCATION_LICENSE_KEY, BACKGROUND_GEOLOCATION_LICENSE."
             exit 1
           fi
           echo "Transistorsoft license found. Native background geolocation will be configured."
@@ -29,6 +31,7 @@ workflows:
           npm run build
       - name: Inject Transistorsoft license
         script: |
+          export TRANSISTORSOFT_LICENSE_KEY="${TRANSISTORSOFT_LICENSE_KEY:-${TRANSISTORSOFT_LICENSE:-${BACKGROUND_GEOLOCATION_LICENSE_KEY:-${BACKGROUND_GEOLOCATION_LICENSE:-}}}}"
           if [ -z "$TRANSISTORSOFT_LICENSE_KEY" ]; then
             echo "ERROR: TRANSISTORSOFT_LICENSE_KEY missing during license injection"
             exit 1

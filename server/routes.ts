@@ -6439,6 +6439,36 @@ export async function registerRoutes(
   }
 
   // ===== SAFETY TIMER (Dead Man's Switch) =====
+  async function getCurrentSafetyTimerForTrail(userId: string) {
+    const active = await storage.getActiveSafetyTimer(userId);
+    if (active) return active;
+
+    const [latestAttentionTimer] = await db.select().from(safetyTimers)
+      .where(and(
+        eq(safetyTimers.userId, userId),
+        inArray(safetyTimers.status, ["active", "grace_period", "escalated"]),
+      ))
+      .orderBy(desc(safetyTimers.startedAt))
+      .limit(1);
+
+    return latestAttentionTimer;
+  }
+
+  async function getCurrentSafeWalkForAttention(userId: string) {
+    const active = await storage.getActiveSafeWalk(userId);
+    if (active) return active;
+
+    const [latestAttentionWalk] = await db.select().from(safeWalks)
+      .where(and(
+        eq(safeWalks.userId, userId),
+        inArray(safeWalks.status, ["active", "overdue", "escalated"]),
+      ))
+      .orderBy(desc(safeWalks.startedAt))
+      .limit(1);
+
+    return latestAttentionWalk;
+  }
+
   app.post("/api/safety-timer/start", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
@@ -6561,7 +6591,7 @@ export async function registerRoutes(
   app.get("/api/safety-timer/trail", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
-      const timer = await storage.getActiveSafetyTimer(userId);
+      const timer = await getCurrentSafetyTimerForTrail(userId);
       if (!timer) return res.json([]);
       const points = await storage.getTripPoints(timer.id, "timer");
       res.json(points);
@@ -6732,7 +6762,7 @@ export async function registerRoutes(
   app.get("/api/safe-walk/trail", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
-      const walk = await storage.getActiveSafeWalk(userId);
+      const walk = await getCurrentSafeWalkForAttention(userId);
       if (!walk) return res.json([]);
       const points = await storage.getTripPoints(walk.id, "walk");
       res.json(points);
@@ -6749,7 +6779,7 @@ export async function registerRoutes(
       const canViewLocation = await checkWatcherLocationPermission(watcherId, targetUserId);
       if (!canViewLocation) return res.status(403).json({ error: "Not authorized to view this user's safe walk" });
 
-      const walk = await storage.getActiveSafeWalk(targetUserId);
+      const walk = await getCurrentSafeWalkForAttention(targetUserId);
       if (!walk) return res.json(null);
 
       res.json({
