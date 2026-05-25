@@ -7,7 +7,7 @@ import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./noti
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db, pool } from "./db";
 import { eq, and, lt, gte, desc, isNull, sql } from "drizzle-orm";
-import { users, settings, authSessions, safeWalks, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, type FamilyRole } from "@shared/schema";
+import { users, settings, authSessions, safeWalks, safetyTimers, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, type FamilyRole } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -6453,6 +6453,24 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/safety-timer/current", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const active = await storage.getActiveSafetyTimer(userId);
+      if (active) return res.json(active);
+
+      const [latest] = await db.select().from(safetyTimers)
+        .where(eq(safetyTimers.userId, userId))
+        .orderBy(desc(safetyTimers.startedAt))
+        .limit(1);
+
+      res.json(latest || null);
+    } catch (error) {
+      console.error("Error getting current safety timer:", error);
+      res.status(500).json({ error: "Failed to get current timer" });
+    }
+  });
+
   app.post("/api/safety-timer/cancel", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
@@ -8063,6 +8081,10 @@ export async function registerRoutes(
             const user = await storage.getUser(timer.userId);
             if (!user) continue;
 
+            // Incident reason intentionally remains "sos": the current DB
+            // enum only supports missed_checkin/sos/test, and an expired
+            // Safety Timer is treated as an urgent emergency escalation. The
+            // timeline marks the exact source so reports can distinguish it.
             const incident = await storage.createIncident(timer.userId, "sos");
             await storage.updateSafetyState(timer.userId, "concern", "Safety timer expired");
             emitTrackingPolicyChanged(timer.userId, "safety_timer_escalated").catch(() => {});
@@ -8117,6 +8139,13 @@ export async function registerRoutes(
               contact2NotifiedAt: allContactIds.length > 1 ? now : undefined,
               allContactsNotifiedAt: now,
               nextActionAt: addMinutes(now, 30),
+              escalationTimeline: JSON.stringify([
+                {
+                  type: "safety_timer_expired",
+                  time: now.toISOString(),
+                  detail: "Safety Timer expired. Emergency contacts were notified immediately.",
+                },
+              ]),
             });
 
             timerEscalations++;

@@ -11,7 +11,9 @@ import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
+import { locationFreshnessLabel } from "@/lib/location-freshness";
 import type { SafetyTimer, TripPoint } from "@shared/schema";
+import { formatDistanceToNow } from "date-fns";
 
 const DURATION_PRESETS = [
   { label: "30 min", value: 30 },
@@ -56,14 +58,18 @@ export default function SafetyTimerPage() {
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: activeTimer, isLoading } = useQuery<SafetyTimer | null>({
-    queryKey: ["/api/safety-timer/active"],
+    queryKey: ["/api/safety-timer/current"],
     refetchInterval: 5000,
   });
 
+  const timerIsRunning = !!activeTimer && ["active", "grace_period"].includes(activeTimer.status);
+  const timerIsEscalated = activeTimer?.status === "escalated";
+  const timerNeedsAttention = timerIsRunning || timerIsEscalated;
+
   const { data: trail } = useQuery<TripPoint[]>({
     queryKey: ["/api/safety-timer/trail"],
-    enabled: !!activeTimer,
-    refetchInterval: 10000,
+    enabled: timerNeedsAttention,
+    refetchInterval: timerIsRunning ? 10000 : false,
   });
 
   const startMutation = useMutation({
@@ -85,7 +91,7 @@ export default function SafetyTimerPage() {
       return apiRequest("POST", "/api/safety-timer/start", { durationMinutes: duration, note: note || undefined });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safety-timer/active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/safety-timer/current"] });
       toast({ title: "Safety Timer started", description: "Your contacts will be alerted if you don't check back in time." });
     },
     onError: () => {
@@ -96,7 +102,8 @@ export default function SafetyTimerPage() {
   const cancelMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/safety-timer/cancel"),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safety-timer/active"] });
+      escalation.setActiveWarning(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/safety-timer/current"] });
       toast({ title: "You're safe!", description: "Timer cancelled. Your contacts will not be notified." });
     },
   });
@@ -104,13 +111,13 @@ export default function SafetyTimerPage() {
   const extendMutation = useMutation({
     mutationFn: (mins: number) => apiRequest("POST", "/api/safety-timer/extend", { additionalMinutes: mins }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safety-timer/active"] });
-      toast({ title: "Timer extended" });
+      queryClient.invalidateQueries({ queryKey: ["/api/safety-timer/current"] });
+      toast({ title: "Timer extended", description: "The server expiry time was updated." });
     },
   });
 
   const sendLocation = useCallback(async () => {
-    if (!activeTimer) return;
+    if (!timerIsRunning) return;
     try {
       const pos = await getOneShotPosition();
       if (!pos) return;
@@ -122,10 +129,10 @@ export default function SafetyTimerPage() {
         activity,
       });
     } catch {}
-  }, [activeTimer]);
+  }, [timerIsRunning]);
 
   useEffect(() => {
-    if (!activeTimer) return;
+    if (!timerIsRunning) return;
 
     sendLocation();
     locationIntervalRef.current = setInterval(sendLocation, 15000);
@@ -133,10 +140,10 @@ export default function SafetyTimerPage() {
     return () => {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
     };
-  }, [activeTimer?.id, sendLocation]);
+  }, [activeTimer?.id, timerIsRunning, sendLocation]);
 
   useEffect(() => {
-    if (!activeTimer) {
+    if (!timerIsRunning || !activeTimer) {
       setRemaining(0);
       return;
     }
@@ -147,9 +154,9 @@ export default function SafetyTimerPage() {
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [activeTimer?.expiresAt]);
+  }, [activeTimer?.expiresAt, timerIsRunning]);
 
-  const progress = activeTimer
+  const progress = activeTimer && timerIsRunning
     ? Math.max(0, Math.min(1, remaining / (activeTimer.durationMinutes * 60 * 1000)))
     : 0;
 
@@ -161,7 +168,7 @@ export default function SafetyTimerPage() {
     );
   }
 
-  if (activeTimer) {
+  if (activeTimer && timerNeedsAttention) {
     const trailPoints = (trail || []).map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt?.toString() }));
     const lastPoint = trailPoints.length > 0 ? trailPoints[trailPoints.length - 1] : null;
     const center = lastPoint
@@ -169,12 +176,25 @@ export default function SafetyTimerPage() {
       : activeTimer.lastLat && activeTimer.lastLng
         ? { lat: activeTimer.lastLat, lng: activeTimer.lastLng }
         : null;
+    const locationTimestamp = lastPoint?.timestamp || activeTimer.lastLocationAt || null;
+    const locationLabel = locationTimestamp
+      ? timerIsRunning
+        ? locationFreshnessLabel(locationTimestamp, true)
+        : `Last updated ${formatDistanceToNow(new Date(locationTimestamp), { addSuffix: true })}`
+      : "No location update yet";
+    const headerTitle = timerIsEscalated ? "Safety Timer Expired" : "Safety Timer Active";
+    const statusText = timerIsEscalated
+      ? "Emergency contacts have been notified."
+      : "Backend timer is active. You can confirm safe or extend before it expires.";
 
     return (
-      <div className="min-h-screen bg-primary pb-8">
+      <div className={`min-h-screen ${timerIsEscalated ? "bg-destructive" : "bg-primary"} pb-8`}>
         <header className="px-6 pt-6 pb-4 flex items-center gap-3">
           <BackButton onClick={() => navigate("/")} tone="onPrimary" />
-          <h1 className="text-xl font-semibold text-primary-foreground" data-testid="text-title">Safety Timer Active</h1>
+          <div>
+            <h1 className="text-xl font-semibold text-primary-foreground" data-testid="text-title">{headerTitle}</h1>
+            <p className="text-sm text-primary-foreground/90">{statusText}</p>
+          </div>
         </header>
 
         <div className="flex flex-col items-center px-6">
@@ -213,37 +233,50 @@ export default function SafetyTimerPage() {
                   markerLabel="You"
                   showTrail={true}
                 />
-                <p className="text-xs text-muted-foreground text-center mt-2">Tracking your location</p>
+                <p className="text-xs text-muted-foreground text-center mt-2">{locationLabel}</p>
               </CardContent>
             </Card>
           )}
 
           <div className="w-full max-w-sm space-y-3 mt-2">
-            <Button
-              size="lg"
-              className="w-full bg-green-500 hover:bg-green-600 text-white text-lg"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
-              data-testid="button-im-safe"
-            >
-              <Shield className="h-5 w-5 mr-2" />
-              I'm Safe
-            </Button>
-
-            <div className="flex gap-2">
-              {EXTEND_OPTIONS.map(opt => (
+            {timerIsRunning ? (
+              <>
                 <Button
-                  key={opt.value}
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => extendMutation.mutate(opt.value)}
-                  disabled={extendMutation.isPending}
-                  data-testid={`button-extend-${opt.value}`}
+                  size="lg"
+                  className="w-full bg-green-500 hover:bg-green-600 text-white text-lg"
+                  onClick={() => cancelMutation.mutate()}
+                  disabled={cancelMutation.isPending}
+                  data-testid="button-im-safe"
                 >
-                  {opt.label}
+                  <Shield className="h-5 w-5 mr-2" />
+                  I'm Safe
                 </Button>
-              ))}
-            </div>
+
+                <div className="flex gap-2">
+                  {EXTEND_OPTIONS.map(opt => (
+                    <Button
+                      key={opt.value}
+                      variant="secondary"
+                      className="flex-1"
+                      onClick={() => extendMutation.mutate(opt.value)}
+                      disabled={extendMutation.isPending}
+                      data-testid={`button-extend-${opt.value}`}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <Button
+                size="lg"
+                className="w-full bg-background text-foreground hover:bg-background/90"
+                onClick={() => navigate("/")}
+                data-testid="button-timer-escalated-home"
+              >
+                Back to Home
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -251,6 +284,11 @@ export default function SafetyTimerPage() {
   }
 
   const isValid = showCustom ? parseInt(customDuration) >= 5 && parseInt(customDuration) <= 1440 : true;
+  const lastStatusText = activeTimer?.status === "safe"
+    ? "Last timer was cancelled safely."
+    : activeTimer?.status === "cancelled"
+      ? "Last timer was cancelled."
+      : null;
 
   return (
     <div className="min-h-screen bg-background pb-8">
@@ -263,6 +301,14 @@ export default function SafetyTimerPage() {
       </header>
 
       <main className="max-w-md mx-auto px-6 py-6 space-y-6">
+        {lastStatusText && (
+          <Card>
+            <CardContent className="py-3 px-4">
+              <p className="text-sm font-medium">{lastStatusText}</p>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex flex-col items-center">
           <div className="relative w-48 h-48 mb-6">
             <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
