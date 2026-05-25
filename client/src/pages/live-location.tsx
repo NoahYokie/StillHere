@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { startLiveTrackingAsync, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
 import { subscribe as subscribeLocation, subscribeLocating, getOneShotPosition } from "@/lib/location-service";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
+import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
 import { getSocket } from "@/lib/socket";
 import { ArrowLeft, MapPin, Navigation, Radio, RadioTower, Footprints, Car, Bike, PersonStanding, Zap, Clock, ShieldAlert, Info, ExternalLink, ChevronUp, ChevronDown } from "lucide-react";
 import { BackButton } from "@/components/back-button";
@@ -58,6 +60,7 @@ function getActivityColor(activity: string | null): string {
 export default function LiveLocationPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
   const [sharingActive, setSharingActive] = useState(() => {
     return localStorage.getItem("liveLocationActive") === "true" || isLiveTrackingActive();
   });
@@ -174,6 +177,16 @@ export default function LiveLocationPage() {
         throw new Error("Location permission denied");
       }
 
+      const outcome = await escalation.requestAlwaysForFeature("share_precise");
+      if (!outcome.granted) {
+        escalation.setActiveWarning({
+          feature: "share_precise",
+          message: "Live location works while the app is open. Enable Always Location for background sharing.",
+        });
+      } else {
+        escalation.setActiveWarning(null);
+      }
+
       const durationMinutes = duration === "0" ? null : parseInt(duration);
       return apiRequest("POST", "/api/live-location/start", { durationMinutes });
     },
@@ -189,7 +202,7 @@ export default function LiveLocationPage() {
             setSharingActive(false);
             apiRequest("POST", "/api/live-location/stop").catch(() => {});
           } else {
-            toast({ title: "Location error", description: err, variant: "destructive" });
+            toast({ title: "Location sharing limited", description: err });
           }
         },
         onExpired: () => {
@@ -202,7 +215,7 @@ export default function LiveLocationPage() {
         setLocationDenied(true);
       } else {
         setSharingActive(true);
-        toast({ title: "Live location sharing started", description: "Your emergency contacts can now see your location in real time." });
+        toast({ title: "Live location sharing started", description: "Your emergency contacts can now see your location while updates are fresh." });
       }
     },
     onError: (err: Error) => {
@@ -216,6 +229,7 @@ export default function LiveLocationPage() {
     mutationFn: async () => apiRequest("POST", "/api/live-location/stop"),
     onSuccess: () => {
       stopLiveTracking();
+      escalation.setActiveWarning(null);
       setSharingActive(false);
       setCurrentActivity("stationary");
       setCurrentSpeed(null);
@@ -415,7 +429,7 @@ export default function LiveLocationPage() {
                           <div className={`h-9 w-9 rounded-full ${getActivityColor(share.lastActivity)} flex items-center justify-center text-white`}>
                             {getActivityIcon(share.lastActivity)}
                           </div>
-                          <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 bg-green-500 rounded-full border-2 border-white dark:border-gray-900" />
+                        <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-gray-900 ${isFreshLocation(share.lastUpdatedAt) ? "bg-green-500" : "bg-amber-500"}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{share.userName || "Contact"}</p>
@@ -426,8 +440,8 @@ export default function LiveLocationPage() {
                             )}
                           </div>
                         </div>
-                        <span className="text-[10px] text-muted-foreground shrink-0">
-                          {formatDistanceToNow(new Date(share.lastUpdatedAt), { addSuffix: true })}
+                        <span className={`text-[10px] shrink-0 ${isFreshLocation(share.lastUpdatedAt) ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                          {locationFreshnessLabel(share.lastUpdatedAt, share.active)}
                         </span>
                       </button>
                     ))}

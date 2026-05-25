@@ -22,6 +22,7 @@ import { formatDistanceToNow } from "date-fns";
 import GoogleMap from "@/components/google-map";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { formatDualTime, getViewerTimezone } from "@/lib/timezone";
+import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
 
 function WeatherPanel({ weather, name }: { weather: WeatherSummary | null | undefined; name: string }) {
   if (!weather) return null;
@@ -76,8 +77,8 @@ export default function ContactPage() {
 
   const locationLat = data?.locationSession?.lastLat ?? data?.lastCheckin?.lat ?? null;
   const locationLng = data?.locationSession?.lastLng ?? data?.lastCheckin?.lng ?? null;
-  const locationIsLive = !!(data?.locationSession?.active && data?.locationSession?.lastLat);
   const locationTimestamp = data?.locationSession?.lastTimestamp ?? data?.lastCheckin?.createdAt ?? null;
+  const locationIsLive = !!(data?.locationSession?.active && data?.locationSession?.lastLat && isFreshLocation(locationTimestamp));
 
   useEffect(() => {
     if (locationLat && locationLng) {
@@ -473,9 +474,7 @@ export default function ContactPage() {
               </CardTitle>
               <CardDescription className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {locationTimestamp
-                  ? formatDistanceToNow(new Date(locationTimestamp), { addSuffix: true })
-                  : "Unknown"}
+                {locationFreshnessLabel(locationTimestamp, !!data?.locationSession?.active)}
                 {locationIsLive && (
                   <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />

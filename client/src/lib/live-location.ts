@@ -1,5 +1,5 @@
 import { apiRequest } from "./queryClient";
-import { subscribe as subscribeGps, subscribeError as subscribeGpsError, forceRefresh as forceGpsRefresh, getTrackingSource } from "./location-service";
+import { subscribe as subscribeGps, subscribeError as subscribeGpsError, forceRefresh as forceGpsRefresh, getTrackingSource, isNativeBackgroundAllowed } from "./location-service";
 import {
   refreshPolicy,
   isNativeTrackingAllowed,
@@ -483,6 +483,15 @@ export async function startLiveTrackingAsync(opts?: {
   installPolicySocketListener();
   installPolicySubscriber();
   console.log(`[LiveLocation] Started via location-service (source=${getTrackingSource()})`);
+
+  setTimeout(() => {
+    const cap = (globalThis as any).Capacitor;
+    if (cap?.isNativePlatform?.() && isNativeBackgroundAllowed() && getTrackingSource() !== "native-bg") {
+      const msg = "Live location works while the app is open. Enable Always Location for background sharing.";
+      console.warn(`[LiveLocation] ${msg} source=${getTrackingSource()}`);
+      onErrorCb?.(msg);
+    }
+  }, 3000);
 
   localStorage.setItem("liveLocationActive", "true");
   return true;

@@ -33,6 +33,7 @@ import { getSocket } from "@/lib/socket";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
 
 type MapPerson = {
   id: string;
@@ -154,6 +155,10 @@ function locationStatusText(
   if (person.locationStatusReason === "sharing_paused") return "Location sharing is off. No last known location is available yet.";
   if (person.locationStatusReason === "presence_only") return "Precise location sharing is off. No last known location is available yet.";
   return "Location is not currently shared.";
+}
+
+function watchedLocationTimestamp(user: Pick<WatchedUser, "lastKnownLocationAt" | "lastLocationAt" | "lastHeartbeatAt">, live?: LiveSnapshot[string]): string | Date | null | undefined {
+  return live?.timestamp || user.lastKnownLocationAt || user.lastLocationAt || user.lastHeartbeatAt;
 }
 
 export default function GuardianMapPage() {
@@ -556,10 +561,8 @@ export default function GuardianMapPage() {
           const batteryLabel = w.batteryLevel != null
             ? `${Math.round(w.batteryLevel * 100)}%${w.batteryCharging ? " charging" : ""}`
             : null;
-          const lastTs =
-            live?.timestamp ??
-            (w.lastLocationAt ? new Date(w.lastLocationAt).toISOString() : undefined) ??
-            (w.lastHeartbeatAt ? new Date(w.lastHeartbeatAt).toISOString() : undefined);
+          const lastTs = watchedLocationTimestamp(w, live);
+          const fresh = isFreshLocation(lastTs);
           return (
             <div className="absolute bottom-4 left-0 right-0 z-20 px-3 pointer-events-none">
               <Card
@@ -589,7 +592,9 @@ export default function GuardianMapPage() {
                       {lastTs && (
                         <>
                           <span>·</span>
-                          <span>{formatDistanceToNow(new Date(lastTs), { addSuffix: true })}</span>
+                          <span className={fresh ? "text-green-600 dark:text-green-400" : ""}>
+                            {locationFreshnessLabel(lastTs, true)}
+                          </span>
                         </>
                       )}
                       {accuracy != null && Number.isFinite(Number(accuracy)) && Number(accuracy) > 0 && (
@@ -764,10 +769,8 @@ export default function GuardianMapPage() {
                     w.lastHeartbeatLat != null;
                   const colors = stateColor(w.safetyState, w.hasOpenIncident);
                   const activity = (live?.activity ?? w.lastActivity ?? "stationary") as string;
-                  const lastTs =
-                    live?.timestamp ??
-                    (w.lastLocationAt ? new Date(w.lastLocationAt).toISOString() : undefined) ??
-                    (w.lastHeartbeatAt ? new Date(w.lastHeartbeatAt).toISOString() : undefined);
+                  const lastTs = watchedLocationTimestamp(w, live);
+                  const fresh = isFreshLocation(lastTs);
 
                   return (
                     <button
@@ -814,7 +817,9 @@ export default function GuardianMapPage() {
                                 <span>·</span>
                                 <span className="flex items-center gap-1">
                                   <Activity className="w-3 h-3" />
-                                  {lastTs ? formatDistanceToNow(new Date(lastTs), { addSuffix: true }) : "now"}
+                                  <span className={fresh ? "text-green-600 dark:text-green-400" : ""}>
+                                    {locationFreshnessLabel(lastTs, !!hasCoords)}
+                                  </span>
                                 </span>
                               </>
                             ) : (

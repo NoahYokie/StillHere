@@ -11,6 +11,7 @@ import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes, 
 import { getSocket } from "@/lib/socket";
 import { formatActivity, formatSpeed } from "@/lib/live-location";
 import GoogleMap from "@/components/google-map";
+import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
 
 interface LocationPoint {
   id: string;
@@ -429,6 +430,8 @@ export default function LiveLocationViewPage() {
   const stationaryDuration = stationarySince
     ? formatDuration(differenceInMinutes(new Date(), new Date(stationarySince)))
     : null;
+  const isFresh = isFreshLocation(liveTimestamp);
+  const freshnessText = locationFreshnessLabel(liveTimestamp, !!trail?.active);
 
   if (!trail?.active && !isLoading) {
     // No live share, no emergency session, no recent snapshot. Still render a
@@ -471,9 +474,7 @@ export default function LiveLocationViewPage() {
         <BackButton onClick={() => navigate("/live-location")} tone="onPrimary" />
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-semibold truncate">{userName}</h1>
-          {liveTimestamp && (
-            <p className="text-xs opacity-80">Updated {formatDistanceToNow(new Date(liveTimestamp), { addSuffix: true })}</p>
-          )}
+          <p className="text-xs opacity-80">{isFresh ? "Live now" : freshnessText}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={() => refetch()} className="text-primary-foreground hover:bg-primary/80" data-testid="button-refresh">
           <RefreshCw className="h-5 w-5" />
@@ -512,7 +513,7 @@ export default function LiveLocationViewPage() {
                 destName: activeSafeWalk.destinationName || "Destination",
               } : undefined}
             />
-            {liveTimestamp && differenceInMinutes(new Date(), new Date(liveTimestamp)) >= 2 && !staleBannerDismissed && (
+            {liveTimestamp && !isFresh && !staleBannerDismissed && (
               <div
                 className="absolute top-3 left-3 right-3 z-10 cursor-pointer"
                 onClick={() => setStaleBannerDismissed(true)}

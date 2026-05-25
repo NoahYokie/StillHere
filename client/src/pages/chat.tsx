@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Message } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { startLiveTracking, stopLiveTracking } from "@/lib/live-location";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 
 interface LocalMessage extends Message {
   sendFailed?: boolean;
@@ -102,6 +103,7 @@ export default function ChatPage() {
   const [, setLocation] = useLocation();
   const { auth } = useAuth();
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
   const [newMessage, setNewMessage] = useState("");
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
@@ -414,6 +416,15 @@ export default function ChatPage() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
+          const outcome = await escalation.requestAlwaysForFeature("share_precise");
+          if (!outcome.granted) {
+            escalation.setActiveWarning({
+              feature: "share_precise",
+              message: "Live location works while the app is open. Enable Always Location for background sharing.",
+            });
+          } else {
+            escalation.setActiveWarning(null);
+          }
           const res = await apiRequest("POST", `/api/messages/${otherUserId}/share-location`, {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
@@ -473,6 +484,7 @@ export default function ChatPage() {
     try {
       // Stop the continuous client uploader first so we don't race with the server.
       await stopLiveTracking();
+      escalation.setActiveWarning(null);
       await apiRequest("POST", "/api/live-location/stop", {});
       toast({ title: "Stopped sharing", description: "Your live location is no longer visible." });
       queryClient.invalidateQueries({ queryKey: ["/api/messages", otherUserId] });

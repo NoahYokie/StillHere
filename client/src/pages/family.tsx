@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import GoogleMap, { type MapPerson } from "@/components/google-map";
+import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import type { FamilyOverview, FamilyMemberView, FamilyMessage, FamilyPlace, FamilyPlaceSchedule } from "@shared/schema";
 
 const PLACE_ICONS: Record<string, any> = {
@@ -133,6 +134,7 @@ export default function FamilyPage() {
   const [, setLocation] = useLocation();
   const { auth } = useAuth();
   const { toast } = useToast();
+  const escalation = useBackgroundLocationEscalation();
   const myUserId = auth?.user?.id;
 
   const { data, isLoading } = useQuery<FamilyOverview>({
@@ -309,6 +311,15 @@ export default function FamilyPage() {
         toast({ title: "Location unavailable", description: "Allow location to use Watch Me.", variant: "destructive" });
         return;
       }
+      const outcome = await escalation.requestAlwaysForFeature("share_precise");
+      if (!outcome.granted) {
+        escalation.setActiveWarning({
+          feature: "share_precise",
+          message: "Live location works while the app is open. Enable Always Location for background sharing.",
+        });
+      } else {
+        escalation.setActiveWarning(null);
+      }
       await apiRequest("POST", "/api/family/watch-me/start", {
         lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy,
         durationMinutes: watchDuration,
@@ -333,6 +344,7 @@ export default function FamilyPage() {
     try {
       const { stopLiveTracking } = await import("@/lib/live-location");
       stopLiveTracking();
+      escalation.setActiveWarning(null);
       await apiRequest("POST", "/api/family/watch-me/stop", {});
       queryClient.invalidateQueries({ queryKey: ["/api/live-location/status"] });
       toast({ title: "Stopped sharing" });

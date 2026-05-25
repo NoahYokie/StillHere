@@ -16,32 +16,33 @@ workflows:
       - name: Install dependencies
         script: |
           npm ci
-      - name: Install Transistorsoft plugin (if licensed)
+      - name: Verify Transistorsoft license
         script: |
-          if [ -n "$TRANSISTORSOFT_LICENSE_KEY" ]; then
-            echo "Transistorsoft license found, installing background geolocation plugin..."
-            npm install @transistorsoft/capacitor-background-geolocation
-          else
-            echo "No Transistorsoft license key — skipping native background geolocation plugin"
-            echo "App will use @capacitor/geolocation fallback"
+          if [ -z "$TRANSISTORSOFT_LICENSE_KEY" ]; then
+            echo "ERROR: TRANSISTORSOFT_LICENSE_KEY is required for production iOS background location."
+            echo "StillHere must not ship a TestFlight/App Store build that claims background sharing without the native plugin license."
+            exit 1
           fi
+          echo "Transistorsoft license found. Native background geolocation will be configured."
       - name: Build web assets
         script: |
           npm run build
-      - name: Inject Transistorsoft license (if available)
+      - name: Inject Transistorsoft license
         script: |
-          if [ -n "$TRANSISTORSOFT_LICENSE_KEY" ]; then
-            echo "Injecting Transistorsoft license key into Capacitor config..."
-            node -e "
-              const fs = require('fs');
-              const cfg = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
-              cfg.plugins = cfg.plugins || {};
-              cfg.plugins.BackgroundGeolocation = cfg.plugins.BackgroundGeolocation || {};
-              cfg.plugins.BackgroundGeolocation.license = process.env.TRANSISTORSOFT_LICENSE_KEY;
-              fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
-              console.log('License key injected successfully');
-            "
+          if [ -z "$TRANSISTORSOFT_LICENSE_KEY" ]; then
+            echo "ERROR: TRANSISTORSOFT_LICENSE_KEY missing during license injection"
+            exit 1
           fi
+          echo "Injecting Transistorsoft license key into Capacitor config..."
+          node -e "
+            const fs = require('fs');
+            const cfg = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
+            cfg.plugins = cfg.plugins || {};
+            cfg.plugins.BackgroundGeolocation = cfg.plugins.BackgroundGeolocation || {};
+            cfg.plugins.BackgroundGeolocation.license = process.env.TRANSISTORSOFT_LICENSE_KEY;
+            fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
+            console.log('License key injected successfully');
+          "
       - name: Sync Capacitor
         script: |
           npx cap sync ios

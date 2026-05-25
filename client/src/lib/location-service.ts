@@ -262,6 +262,13 @@ class LocationService {
     }
   }
 
+  async handleNativeBackgroundGranted(): Promise<void> {
+    if (!this.isNativePlatform() || this.nativeStarted || this.subscribers.size === 0) return;
+    console.log("[GPS] Always authorization granted; restarting GPS to prefer native BG plugin");
+    await this.stopWatch();
+    this.startWatch();
+  }
+
   private async stopNativeBackgroundWatch(): Promise<void> {
     for (const sub of this.nativeSubscriptions) {
       try { sub.remove(); } catch {}
@@ -369,6 +376,12 @@ class LocationService {
         const started = await this.startNativeBackgroundWatch();
         if (session !== this.watchSessionId) return;
         if (started) return;
+      } else if (nativeBackgroundAllowed) {
+        this.errorSubscribers.forEach(fn => {
+          try {
+            fn("Live location works while the app is open. Enable Always Location for background sharing.");
+          } catch {}
+        });
       }
 
       if (this.capGeolocationPlugin) {
@@ -588,6 +601,9 @@ let nativeBackgroundAllowed = false;
 export function setNativeBackgroundAllowed(allowed: boolean): void {
   const previous = nativeBackgroundAllowed;
   nativeBackgroundAllowed = allowed;
+  if (!previous && allowed) {
+    locationService.handleNativeBackgroundGranted();
+  }
   if (previous && !allowed) {
     // Tear down the native plugin so we don't keep collecting in background
     // after the user revoked Always.

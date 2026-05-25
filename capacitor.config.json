@@ -32,8 +32,7 @@
       "enabled": true
     },
     "BackgroundGeolocation": {
-      "_TODO_ALWAYS_ESCALATION": "App Store Phase 1 ships with WhenInUse only. Safe Walk, Safety Timer, Drive Safety, active Safety-Circle sharing, and SOS may require Always Location for reliable background updates. The app should request/escalate to Always at the moment the user enables one of those features (NOT upfront).",
-      "locationAuthorizationRequest": "WhenInUse",
+      "locationAuthorizationRequest": "Always",
       "backgroundPermissionRationale": {
         "title": "Background location for safety features",
         "message": "StillHere uses background location only while a safety feature you turned on is running, such as Safe Walk, Safety Timer, Drive Safety, an active SOS, or active sharing with your Safety Circle. We will attempt to share your location with the contacts you chose so they can reach you. Background location is off when you are not using one of these features.",
