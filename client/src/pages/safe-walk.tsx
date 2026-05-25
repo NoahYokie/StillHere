@@ -11,7 +11,9 @@ import { BackButton } from "@/components/back-button";
 import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
+import { locationFreshnessLabel } from "@/lib/location-freshness";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
+import { formatDistanceToNow } from "date-fns";
 
 function formatCountdown(ms: number): string {
   if (ms <= 0) return "0:00";
@@ -112,14 +114,18 @@ export default function SafeWalkPage() {
   const searchIdRef = useRef(0);
 
   const { data: activeWalk, isLoading } = useQuery<SafeWalk | null>({
-    queryKey: ["/api/safe-walk/active"],
+    queryKey: ["/api/safe-walk/current"],
     refetchInterval: 5000,
   });
 
+  const walkIsRunning = !!activeWalk && ["active", "overdue"].includes(activeWalk.status);
+  const walkIsEscalated = activeWalk?.status === "escalated";
+  const walkNeedsAttention = walkIsRunning || walkIsEscalated;
+
   const { data: trail } = useQuery<TripPoint[]>({
     queryKey: ["/api/safe-walk/trail"],
-    enabled: !!activeWalk,
-    refetchInterval: 10000,
+    enabled: walkNeedsAttention,
+    refetchInterval: walkIsRunning ? 10000 : false,
   });
 
   const { data: geofences } = useQuery<Geofence[]>({
@@ -205,7 +211,7 @@ export default function SafeWalkPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/active"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/current"] });
       toast({ title: "Safe Walk started", description: "We'll watch until you arrive safely." });
     },
     onError: () => {
@@ -216,7 +222,8 @@ export default function SafeWalkPage() {
   const cancelMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/safe-walk/cancel"),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/active"] });
+      escalation.setActiveWarning(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/current"] });
       toast({ title: "Safe Walk cancelled" });
     },
   });
@@ -224,7 +231,8 @@ export default function SafeWalkPage() {
   const arrivedMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/safe-walk/arrived"),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/active"] });
+      escalation.setActiveWarning(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/current"] });
       toast({ title: "You've arrived safely!" });
     },
   });
@@ -232,13 +240,13 @@ export default function SafeWalkPage() {
   const extendMutation = useMutation({
     mutationFn: (mins: number) => apiRequest("POST", "/api/safe-walk/extend", { additionalMinutes: mins }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/active"] });
-      toast({ title: "Time extended" });
+      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/current"] });
+      toast({ title: "Time extended", description: "The server arrival time was updated." });
     },
   });
 
   const sendLocation = useCallback(async () => {
-    if (!activeWalk) return;
+    if (!walkIsRunning) return;
     try {
       const pos = await getOneShotPosition();
       if (!pos) return;
@@ -251,24 +259,25 @@ export default function SafeWalkPage() {
       });
       const data = await res.json();
       if (data.arrived) {
-        queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/active"] });
+        escalation.setActiveWarning(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/current"] });
         toast({ title: "You've arrived safely!", description: "Safe Walk ended automatically." });
       }
       setCurrentPos({ lat: pos.lat, lng: pos.lng });
     } catch {}
-  }, [activeWalk, toast]);
+  }, [walkIsRunning, toast, escalation]);
 
   useEffect(() => {
-    if (!activeWalk) return;
+    if (!walkIsRunning) return;
     sendLocation();
     locationIntervalRef.current = setInterval(sendLocation, 15000);
     return () => {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
     };
-  }, [activeWalk?.id, sendLocation]);
+  }, [activeWalk?.id, walkIsRunning, sendLocation]);
 
   useEffect(() => {
-    if (!activeWalk) { setRemaining(0); return; }
+    if (!walkIsRunning || !activeWalk) { setRemaining(0); return; }
     const update = () => {
       const diff = new Date(activeWalk.expectedArrivalAt).getTime() - Date.now();
       setRemaining(Math.max(0, diff));
@@ -276,7 +285,7 @@ export default function SafeWalkPage() {
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [activeWalk?.expectedArrivalAt]);
+  }, [activeWalk?.expectedArrivalAt, walkIsRunning]);
 
   const searchAddress = useCallback(async (query: string) => {
     if (query.length < 2) { setAddressResults([]); setSearching(false); return; }
@@ -341,11 +350,21 @@ export default function SafeWalkPage() {
     );
   }
 
-  if (activeWalk) {
+  if (activeWalk && walkNeedsAttention) {
     const trailPoints = (trail || []).map(p => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt?.toString() }));
     const destPoint = { lat: activeWalk.destinationLat, lng: activeWalk.destinationLng };
     const center = currentPos || (activeWalk.lastLat && activeWalk.lastLng ? { lat: activeWalk.lastLat, lng: activeWalk.lastLng } : destPoint);
-    const isOverdue = remaining <= 0;
+    const isOverdue = walkIsEscalated || activeWalk.status === "overdue" || remaining <= 0;
+    const locationTimestamp = trailPoints[trailPoints.length - 1]?.timestamp || activeWalk.lastLocationAt || null;
+    const locationLabel = locationTimestamp
+      ? walkIsRunning
+        ? locationFreshnessLabel(locationTimestamp, true)
+        : `Last updated ${formatDistanceToNow(new Date(locationTimestamp), { addSuffix: true })}`
+      : "No location update yet";
+    const title = walkIsEscalated ? "Safe Walk Escalated" : isOverdue ? "Running Late" : "Safe Walk Active";
+    const subtitle = walkIsEscalated
+      ? "Emergency contacts have been notified."
+      : `${activeWalk.destinationName || "Destination"} - ${formatCountdown(remaining)} ${isOverdue ? "overdue" : "remaining"}`;
 
     return (
       <div className="min-h-screen bg-background pb-8">
@@ -353,10 +372,10 @@ export default function SafeWalkPage() {
           <BackButton onClick={() => navigate("/")} tone="onPrimary" />
           <div>
             <h1 className="text-xl font-semibold" data-testid="text-title">
-              {isOverdue ? "Running Late" : "Safe Walk Active"}
+              {title}
             </h1>
             <p className="text-sm opacity-90">
-              {activeWalk.destinationName || "Destination"} · {formatCountdown(remaining)} {isOverdue ? "overdue" : "remaining"}
+              {subtitle}
             </p>
           </div>
         </header>
@@ -371,6 +390,7 @@ export default function SafeWalkPage() {
                 className="w-full h-52"
                 showTrail={true}
               />
+              <p className="text-xs text-muted-foreground text-center mt-2">{locationLabel}</p>
             </CardContent>
           </Card>
 
@@ -383,41 +403,54 @@ export default function SafeWalkPage() {
           )}
 
           <div className="space-y-3">
-            <Button
-              size="lg"
-              className="w-full bg-green-500 hover:bg-green-600 text-white text-lg"
-              onClick={() => arrivedMutation.mutate()}
-              disabled={arrivedMutation.isPending}
-              data-testid="button-arrived"
-            >
-              <CheckCircle2 className="h-5 w-5 mr-2" />
-              I've Arrived
-            </Button>
-
-            <div className="flex gap-2">
-              {EXTEND_OPTIONS.map(opt => (
+            {walkIsRunning ? (
+              <>
                 <Button
-                  key={opt.value}
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => extendMutation.mutate(opt.value)}
-                  disabled={extendMutation.isPending}
-                  data-testid={`button-extend-${opt.value}`}
+                  size="lg"
+                  className="w-full bg-green-500 hover:bg-green-600 text-white text-lg"
+                  onClick={() => arrivedMutation.mutate()}
+                  disabled={arrivedMutation.isPending}
+                  data-testid="button-arrived"
                 >
-                  {opt.label}
+                  <CheckCircle2 className="h-5 w-5 mr-2" />
+                  I've Arrived
                 </Button>
-              ))}
-            </div>
 
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
-              data-testid="button-cancel-walk"
-            >
-              Cancel Safe Walk
-            </Button>
+                <div className="flex gap-2">
+                  {EXTEND_OPTIONS.map(opt => (
+                    <Button
+                      key={opt.value}
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => extendMutation.mutate(opt.value)}
+                      disabled={extendMutation.isPending}
+                      data-testid={`button-extend-${opt.value}`}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  onClick={() => cancelMutation.mutate()}
+                  disabled={cancelMutation.isPending}
+                  data-testid="button-cancel-walk"
+                >
+                  Cancel Safe Walk
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="lg"
+                className="w-full"
+                onClick={() => navigate("/")}
+                data-testid="button-safe-walk-escalated-home"
+              >
+                Back to Home
+              </Button>
+            )}
           </div>
         </main>
       </div>
@@ -430,6 +463,12 @@ export default function SafeWalkPage() {
     return <MapPin className="h-4 w-4" />;
   };
 
+  const lastStatusText = activeWalk?.status === "arrived"
+    ? "Last Safe Walk was marked arrived safely."
+    : activeWalk?.status === "cancelled"
+      ? "Last Safe Walk was cancelled."
+      : null;
+
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="bg-primary text-primary-foreground px-6 py-4 flex items-center gap-3">
@@ -441,6 +480,14 @@ export default function SafeWalkPage() {
       </header>
 
       <main className="max-w-md mx-auto px-6 py-6 space-y-4">
+        {lastStatusText && (
+          <Card>
+            <CardContent className="py-3 px-4">
+              <p className="text-sm font-medium">{lastStatusText}</p>
+            </CardContent>
+          </Card>
+        )}
+
         {geofences && geofences.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
@@ -614,3 +661,4 @@ export default function SafeWalkPage() {
     </div>
   );
 }
+

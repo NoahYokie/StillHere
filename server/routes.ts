@@ -6,7 +6,7 @@ import { processLocationContext, getUserContext, getRecentContextEvents } from "
 import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db, pool } from "./db";
-import { eq, and, lt, gte, desc, isNull, sql } from "drizzle-orm";
+import { eq, and, lt, gte, desc, isNull, sql, inArray } from "drizzle-orm";
 import { users, settings, authSessions, safeWalks, safetyTimers, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, type FamilyRole } from "@shared/schema";
 import {
   generateRegistrationOptions,
@@ -4615,6 +4615,29 @@ export async function registerRoutes(
       const isCheckin = affirmatives.some(a => body === a || body.includes(a));
       
       if (isCheckin) {
+        const [safeWalkAwaitingResponse] = await db.select().from(safeWalks)
+          .where(and(
+            eq(safeWalks.userId, user.id),
+            inArray(safeWalks.status, ["active", "overdue", "escalated"]),
+          ))
+          .orderBy(desc(safeWalks.startedAt))
+          .limit(1);
+
+        if (safeWalkAwaitingResponse) {
+          await storage.updateSafeWalk(safeWalkAwaitingResponse.id, {
+            status: "arrived",
+            resolvedAt: new Date(),
+          });
+          emitTrackingPolicyChanged(user.id, "safe_walk_sms_arrived").catch(() => {});
+
+          const openIncident = await storage.getOpenIncident(user.id);
+          if (openIncident) {
+            await resolveCheckin(user.id, "sms");
+          }
+
+          return res.type("text/xml").send(`<Response><Message>${escapeXml(`StillHere Confirmation\n\nHi ${user.name}, your Safe Walk has been marked arrived safely. Thank you for confirming.`)}</Message></Response>`);
+        }
+
         const result = await resolveCheckin(user.id, "sms");
         
         const contacts = await storage.getContacts(user.id);
@@ -6595,6 +6618,24 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/safe-walk/current", async (req, res) => {
+    const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const active = await storage.getActiveSafeWalk(userId);
+      if (active) return res.json(active);
+
+      const [latest] = await db.select().from(safeWalks)
+        .where(eq(safeWalks.userId, userId))
+        .orderBy(desc(safeWalks.startedAt))
+        .limit(1);
+
+      res.json(latest || null);
+    } catch (error) {
+      console.error("Error getting current Safe Walk:", error);
+      res.status(500).json({ error: "Failed to get current Safe Walk" });
+    }
+  });
+
   app.post("/api/safe-walk/cancel", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
@@ -8230,6 +8271,7 @@ export async function registerRoutes(
               let locationInfo = "";
               if (walk.lastLat && walk.lastLng) {
                 locationInfo = `\nLast known location: https://www.google.com/maps?q=${walk.lastLat},${walk.lastLng}`;
+                if (walk.lastLocationAt) locationInfo += `\nLast updated: ${formatOwnerLocalAlertTime(walk.lastLocationAt, user.timezone)}`;
                 if (walk.lastActivity) locationInfo += `\nActivity: ${walk.lastActivity}`;
               }
 
