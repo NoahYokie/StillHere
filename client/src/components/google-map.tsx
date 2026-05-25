@@ -874,7 +874,7 @@ export default function GoogleMapComponent({
       }
       prevCenterRef.current = newPos;
     }
-  }, [center.lat, center.lng, points, people, focusPersonId, isLocating, smartCamera]);
+  }, [center.lat, center.lng, points, people, isLocating, smartCamera]);
 
   // When a parent component changes focusPersonId (e.g. user taps a member chip
   // outside the map), clear the "user has interacted" flag so smartCamera will
@@ -883,7 +883,38 @@ export default function GoogleMapComponent({
     if (focusPersonId === undefined) return;
     userInteractedRef.current = false;
     setShowRecenter(false);
-  }, [focusPersonId]);
+
+    const map = mapInstanceRef.current;
+    if (!map || !smartCamera || !people || people.length === 0) return;
+
+    const eligible = people.filter(isPersonCameraEligible);
+    const explicitFocus = focusPersonId ? people.find(p => p.id === focusPersonId) : null;
+    programmaticMoveRef.current = true;
+
+    if (explicitFocus) {
+      map.panTo({ lat: explicitFocus.lat, lng: explicitFocus.lng });
+      map.setZoom(SELECTED_PERSON_ZOOM);
+    } else if (eligible.length > 1 && !people.some(p => p.safetyState === "concern")) {
+      const bounds = new google.maps.LatLngBounds();
+      eligible.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+      map.fitBounds(bounds, 50);
+      const listener = map.addListener("idle", () => {
+        const z = map.getZoom();
+        if (z != null && z < OVERVIEW_MIN_ZOOM) map.setZoom(OVERVIEW_MIN_ZOOM);
+        if (z != null && z > OVERVIEW_MAX_ZOOM) map.setZoom(OVERVIEW_MAX_ZOOM);
+        google.maps.event.removeListener(listener);
+      });
+    } else {
+      const focus = determineFocusTarget(people, null);
+      if (focus) {
+        const vZoom = getVelocityZoom(eligible.length ? eligible : [focus]);
+        map.panTo({ lat: focus.lat, lng: focus.lng });
+        map.setZoom(Math.max(FOCUS_MIN_ZOOM, Math.min(MAX_ZOOM, vZoom)));
+      }
+    }
+
+    setTimeout(() => { programmaticMoveRef.current = false; }, 300);
+  }, [focusPersonId, people, smartCamera]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
