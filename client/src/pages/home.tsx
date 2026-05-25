@@ -666,23 +666,30 @@ export default function Home() {
     },
   });
 
-  const formatNextCheckinTime = (date: Date) => format(new Date(date), "h:mm a");
+  const formatNextCheckinTime = (date: Date) => {
+    const tz = status?.user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return new Date(date).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: tz,
+    });
+  };
 
   const formatNextCheckinMeta = (date: Date) => {
     const d = new Date(date);
+    const tzRaw = status?.user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const tz = tzRaw || "UTC";
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const dayAfterTomorrowStart = new Date(todayStart);
-    dayAfterTomorrowStart.setDate(dayAfterTomorrowStart.getDate() + 2);
-
-    let dayLabel = "";
-    if (d < tomorrowStart) dayLabel = "Today";
-    else if (d < dayAfterTomorrowStart) dayLabel = "Tomorrow";
-    else dayLabel = format(d, "EEEE");
-
-    const tzRaw = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+    const dueDay = dayFmt.format(d);
+    const today = dayFmt.format(now);
+    const tomorrow = dayFmt.format(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+    const dayLabel = dueDay === today
+      ? "Today"
+      : dueDay === tomorrow
+        ? "Tomorrow"
+        : new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: tz }).format(d);
     const tzCity = tzRaw.split("/").pop()?.replace(/_/g, " ") || "";
 
     return tzCity ? `${dayLabel} \u00B7 ${tzCity}` : dayLabel;

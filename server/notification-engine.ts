@@ -159,6 +159,22 @@ function isUserInSleepHours(user: { sleepStart?: string; sleepEnd?: string; time
   return currentMin >= sleepStartMin && currentMin < sleepEndMin;
 }
 
+function timezonePlaceLabel(timezone?: string | null): string {
+  if (!timezone) return "UTC";
+  const city = timezone.split("/").pop()?.replace(/_/g, " ");
+  return city ? `${city} time` : timezone;
+}
+
+function formatPreferredCheckinLabel(preferredTime?: string | null, timezone?: string | null): string | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((preferredTime || "").trim());
+  if (!match) return null;
+  const hour = Math.max(0, Math.min(23, parseInt(match[1], 10)));
+  const minute = Math.max(0, Math.min(59, parseInt(match[2], 10)));
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix} ${timezonePlaceLabel(timezone)}`;
+}
+
 export async function notifyConcern(
   userId: string,
   userName: string,
@@ -170,6 +186,10 @@ export async function notifyConcern(
   }
   const isEmergency = reason === "sos" || reason === "crash_detection";
   const protectedUser = await storage.getUser(userId);
+  const protectedSettings = reason === "missed_checkin" ? await storage.getSettings(userId).catch(() => null) : null;
+  const scheduledCheckinLabel = reason === "missed_checkin"
+    ? formatPreferredCheckinLabel(protectedSettings?.preferredCheckinTime, protectedUser?.timezone)
+    : null;
   if (!isEmergency && protectedUser && isUserInSleepHours(protectedUser)) {
     console.log(`[NOTIFY] Suppressed ${reason} concern for user=${userId} (sleep hours active)`);
     return;
@@ -182,7 +202,7 @@ export async function notifyConcern(
   switch (reason) {
     case "missed_checkin":
       title = "Can you check in?";
-      reasonText = `We haven't heard from ${userName}. Tap here to try reaching them.`;
+      reasonText = `We haven't heard from ${userName}.${scheduledCheckinLabel ? ` Their scheduled check-in was ${scheduledCheckinLabel}.` : ""} Tap here to try reaching them.`;
       break;
     case "sos":
       title = "Emergency alert";

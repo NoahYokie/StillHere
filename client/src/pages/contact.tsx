@@ -402,7 +402,7 @@ export default function ContactPage() {
                     Last check-in:{" "}
                     <span data-testid="text-last-checkin">
                       {lastCheckin
-                        ? formatDistanceToNow(new Date(lastCheckin.createdAt), { addSuffix: true })
+                        ? `${formatDistanceToNow(new Date(lastCheckin.createdAt), { addSuffix: true })} (${formatDualTime(lastCheckin.createdAt, user.timezone || viewerTimezone, viewerTimezone)})`
                         : "Never"}
                     </span>
                   </CardDescription>

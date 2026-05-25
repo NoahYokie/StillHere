@@ -225,7 +225,8 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     }
 
     const baseUrl = getBaseUrl();
-    const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    const allClearAt = new Date();
+    const allClearTimeLabel = formatOwnerLocalAlertTime(allClearAt, user.timezone);
     const allContacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
     console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contacts=${allContacts.length}`);
 
@@ -245,7 +246,7 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
         // SMS link cannot grant ongoing visibility.
         const fresh = await storage.generateToken(contact.id, { ttlHours: 4, purpose: "allclear" });
         const link = `${baseUrl}/e/${fresh.token}`;
-        await sendAllClearNotification(normalizedPhone, user.name, link);
+        await sendAllClearNotification(normalizedPhone, user.name, link, { alertSentLabel: allClearTimeLabel });
         smsSuccess++;
         smsDedup.add(normalizedPhone);
         console.log(`[NOTIFY] Sent RECOVERY_SMS to ***${contact.phone.slice(-4)} (Role: WATCHER, channel: sms, ttlHours: 4)`);
@@ -371,6 +372,37 @@ async function sendLinkedWatcherPresencePush(
   );
 }
 
+function timezonePlaceLabel(timezone?: string | null): string {
+  if (!timezone) return "UTC";
+  const city = timezone.split("/").pop()?.replace(/_/g, " ");
+  return city ? `${city} time` : timezone;
+}
+
+function formatPreferredCheckinLabel(preferredTime?: string | null, timezone?: string | null): string | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((preferredTime || "").trim());
+  if (!match) return null;
+  const hour = Math.max(0, Math.min(23, parseInt(match[1], 10)));
+  const minute = Math.max(0, Math.min(59, parseInt(match[2], 10)));
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix} ${timezonePlaceLabel(timezone)}`;
+}
+
+function formatOwnerLocalAlertTime(date: Date, timezone?: string | null): string {
+  const tz = timezone || "UTC";
+  try {
+    const time = date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: tz,
+    });
+    return `${time} ${timezonePlaceLabel(timezone)}`;
+  } catch {
+    return `${date.toISOString()} UTC`;
+  }
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null; watcherConsentStatus?: string | null },
   userName: string,
@@ -380,18 +412,20 @@ async function notifyContact(
     phone: string,
     userName: string,
     link: string,
-    options?: { userId?: string | null; incidentId?: string | null; ipAddress?: string | null; dedupeKey?: string | null },
+    options?: { userId?: string | null; incidentId?: string | null; ipAddress?: string | null; dedupeKey?: string | null; scheduledCheckinLabel?: string | null; alertSentLabel?: string | null },
   ) => Promise<{ success: boolean; error?: string } | any>,
   audit?: { incidentId?: string | null; ipAddress?: string | null },
 ): Promise<NotifyContactSummary> {
   const summary: NotifyContactSummary = { attempted: [], delivered: [], smsAttempted: false, smsDelivered: false };
   const incidentId = audit?.incidentId ?? null;
   const ipAddress = audit?.ipAddress ?? null;
+  let subjectUser: Awaited<ReturnType<typeof storage.getUser>> | undefined;
+  let subjectSettings: Awaited<ReturnType<typeof storage.getSettings>> | undefined;
 
   // Store-review safety net: if the SUBJECT user (the one in trouble) is the
   // dedicated Apple/Play review account, never page real emergency contacts.
   try {
-    const subjectUser = await storage.getUser(contact.userId);
+    subjectUser = await storage.getUser(contact.userId);
     if (subjectUser?.isReviewAccount) {
       console.log(`[NOTIFY] Skipped contact fan-out (review account subject ${contact.userId})`);
       return summary;
@@ -399,6 +433,13 @@ async function notifyContact(
   } catch (e: any) {
     console.warn(`[NOTIFY] Review-flag lookup failed for subject ${contact.userId}, dispatching anyway:`, e?.message || e);
   }
+  try {
+    subjectSettings = await storage.getSettings(contact.userId);
+  } catch {}
+  const scheduledCheckinLabel = reason === "missed_checkin"
+    ? formatPreferredCheckinLabel(subjectSettings?.preferredCheckinTime, subjectUser?.timezone)
+    : null;
+  const alertSentLabel = formatOwnerLocalAlertTime(new Date(), subjectUser?.timezone);
 
   // Channel 1: SMS
   const normalizedPhone = normalizePhone(contact.phone);
@@ -410,6 +451,8 @@ async function notifyContact(
       incidentId,
       ipAddress,
       dedupeKey: incidentId ? `contact_alert:${incidentId}:${contact.id}` : null,
+      scheduledCheckinLabel,
+      alertSentLabel,
     });
     if (smsRes && smsRes.success) {
       summary.delivered.push("sms");
@@ -430,7 +473,6 @@ async function notifyContact(
   if (cleanEmail) {
     summary.attempted.push("email");
     try {
-      const subjectUser = await storage.getUser(contact.userId);
       const emailRes = await sendEmergencyEmail(cleanEmail, userName, link, reason, {
         lat: subjectUser?.lastLat ?? null,
         lng: subjectUser?.lastLng ?? null,
@@ -459,11 +501,14 @@ async function notifyContact(
   if (linkedUserId && isAcceptedWatcherLink(contact, linkedUserId)) {
     summary.attempted.push("push");
     try {
+      const timingSuffix = reason === "missed_checkin" && scheduledCheckinLabel
+        ? ` Scheduled check-in time: ${scheduledCheckinLabel}.`
+        : "";
       const pushRes = await sendPushNotification(linkedUserId, {
         title: reason === "sos" ? `SOS from ${userName}` : `Safety Alert: ${userName} has not checked in`,
         body: reason === "sos"
           ? `${userName} has activated an emergency SOS and needs immediate assistance. Open the app to respond.`
-          : `${userName} has not completed their scheduled safety checkin. Open the app to respond.`,
+          : `${userName} has not completed their scheduled safety checkin.${timingSuffix} Open the app to respond.`,
         url: "/watched",
         tag: "emergency-alert",
       }, {
@@ -483,7 +528,7 @@ async function notifyContact(
     try {
       const alertContent = reason === "sos"
         ? `${userName} has activated an emergency SOS. Please check on them immediately.`
-        : `${userName} has not completed their safety checkin. Please check on them.`;
+        : `${userName} has not completed their safety checkin.${scheduledCheckinLabel ? ` Scheduled check-in time: ${scheduledCheckinLabel}.` : ""} Please check on them.`;
       await storage.saveMessage(contact.userId, linkedUserId, alertContent);
       emitToUser(linkedUserId, "message:new", {
         type: "emergency-alert",

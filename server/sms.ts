@@ -104,6 +104,22 @@ export interface SendSmsOptions {
   // Caller-supplied dedupeKey for Category-B traffic. When set, two sends
   // with the same key within 5 minutes are collapsed.
   dedupeKey?: string | null;
+  scheduledCheckinLabel?: string | null;
+  alertSentLabel?: string | null;
+}
+
+function appendTimingContext(
+  body: string,
+  options: Pick<SendSmsOptions, "scheduledCheckinLabel" | "alertSentLabel">,
+): string {
+  const lines: string[] = [];
+  if (options.scheduledCheckinLabel) {
+    lines.push(`Scheduled check-in time: ${options.scheduledCheckinLabel}.`);
+  }
+  if (options.alertSentLabel) {
+    lines.push(`Alert sent: ${options.alertSentLabel}.`);
+  }
+  return lines.length > 0 ? `${body}\n\n${lines.join("\n")}` : body;
 }
 
 export async function sendSms(
@@ -326,7 +342,10 @@ export async function sendMissedCheckinAlert(
   link: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call. None received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you are unable to reach them, please contact your local emergency services.`;
+  const body = appendTimingContext(
+    `StillHere Safety Alert\n\n${userName} has not responded to a safety check-in. We tried reaching them by app notification, SMS, and a phone call. None received a response.\n\nPlease try to reach ${userName} directly. If you have the StillHere app, open it for live status, location, and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you are unable to reach them, please contact your local emergency services.`,
+    options,
+  );
   return sendSms(contactPhone, body, { purpose: "missed_checkin_alert", ...options });
 }
 
@@ -380,7 +399,7 @@ export async function sendAllClearNotification(
   link: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const timeLabel = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const timeLabel = options.alertSentLabel || new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const body = `StillHere All Clear\n\n${userName} confirmed they are safe at ${timeLabel}. No action is needed.\n\nView their status in the StillHere app, or from any browser:\n${link}`;
   return sendSms(contactPhone, body, { purpose: "all_clear", ...options });
 }
@@ -404,7 +423,10 @@ export async function sendEscalationAlert(
   const reasonText = reason === "sos"
     ? "activated an emergency SOS"
     : "has not responded to a safety check-in";
-  const body = `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services.`;
+  const body = appendTimingContext(
+    `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services.`,
+    reason === "missed_checkin" ? options : { alertSentLabel: options.alertSentLabel },
+  );
   return sendSms(contactPhone, body, { purpose: "escalation_alert", ...options });
 }
 
