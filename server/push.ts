@@ -185,35 +185,75 @@ async function sendAPNsAlertPush(
     ? "api.sandbox.push.apple.com"
     : "api.push.apple.com";
 
-  const response = await fetch(`https://${host}/3/device/${deviceToken}`, {
-    method: "POST",
-    headers: {
+  // Apple APNs provider API is HTTP/2 only. Node's fetch/undici speaks HTTP/1.1
+  // here, which fails before APNs can return a useful status. Use http2
+  // directly so native iOS pushes work from Cloud Run.
+  const http2 = await import("http2");
+  const body = JSON.stringify({
+    aps: {
+      alert: {
+        title: payload.title,
+        body: payload.body,
+      },
+      sound: "default",
+    },
+    url: payload.url || "/",
+    tag: payload.tag,
+  });
+
+  const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const client = http2.connect(`https://${host}`);
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      try { client.close(); } catch {}
+      fn();
+    };
+
+    client.setTimeout(10_000, () => {
+      finish(() => reject(new Error("apns_timeout")));
+    });
+    client.on("error", (error) => {
+      finish(() => reject(error));
+    });
+
+    const req = client.request({
+      ":method": "POST",
+      ":path": `/3/device/${deviceToken}`,
       authorization: `bearer ${jwt}`,
       "apns-topic": IOS_BUNDLE_ID,
       "apns-push-type": "alert",
       "apns-priority": "10",
       "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      aps: {
-        alert: {
-          title: payload.title,
-          body: payload.body,
-        },
-        sound: "default",
-      },
-      url: payload.url || "/",
-      tag: payload.tag,
-    }),
+    });
+
+    let status = 0;
+    let chunks = "";
+    req.setEncoding("utf8");
+    req.on("response", (headers) => {
+      const rawStatus = headers[":status"];
+      status = typeof rawStatus === "number" ? rawStatus : parseInt(String(rawStatus || "0"), 10);
+    });
+    req.on("data", (chunk) => {
+      chunks += chunk;
+    });
+    req.on("end", () => {
+      finish(() => resolve({ status, body: chunks }));
+    });
+    req.on("error", (error) => {
+      finish(() => reject(error));
+    });
+    req.end(body);
   });
 
-  if (response.ok) return { ok: true };
+  if (response.status >= 200 && response.status < 300) return { ok: true };
 
-  const body = await response.text().catch(() => "");
-  let reason = body;
+  const responseBody = response.body || "";
+  let reason = responseBody;
   try {
-    const parsed = JSON.parse(body);
-    reason = parsed?.reason || body;
+    const parsed = JSON.parse(responseBody);
+    reason = parsed?.reason || responseBody;
   } catch {}
 
   const removeSubscription = response.status === 410 ||
@@ -235,7 +275,7 @@ async function generateAPNsJWT(keyId: string, teamId: string, key: string): Prom
   const unsignedToken = `${header}.${claims}`;
 
   const privateKey = crypto.createPrivateKey({
-    key: key.includes("BEGIN") ? key : `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----`,
+    key: normalizeAPNsPrivateKey(key),
     format: "pem",
   });
 
@@ -245,6 +285,12 @@ async function generateAPNsJWT(keyId: string, teamId: string, key: string): Prom
   });
 
   return `${unsignedToken}.${signature.toString("base64url")}`;
+}
+
+function normalizeAPNsPrivateKey(key: string): string {
+  const trimmed = key.trim().replace(/\\n/g, "\n");
+  if (trimmed.includes("BEGIN PRIVATE KEY")) return trimmed;
+  return `-----BEGIN PRIVATE KEY-----\n${trimmed}\n-----END PRIVATE KEY-----`;
 }
 
 export async function sendReminderPush(userId: string, userName: string): Promise<void> {
