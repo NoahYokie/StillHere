@@ -20,32 +20,47 @@ workflows:
         script: |
           export TRANSISTORSOFT_LICENSE_KEY="${TRANSISTORSOFT_LICENSE_KEY:-${TRANSISTORSOFT_LICENSE:-${BACKGROUND_GEOLOCATION_LICENSE_KEY:-${BACKGROUND_GEOLOCATION_LICENSE:-}}}}"
           if [ -z "$TRANSISTORSOFT_LICENSE_KEY" ]; then
-            echo "ERROR: TRANSISTORSOFT_LICENSE_KEY is required for production iOS background location."
-            echo "StillHere must not ship a TestFlight/App Store build that claims background sharing without the native plugin license."
-            echo "Add it in Codemagic as TRANSISTORSOFT_LICENSE_KEY. Accepted fallback names: TRANSISTORSOFT_LICENSE, BACKGROUND_GEOLOCATION_LICENSE_KEY, BACKGROUND_GEOLOCATION_LICENSE."
-            exit 1
+            echo "WARNING: TRANSISTORSOFT_LICENSE_KEY is not set."
+            echo "TestFlight build will continue with licensed native background location disabled."
+            echo "Live location will work only while the app is open until the real license is added."
+            echo "Add it later as TRANSISTORSOFT_LICENSE_KEY. Accepted fallback names: TRANSISTORSOFT_LICENSE, BACKGROUND_GEOLOCATION_LICENSE_KEY, BACKGROUND_GEOLOCATION_LICENSE."
+            echo "false" > .transistorsoft-licensed
+          else
+            echo "true" > .transistorsoft-licensed
+            echo "Transistorsoft license found. Native background geolocation will be configured."
           fi
-          echo "Transistorsoft license found. Native background geolocation will be configured."
       - name: Build web assets
         script: |
+          export VITE_TRANSISTORSOFT_LICENSED="$(cat .transistorsoft-licensed 2>/dev/null || echo false)"
           npm run build
       - name: Inject Transistorsoft license
         script: |
           export TRANSISTORSOFT_LICENSE_KEY="${TRANSISTORSOFT_LICENSE_KEY:-${TRANSISTORSOFT_LICENSE:-${BACKGROUND_GEOLOCATION_LICENSE_KEY:-${BACKGROUND_GEOLOCATION_LICENSE:-}}}}"
           if [ -z "$TRANSISTORSOFT_LICENSE_KEY" ]; then
-            echo "ERROR: TRANSISTORSOFT_LICENSE_KEY missing during license injection"
-            exit 1
+            echo "No Transistorsoft license to inject. Disabling native background geolocation in Capacitor config for this build."
+            node -e "
+              const fs = require('fs');
+              const cfg = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
+              cfg.plugins = cfg.plugins || {};
+              cfg.plugins.BackgroundGeolocation = cfg.plugins.BackgroundGeolocation || {};
+              cfg.plugins.BackgroundGeolocation.enabled = false;
+              delete cfg.plugins.BackgroundGeolocation.license;
+              fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
+              console.log('BackgroundGeolocation disabled for unlicensed TestFlight build');
+            "
+          else
+            echo "Injecting Transistorsoft license key into Capacitor config..."
+            node -e "
+              const fs = require('fs');
+              const cfg = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
+              cfg.plugins = cfg.plugins || {};
+              cfg.plugins.BackgroundGeolocation = cfg.plugins.BackgroundGeolocation || {};
+              cfg.plugins.BackgroundGeolocation.enabled = true;
+              cfg.plugins.BackgroundGeolocation.license = process.env.TRANSISTORSOFT_LICENSE_KEY;
+              fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
+              console.log('License key injected successfully');
+            "
           fi
-          echo "Injecting Transistorsoft license key into Capacitor config..."
-          node -e "
-            const fs = require('fs');
-            const cfg = JSON.parse(fs.readFileSync('capacitor.config.json', 'utf8'));
-            cfg.plugins = cfg.plugins || {};
-            cfg.plugins.BackgroundGeolocation = cfg.plugins.BackgroundGeolocation || {};
-            cfg.plugins.BackgroundGeolocation.license = process.env.TRANSISTORSOFT_LICENSE_KEY;
-            fs.writeFileSync('capacitor.config.json', JSON.stringify(cfg, null, 2));
-            console.log('License key injected successfully');
-          "
       - name: Sync Capacitor
         script: |
           npx cap sync ios

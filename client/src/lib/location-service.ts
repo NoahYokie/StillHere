@@ -15,6 +15,13 @@ export type LocationMode = "normal" | "high_accuracy";
 type LocationSubscriber = (state: LocationState) => void;
 type ErrorSubscriber = (msg: string) => void;
 
+export const BACKGROUND_LOCATION_UNLICENSED_MESSAGE =
+  "Background location is not enabled yet. Live location works while the app is open.";
+
+export function isNativeBackgroundLocationLicensed(): boolean {
+  return import.meta.env.VITE_TRANSISTORSOFT_LICENSED === "true";
+}
+
 const VALID_ACCURACY_THRESHOLD = 100;
 const JITTER_DISTANCE_KM = 5;
 const JITTER_TIME_MS = 10000;
@@ -129,16 +136,20 @@ class LocationService {
   private async initNativePlugin(): Promise<void> {
     if (!this.isNativePlatform()) return;
 
-    try {
-      const pluginId = "@transistorsoft/capacitor-background-geolocation";
-      const mod = await import(/* @vite-ignore */ pluginId);
-      this.nativePlugin = mod.default || mod.BackgroundGeolocation;
-      if (this.nativePlugin) {
-        this.nativeReady = true;
-        console.log("[GPS] Native background geolocation plugin loaded");
+    if (!isNativeBackgroundLocationLicensed()) {
+      console.log("[GPS] Native background geolocation disabled: Transistorsoft license not configured for this build");
+    } else {
+      try {
+        const pluginId = "@transistorsoft/capacitor-background-geolocation";
+        const mod = await import(/* @vite-ignore */ pluginId);
+        this.nativePlugin = mod.default || mod.BackgroundGeolocation;
+        if (this.nativePlugin) {
+          this.nativeReady = true;
+          console.log("[GPS] Native background geolocation plugin loaded");
+        }
+      } catch {
+        console.log("[GPS] Background geolocation plugin not available, trying @capacitor/geolocation");
       }
-    } catch {
-      console.log("[GPS] Background geolocation plugin not available, trying @capacitor/geolocation");
     }
 
     if (!this.nativeReady) {
@@ -379,7 +390,9 @@ class LocationService {
       } else if (nativeBackgroundAllowed) {
         this.errorSubscribers.forEach(fn => {
           try {
-            fn("Live location works while the app is open. Enable Always Location for background sharing.");
+            fn(isNativeBackgroundLocationLicensed()
+              ? "Live location works while the app is open. Enable Always Location for background sharing."
+              : BACKGROUND_LOCATION_UNLICENSED_MESSAGE);
           } catch {}
         });
       }

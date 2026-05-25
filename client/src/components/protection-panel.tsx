@@ -7,6 +7,7 @@ import { Shield, Eye, EyeOff, MapPin, Radio, Pause, ChevronDown, ChevronUp, User
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
+import { BACKGROUND_LOCATION_UNLICENSED_MESSAGE } from "@/lib/location-service";
 
 interface ProtectionData {
   sharingMode: "precise" | "area" | "presence" | "paused";
@@ -52,6 +53,14 @@ export function ProtectionPanel() {
     if (mode === "precise") {
       const outcome = await escalation.requestAlwaysForFeature("share_precise");
       if (!outcome.granted) {
+        if (outcome.unlicensed) {
+          escalation.setActiveWarning({
+            feature: "share_precise",
+            message: BACKGROUND_LOCATION_UNLICENSED_MESSAGE,
+          });
+          modeMutation.mutate(mode);
+          return;
+        }
         toast({
           title: "Background location required",
           description: "Precise sharing needs Always location so updates keep flowing when your phone locks. Try Area mode or open Settings to upgrade.",
@@ -65,7 +74,9 @@ export function ProtectionPanel() {
       if (!outcome.granted) {
         escalation.setActiveWarning({
           feature: "share_area",
-          message: "Area sharing is on, but updates may pause when the app is in the background. Tap Upgrade to switch to Always.",
+          message: outcome.unlicensed
+            ? BACKGROUND_LOCATION_UNLICENSED_MESSAGE
+            : "Area sharing is on, but updates may pause when the app is in the background. Tap Upgrade to switch to Always.",
         });
       } else {
         escalation.setActiveWarning(null);

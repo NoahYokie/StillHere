@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { usePermissionHealth, requestLocationPermission, requestNotificationPermission, requestMotionPermissionWrapper, getLocationLabel, isLocationFullyGranted, isPermissionMarkedEnabled, clearPermissionIntent } from "@/lib/permissions";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
+import { BACKGROUND_LOCATION_UNLICENSED_MESSAGE } from "@/lib/location-service";
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -76,6 +77,11 @@ function SafetyHealthCard() {
     setFixing(false);
     if (outcome.granted) {
       toast({ title: "Background location enabled" });
+    } else if (outcome.unlicensed) {
+      toast({
+        title: "Background location not enabled yet",
+        description: BACKGROUND_LOCATION_UNLICENSED_MESSAGE,
+      });
     } else if (outcome.blocked) {
       toast({
         title: "Open Settings to allow Always",

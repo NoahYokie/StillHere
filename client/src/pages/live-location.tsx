@@ -7,7 +7,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { startLiveTrackingAsync, stopLiveTracking, isLiveTrackingActive, formatActivity, formatSpeed } from "@/lib/live-location";
-import { subscribe as subscribeLocation, subscribeLocating, getOneShotPosition } from "@/lib/location-service";
+import {
+  BACKGROUND_LOCATION_UNLICENSED_MESSAGE,
+  subscribe as subscribeLocation,
+  subscribeLocating,
+  getOneShotPosition,
+} from "@/lib/location-service";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
 import { getSocket } from "@/lib/socket";
@@ -181,7 +186,9 @@ export default function LiveLocationPage() {
       if (!outcome.granted) {
         escalation.setActiveWarning({
           feature: "share_precise",
-          message: "Live location works while the app is open. Enable Always Location for background sharing.",
+          message: outcome.unlicensed
+            ? BACKGROUND_LOCATION_UNLICENSED_MESSAGE
+            : "Live location works while the app is open. Enable Always Location for background sharing.",
         });
       } else {
         escalation.setActiveWarning(null);

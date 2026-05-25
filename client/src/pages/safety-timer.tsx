@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { getOneShotPosition } from "@/lib/location-service";
+import { BACKGROUND_LOCATION_UNLICENSED_MESSAGE, getOneShotPosition } from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -83,7 +83,9 @@ export default function SafetyTimerPage() {
       if (!outcome.granted) {
         escalation.setActiveWarning({
           feature: "safety_timer",
-          message: "Safety Timer is running, but background location is limited. Your last known location will be used if the timer runs out.",
+          message: outcome.unlicensed
+            ? BACKGROUND_LOCATION_UNLICENSED_MESSAGE
+            : "Safety Timer is running, but background location is limited. Your last known location will be used if the timer runs out.",
         });
       } else {
         escalation.setActiveWarning(null);

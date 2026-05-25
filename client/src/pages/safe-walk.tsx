@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { getOneShotPosition, subscribe as subscribeLocation } from "@/lib/location-service";
+import {
+  BACKGROUND_LOCATION_UNLICENSED_MESSAGE,
+  getOneShotPosition,
+  subscribe as subscribeLocation,
+} from "@/lib/location-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -196,7 +200,9 @@ export default function SafeWalkPage() {
       if (!outcome.granted) {
         escalation.setActiveWarning({
           feature: "safe_walk",
-          message: "Safe Walk is running with limited background access. Updates may pause when your phone locks. Tap Upgrade to switch to Always.",
+          message: outcome.unlicensed
+            ? BACKGROUND_LOCATION_UNLICENSED_MESSAGE
+            : "Safe Walk is running with limited background access. Updates may pause when your phone locks. Tap Upgrade to switch to Always.",
         });
       } else {
         escalation.setActiveWarning(null);

@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Message } from "@shared/schema";
 import { format, formatDistanceToNow } from "date-fns";
 import { startLiveTracking, stopLiveTracking } from "@/lib/live-location";
+import { BACKGROUND_LOCATION_UNLICENSED_MESSAGE } from "@/lib/location-service";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 
 interface LocalMessage extends Message {
@@ -420,7 +421,9 @@ export default function ChatPage() {
           if (!outcome.granted) {
             escalation.setActiveWarning({
               feature: "share_precise",
-              message: "Live location works while the app is open. Enable Always Location for background sharing.",
+              message: outcome.unlicensed
+                ? BACKGROUND_LOCATION_UNLICENSED_MESSAGE
+                : "Live location works while the app is open. Enable Always Location for background sharing.",
             });
           } else {
             escalation.setActiveWarning(null);

@@ -11,7 +11,11 @@ import {
   type AuthorizationLevel,
   type FeatureKey,
 } from "@/lib/escalate-always";
-import { setNativeBackgroundAllowed } from "@/lib/location-service";
+import {
+  BACKGROUND_LOCATION_UNLICENSED_MESSAGE,
+  isNativeBackgroundLocationLicensed,
+  setNativeBackgroundAllowed,
+} from "@/lib/location-service";
 import { BackgroundLocationSheet } from "./background-location-sheet";
 import { BackgroundLocationWarningBanner } from "./background-location-warning-banner";
 
@@ -21,6 +25,7 @@ export type EscalationOutcome = {
   degraded: boolean;         // only "when_in_use"
   blocked: boolean;          // "denied" or "restricted"
   dismissed: boolean;        // user tapped Not now without prompting
+  unlicensed?: boolean;      // native background plugin disabled for this build
 };
 
 export type BackgroundLocationContextValue = {
@@ -86,7 +91,7 @@ export function BackgroundLocationProvider({ children }: { children: React.React
     setAuthLevel(level);
     // Mirror the always-grant into the LocationService gate so any subsequent
     // startWatch is allowed to use native background mode.
-    setNativeBackgroundAllowed(isAlwaysGranted(level));
+    setNativeBackgroundAllowed(isNativeBackgroundLocationLicensed() && isAlwaysGranted(level));
     return level;
   }, []);
 
@@ -102,7 +107,7 @@ export function BackgroundLocationProvider({ children }: { children: React.React
     subscribeProviderChange((level) => {
       if (cancelled) return;
       setAuthLevel(level);
-      setNativeBackgroundAllowed(isAlwaysGranted(level));
+      setNativeBackgroundAllowed(isNativeBackgroundLocationLicensed() && isAlwaysGranted(level));
     }).then((u) => { if (cancelled) u(); else unsub = u; });
     return () => {
       cancelled = true;
@@ -127,7 +132,7 @@ export function BackgroundLocationProvider({ children }: { children: React.React
       blocked: level === "denied" || level === "restricted",
       dismissed,
     };
-    setNativeBackgroundAllowed(outcome.granted);
+    setNativeBackgroundAllowed(isNativeBackgroundLocationLicensed() && outcome.granted);
     const r = pendingRef.current;
     pendingRef.current = null;
     setSheetOpen(false);
@@ -158,6 +163,19 @@ export function BackgroundLocationProvider({ children }: { children: React.React
     async (feature: FeatureKey): Promise<EscalationOutcome> => {
       const level = await getAuthorizationLevel();
       setAuthLevel(level);
+
+      if (!isNativeBackgroundLocationLicensed()) {
+        setNativeBackgroundAllowed(false);
+        setWarning({ feature, message: BACKGROUND_LOCATION_UNLICENSED_MESSAGE });
+        return {
+          level,
+          granted: false,
+          degraded: isAtLeastWhenInUse(level),
+          blocked: false,
+          dismissed: false,
+          unlicensed: true,
+        };
+      }
 
       // Already Always — nothing to do.
       if (isAlwaysGranted(level)) {

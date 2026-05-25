@@ -34,6 +34,7 @@ import { useAuth } from "@/lib/auth";
 import { getSocket } from "@/lib/socket";
 import GoogleMap, { type MapPerson } from "@/components/google-map";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
+import { BACKGROUND_LOCATION_UNLICENSED_MESSAGE } from "@/lib/location-service";
 import type { FamilyOverview, FamilyMemberView, FamilyMessage, FamilyPlace, FamilyPlaceSchedule } from "@shared/schema";
 
 const PLACE_ICONS: Record<string, any> = {
@@ -315,7 +316,9 @@ export default function FamilyPage() {
       if (!outcome.granted) {
         escalation.setActiveWarning({
           feature: "share_precise",
-          message: "Live location works while the app is open. Enable Always Location for background sharing.",
+          message: outcome.unlicensed
+            ? BACKGROUND_LOCATION_UNLICENSED_MESSAGE
+            : "Live location works while the app is open. Enable Always Location for background sharing.",
         });
       } else {
         escalation.setActiveWarning(null);
