@@ -8222,6 +8222,16 @@ export async function registerRoutes(
             const incident = await storage.createIncident(timer.userId, "sos");
             await storage.updateSafetyState(timer.userId, "concern", "Safety timer expired");
             emitTrackingPolicyChanged(timer.userId, "safety_timer_escalated").catch(() => {});
+            await createProtectedUserSystemAlert(
+              user,
+              "Your Safety Timer expired. Emergency contacts have been alerted.",
+              {
+                kind: "safety_timer_expired",
+                incidentId: incident.id,
+                timerId: timer.id,
+                expiresAt: timer.expiresAt.toISOString(),
+              },
+            );
             notifyConcern(timer.userId, user.name, "sos").catch((err) => {
               console.error(`[TIMER] notifyConcern failed for user=${timer.userId}:`, err?.message || err);
             });

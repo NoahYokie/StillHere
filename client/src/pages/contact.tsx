@@ -84,9 +84,28 @@ export default function ContactPage() {
     enabled: !!token,
   });
 
-  const locationLat = data?.locationSession?.lastLat ?? data?.lastCheckin?.lat ?? null;
-  const locationLng = data?.locationSession?.lastLng ?? data?.lastCheckin?.lng ?? null;
-  const locationTimestamp = data?.locationSession?.lastTimestamp ?? data?.lastCheckin?.createdAt ?? null;
+  const locationLat =
+    data?.locationSession?.lastLat ??
+    data?.safetyTimer?.lastLat ??
+    data?.safeWalk?.lastLat ??
+    data?.crashDrive?.endLat ??
+    data?.crashDrive?.startLat ??
+    data?.lastCheckin?.lat ??
+    null;
+  const locationLng =
+    data?.locationSession?.lastLng ??
+    data?.safetyTimer?.lastLng ??
+    data?.safeWalk?.lastLng ??
+    data?.crashDrive?.endLng ??
+    data?.crashDrive?.startLng ??
+    data?.lastCheckin?.lng ??
+    null;
+  const locationTimestamp =
+    data?.locationSession?.lastTimestamp ??
+    data?.safetyTimer?.lastLocationAt ??
+    data?.safeWalk?.lastLocationAt ??
+    data?.lastCheckin?.createdAt ??
+    null;
   const locationIsLive = !!(data?.locationSession?.active && data?.locationSession?.lastLat && isFreshLocation(locationTimestamp));
 
   useEffect(() => {
@@ -240,6 +259,24 @@ export default function ContactPage() {
   const isSOS = incident?.reason === "sos";
   const emergencyNumber = emergencyNumberForTimezone(user.timezone);
   const hasTrip = safetyTimer || safeWalk || crashDrive;
+  const alertTitle = safetyTimer
+    ? "Safety Timer expired"
+    : safeWalk
+      ? "Safe Walk overdue"
+      : crashDrive
+        ? "Crash detected"
+        : isSOS
+          ? "Help has been requested"
+          : "Missed check-in";
+  const alertDescription = safetyTimer
+    ? `${user.name}'s Safety Timer expired and they have not checked back in.`
+    : safeWalk
+      ? `${user.name} has not arrived from their Safe Walk as expected.`
+      : crashDrive
+        ? `${user.name} may need help after a detected crash.`
+        : isSOS
+          ? `${user.name} pressed the emergency button.`
+          : `${user.name} hasn't checked in as expected.`;
   const trailPoints = (tripTrail || []).map((p: any) => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt?.toString() }));
 
   const getStatusColor = () => {
@@ -288,12 +325,10 @@ export default function ContactPage() {
                 <AlertTriangle className="h-8 w-8 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                 <div className="flex-1">
                   <p className="text-2xl font-bold leading-tight">
-                    {isSOS ? "Help has been requested" : "Missed check-in"}
+                    {alertTitle}
                   </p>
                   <p className="text-base font-medium mt-2 opacity-95">
-                    {isSOS
-                      ? `${user.name} pressed the emergency button.`
-                      : `${user.name} hasn't checked in as expected.`}
+                    {alertDescription}
                   </p>
                 </div>
               </div>
