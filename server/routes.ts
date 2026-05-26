@@ -8252,7 +8252,7 @@ export async function registerRoutes(
                 try {
                   await sendSms(contact.phone,
                     `StillHere ALERT: ${user.name}'s safety timer has expired and they have not responded.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nLink expires in 24 hours.`,
-                    { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safety_timer:${timer.id}:${contact.id}` }
+                    { purpose: "sos_alert", userId: user.id, dedupeKey: `safety_timer:${timer.id}:${contact.id}` }
                   );
                 } catch (err: any) {
                   console.error(`[TIMER] SMS to contact=${contact.id} (phone ***${contact.phone.slice(-4)}) failed:`, err?.message || err);
