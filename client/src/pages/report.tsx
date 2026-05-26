@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,10 +42,16 @@ function formatIncidentReason(reason: string): string {
   }
 }
 
+function normalizeReportPeriod(value: string | null): string {
+  return value && ["day", "week", "fortnight", "month"].includes(value) ? value : "week";
+}
+
 export default function ReportPage() {
   const { userId } = useParams<{ userId: string }>();
   const [, setLocation] = useLocation();
-  const [period, setPeriod] = useState("week");
+  const search = useSearch();
+  const initialPeriod = normalizeReportPeriod(new URLSearchParams(search).get("period"));
+  const [period, setPeriod] = useState(initialPeriod);
 
   const { data: report, isLoading } = useQuery<ReportData>({
     queryKey: ["/api/reports", userId, period],
@@ -59,6 +65,19 @@ export default function ReportPage() {
 
   function handlePrint() {
     window.print();
+  }
+
+  function handlePeriodChange(nextPeriod: string) {
+    setPeriod(nextPeriod);
+    if (userId && typeof window !== "undefined") {
+      window.history.replaceState(null, "", `/report/${userId}?period=${encodeURIComponent(nextPeriod)}`);
+    }
+  }
+
+  function openMonitoredUserProfile() {
+    if (!userId || typeof window === "undefined") return;
+    const returnPath = `${window.location.pathname}${window.location.search}`;
+    setLocation(`/live-location/${userId}?from=${encodeURIComponent(returnPath)}`);
   }
 
   const periodLabel = period === "day" ? "Daily" : period === "week" ? "Weekly" : period === "fortnight" ? "Fortnightly" : "Monthly";
@@ -78,7 +97,7 @@ export default function ReportPage() {
         </div>
 
         <div className="mb-4 print:hidden">
-          <Select value={period} onValueChange={setPeriod}>
+          <Select value={period} onValueChange={handlePeriodChange}>
             <SelectTrigger data-testid="select-report-period">
               <SelectValue />
             </SelectTrigger>
@@ -100,7 +119,14 @@ export default function ReportPage() {
         {report && (
           <div className="space-y-4">
             <div className="text-center mb-6 print:mb-4">
-              <h2 className="text-2xl font-bold" data-testid="text-report-name">{report.userName}</h2>
+              <button
+                type="button"
+                onClick={openMonitoredUserProfile}
+                className="text-2xl font-bold hover:underline focus:outline-none focus-visible:underline"
+                data-testid="text-report-name"
+              >
+                {report.userName}
+              </button>
               <p className="text-muted-foreground" data-testid="text-report-period">
                 {periodLabel} Report: {report.periodStart} to {report.periodEnd}
               </p>

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Navigation, Footprints, Car, Bike, PersonStanding, Zap, RefreshCw, ExternalLink, Clock, Route, ArrowRight, Shield, Hospital, Flame, History, Play, Pause, X, Layers } from "lucide-react";
 import { BackButton } from "@/components/back-button";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes, subDays, startOfDay, endOfDay } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { formatActivity, formatSpeed } from "@/lib/live-location";
@@ -241,6 +241,7 @@ function getTotalDistance(points: LocationPoint[]): number {
 
 export default function LiveLocationViewPage() {
   const [, navigate] = useLocation();
+  const search = useSearch();
   const params = useParams<{ userId: string }>();
   const targetUserId = params.userId;
   const [liveLat, setLiveLat] = useState<number | null>(null);
@@ -417,6 +418,21 @@ export default function LiveLocationViewPage() {
   };
 
   const userName = trail?.share?.userName || "Contact";
+  const returnPath = useMemo(() => {
+    const raw = new URLSearchParams(search).get("from");
+    if (!raw) return null;
+    try {
+      const decoded = decodeURIComponent(raw);
+      return decoded.startsWith("/") && !decoded.startsWith("//") ? decoded : null;
+    } catch {
+      return null;
+    }
+  }, [search]);
+  const handleBack = () => {
+    if (returnPath) return navigate(returnPath);
+    if (typeof window !== "undefined" && window.history.length > 1) return window.history.back();
+    return navigate("/live-location");
+  };
   const timeline = useMemo(() => buildTimeline(livePoints), [livePoints]);
   const stationarySince = useMemo(() => getStationarySince(livePoints, liveActivity), [livePoints, liveActivity]);
   const totalDistance = useMemo(() => getTotalDistance(livePoints), [livePoints]);
@@ -452,7 +468,7 @@ export default function LiveLocationViewPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
-          <BackButton onClick={() => navigate("/live-location")} tone="onPrimary" />
+          <BackButton onClick={handleBack} tone="onPrimary" />
           <h1 className="text-lg font-semibold truncate">{userName}</h1>
         </div>
         <div className="relative flex-1 min-h-[45vh]">
@@ -479,7 +495,7 @@ export default function LiveLocationViewPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
-        <BackButton onClick={() => navigate("/live-location")} tone="onPrimary" />
+        <BackButton onClick={handleBack} tone="onPrimary" />
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-semibold truncate">{userName}</h1>
           <p className="text-xs opacity-80">{isFresh ? "Live now" : freshnessText}</p>
