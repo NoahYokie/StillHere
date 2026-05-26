@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Check, AlertTriangle, Clock, Phone, UserCheck, AlertCircle, Bell, Activity, Car, Smartphone, Timer, Navigation, ShieldCheck } from "lucide-react";
+import { Check, AlertTriangle, Clock, Phone, UserCheck, AlertCircle, Bell, MessageSquare, Activity, Car, Smartphone, Timer, Navigation, ShieldCheck } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import type { UserStatus } from "@shared/schema";
 import { format } from "date-fns";
@@ -96,6 +96,7 @@ function EscalationBanner({ status }: { status: UserStatus }) {
 
   const isSOSReason = incident.reason === "sos";
   const title = isSOSReason ? "Help request active" : "Missed checkin alert";
+  const wellnessStatus = (incident as any).wellnessCallStatus as string | null | undefined;
 
   if (incident.status === "paused") {
     const contactName = handlingContact?.name || "A contact";
@@ -122,6 +123,42 @@ function EscalationBanner({ status }: { status: UserStatus }) {
   try { notifiedIds = JSON.parse((incident as any).notifiedContactIds || "[]"); } catch { notifiedIds = []; }
 
   const steps: { label: string; done: boolean; icon: JSX.Element }[] = [];
+
+  if ((incident as any).pushSentAt) {
+    steps.push({
+      label: "Push reminder sent to your phone",
+      done: true,
+      icon: <Bell className="h-3.5 w-3.5" />,
+    });
+  }
+
+  if ((incident as any).smsSentAt) {
+    steps.push({
+      label: "SMS reminder sent to your phone",
+      done: true,
+      icon: <MessageSquare className="h-3.5 w-3.5" />,
+    });
+  }
+
+  if ((incident as any).callSentAt || wellnessStatus) {
+    const wellnessLabel =
+      wellnessStatus === "voicemail_left"
+        ? "Wellness call attempted. Reached voicemail or no keypad response"
+        : wellnessStatus === "no_response"
+        ? "Wellness call attempted. No answer"
+        : wellnessStatus === "failed"
+        ? "Wellness call attempted but could not connect"
+        : wellnessStatus === "safe"
+        ? "Wellness call answered. You confirmed safe"
+        : wellnessStatus === "help"
+        ? "Wellness call answered. You requested help"
+        : "Wellness call attempted";
+    steps.push({
+      label: wellnessLabel,
+      done: true,
+      icon: <Phone className="h-3.5 w-3.5" />,
+    });
+  }
 
   for (const contact of sortedContacts) {
     if (notifiedIds.includes(contact.id)) {
@@ -179,6 +216,12 @@ function EscalationBanner({ status }: { status: UserStatus }) {
                   </div>
                 ))}
               </div>
+            )}
+
+            {(incident as any).callSentAt && (
+              <p className="text-xs text-amber-700/80 dark:text-amber-300/70 mt-3" data-testid="text-wellness-call-help">
+                Save the StillHere number so wellness calls ring normally.
+              </p>
             )}
 
             {steps.length === 0 && (

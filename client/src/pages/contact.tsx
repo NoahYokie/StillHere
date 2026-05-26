@@ -61,6 +61,15 @@ function WeatherPanel({ weather, name }: { weather: WeatherSummary | null | unde
   );
 }
 
+function emergencyNumberForTimezone(timezone?: string | null): string {
+  const tz = timezone || "";
+  if (tz.includes("Australia")) return "000";
+  if (tz.includes("Pacific/Auckland")) return "111";
+  if (tz.includes("Europe/London")) return "999";
+  if (tz.includes("Europe/")) return "112";
+  return "911";
+}
+
 export default function ContactPage() {
   const { token } = useParams<{ token: string }>();
   const { toast } = useToast();
@@ -229,6 +238,7 @@ export default function ContactPage() {
   const isBeingHandled = incident?.status === "paused" && handlingContact;
   const isMissedCheckin = incident?.reason === "missed_checkin";
   const isSOS = incident?.reason === "sos";
+  const emergencyNumber = emergencyNumberForTimezone(user.timezone);
   const hasTrip = safetyTimer || safeWalk || crashDrive;
   const trailPoints = (tripTrail || []).map((p: any) => ({ lat: p.lat, lng: p.lng, activity: p.activity, timestamp: p.recordedAt?.toString() }));
 
@@ -317,6 +327,12 @@ export default function ContactPage() {
                   case "push": return <Bell className="h-3.5 w-3.5" />;
                   case "sms": return <MessageCircleMore className="h-3.5 w-3.5" />;
                   case "call": case "call_failed": return <PhoneCall className="h-3.5 w-3.5" />;
+                  case "wellness_call_placed":
+                  case "wellness_call_answered_human":
+                  case "wellness_call_voicemail_left":
+                  case "wellness_call_no_response":
+                  case "wellness_call_failed":
+                    return <PhoneCall className="h-3.5 w-3.5" />;
                   case "contact_alert": case "contact_escalation": return <Shield className="h-3.5 w-3.5" />;
                   default: return <Clock className="h-3.5 w-3.5" />;
                 }
@@ -327,7 +343,13 @@ export default function ContactPage() {
                   case "push": return "text-blue-600 bg-blue-100 dark:bg-blue-900/40 dark:text-blue-400";
                   case "sms": return "text-green-600 bg-green-100 dark:bg-green-900/40 dark:text-green-400";
                   case "call": return "text-purple-600 bg-purple-100 dark:bg-purple-900/40 dark:text-purple-400";
+                  case "wellness_call_placed":
+                  case "wellness_call_answered_human":
+                  case "wellness_call_voicemail_left":
+                  case "wellness_call_no_response":
+                    return "text-purple-600 bg-purple-100 dark:bg-purple-900/40 dark:text-purple-400";
                   case "call_failed": return "text-red-600 bg-red-100 dark:bg-red-900/40 dark:text-red-400";
+                  case "wellness_call_failed": return "text-red-600 bg-red-100 dark:bg-red-900/40 dark:text-red-400";
                   case "contact_alert": case "contact_escalation": return "text-orange-600 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-400";
                   default: return "text-muted-foreground bg-muted";
                 }
@@ -544,6 +566,21 @@ export default function ContactPage() {
               Message {user.name}
             </a>
           </Button>
+
+          {hasActiveIncident && (
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full justify-center gap-3 h-14 text-base font-bold border-2 border-red-600 text-red-700 dark:text-red-400"
+              asChild
+              data-testid="button-call-emergency"
+            >
+              <a href={`tel:${emergencyNumber}`}>
+                <PhoneCall className="h-6 w-6" strokeWidth={2.5} />
+                Call emergency services ({emergencyNumber})
+              </a>
+            </Button>
+          )}
         </div>
 
         {/* Action Buttons */}
@@ -599,11 +636,11 @@ export default function ContactPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-base" data-testid="text-get-app-title">Help faster with StillHere</h3>
+                  <h3 className="font-semibold text-base" data-testid="text-get-app-title">Get the full StillHere experience</h3>
                   <Sparkles className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  This link works without an account. The app gives you faster alerts and a clearer way to support {user.name}.
+                  Download the app to receive live alerts, safety updates, and location sharing. This link still works without an account.
                 </p>
               </div>
             </div>

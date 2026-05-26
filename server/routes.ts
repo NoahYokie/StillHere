@@ -403,6 +403,26 @@ function formatOwnerLocalAlertTime(date: Date, timezone?: string | null): string
   }
 }
 
+async function createProtectedUserSystemAlert(
+  user: { id: string; name?: string | null },
+  content: string,
+  meta?: Record<string, any>,
+): Promise<void> {
+  try {
+    const msg = await storage.saveMessage(user.id, user.id, content, {
+      messageType: "system_alert",
+      meta,
+    });
+    emitToUser(user.id, "message:new", {
+      ...msg,
+      senderName: "StillHere",
+      type: "system-alert",
+    });
+  } catch (err: any) {
+    console.error(`[NOTIFY] In-app system alert failed for user=${user.id}:`, err?.message || err);
+  }
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null; watcherConsentStatus?: string | null },
   userName: string,
@@ -7616,6 +7636,17 @@ export async function registerRoutes(
           });
 
           await sendReminderPush(user.id, user.name);
+          await createProtectedUserSystemAlert(
+            user,
+            `You missed your scheduled check-in at ${localDueLabel}. StillHere is trying to reach you.`,
+            {
+              kind: "missed_checkin",
+              incidentId: incident.id,
+              dueOccurrenceKey,
+              scheduledDueAt: dueTime.toISOString(),
+              localDueTime: localDueLabel,
+            },
+          );
           console.log(`[ESCALATION] Step 1/3: Push sent to user=${user.id}`);
 
           if (settings.locationMode === "emergency_only" || settings.locationMode === "both") {
@@ -7715,6 +7746,16 @@ export async function registerRoutes(
             console.log(`[ESCALATION] Step 2/3: SMS sent to user=${user.id} (phone ***${user.phone.slice(-4)})`);
           } else {
             await sendReminderPush(user.id, user.name);
+            await createProtectedUserSystemAlert(
+              user,
+              "StillHere sent another missed check-in reminder because no phone number is available for SMS.",
+              {
+                kind: "missed_checkin",
+                incidentId: incident.id,
+                dueOccurrenceKey,
+                stage: "push_no_phone",
+              },
+            );
             existingTimeline.push({ type: "push", time: timeStr, detail: "Push reminder sent because no phone is available. Still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: Push sent to user=${user.id} (no phone for SMS)`);
           }
@@ -7841,7 +7882,7 @@ export async function registerRoutes(
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: firstContact.id, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `All attempts exhausted. Emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contacts alerted after no response. First contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -7869,7 +7910,7 @@ export async function registerRoutes(
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: firstContact.id, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
               await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
-              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Call unanswered, all attempts exhausted. Emergency contact notified: ${firstContact.name}` });
+              existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contacts alerted after no response to the wellness call. First contact notified: ${firstContact.name}` });
             }
           }
           notifyConcern(user.id, user.name, incident.reason as any).catch((err) => {
@@ -7993,6 +8034,15 @@ export async function registerRoutes(
           if (incident.reason === "missed_checkin") {
             existingTimeline.push({ type: "push", time: timeStr, detail: "Push notification sent (legacy recovery)" });
             await sendReminderPush(user.id, user.name);
+            await createProtectedUserSystemAlert(
+              user,
+              "StillHere restarted your missed check-in reminder flow for an open incident.",
+              {
+                kind: "missed_checkin",
+                incidentId: incident.id,
+                stage: "legacy_recovery",
+              },
+            );
             await storage.updateIncident(incident.id, {
               lastEscalationStep: "push",
               pushSentAt: now,
