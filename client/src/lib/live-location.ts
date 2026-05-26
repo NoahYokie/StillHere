@@ -19,8 +19,7 @@ import {
   clearCachedPolicy,
 } from "./tracking-policy-cache";
 import { getSocket } from "./socket";
-
-type ActivityType = "stationary" | "walking" | "running" | "cycling" | "driving";
+import { detectActivityFromSpeed, formatActivity, type ActivityType } from "@shared/activity-detection";
 
 type LocationListener = (data: {
   lat: number;
@@ -54,15 +53,6 @@ const STALE_THRESHOLD_MS = 45000;
 const POLICY_POLL_MS = 60000;
 
 const SILENT_WAV_BASE64 = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-
-function detectActivityFromSpeed(speedMs: number | null | undefined): ActivityType {
-  if (speedMs == null || speedMs < 0.5) return "stationary";
-  const kmh = speedMs * 3.6;
-  if (kmh < 7) return "walking";
-  if (kmh < 20) return "running";
-  if (kmh < 35) return "cycling";
-  return "driving";
-}
 
 function distanceMeters(a: GeolocationPosition, b: GeolocationPosition): number {
   const R = 6371000;
@@ -659,16 +649,7 @@ window.addEventListener("focus", () => {
   }
 });
 
-export function formatActivity(activity: string | null | undefined): string {
-  switch (activity) {
-    case "stationary": return "Stationary";
-    case "walking": return "Walking";
-    case "running": return "Running";
-    case "cycling": return "Cycling";
-    case "driving": return "Driving";
-    default: return "Unknown";
-  }
-}
+export { formatActivity };
 
 export function formatSpeed(speedMs: number | null | undefined): string {
   if (speedMs == null || speedMs < 0.5) return "0 km/h";

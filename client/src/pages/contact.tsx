@@ -512,8 +512,10 @@ export default function ContactPage() {
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-400" />Stationary</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500" />Walking</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" />Running</span>
-                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />Cycling</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" />Bike</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-cyan-500" />Scooter</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-purple-500" />Driving</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />Train / transit</span>
                   </div>
                 </div>
               )}

@@ -53,6 +53,7 @@ import { getTrackingPolicyForUser, emitTrackingPolicyChanged } from "./tracking-
 import { deleteUserAccount, drainProcessorCleanupQueue } from "./accountDeletion";
 import { twilioVoiceLimiter } from "./throughput";
 import { getWeatherSummary } from "./weather";
+import { detectActivityFromSpeed } from "@shared/activity-detection";
 
 // Helper to get userId from session
 // Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
@@ -162,15 +163,6 @@ function formatContextEvent(type: string, placeName: string | null, detail: stri
     case "trip_end": return placeName ? `Arrived at ${place}` : "Arrived safely";
     default: return type;
   }
-}
-
-function detectActivity(speedMs: number | null | undefined): string {
-  if (speedMs == null || speedMs < 0.5) return "stationary";
-  const kmh = speedMs * 3.6;
-  if (kmh < 7) return "walking";
-  if (kmh < 20) return "running";
-  if (kmh < 35) return "cycling";
-  return "driving";
 }
 
 type CheckinMethod = "app" | "sms" | "call";
@@ -5494,7 +5486,7 @@ export async function registerRoutes(
       const { lat, lng, accuracy, speed, heading, activity } = req.body;
       if (lat == null || lng == null) return res.status(400).json({ error: "lat and lng are required" });
 
-      const detectedActivity = activity || detectActivity(speed);
+      const detectedActivity = activity || detectActivityFromSpeed(speed);
       const point = await storage.updateLiveLocation(
         share.id, userId, lat, lng,
         accuracy ?? null, speed ?? null, heading ?? null, detectedActivity

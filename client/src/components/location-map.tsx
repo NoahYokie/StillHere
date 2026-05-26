@@ -34,7 +34,9 @@ const activityColors: Record<string, string> = {
   walking: "#22c55e",
   running: "#f97316",
   cycling: "#3b82f6",
+  scooter: "#06b6d4",
   driving: "#a855f7",
+  transit: "#6366f1",
 };
 
 let pulseStyleInjected = false;

@@ -264,6 +264,8 @@ export function getUserContext(userId: string): UserContext {
     const activity = state.lastActivity;
     let verb = "Heading out";
     if (activity === "driving") verb = "Driving";
+    else if (activity === "transit") verb = "On transit";
+    else if (activity === "scooter") verb = "On a scooter";
     else if (activity === "walking") verb = "Heading out";
     else if (activity === "running") verb = "On a run";
     else if (activity === "cycling") verb = "Cycling";

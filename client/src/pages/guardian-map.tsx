@@ -74,8 +74,10 @@ const ACTIVITY_LABEL: Record<string, string> = {
   stationary: "Still",
   walking: "Walking",
   running: "Running",
-  cycling: "Cycling",
+  cycling: "Bike",
+  scooter: "Scooter",
   driving: "Driving",
+  transit: "Train / transit",
 };
 
 function ActivityIcon({ activity, className }: { activity?: string | null; className?: string }) {
@@ -85,8 +87,10 @@ function ActivityIcon({ activity, className }: { activity?: string | null; class
     case "running":
       return <Footprints className={cls} />;
     case "cycling":
+    case "scooter":
       return <Bike className={cls} />;
     case "driving":
+    case "transit":
       return <Car className={cls} />;
     default:
       return <CircleDot className={cls} />;

@@ -623,7 +623,7 @@ export const locationBreadcrumbsRelations = relations(locationBreadcrumbs, ({ on
 }));
 
 // Live Location Sharing table
-export const activityTypeEnum = pgEnum("activity_type", ["stationary", "walking", "running", "cycling", "driving"]);
+export const activityTypeEnum = pgEnum("activity_type", ["stationary", "walking", "running", "cycling", "scooter", "driving", "transit"]);
 
 export const liveLocationShares = pgTable("live_location_shares", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -1223,7 +1223,7 @@ export interface FamilyMemberView {
   locationStatus?: "live" | "last_known" | "hidden" | "none";
   locationStatusReason?: "sharing_paused" | "presence_only" | "location_unavailable" | "permission_denied" | null;
   lastKnownLocationAt?: Date | null;
-  lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
+  lastActivity: "stationary" | "walking" | "running" | "cycling" | "scooter" | "driving" | "transit" | null;
   hasActiveIncident: boolean;
   // IANA timezone (e.g. "America/New_York") so the family UI can show each
   // member's local clock when they're in a different time zone.
@@ -1402,7 +1402,7 @@ export interface WatchedUser {
   locationStatus?: "live" | "last_known" | "hidden" | "none";
   locationStatusReason?: "sharing_paused" | "presence_only" | "location_unavailable" | "permission_denied" | null;
   lastKnownLocationAt?: Date | null;
-  lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null;
+  lastActivity: "stationary" | "walking" | "running" | "cycling" | "scooter" | "driving" | "transit" | null;
   lastSpeed: number | null;
   batteryLevel: number | null;
   batteryCharging: boolean | null;

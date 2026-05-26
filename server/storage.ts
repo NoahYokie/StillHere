@@ -2376,7 +2376,7 @@ export class DatabaseStorage implements IStorage {
       let lastLocationLat: number | null = null;
       let lastLocationLng: number | null = null;
       let lastLocationAcc: number | null = null;
-      let lastActivity: "stationary" | "walking" | "running" | "cycling" | "driving" | null = null;
+      let lastActivity: "stationary" | "walking" | "running" | "cycling" | "scooter" | "driving" | "transit" | null = null;
       let lastSpeed: number | null = null;
       const activeSession = await db.select().from(locationSessions).where(
         and(eq(locationSessions.userId, user.id), eq(locationSessions.active, true))

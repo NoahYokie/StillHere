@@ -47,7 +47,9 @@ function getActivityIcon(activity: string | null) {
     case "walking": return <Footprints className="h-4 w-4" />;
     case "running": return <Zap className="h-4 w-4" />;
     case "cycling": return <Bike className="h-4 w-4" />;
+    case "scooter": return <Bike className="h-4 w-4" />;
     case "driving": return <Car className="h-4 w-4" />;
+    case "transit": return <Car className="h-4 w-4" />;
     default: return <PersonStanding className="h-4 w-4" />;
   }
 }
@@ -57,7 +59,9 @@ function getActivityColor(activity: string | null): string {
     case "walking": return "bg-green-500";
     case "running": return "bg-orange-500";
     case "cycling": return "bg-blue-500";
+    case "scooter": return "bg-cyan-500";
     case "driving": return "bg-purple-500";
+    case "transit": return "bg-indigo-500";
     default: return "bg-gray-400";
   }
 }

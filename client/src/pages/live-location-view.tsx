@@ -65,7 +65,9 @@ function getActivityIcon(activity: string | null, size = "h-5 w-5") {
     case "walking": return <Footprints className={size} />;
     case "running": return <Zap className={size} />;
     case "cycling": return <Bike className={size} />;
+    case "scooter": return <Bike className={size} />;
     case "driving": return <Car className={size} />;
+    case "transit": return <Car className={size} />;
     default: return <PersonStanding className={size} />;
   }
 }
@@ -75,7 +77,9 @@ function getActivityColor(activity: string | null): string {
     case "walking": return "bg-green-500 text-white";
     case "running": return "bg-orange-500 text-white";
     case "cycling": return "bg-blue-500 text-white";
+    case "scooter": return "bg-cyan-500 text-white";
     case "driving": return "bg-purple-500 text-white";
+    case "transit": return "bg-indigo-500 text-white";
     default: return "bg-gray-400 text-white";
   }
 }
@@ -85,7 +89,9 @@ function getActivityBorderColor(activity: string | null): string {
     case "walking": return "border-green-500";
     case "running": return "border-orange-500";
     case "cycling": return "border-blue-500";
+    case "scooter": return "border-cyan-500";
     case "driving": return "border-purple-500";
+    case "transit": return "border-indigo-500";
     default: return "border-gray-400";
   }
 }
@@ -180,7 +186,9 @@ function buildTimeline(points: LocationPoint[]): TimelineSegment[] {
       const durMin = differenceInSeconds(new Date(segPoints[segPoints.length - 1].recordedAt), new Date(segPoints[0].recordedAt)) / 60;
 
       const dominantActivity = prevIsMoving
-        ? (segPoints.filter(p => p.activity === "driving").length > segPoints.length / 2 ? "driving"
+        ? (segPoints.filter(p => p.activity === "transit").length > segPoints.length / 2 ? "transit"
+          : segPoints.filter(p => p.activity === "driving").length > segPoints.length / 2 ? "driving"
+          : segPoints.filter(p => p.activity === "scooter").length > segPoints.length / 2 ? "scooter"
           : segPoints.filter(p => p.activity === "cycling").length > segPoints.length / 2 ? "cycling"
           : segPoints.filter(p => p.activity === "running").length > segPoints.length / 2 ? "running"
           : segPoints.filter(p => p.activity === "walking").length > segPoints.length / 2 ? "walking"

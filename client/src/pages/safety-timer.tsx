@@ -12,6 +12,7 @@ import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import { locationFreshnessLabel } from "@/lib/location-freshness";
+import { detectActivityFromSpeed } from "@shared/activity-detection";
 import type { SafetyTimer, TripPoint } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -35,14 +36,6 @@ function formatCountdown(ms: number): string {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
-function getActivityFromSpeed(speedMps: number | null): string {
-  if (!speedMps || speedMps < 0.5) return "stationary";
-  if (speedMps < 2) return "walking";
-  if (speedMps < 5) return "running";
-  if (speedMps < 8) return "cycling";
-  return "driving";
 }
 
 export default function SafetyTimerPage() {
@@ -123,7 +116,7 @@ export default function SafetyTimerPage() {
     try {
       const pos = await getOneShotPosition();
       if (!pos) return;
-      const activity = getActivityFromSpeed(pos.speed);
+      const activity = detectActivityFromSpeed(pos.speed);
       await apiRequest("POST", "/api/safety-timer/location", {
         lat: pos.lat,
         lng: pos.lng,

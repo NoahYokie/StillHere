@@ -103,15 +103,19 @@ const activityColors: Record<string, string> = {
   walking: "#22c55e",
   running: "#f97316",
   cycling: "#3b82f6",
+  scooter: "#06b6d4",
   driving: "#a855f7",
+  transit: "#6366f1",
 };
 
 const activityLabels: Record<string, string> = {
   stationary: "Stationary",
   walking: "Walking",
   running: "Running",
-  cycling: "Cycling",
+  cycling: "Bike",
+  scooter: "Scooter",
   driving: "Driving",
+  transit: "Train / transit",
 };
 
 function createMarkerElement(activity?: string | null): HTMLElement {
@@ -145,8 +149,10 @@ function getSafetyLabel(person: MapPerson): string | null {
 function getActivityGlyphSvg(activity: string | null | undefined, color: string): string {
   switch (activity) {
     case "driving":
+    case "transit":
       return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11h.5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H19v1a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H8v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-1h-.5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1H5zm2.2 0h9.6l-1-3H8.2l-1 3zM7 14a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm10 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>`;
     case "cycling":
+    case "scooter":
       return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true"><circle cx="5.5" cy="17.5" r="3.5" fill="none" stroke="${color}" stroke-width="1.6"/><circle cx="18.5" cy="17.5" r="3.5" fill="none" stroke="${color}" stroke-width="1.6"/><path d="M15 4a1 1 0 1 1 .001 2.001A1 1 0 0 1 15 4zm-3.5 4l2 2.5-3 3 2 2v3h-2v-2l-3-3 4-4-1.5-2H7V6h3l1.5 2z"/></svg>`;
     case "running":
       return `<svg viewBox="0 0 24 24" width="16" height="16" fill="${color}" aria-hidden="true" class="gmap-walk"><path d="M13.5 5.5a1.8 1.8 0 1 1 0-3.6 1.8 1.8 0 0 1 0 3.6zM10 22l1.6-7-2.4-2 .9-4.8c.2-1 1.1-1.7 2-1.5l3.4.6c.4.1.8.4 1 .8l1.5 3 2.6.5-.4 1.9-3.6-.7-1.3-2.6-.7 3.5 2.4 2L16.4 22h-2l-.9-4.4-2.2-2.1L10 22H8z"/></svg>`;

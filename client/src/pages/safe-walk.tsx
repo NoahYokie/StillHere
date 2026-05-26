@@ -16,6 +16,7 @@ import { useLocation } from "wouter";
 import GoogleMap from "@/components/google-map";
 import { useBackgroundLocationEscalation } from "@/components/background-location-provider";
 import { locationFreshnessLabel } from "@/lib/location-freshness";
+import { detectActivityFromSpeed } from "@shared/activity-detection";
 import type { SafeWalk, TripPoint, Geofence } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -25,14 +26,6 @@ function formatCountdown(ms: number): string {
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function getActivityFromSpeed(speedMps: number | null): string {
-  if (!speedMps || speedMps < 0.5) return "stationary";
-  if (speedMps < 2) return "walking";
-  if (speedMps < 5) return "running";
-  if (speedMps < 8) return "cycling";
-  return "driving";
 }
 
 function getDistanceKm(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
@@ -256,7 +249,7 @@ export default function SafeWalkPage() {
     try {
       const pos = await getOneShotPosition();
       if (!pos) return;
-      const activity = getActivityFromSpeed(pos.speed);
+      const activity = detectActivityFromSpeed(pos.speed);
       const res = await apiRequest("POST", "/api/safe-walk/location", {
         lat: pos.lat,
         lng: pos.lng,
