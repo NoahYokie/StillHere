@@ -14,6 +14,9 @@ function getEscalationIcon(type: string) {
   if (type === "sms") return MessageCircleMore;
   if (type === "call" || type === "call_failed" || type.startsWith("wellness_call")) return PhoneCall;
   if (type === "contact_alert" || type === "contact_escalation") return Shield;
+  if (type.startsWith("safety_timer")) return Clock;
+  if (type.startsWith("safe_walk")) return MapPin;
+  if (type.startsWith("delivery")) return MessageCircleMore;
   return Clock;
 }
 
@@ -23,7 +26,20 @@ function getEscalationColor(type: string) {
   if (type === "call" || type.startsWith("wellness_call")) return "text-purple-600 bg-purple-50 border-purple-100";
   if (type === "call_failed") return "text-red-600 bg-red-50 border-red-100";
   if (type === "contact_alert" || type === "contact_escalation") return "text-orange-600 bg-orange-50 border-orange-100";
+  if (type.startsWith("safety_timer")) return "text-amber-600 bg-amber-50 border-amber-100";
+  if (type.startsWith("safe_walk")) return "text-cyan-600 bg-cyan-50 border-cyan-100";
+  if (type.startsWith("delivery")) return "text-slate-600 bg-slate-50 border-slate-100";
   return "text-muted-foreground bg-muted border-border";
+}
+
+function formatIncidentReason(reason: string): string {
+  switch (reason) {
+    case "sos": return "SOS Alert";
+    case "missed_checkin": return "Missed Check-in";
+    case "safety_timer": return "Safety Timer";
+    case "safe_walk": return "Safe Walk";
+    default: return reason.replace(/_/g, " ");
+  }
 }
 
 export default function ReportPage() {
@@ -135,6 +151,35 @@ export default function ReportPage() {
               </CardContent>
             </Card>
 
+            {report.safetyTimeline && report.safetyTimeline.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Shield className="w-4 h-4 text-primary" />
+                    Safety Activity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {report.safetyTimeline.map((entry, i) => {
+                      const Icon = getEscalationIcon(entry.type);
+                      return (
+                        <div key={`${entry.type}-${entry.time}-${i}`} className="flex items-start gap-2 text-xs" data-testid={`row-safety-activity-${i}`}>
+                          <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${getEscalationColor(entry.type)}`}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-foreground">{entry.detail}</span>
+                            <span className="block text-muted-foreground">{new Date(entry.time).toLocaleString()}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {report.incidents.length > 0 && (
               <Card>
                 <CardHeader>
@@ -149,7 +194,7 @@ export default function ReportPage() {
                       <div key={i} className="py-3 border-b border-border last:border-0" data-testid={`row-incident-${i}`}>
                         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                           <span>{inc.date}</span>
-                          <span>{inc.reason === "sos" ? "SOS Alert" : "Missed Checkin"}</span>
+                          <span>{formatIncidentReason(inc.reason)}</span>
                           <Badge variant={inc.resolved ? "secondary" : "destructive"} className="text-xs">
                             {inc.resolved ? "Resolved" : "Open"}
                           </Badge>

@@ -1326,6 +1326,13 @@ export interface EscalationTimelineEntry {
   detail: string;
 }
 
+export interface SafetyActivityTimelineEntry {
+  type: string;
+  time: string;
+  detail: string;
+  source: "checkin" | "missed_checkin" | "safety_timer" | "safe_walk" | "sos" | "contact" | "delivery" | "location" | "system";
+}
+
 export interface ReportData {
   userName: string;
   periodStart: string;
@@ -1334,6 +1341,7 @@ export interface ReportData {
   totalCheckins: number;
   missedCheckins: number;
   complianceRate: number;
+  safetyTimeline: SafetyActivityTimelineEntry[];
   incidents: { date: string; reason: string; resolved: boolean; duration: string | null; escalationTimeline: EscalationTimelineEntry[] }[];
   // Omitted entirely when the user has not opted in to heart-rate monitoring.
   heartRateSummary?: { avgBpm: number; minBpm: number; maxBpm: number; alerts: number };

@@ -7,7 +7,7 @@ import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./noti
 import { addMinutes, addHours, addDays } from "date-fns";
 import { db, pool } from "./db";
 import { eq, and, lt, gte, desc, isNull, sql, inArray } from "drizzle-orm";
-import { users, settings, authSessions, safeWalks, safetyTimers, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, type FamilyRole } from "@shared/schema";
+import { users, settings, authSessions, safeWalks, safetyTimers, watcherNotificationPrefs, incidents, checkins, contextEvents, contacts, outboundSendLog, type FamilyRole } from "@shared/schema";
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -5942,6 +5942,7 @@ export async function registerRoutes(
         .from(contextEvents)
         .where(and(eq(contextEvents.userId, userId), gte(contextEvents.createdAt, weekAgo)))
         .orderBy(desc(contextEvents.createdAt));
+      const safetyActivity = await buildSafetyActivityTimeline(userId, weekAgo, now);
 
       const reasonMap: Record<string, string> = {
         missed_checkin: "Missed check-in",
@@ -6090,6 +6091,10 @@ export async function registerRoutes(
       }
 
       const timeline = deduped.map(({ text, time }) => ({ text, time }));
+      for (const entry of safetyActivity) {
+        timeline.push({ text: entry.detail, time: formatReportTime(new Date(entry.time)) });
+      }
+      timeline.sort((a, b) => reportTimeSortValue(b.time) - reportTimeSortValue(a.time));
 
       res.json({
         summaryTone,
@@ -6180,6 +6185,7 @@ export async function registerRoutes(
       const weekContext = await db.select().from(contextEvents)
         .where(and(eq(contextEvents.userId, watchedUserId), gte(contextEvents.createdAt, weekAgo)))
         .orderBy(desc(contextEvents.createdAt));
+      const safetyActivity = await buildSafetyActivityTimeline(watchedUserId, weekAgo, now);
 
       const reasonMap: Record<string, string> = {
         missed_checkin: "Missed check-in",
@@ -6300,7 +6306,10 @@ export async function registerRoutes(
       res.json({
         summaryTone,
         summary,
-        timeline: deduped.map(({ text, time }) => ({ text, time })),
+        timeline: [
+          ...deduped.map(({ text, time }) => ({ text, time })),
+          ...safetyActivity.map((entry) => ({ text: entry.detail, time: formatReportTime(new Date(entry.time)) })),
+        ].sort((a, b) => reportTimeSortValue(b.time) - reportTimeSortValue(a.time)),
         weekStart: weekAgo.toISOString(),
         weekEnd: now.toISOString(),
         totalCheckins: weekCheckins.length,
@@ -6345,6 +6354,7 @@ export async function registerRoutes(
       const userSettings = await storage.getSettings(watchedUserId);
       const checkinList = await storage.getCheckinHistory(watchedUserId, from, now);
       const incidentList = await storage.getIncidentHistory(watchedUserId, from, now);
+      const safetyActivity = await buildSafetyActivityTimeline(watchedUserId, from, now);
 
       const dayCount = Math.max(1, Math.ceil((now.getTime() - from.getTime()) / 86400000));
       const expectedCheckins = dayCount;
@@ -6408,9 +6418,10 @@ export async function registerRoutes(
         totalCheckins: checkinList.length,
         missedCheckins,
         complianceRate: Math.min(100, complianceRate),
+        safetyTimeline: safetyActivity,
         incidents: incidentList.map(i => ({
           date: fmtDate(i.startedAt, "yyyy-MM-dd"),
-          reason: i.reason,
+          reason: inferIncidentReportReason(i),
           resolved: i.status === "resolved",
           duration: i.resolvedAt
             ? `${Math.round((i.resolvedAt.getTime() - i.startedAt.getTime()) / 60000)} min`
@@ -9581,4 +9592,191 @@ function parseEscalationTimeline(value: string | null | undefined): Array<{ type
   } catch {
     return [];
   }
+}
+
+type SafetyReportTimelineEntry = {
+  type: string;
+  time: string;
+  detail: string;
+  source: "checkin" | "missed_checkin" | "safety_timer" | "safe_walk" | "sos" | "contact" | "delivery" | "location" | "system";
+};
+
+function reportTimeSortValue(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function formatLocationAvailability(at: Date | string | null | undefined): string {
+  if (!at) return "Location not available";
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "Location not available";
+  const ageMs = Date.now() - date.getTime();
+  if (ageMs < 2 * 60 * 1000) return "Location fresh: Live now";
+  const minutes = Math.max(1, Math.round(ageMs / 60000));
+  if (minutes < 60) return `Last known location updated ${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return `Last known location updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+}
+
+function inferIncidentReportReason(incident: any): string {
+  const timeline = parseEscalationTimeline(incident?.escalationTimeline);
+  if (timeline.some((entry) => entry.type?.startsWith("safety_timer"))) return "safety_timer";
+  if (timeline.some((entry) => entry.type?.startsWith("safe_walk"))) return "safe_walk";
+  return incident?.reason || "incident";
+}
+
+function describeDelivery(row: any): string | null {
+  const key = String(row.dedupeKey || "");
+  const channel = String(row.channel || "").toUpperCase();
+  const status = String(row.status || "unknown").replace(/_/g, " ");
+  if (row.purpose === "wellness_call") return `Wellness call ${status}`;
+  if (key.startsWith("safe_walk:")) return `Safe Walk ${channel} delivery ${status}`;
+  if (key.startsWith("safety_timer:")) return `Safety Timer ${channel} delivery ${status}`;
+  if (row.purpose === "reminder") return `Reminder ${channel} delivery ${status}`;
+  if (row.purpose === "missed_checkin_alert") return `Missed check-in ${channel} delivery ${status}`;
+  if (row.purpose === "sos_alert") return `Emergency contact ${channel} alert ${status}`;
+  return null;
+}
+
+async function buildSafetyActivityTimeline(userId: string, from: Date, to: Date): Promise<SafetyReportTimelineEntry[]> {
+  const events: SafetyReportTimelineEntry[] = [];
+  const inWindow = (date: Date | null | undefined) => !!date && date >= from && date <= to;
+
+  const [timerRows, walkRows, incidentRows, deliveryRows] = await Promise.all([
+    db.select().from(safetyTimers).where(eq(safetyTimers.userId, userId)).orderBy(desc(safetyTimers.startedAt)),
+    db.select().from(safeWalks).where(eq(safeWalks.userId, userId)).orderBy(desc(safeWalks.startedAt)),
+    db.select().from(incidents).where(and(eq(incidents.userId, userId), gte(incidents.startedAt, from))).orderBy(desc(incidents.startedAt)),
+    db.select().from(outboundSendLog).where(and(eq(outboundSendLog.userId, userId), gte(outboundSendLog.createdAt, from))).orderBy(desc(outboundSendLog.createdAt)),
+  ]);
+
+  for (const timer of timerRows) {
+    if (inWindow(timer.startedAt)) {
+      const note = timer.note ? ` (${timer.note})` : "";
+      events.push({
+        type: "safety_timer_started",
+        time: timer.startedAt.toISOString(),
+        source: "safety_timer",
+        detail: `Safety Timer started for ${timer.durationMinutes} minutes${note}. ${formatLocationAvailability(timer.lastLocationAt)}.`,
+      });
+      events.push({
+        type: "safety_timer_extension_history_unavailable",
+        time: timer.startedAt.toISOString(),
+        source: "safety_timer",
+        detail: "Safety Timer extension history was not recorded separately in this version.",
+      });
+    }
+    if (timer.status === "safe" && inWindow(timer.resolvedAt)) {
+      events.push({
+        type: "safety_timer_safe",
+        time: timer.resolvedAt!.toISOString(),
+        source: "safety_timer",
+        detail: `Safety Timer cancelled / marked safe. ${formatLocationAvailability(timer.lastLocationAt)}.`,
+      });
+    }
+    if (timer.status === "cancelled" && inWindow(timer.resolvedAt)) {
+      events.push({
+        type: "safety_timer_cancelled",
+        time: timer.resolvedAt!.toISOString(),
+        source: "safety_timer",
+        detail: `Safety Timer cancelled. ${formatLocationAvailability(timer.lastLocationAt)}.`,
+      });
+    }
+    if (timer.status === "escalated" && inWindow(timer.resolvedAt)) {
+      events.push({
+        type: "safety_timer_escalated",
+        time: timer.resolvedAt!.toISOString(),
+        source: "safety_timer",
+        detail: `Safety Timer expired and escalated. ${formatLocationAvailability(timer.lastLocationAt)}.`,
+      });
+    }
+  }
+
+  for (const walk of walkRows) {
+    const destination = walk.destinationName ? ` to ${walk.destinationName}` : "";
+    if (inWindow(walk.startedAt)) {
+      events.push({
+        type: "safe_walk_started",
+        time: walk.startedAt.toISOString(),
+        source: "safe_walk",
+        detail: `Safe Walk started${destination}. Expected arrival: ${walk.expectedArrivalAt.toISOString()}. ${formatLocationAvailability(walk.lastLocationAt)}.`,
+      });
+      events.push({
+        type: "safe_walk_extension_history_unavailable",
+        time: walk.startedAt.toISOString(),
+        source: "safe_walk",
+        detail: "Safe Walk extension history was not recorded separately in this version.",
+      });
+    }
+    if ((walk.status === "overdue" || walk.status === "escalated") && inWindow(walk.expectedArrivalAt)) {
+      events.push({
+        type: "safe_walk_overdue",
+        time: walk.expectedArrivalAt.toISOString(),
+        source: "safe_walk",
+        detail: `Safe Walk became overdue${destination}. ${formatLocationAvailability(walk.lastLocationAt)}.`,
+      });
+    }
+    if (walk.status === "arrived" && inWindow(walk.resolvedAt)) {
+      events.push({
+        type: "safe_walk_arrived",
+        time: walk.resolvedAt!.toISOString(),
+        source: "safe_walk",
+        detail: `Safe Walk marked arrived safely${destination}. ${formatLocationAvailability(walk.lastLocationAt)}.`,
+      });
+    }
+    if (walk.status === "cancelled" && inWindow(walk.resolvedAt)) {
+      events.push({
+        type: "safe_walk_cancelled",
+        time: walk.resolvedAt!.toISOString(),
+        source: "safe_walk",
+        detail: `Safe Walk cancelled${destination}. ${formatLocationAvailability(walk.lastLocationAt)}.`,
+      });
+    }
+    if (walk.status === "escalated" && inWindow(walk.resolvedAt)) {
+      events.push({
+        type: "safe_walk_escalated",
+        time: walk.resolvedAt!.toISOString(),
+        source: "safe_walk",
+        detail: `Safe Walk escalated${destination}; emergency contacts were alerted. ${formatLocationAvailability(walk.lastLocationAt)}.`,
+      });
+    }
+  }
+
+  for (const incident of incidentRows) {
+    const inferred = inferIncidentReportReason(incident);
+    const source = inferred === "safety_timer" ? "safety_timer" : inferred === "safe_walk" ? "safe_walk" : inferred === "missed_checkin" ? "missed_checkin" : "sos";
+    for (const entry of parseEscalationTimeline(incident.escalationTimeline)) {
+      const entryTime = new Date(entry.time);
+      if (!inWindow(entryTime)) continue;
+      events.push({
+        type: entry.type,
+        time: entryTime.toISOString(),
+        source,
+        detail: entry.detail,
+      });
+    }
+  }
+
+  for (const row of deliveryRows) {
+    if (!inWindow(row.createdAt)) continue;
+    if (row.purpose === "drive_crash") continue;
+    const detail = describeDelivery(row);
+    if (!detail) continue;
+    events.push({
+      type: `delivery_${row.channel}_${row.status}`,
+      time: row.createdAt.toISOString(),
+      source: row.purpose === "wellness_call" ? "contact" : "delivery",
+      detail,
+    });
+  }
+
+  const seen = new Set<string>();
+  return events
+    .filter((event) => {
+      const key = `${event.type}:${event.time}:${event.detail}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+    .slice(0, 120);
 }
