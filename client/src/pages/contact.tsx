@@ -106,7 +106,9 @@ export default function ContactPage() {
     data?.safeWalk?.lastLocationAt ??
     data?.lastCheckin?.createdAt ??
     null;
-  const locationIsLive = !!(data?.locationSession?.active && data?.locationSession?.lastLat && isFreshLocation(locationTimestamp));
+  const safetyTripLocationActive = !!(data?.safetyTimer || data?.safeWalk || data?.crashDrive);
+  const locationTrackingActive = !!(data?.locationSession?.active || safetyTripLocationActive);
+  const locationIsLive = !!(locationTrackingActive && locationLat && locationLng && isFreshLocation(locationTimestamp));
 
   useEffect(() => {
     if (locationLat && locationLng) {
@@ -533,7 +535,7 @@ export default function ContactPage() {
               </CardTitle>
               <CardDescription className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                {locationFreshnessLabel(locationTimestamp, !!data?.locationSession?.active)}
+                {locationFreshnessLabel(locationTimestamp, locationTrackingActive)}
                 {locationIsLive && (
                   <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
