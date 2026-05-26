@@ -1225,6 +1225,16 @@ export interface FamilyMemberView {
   lastKnownLocationAt?: Date | null;
   lastActivity: "stationary" | "walking" | "running" | "cycling" | "scooter" | "driving" | "transit" | null;
   hasActiveIncident: boolean;
+  activeSafeWalk: {
+    destinationName: string | null;
+    expectedArrivalAt: Date;
+    lastLat: number | null;
+    lastLng: number | null;
+    lastSpeed: number | null;
+    lastLocationAt: Date | null;
+    lastActivity: "stationary" | "walking" | "running" | "cycling" | "scooter" | "driving" | "transit" | null;
+    status: string;
+  } | null;
   // IANA timezone (e.g. "America/New_York") so the family UI can show each
   // member's local clock when they're in a different time zone.
   timezone: string | null;
@@ -1420,8 +1430,11 @@ export interface WatchedUser {
   activeSafeWalk: {
     destinationName: string | null;
     expectedArrivalAt: Date;
+    lastLat: number | null;
+    lastLng: number | null;
     lastSpeed: number | null;
     lastLocationAt: Date | null;
+    lastActivity: "stationary" | "walking" | "running" | "cycling" | "scooter" | "driving" | "transit" | null;
     status: string;
   } | null;
   weather: WeatherSummary | null;

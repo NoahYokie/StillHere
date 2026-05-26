@@ -2517,8 +2517,11 @@ export class DatabaseStorage implements IStorage {
         activeSafeWalk: activeWalk ? {
           destinationName: activeWalk.destinationName,
           expectedArrivalAt: activeWalk.expectedArrivalAt,
+          lastLat: activeWalk.lastLat,
+          lastLng: activeWalk.lastLng,
           lastSpeed: activeWalk.lastSpeed,
           lastLocationAt: activeWalk.lastLocationAt,
+          lastActivity: activeWalk.lastActivity as any,
           status: activeWalk.status,
         } : null,
         weather: null,
@@ -3417,17 +3420,38 @@ export class DatabaseStorage implements IStorage {
       }
       return { lat, lng };
     };
+    const getAttentionSafeWalk = async (memberUserId: string) => {
+      const [walk] = await db.select().from(safeWalks)
+        .where(and(
+          eq(safeWalks.userId, memberUserId),
+          inArray(safeWalks.status, ["active", "overdue", "escalated"]),
+        ))
+        .orderBy(desc(safeWalks.startedAt))
+        .limit(1);
+      return walk || null;
+    };
+    const serializeSafeWalk = (walk: SafeWalk | null) => walk ? {
+      destinationName: walk.destinationName,
+      expectedArrivalAt: walk.expectedArrivalAt,
+      lastLat: walk.lastLat,
+      lastLng: walk.lastLng,
+      lastSpeed: walk.lastSpeed,
+      lastLocationAt: walk.lastLocationAt,
+      lastActivity: walk.lastActivity as any,
+      status: walk.status,
+    } : null;
 
     // Always include the admin as an implicit "active" member view
     const memberViews: FamilyMemberView[] = [];
     const adminUser = await this.getUser(family.adminUserId);
     if (adminUser) {
+      const adminWalk = await getAttentionSafeWalk(adminUser.id);
       const adminMode = (adminUser as any).sharingMode || "precise";
-      const adminRawLat = (adminUser as any).lastHeartbeatLat ?? null;
-      const adminRawLng = (adminUser as any).lastHeartbeatLng ?? null;
+      const adminRawLat = adminWalk?.lastLat ?? (adminUser as any).lastHeartbeatLat ?? null;
+      const adminRawLng = adminWalk?.lastLng ?? (adminUser as any).lastHeartbeatLng ?? null;
       const adminKnownLat = (adminUser as any).lastLat ?? adminRawLat;
       const adminKnownLng = (adminUser as any).lastLng ?? adminRawLng;
-      const adminKnownAt = (adminUser as any).lastLocationAt ?? (adminUser as any).lastHeartbeatAt ?? null;
+      const adminKnownAt = adminWalk?.lastLocationAt ?? (adminUser as any).lastLocationAt ?? (adminUser as any).lastHeartbeatAt ?? null;
       const adminHidden = adminMode === "paused" || adminMode === "presence";
       const adminSourceLat = adminRawLat ?? adminKnownLat;
       const adminSourceLng = adminRawLng ?? adminKnownLng;
@@ -3457,8 +3481,9 @@ export class DatabaseStorage implements IStorage {
         locationStatus: adminLocationStatus as any,
         locationStatusReason: adminMode === "paused" ? "sharing_paused" : adminMode === "presence" ? "presence_only" : null,
         lastKnownLocationAt: adminKnownAt,
-        lastActivity: (adminUser as any).lastActivity ?? null,
+        lastActivity: (adminWalk?.lastActivity as any) ?? (adminUser as any).lastActivity ?? null,
         hasActiveIncident: false,
+        activeSafeWalk: serializeSafeWalk(adminWalk),
         timezone: (adminUser as any).timezone || null,
       });
     }
@@ -3476,6 +3501,7 @@ export class DatabaseStorage implements IStorage {
       let memberLocationStatus: "live" | "last_known" | "hidden" | "none" = "none";
       let timezone: string | null = null;
       let resolvedSharingMode: any = row.sharingMode;
+      let activeSafeWalk: SafeWalk | null = null;
 
       // CRITICAL CONSENT GATE: only effectively-active members hydrate any
       // location, presence, or safety data. Pending and active_legacy-expired
@@ -3486,14 +3512,15 @@ export class DatabaseStorage implements IStorage {
       if (row.userId && exposeMemberData) {
         const u = await this.getUser(row.userId);
         if (u) {
+          activeSafeWalk = await getAttentionSafeWalk(u.id);
           name = u.name || name;
           phone = u.phone || phone;
           safetyState = (u as any).safetyState || null;
           lastSeenAt = (u as any).lastHeartbeatAt || null;
-          lastLat = (u as any).lastHeartbeatLat ?? null;
-          lastLng = (u as any).lastHeartbeatLng ?? null;
+          lastLat = activeSafeWalk?.lastLat ?? (u as any).lastHeartbeatLat ?? null;
+          lastLng = activeSafeWalk?.lastLng ?? (u as any).lastHeartbeatLng ?? null;
           lastAccuracy = (u as any).lastHeartbeatAcc ?? null;
-          lastActivity = (u as any).lastActivity ?? null;
+          lastActivity = (activeSafeWalk?.lastActivity as any) ?? (u as any).lastActivity ?? null;
           timezone = (u as any).timezone || null;
           resolvedSharingMode = row.sharingMode;
 
@@ -3504,7 +3531,7 @@ export class DatabaseStorage implements IStorage {
           const knownLng = (u as any).lastLng ?? rawLng;
           const sourceLat = rawLat ?? knownLat;
           const sourceLng = rawLng ?? knownLng;
-          lastKnownLocationAt = (u as any).lastLocationAt ?? lastSeenAt;
+          lastKnownLocationAt = activeSafeWalk?.lastLocationAt ?? (u as any).lastLocationAt ?? lastSeenAt;
           const sharingHidden = resolvedSharingMode === "paused" || resolvedSharingMode === "presence";
           const memberLoc = sharingHidden
             ? { lat: knownLat, lng: knownLng }
@@ -3558,6 +3585,7 @@ export class DatabaseStorage implements IStorage {
         lastKnownLocationAt,
         lastActivity,
         hasActiveIncident: false,
+        activeSafeWalk: exposeMemberData ? serializeSafeWalk(activeSafeWalk) : null,
         timezone,
       });
     }

@@ -415,6 +415,106 @@ async function createProtectedUserSystemAlert(
   }
 }
 
+async function placeWellnessCallForIncident(
+  user: { id: string; phone?: string | null; name?: string | null },
+  incident: { id: string },
+  timeline: Array<{ type: string; time: string; detail: string }>,
+  time: Date,
+  detailPrefix = "Wellness call",
+): Promise<boolean> {
+  const timeStr = time.toISOString();
+  const userSettings = await storage.getSettings(user.id).catch(() => null);
+  const autoWellnessCallFlag = !!(userSettings as any)?.autoWellnessCall;
+  const twilioReady = isTwilioConfigured();
+  const hasPhone = !!user.phone;
+
+  console.log(JSON.stringify({
+    event: "CALL_FLOW_DIAGNOSTIC",
+    source: "safe_walk",
+    userId: user.id,
+    autoWellnessCallEnabled: autoWellnessCallFlag,
+    twilioConfigured: twilioReady,
+    hasPhone,
+    phoneLast4: hasPhone && user.phone ? `***${user.phone.slice(-4)}` : null,
+    willAttemptCall: autoWellnessCallFlag && twilioReady && hasPhone,
+    incidentId: incident.id,
+    timestamp: timeStr,
+  }));
+
+  if (!autoWellnessCallFlag || !twilioReady || !user.phone) {
+    const reasons = [];
+    if (!autoWellnessCallFlag) reasons.push("autoWellnessCall disabled");
+    if (!twilioReady) reasons.push("Twilio not configured");
+    if (!hasPhone) reasons.push("no phone number");
+    const reason = reasons.join(", ");
+    timeline.push({ type: "call_skipped", time: timeStr, detail: `${detailPrefix} skipped: ${reason}` });
+    console.log(`[SAFE-WALK] Wellness call skipped for user=${user.id}: ${reason}`);
+    return false;
+  }
+
+  const voicePolicy = await import("./outbound-policy");
+  let voiceAttemptId: string | undefined;
+  try {
+    const voiceDecision = await voicePolicy.enforceSendPolicy({
+      channel: "voice",
+      purpose: "wellness_call",
+      destination: user.phone,
+      userId: user.id,
+      incidentId: incident.id,
+      dedupeKey: `wellness_call:${incident.id}`,
+    });
+    voiceAttemptId = voiceDecision.attemptId;
+    if (voiceDecision.degraded) {
+      await storage.updateIncident(incident.id, { degradedDelivery: true });
+    }
+    if (!voiceDecision.allowed) {
+      timeline.push({ type: "call_failed", time: timeStr, detail: `${detailPrefix} blocked by policy: ${voiceDecision.reason}` });
+      console.warn(`[SAFE-WALK] Wellness call blocked by policy (${voiceDecision.reason}) for user=${user.id}`);
+      return false;
+    }
+
+    const twilio = (await import("twilio")).default;
+    const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
+    const voiceFromNumber = getTwilioVoiceFromNumber();
+    if (!voiceFromNumber) {
+      throw new Error("Twilio voice caller number is not configured. Set TWILIO_VOICE_PHONE_NUMBER to a verified or purchased Twilio voice number.");
+    }
+    const baseUrl = getBaseUrl();
+    const callParams: any = {
+      to: user.phone!,
+      from: voiceFromNumber,
+      url: `${baseUrl}/api/wellness-call/respond`,
+      method: "POST",
+      machineDetection: "DetectMessageEnd",
+      asyncAmd: true,
+      asyncAmdStatusCallback: `${baseUrl}/api/wellness-call/status`,
+      asyncAmdStatusCallbackMethod: "POST",
+      statusCallback: `${baseUrl}/api/wellness-call/status`,
+      statusCallbackMethod: "POST",
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+    };
+    const callResult = await twilioVoiceLimiter.run(() => client.calls.create(callParams));
+    await voicePolicy.markSendProviderResult(voiceAttemptId, "sent", { providerId: callResult.sid });
+    timeline.push({ type: "call", time: timeStr, detail: `${detailPrefix} placed` });
+    await storage.updateIncident(incident.id, {
+      callSentAt: time,
+      wellnessCallStatus: "placed",
+      escalationTimeline: JSON.stringify(timeline),
+    });
+    console.log(`[SAFE-WALK] Wellness call placed for user=${user.id} (SID: ${callResult.sid})`);
+    return true;
+  } catch (err: any) {
+    const callError = err?.message || "unknown error";
+    timeline.push({ type: "call_failed", time: timeStr, detail: `${detailPrefix} failed: ${callError}` });
+    console.error(`[SAFE-WALK] Wellness call failed for user=${user.id}: ${callError}`);
+    try {
+      await voicePolicy.markSendProviderResult(voiceAttemptId, "failed", { errorMessage: callError });
+      await storage.updateIncident(incident.id, { degradedDelivery: true });
+    } catch {}
+    return false;
+  }
+}
+
 async function notifyContact(
   contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null; watcherConsentStatus?: string | null },
   userName: string,
@@ -8376,6 +8476,20 @@ export async function registerRoutes(
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for user=${walk.userId}:`, err?.message || err);
             });
+            const escalationTimeline = [
+              {
+                type: "safe_walk_escalated",
+                time: now.toISOString(),
+                detail: `Safe Walk${destInfo} escalated because the user did not arrive or respond.`,
+              },
+            ];
+            await placeWellnessCallForIncident(
+              user,
+              incident,
+              escalationTimeline,
+              now,
+              "Wellness call attempted for Safe Walk escalation",
+            );
             // Phase 2: incident-scoped tokens for the safe-walk incident.
             const tokens = await storage.getOrMintIncidentTokensForUser(walk.userId, incident.startedAt);
             const contacts = (await storage.getContacts(walk.userId)).filter(isContactActiveForAlerts);
@@ -8417,6 +8531,11 @@ export async function registerRoutes(
               }
               allContactIds.push(contact.id);
             }
+            escalationTimeline.push({
+              type: "contact_alert",
+              time: now.toISOString(),
+              detail: `Emergency contacts alerted for Safe Walk${destInfo}. Notified ${allContactIds.length} contact(s).`,
+            });
 
             await storage.updateIncident(incident.id, {
               escalationLevel: allContactIds.length,
@@ -8427,13 +8546,7 @@ export async function registerRoutes(
               contact2NotifiedAt: allContactIds.length > 1 ? now : undefined,
               allContactsNotifiedAt: now,
               nextActionAt: addMinutes(now, 30),
-              escalationTimeline: JSON.stringify([
-                {
-                  type: "safe_walk_escalated",
-                  time: now.toISOString(),
-                  detail: `Safe Walk${destInfo} escalated. Emergency contacts were notified immediately.`,
-                },
-              ]),
+              escalationTimeline: JSON.stringify(escalationTimeline),
             });
 
             walkEscalations++;
@@ -9695,6 +9808,14 @@ async function buildSafetyActivityTimeline(userId: string, from: Date, to: Date)
 
   for (const walk of walkRows) {
     const destination = walk.destinationName ? ` to ${walk.destinationName}` : "";
+    const correlatedIncident = incidentRows.find((incident) => {
+      if (incident.reason !== "sos" || !incident.startedAt) return false;
+      const startedAt = new Date(incident.startedAt).getTime();
+      const dueAt = new Date(walk.expectedArrivalAt).getTime();
+      const resolvedAt = walk.resolvedAt ? new Date(walk.resolvedAt).getTime() : dueAt + 2 * 60 * 60 * 1000;
+      return startedAt >= dueAt && startedAt <= resolvedAt + 5 * 60 * 1000;
+    });
+    const resolvedLate = !!walk.resolvedAt && new Date(walk.resolvedAt).getTime() > new Date(walk.expectedArrivalAt).getTime();
     if (inWindow(walk.startedAt)) {
       events.push({
         type: "safe_walk_started",
@@ -9709,7 +9830,7 @@ async function buildSafetyActivityTimeline(userId: string, from: Date, to: Date)
         detail: "Safe Walk extension history was not recorded separately in this version.",
       });
     }
-    if ((walk.status === "overdue" || walk.status === "escalated") && inWindow(walk.expectedArrivalAt)) {
+    if ((walk.status === "overdue" || walk.status === "escalated" || resolvedLate || correlatedIncident) && inWindow(walk.expectedArrivalAt)) {
       events.push({
         type: "safe_walk_overdue",
         time: walk.expectedArrivalAt.toISOString(),
@@ -9737,6 +9858,13 @@ async function buildSafetyActivityTimeline(userId: string, from: Date, to: Date)
       events.push({
         type: "safe_walk_escalated",
         time: walk.resolvedAt!.toISOString(),
+        source: "safe_walk",
+        detail: `Safe Walk escalated${destination}; emergency contacts were alerted. ${formatLocationAvailability(walk.lastLocationAt)}.`,
+      });
+    } else if (correlatedIncident && inWindow(correlatedIncident.startedAt)) {
+      events.push({
+        type: "safe_walk_escalated",
+        time: correlatedIncident.startedAt.toISOString(),
         source: "safe_walk",
         detail: `Safe Walk escalated${destination}; emergency contacts were alerted. ${formatLocationAvailability(walk.lastLocationAt)}.`,
       });

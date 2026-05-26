@@ -82,6 +82,15 @@ function safetyTone(m: FamilyMemberView): { label: string; dot: string; tone: st
     return { label: "Declined", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
   }
   if (m.status === "paused") return { label: "Paused", dot: "bg-muted-foreground/40", tone: "text-muted-foreground" };
+  if (m.activeSafeWalk?.status === "escalated") {
+    return { label: "Safe Walk escalated", dot: "bg-destructive animate-pulse", tone: "text-destructive" };
+  }
+  if (m.activeSafeWalk?.status === "overdue") {
+    return { label: "Safe Walk overdue", dot: "bg-amber-500 animate-pulse", tone: "text-amber-600 dark:text-amber-400" };
+  }
+  if (m.activeSafeWalk?.status === "active") {
+    return { label: "Safe Walk active", dot: "bg-primary animate-pulse", tone: "text-primary" };
+  }
   if (m.hasActiveIncident || m.safetyState === "concern") {
     return { label: "Needs help", dot: "bg-destructive animate-pulse", tone: "text-destructive" };
   }
@@ -112,6 +121,21 @@ function familyLocationStatusText(m: FamilyMemberView): string {
   if (m.locationStatusReason === "presence_only") return "Precise location sharing is off. No last known location is available yet.";
   if (m.locationStatusReason === "permission_denied") return "Location sharing is not available for this member.";
   return "Location has not been shared yet.";
+}
+
+function safeWalkStatusText(m: FamilyMemberView): string | null {
+  const walk = m.activeSafeWalk;
+  if (!walk) return null;
+  const destination = walk.destinationName ? ` to ${walk.destinationName}` : "";
+  const eta = walk.expectedArrivalAt
+    ? `ETA ${new Date(walk.expectedArrivalAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+    : "ETA unavailable";
+  const locationFreshness = walk.lastLocationAt
+    ? `Location updated ${formatDistanceToNow(new Date(walk.lastLocationAt), { addSuffix: true })}`
+    : "Location not available";
+  if (walk.status === "escalated") return `Safe Walk escalated${destination}. ${locationFreshness}.`;
+  if (walk.status === "overdue") return `Safe Walk overdue${destination}. ${locationFreshness}.`;
+  return `Safe Walk active${destination}. ${eta}. ${locationFreshness}.`;
 }
 
 type FamilyMessageWithSender = FamilyMessage & { senderName: string | null };
@@ -450,8 +474,8 @@ export default function FamilyPage() {
         lastUpdated: (m.lastKnownLocationAt || m.lastSeenAt)
           ? new Date(m.lastKnownLocationAt || m.lastSeenAt!).toISOString()
           : undefined,
-        safetyState: (m.safetyState as any) || "active",
-        activity: (m.lastActivity as any) || "stationary",
+        safetyState: (m.activeSafeWalk?.status === "overdue" || m.activeSafeWalk?.status === "escalated") ? "concern" as any : ((m.safetyState as any) || "active"),
+        activity: (m.activeSafeWalk?.lastActivity as any) || (m.lastActivity as any) || "stationary",
         isMe: m.userId === myUserId,
       }));
     // If I have no server-side location yet, drop a "You" pin from the live
@@ -1195,6 +1219,12 @@ export default function FamilyPage() {
                     {m.locationStatus && m.locationStatus !== "live" && (m.status === "active" || m.status === "active_legacy") && (
                       <div className="mt-1 text-xs text-muted-foreground" data-testid={`text-member-location-status-${m.id}`}>
                         {familyLocationStatusText(m)}
+                      </div>
+                    )}
+                    {safeWalkStatusText(m) && (
+                      <div className="mt-1 text-xs text-primary flex items-start gap-1.5" data-testid={`text-member-safe-walk-${m.id}`}>
+                        <Navigation className="w-3 h-3 mt-0.5 shrink-0" />
+                        <span>{safeWalkStatusText(m)}</span>
                       </div>
                     )}
                   </div>
