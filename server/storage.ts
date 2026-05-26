@@ -226,6 +226,66 @@ export function computeNextCheckinDue(opts: {
   return candidate;
 }
 
+export function computeMissedCheckinOccurrence(opts: {
+  lastTime: Date;
+  now: Date;
+  intervalHours: number;
+  preferredCheckinTime: string | null | undefined;
+  timezone: string | null | undefined;
+  lastTimeIsCheckin?: boolean;
+}): { dueTime: Date; nextDueTime: Date; occurrenceKey: string } | null {
+  const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
+  let dueTime = computeNextCheckinDue({
+    lastTime: opts.lastTime,
+    intervalHours,
+    preferredCheckinTime: opts.preferredCheckinTime,
+    timezone: opts.timezone,
+    lastTimeIsCheckin: opts.lastTimeIsCheckin,
+  });
+
+  if (opts.now <= dueTime) return null;
+
+  let nextDueTime = computeNextCheckinDue({
+    lastTime: dueTime,
+    intervalHours,
+    preferredCheckinTime: opts.preferredCheckinTime,
+    timezone: opts.timezone,
+    lastTimeIsCheckin: false,
+  });
+
+  let safety = 0;
+  while (opts.now > nextDueTime && safety < 400) {
+    dueTime = nextDueTime;
+    nextDueTime = computeNextCheckinDue({
+      lastTime: dueTime,
+      intervalHours,
+      preferredCheckinTime: opts.preferredCheckinTime,
+      timezone: opts.timezone,
+      lastTimeIsCheckin: false,
+    });
+    safety++;
+  }
+
+  return {
+    dueTime,
+    nextDueTime,
+    occurrenceKey: dueTime.toISOString(),
+  };
+}
+
+export function formatCheckinDueLocalLabel(dueTime: Date, timezone: string | null | undefined): string {
+  const tz = timezone || "UTC";
+  try {
+    return new Intl.DateTimeFormat("en-AU", {
+      timeZone: tz,
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(dueTime);
+  } catch {
+    return dueTime.toISOString();
+  }
+}
+
 function normalizeCheckinIntervalHours(value: number | null | undefined): number {
   if (!Number.isFinite(value)) return 24;
   const hours = Math.round(Number(value));
@@ -1943,9 +2003,9 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean }[]> {
+  async getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[]> {
     const now = new Date();
-    const results: { user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean }[] = [];
+    const results: { user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[] = [];
     const latestCheckins = db
       .select({
         userId: checkins.userId,
@@ -1988,21 +2048,34 @@ export class DatabaseStorage implements IStorage {
       // the behavior remains correct if the query is changed later.
       if (userSettings.pauseUntil && userSettings.pauseUntil > now) continue;
 
-      // Skip if already has open incident
-      const openIncident = await this.getOpenIncident(user.id);
-      if (openIncident) continue;
-
-      // Check timing — honor the user's preferred local time-of-day so a
-      // missed 7pm check-in doesn't fire its reminder at the wrong hour.
       const lastTime = row.lastCheckinAt || user.createdAt;
-      const dueTime = computeNextCheckinDue({
+      const occurrence = computeMissedCheckinOccurrence({
         lastTime,
+        now,
         intervalHours: userSettings.checkinIntervalHours,
         preferredCheckinTime: userSettings.preferredCheckinTime,
         timezone: user.timezone,
         lastTimeIsCheckin: !!row.lastCheckinAt,
       });
-      if (now > dueTime) {
+
+      // Skip if already has open incident
+      const openIncident = await this.getOpenIncident(user.id);
+      if (openIncident) {
+        console.log(JSON.stringify({
+          event: "MISSED_CHECKIN_SKIP",
+          userId: user.id,
+          dueTimeUtc: occurrence?.dueTime.toISOString() || null,
+          localDueTime: occurrence ? formatCheckinDueLocalLabel(occurrence.dueTime, user.timezone) : null,
+          skipReason: `open_incident:${openIncident.reason}`,
+        }));
+        continue;
+      }
+
+      // Check timing — honor the user's preferred local time-of-day so a
+      // missed 7pm check-in doesn't fire its reminder at the wrong hour.
+      if (occurrence) {
+        const dueTime = occurrence.dueTime;
+        const localDueLabel = formatCheckinDueLocalLabel(dueTime, user.timezone);
         // If this due window already produced a missed-checkin incident, do
         // not create another one just because the stale-incident sweeper later
         // archived the open incident. A new missed-checkin flow starts only
@@ -2015,15 +2088,42 @@ export class DatabaseStorage implements IStorage {
             eq(incidents.reason, "missed_checkin"),
             eq(incidents.isDrill, false),
             gte(incidents.startedAt, dueTime),
+            lt(incidents.startedAt, occurrence.nextDueTime),
           ))
           .limit(1);
-        if (sameDueIncident) continue;
+        if (sameDueIncident) {
+          console.log(JSON.stringify({
+            event: "MISSED_CHECKIN_SKIP",
+            userId: user.id,
+            dueTimeUtc: dueTime.toISOString(),
+            localDueTime: localDueLabel,
+            skipReason: "same_due_occurrence_incident",
+          }));
+          continue;
+        }
 
         // A missed check-in now enters one official incident flow immediately:
         // push -> SMS -> wellness call -> contacts. Older builds had an extra
         // pre-incident reminder layer, which made users see multiple reminder
         // systems around the same missed check-in.
-        results.push({ user, settings: userSettings, isDueForReminder: false, isDueForAlert: true });
+        results.push({
+          user,
+          settings: userSettings,
+          isDueForReminder: false,
+          isDueForAlert: true,
+          dueTime,
+          nextDueTime: occurrence.nextDueTime,
+          dueOccurrenceKey: occurrence.occurrenceKey,
+          localDueLabel,
+        });
+      } else {
+        console.log(JSON.stringify({
+          event: "MISSED_CHECKIN_SKIP",
+          userId: user.id,
+          dueTimeUtc: null,
+          localDueTime: null,
+          skipReason: "not_due",
+        }));
       }
     }
 

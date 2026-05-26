@@ -7589,7 +7589,7 @@ export async function registerRoutes(
       let alertsSent = 0;
       const now = new Date();
       
-      for (const { user, settings, isDueForAlert } of overdueUsers) {
+      for (const { user, settings, isDueForAlert, dueTime, dueOccurrenceKey, localDueLabel } of overdueUsers) {
         if (isDueForAlert) {
           const existingOpenIncident = await storage.getOpenIncident(user.id);
           if (existingOpenIncident) {
@@ -7605,8 +7605,15 @@ export async function registerRoutes(
           await storage.updateSafetyState(user.id, "concern", "Missed check-in");
           emitTrackingPolicyChanged(user.id, "missed_checkin_open").catch(() => {});
 
-          const timeline = [...reminderHistory];
-          timeline.push({ type: "push", time: timeStr, detail: "Push notification sent to user" });
+          const timeline: any[] = [...reminderHistory];
+          timeline.push({
+            type: "push",
+            time: timeStr,
+            detail: "Push notification sent to user",
+            dueOccurrenceKey,
+            scheduledDueAt: dueTime.toISOString(),
+            localDueTime: localDueLabel,
+          });
 
           await sendReminderPush(user.id, user.name);
           console.log(`[ESCALATION] Step 1/3: Push sent to user=${user.id}`);
@@ -7696,8 +7703,14 @@ export async function registerRoutes(
         if (step === "push") {
           console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress  -  step: push→sms", userId: user.id, incidentId: incident.id, timestamp: timeStr }));
           const checkInLink = `${baseUrl}/`;
+          const dueOccurrenceKey = existingTimeline.find((entry) => entry?.dueOccurrenceKey)?.dueOccurrenceKey
+            || incident.startedAt.toISOString();
           if (user.phone) {
-            await sendReminderSms(user.phone, checkInLink, !!userSettings?.smsCheckinEnabled);
+            await sendReminderSms(user.phone, checkInLink, !!userSettings?.smsCheckinEnabled, {
+              userId: user.id,
+              incidentId: incident.id,
+              dedupeKey: `checkin_reminder_sms:${user.id}:${dueOccurrenceKey}`,
+            });
             existingTimeline.push({ type: "sms", time: timeStr, detail: "SMS reminder sent to user. Still trying to reach them" });
             console.log(`[ESCALATION] Step 2/3: SMS sent to user=${user.id} (phone ***${user.phone.slice(-4)})`);
           } else {
