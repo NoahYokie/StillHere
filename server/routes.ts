@@ -8358,6 +8358,18 @@ export async function registerRoutes(
             const incident = await storage.createIncident(walk.userId, "sos");
             await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue. Not responding");
             emitTrackingPolicyChanged(walk.userId, "safe_walk_escalated").catch(() => {});
+            const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
+            await createProtectedUserSystemAlert(
+              user,
+              `Your Safe Walk${destInfo} escalated because you had not arrived or responded. Emergency contacts have been alerted.`,
+              {
+                kind: "safe_walk_escalated",
+                incidentId: incident.id,
+                safeWalkId: walk.id,
+                destinationName: walk.destinationName,
+                expectedArrivalAt: walk.expectedArrivalAt.toISOString(),
+              },
+            );
             notifyConcern(walk.userId, user.name, "sos").catch((err) => {
               console.error(`[SAFE-WALK] notifyConcern failed for user=${walk.userId}:`, err?.message || err);
             });
@@ -8365,7 +8377,6 @@ export async function registerRoutes(
             const tokens = await storage.getOrMintIncidentTokensForUser(walk.userId, incident.startedAt);
             const contacts = (await storage.getContacts(walk.userId)).filter(isContactActiveForAlerts);
             const sortedContacts = [...contacts].sort((a, b) => a.priority - b.priority);
-            const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
             const noteInfo = walk.note ? `\nNote: ${walk.note}` : "";
             const allContactIds: string[] = [];
 
@@ -8382,7 +8393,7 @@ export async function registerRoutes(
                 try {
                   await sendSms(contact.phone,
                     `StillHere ALERT: ${user.name} has not arrived${destInfo} and is not responding.${noteInfo}${locationInfo}\n\nCheck their status: ${link}\n\nLink expires in 24 hours.`,
-                    { purpose: "missed_checkin_alert", userId: user.id, dedupeKey: `safe_walk:${walk.id}:${contact.id}` }
+                    { purpose: "sos_alert", userId: user.id, dedupeKey: `safe_walk:${walk.id}:${contact.id}` }
                   );
                 } catch (err: any) {
                   console.error(`[SAFE-WALK] Escalation SMS to contact=${contact.id} (phone ***${contact.phone.slice(-4)}) failed:`, err?.message || err);
@@ -8413,6 +8424,13 @@ export async function registerRoutes(
               contact2NotifiedAt: allContactIds.length > 1 ? now : undefined,
               allContactsNotifiedAt: now,
               nextActionAt: addMinutes(now, 30),
+              escalationTimeline: JSON.stringify([
+                {
+                  type: "safe_walk_escalated",
+                  time: now.toISOString(),
+                  detail: `Safe Walk${destInfo} escalated. Emergency contacts were notified immediately.`,
+                },
+              ]),
             });
 
             walkEscalations++;
