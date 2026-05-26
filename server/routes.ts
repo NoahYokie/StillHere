@@ -9630,6 +9630,8 @@ function describeDelivery(row: any): string | null {
   const channel = String(row.channel || "").toUpperCase();
   const status = String(row.status || "unknown").replace(/_/g, " ");
   if (row.purpose === "wellness_call") return `Wellness call ${status}`;
+  if (row.purpose === "sos_alert" && key.startsWith("safe_walk:")) return `Safe Walk emergency contact ${channel} alert ${status}`;
+  if (row.purpose === "sos_alert" && key.startsWith("safety_timer:")) return `Safety Timer emergency contact ${channel} alert ${status}`;
   if (key.startsWith("safe_walk:")) return `Safe Walk ${channel} delivery ${status}`;
   if (key.startsWith("safety_timer:")) return `Safety Timer ${channel} delivery ${status}`;
   if (row.purpose === "reminder") return `Reminder ${channel} delivery ${status}`;
