@@ -46,6 +46,7 @@ import {
   getVapidPublicKey,
   sendReminderPush,
   sendPushNotification,
+  syncBadgeCount,
 } from "./push";
 import { emitToUser, isUserOnline } from "./socket";
 import { sendEmergencyEmail, sendGeofenceEmail, sendCrashEmail } from "./email";
@@ -431,6 +432,53 @@ async function appendIncidentTimelineEntry(
      WHERE id = $1`,
     [incidentId, JSON.stringify([entry])],
   );
+  if (entry.type === "pre_call_sms_sent" || entry.type === "pre_call_sms_failed" || entry.type.startsWith("wellness_call_")) {
+    injectIncidentSystemMessageToWatchers(incidentId, entry).catch((err: any) => {
+      console.warn(`[THREAD] Failed to inject incident system message incident=${incidentId}: ${err?.message || err}`);
+    });
+  }
+}
+
+async function injectIncidentSystemMessageToWatchers(
+  incidentId: string,
+  entry: { type: string; time: string; detail: string },
+): Promise<void> {
+  const [incident] = await db.select().from(incidents).where(eq(incidents.id, incidentId)).limit(1);
+  if (!incident || incident.isDrill) return;
+  const user = await storage.getUser(incident.userId);
+  if (!user) return;
+  const linkedContacts = (await storage.getContacts(user.id)).filter((contact) =>
+    !!contact.linkedUserId &&
+    isAcceptedWatcherLink(contact, contact.linkedUserId) &&
+    isContactActiveForAlerts(contact)
+  );
+  for (const contact of linkedContacts) {
+    const receiverId = contact.linkedUserId!;
+    const msg = await storage.saveMessage(user.id, receiverId, entry.detail, {
+      messageType: "system_alert",
+      meta: {
+        kind: entry.type,
+        incidentId,
+        safetyCritical: true,
+        source: "incident_timeline",
+        timelineAt: entry.time,
+      },
+    });
+    emitToUser(receiverId, "message:new", { ...msg, senderName: user.name || "StillHere" });
+    sendPushNotification(receiverId, {
+      title: `${user.name || "StillHere"} safety update`,
+      body: entry.detail.slice(0, 140),
+      url: `/chat/${user.id}`,
+      tag: `safety-thread-${incidentId}`,
+    }, {
+      purpose: "system_alert",
+      incidentId,
+      dedupeKey: `thread_system:${incidentId}:${receiverId}:${entry.type}`,
+      priority: "safety_critical",
+    }).catch((err: any) => {
+      console.warn(`[THREAD] Safety system push failed receiver=${receiverId}: ${err?.message || err}`);
+    });
+  }
 }
 
 async function sendPreCallSmsForIncident(
@@ -4005,19 +4053,21 @@ export async function registerRoutes(
 
       const msg = await storage.saveMessage(currentUserId, receiverId, content.trim());
 
-      const { emitToUser, isUserOnline } = await import("./socket");
+      const { emitToUser } = await import("./socket");
       const sender = await storage.getUser(currentUserId);
       emitToUser(receiverId, "message:new", { ...msg, senderName: sender?.name || "Someone" });
 
-      if (!isUserOnline(receiverId)) {
-        const pushBody = content.substring(0, 100);
-        await sendPushNotification(receiverId, {
-          title: `Message from ${sender?.name || "Someone"}`,
-          body: pushBody,
-          url: `/chat/${currentUserId}`,
-          tag: "new-message",
-        });
-      }
+      const pushBody = content.substring(0, 100);
+      await sendPushNotification(receiverId, {
+        title: `Message from ${sender?.name || "Someone"}`,
+        body: pushBody,
+        url: `/chat/${currentUserId}`,
+        tag: "new-message",
+      }, {
+        purpose: "system_alert",
+        dedupeKey: `chat_message:${msg.id}`,
+        priority: "normal",
+      });
 
       res.json(msg);
     } catch (error) {
@@ -4080,7 +4130,8 @@ export async function registerRoutes(
       }
       const senderId = req.params.userId;
       await storage.markMessagesRead(senderId, currentUserId);
-      res.json({ success: true });
+      const badgeCount = await syncBadgeCount(currentUserId);
+      res.json({ success: true, badgeCount });
     } catch (error) {
       console.error("Error marking messages read:", error);
       res.status(500).json({ error: "Failed to mark messages read" });
@@ -6711,6 +6762,20 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/messages/badge/sync", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const count = await syncBadgeCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error syncing badge count:", error);
+      res.status(500).json({ error: "Failed to sync badge count" });
+    }
+  });
+
   app.get("/api/safety-timer/current", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
@@ -7143,15 +7208,8 @@ export async function registerRoutes(
       console.log(`[WELLNESS CALL] Keeping existing status ${incident.wellnessCallStatus} over lower-priority ${status} for incident=${incident.id}`);
       return;
     }
-    const timeline: any[] = (() => {
-      try { return JSON.parse(incident.escalationTimeline || "[]"); } catch { return []; }
-    })();
-    if (detail) {
-      timeline.push({ type: `wellness_call_${status}`, time: new Date().toISOString(), detail });
-    }
     const update: any = {
       wellnessCallStatus: status as any,
-      escalationTimeline: JSON.stringify(timeline),
     };
     const shouldAccelerate = options?.accelerateContacts ?? shouldAccelerateContactEscalation(status);
     if (shouldAccelerate && incident.lastEscalationStep === "call") {
@@ -7166,6 +7224,13 @@ export async function registerRoutes(
       }));
     }
     await storage.updateIncident(incident.id, update);
+    if (detail) {
+      await appendIncidentTimelineEntry(incident.id, {
+        type: `wellness_call_${status}`,
+        time: new Date().toISOString(),
+        detail,
+      });
+    }
     try {
       const watcherContacts = await storage.getContactsLinkedToUser(user.id);
       for (const c of watcherContacts) {

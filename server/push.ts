@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { db } from "./db";
-import { pushSubscriptions } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { contacts, incidents, messages, pushSubscriptions } from "@shared/schema";
+import { and, eq, ne } from "drizzle-orm";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
@@ -32,6 +32,62 @@ export interface PushNotificationOptions {
   purpose?: import("./outbound-policy").OutboundPurpose;
   incidentId?: string | null;
   dedupeKey?: string | null;
+  badgeCount?: number | null;
+  priority?: "normal" | "system_info" | "safety_critical";
+}
+
+export async function computeAuthoritativeBadgeCount(userId: string): Promise<number> {
+  const unreadRows = await db.select({ id: messages.id }).from(messages).where(
+    and(eq(messages.receiverId, userId), eq(messages.read, false)),
+  );
+
+  const ownOpenIncidents = await db.select({ id: incidents.id }).from(incidents).where(
+    and(eq(incidents.userId, userId), ne(incidents.status, "resolved"), eq(incidents.isDrill, false)),
+  );
+
+  const watchedRows = await db.select({ ownerId: contacts.userId }).from(contacts).where(
+    and(eq(contacts.linkedUserId, userId), eq(contacts.watcherConsentStatus, "accepted")),
+  );
+  const watchedOwnerIds = Array.from(new Set(watchedRows.map((row) => row.ownerId).filter(Boolean)));
+  let watchedOpenCount = 0;
+  for (const ownerId of watchedOwnerIds) {
+    const rows = await db.select({ id: incidents.id }).from(incidents).where(
+      and(eq(incidents.userId, ownerId), ne(incidents.status, "resolved"), eq(incidents.isDrill, false)),
+    );
+    watchedOpenCount += rows.length;
+  }
+
+  return unreadRows.length + ownOpenIncidents.length + watchedOpenCount;
+}
+
+export function buildAPNsAlertPayload(
+  payload: { title: string; body: string; url?: string; tag?: string },
+  badgeCount?: number,
+): Record<string, any> {
+  return {
+    aps: {
+      alert: {
+        title: payload.title,
+        body: payload.body,
+      },
+      sound: "default",
+      ...(Number.isInteger(badgeCount) ? { badge: Math.max(0, Number(badgeCount)) } : {}),
+    },
+    url: payload.url || "/",
+    tag: payload.tag,
+    badgeCount,
+  };
+}
+
+export function buildAPNsBadgePayload(badgeCount: number): Record<string, any> {
+  return {
+    aps: {
+      badge: Math.max(0, badgeCount),
+      "content-available": 1,
+    },
+    badgeCount: Math.max(0, badgeCount),
+    tag: "badge-sync",
+  };
 }
 
 export async function sendPushNotification(
@@ -97,6 +153,12 @@ export async function sendPushNotification(
     .select()
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.userId, userId));
+  const badgeCount = Number.isInteger(options.badgeCount)
+    ? Math.max(0, Number(options.badgeCount))
+    : await computeAuthoritativeBadgeCount(userId).catch((error: any) => {
+      console.warn(`[PUSH] Badge count failed for user=${userId}: ${error?.message || error}`);
+      return undefined;
+    });
 
   let sent = 0;
   let failed = 0;
@@ -110,7 +172,7 @@ export async function sendPushNotification(
     if (sub.endpoint.startsWith("apns://")) {
       const token = sub.endpoint.slice("apns://".length);
       try {
-        const result = await sendAPNsAlertPush(token, payload);
+        const result = await sendAPNsAlertPush(token, payload, { badgeCount });
         if (result.ok) {
           sent++;
         } else {
@@ -145,7 +207,7 @@ export async function sendPushNotification(
     try {
       await webpush.sendNotification(
         pushSubscription,
-        JSON.stringify(payload)
+        JSON.stringify({ ...payload, badgeCount })
       );
       sent++;
     } catch (error: any) {
@@ -168,9 +230,57 @@ export async function sendPushNotification(
   return { sent, failed };
 }
 
+export async function syncBadgeCount(userId: string): Promise<number> {
+  const badgeCount = await computeAuthoritativeBadgeCount(userId);
+  const subscriptions = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId));
+
+  const apnsSubscriptions = subscriptions.filter((sub) => sub.endpoint.startsWith("apns://"));
+  for (const sub of apnsSubscriptions) {
+    const token = sub.endpoint.slice("apns://".length);
+    try {
+      const result = await sendAPNsBadgePush(token, badgeCount);
+      if (!result.ok) {
+        if (result.removeSubscription) {
+          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+        }
+        console.warn(`[PUSH] Badge sync failed ${sub.id}: ${result.errorMessage}`);
+      }
+    } catch (error: any) {
+      console.warn(`[PUSH] Badge sync error ${sub.id}: ${error?.message || error}`);
+    }
+  }
+
+  return badgeCount;
+}
+
+async function sendAPNsBadgePush(
+  deviceToken: string,
+  badgeCount: number,
+): Promise<{ ok: boolean; removeSubscription?: boolean; errorMessage?: string }> {
+  return sendAPNsRawPush(deviceToken, buildAPNsBadgePayload(badgeCount), {
+    pushType: "background",
+    priority: "5",
+  });
+}
+
 async function sendAPNsAlertPush(
   deviceToken: string,
   payload: { title: string; body: string; url?: string; tag?: string },
+  options: { badgeCount?: number } = {},
+): Promise<{ ok: boolean; removeSubscription?: boolean; errorMessage?: string }> {
+  return sendAPNsRawPush(deviceToken, buildAPNsAlertPayload(payload, options.badgeCount), {
+    pushType: "alert",
+    priority: "10",
+  });
+}
+
+async function sendAPNsRawPush(
+  deviceToken: string,
+  bodyPayload: Record<string, any>,
+  options: { pushType: "alert" | "background"; priority: "10" | "5" },
 ): Promise<{ ok: boolean; removeSubscription?: boolean; errorMessage?: string }> {
   const apnsKeyId = process.env.APNS_KEY_ID;
   const apnsTeamId = process.env.APNS_TEAM_ID;
@@ -189,17 +299,7 @@ async function sendAPNsAlertPush(
   // here, which fails before APNs can return a useful status. Use http2
   // directly so native iOS pushes work from Cloud Run.
   const http2 = await import("http2");
-  const body = JSON.stringify({
-    aps: {
-      alert: {
-        title: payload.title,
-        body: payload.body,
-      },
-      sound: "default",
-    },
-    url: payload.url || "/",
-    tag: payload.tag,
-  });
+  const body = JSON.stringify(bodyPayload);
 
   const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
     const client = http2.connect(`https://${host}`);
@@ -223,8 +323,8 @@ async function sendAPNsAlertPush(
       ":path": `/3/device/${deviceToken}`,
       authorization: `bearer ${jwt}`,
       "apns-topic": IOS_BUNDLE_ID,
-      "apns-push-type": "alert",
-      "apns-priority": "10",
+      "apns-push-type": options.pushType,
+      "apns-priority": options.priority,
       "content-type": "application/json",
     });
 

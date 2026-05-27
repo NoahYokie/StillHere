@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { apiRequest } from "@/lib/queryClient";
 
 export function isNative(): boolean {
   return Capacitor.isNativePlatform();
@@ -10,6 +11,10 @@ export function isIOS(): boolean {
 
 export async function initCapacitorPlugins() {
   if (!isNative()) return;
+  const syncBadge = () => {
+    apiRequest("POST", "/api/messages/badge/sync").catch(() => {});
+  };
+  syncBadge();
 
   if (isIOS()) {
     document.body.classList.add("capacitor-ios");
@@ -44,6 +49,9 @@ export async function initCapacitorPlugins() {
       if (canGoBack) {
         window.history.back();
       }
+    });
+    App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) syncBadge();
     });
   } catch {}
 

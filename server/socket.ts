@@ -4,7 +4,7 @@ import { db } from "./db";
 import { authSessions, users } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { storage } from "./storage";
-import { sendPushNotification } from "./push";
+import { sendPushNotification, syncBadgeCount } from "./push";
 import { sendVoipPush } from "./voip-push";
 import cookie from "cookie";
 
@@ -183,14 +183,16 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
         io!.to(`user:${userId}`).emit("message:sent", msg);
         if (callback) callback({ success: true, message: msg });
 
-        if (!isUserOnline(data.receiverId)) {
-          await sendPushNotification(data.receiverId, {
-            title: `Message from ${sender?.name || "Someone"}`,
-            body: data.content.substring(0, 100),
-            url: `/chat/${userId}`,
-            tag: "new-message",
-          });
-        }
+        await sendPushNotification(data.receiverId, {
+          title: `Message from ${sender?.name || "Someone"}`,
+          body: data.content.substring(0, 100),
+          url: `/chat/${userId}`,
+          tag: "new-message",
+        }, {
+          purpose: "system_alert",
+          dedupeKey: `chat_message:${msg.id}`,
+          priority: "normal",
+        });
       } catch (error) {
         console.error("[SOCKET] message:send error:", error);
         if (callback) callback({ success: false, error: "Failed" });
@@ -201,6 +203,9 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
       try {
         if (!data || !isValidUUID(data.senderId)) return;
         await storage.markMessagesRead(data.senderId, userId);
+        syncBadgeCount(userId).catch((err: any) => {
+          console.warn(`[SOCKET] badge sync failed for ${userId}: ${err?.message || err}`);
+        });
         io!.to(`user:${data.senderId}`).emit("message:read-receipt", { readBy: userId });
       } catch (err: any) {
         console.error(`[SOCKET] message:read failed for ${userId}:`, err?.message || err);
