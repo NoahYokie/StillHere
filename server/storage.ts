@@ -188,6 +188,7 @@ function getTimezoneOffsetMs(date: Date, tz: string): number {
 // for daily-cadence schedules.
 export function computeNextCheckinDue(opts: {
   lastTime: Date;
+  scheduleAnchorTime?: Date;
   intervalHours: number;
   preferredCheckinTime: string | null | undefined;
   timezone: string | null | undefined;
@@ -206,9 +207,16 @@ export function computeNextCheckinDue(opts: {
   const targetM = Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0));
   const stepDays = intervalHours / 24;
   const stepMs = stepDays * 86_400_000;
+  const anchorTime = opts.scheduleAnchorTime || lastTime;
 
-  let dayStart = startOfDayInTimezone(lastTime, tz);
+  let dayStart = startOfDayInTimezone(anchorTime, tz);
   let candidate = new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
+  if (candidate <= anchorTime && !opts.lastTimeIsCheckin) {
+    const probe = new Date(candidate.getTime() + stepMs + 3_600_000);
+    dayStart = startOfDayInTimezone(probe, tz);
+    candidate = new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
+  }
+
   // Advance until strictly after lastTime. Re-anchor each iteration so DST
   // transitions don't cause drift.
   let safety = 0;
@@ -226,8 +234,17 @@ export function computeNextCheckinDue(opts: {
   return candidate;
 }
 
+function isCheckinWithinDueWindow(lastCheckinAt: Date, dueTime: Date, nextDueTime: Date, timezone: string | null | undefined): boolean {
+  if (lastCheckinAt >= dueTime && lastCheckinAt < nextDueTime) return true;
+  // A same-local-day check-in before the preferred time is treated as that
+  // day's OK check-in so users are not punished for checking in early.
+  return lastCheckinAt < dueTime
+    && startOfDayInTimezone(lastCheckinAt, timezone || "UTC").getTime() === startOfDayInTimezone(dueTime, timezone || "UTC").getTime();
+}
+
 export function computeMissedCheckinOccurrence(opts: {
   lastTime: Date;
+  scheduleAnchorTime?: Date;
   now: Date;
   intervalHours: number;
   preferredCheckinTime: string | null | undefined;
@@ -236,17 +253,19 @@ export function computeMissedCheckinOccurrence(opts: {
 }): { dueTime: Date; nextDueTime: Date; occurrenceKey: string } | null {
   const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
   let dueTime = computeNextCheckinDue({
-    lastTime: opts.lastTime,
+    lastTime: opts.scheduleAnchorTime || opts.lastTime,
+    scheduleAnchorTime: opts.scheduleAnchorTime,
     intervalHours,
     preferredCheckinTime: opts.preferredCheckinTime,
     timezone: opts.timezone,
-    lastTimeIsCheckin: opts.lastTimeIsCheckin,
+    lastTimeIsCheckin: false,
   });
 
   if (opts.now <= dueTime) return null;
 
   let nextDueTime = computeNextCheckinDue({
     lastTime: dueTime,
+    scheduleAnchorTime: opts.scheduleAnchorTime || opts.lastTime,
     intervalHours,
     preferredCheckinTime: opts.preferredCheckinTime,
     timezone: opts.timezone,
@@ -258,12 +277,17 @@ export function computeMissedCheckinOccurrence(opts: {
     dueTime = nextDueTime;
     nextDueTime = computeNextCheckinDue({
       lastTime: dueTime,
+      scheduleAnchorTime: opts.scheduleAnchorTime || opts.lastTime,
       intervalHours,
       preferredCheckinTime: opts.preferredCheckinTime,
       timezone: opts.timezone,
       lastTimeIsCheckin: false,
     });
     safety++;
+  }
+
+  if (opts.lastTimeIsCheckin && isCheckinWithinDueWindow(opts.lastTime, dueTime, nextDueTime, opts.timezone)) {
+    return null;
   }
 
   return {
@@ -1790,6 +1814,7 @@ export class DatabaseStorage implements IStorage {
     // time-of-day for daily-cadence schedules.
     const nextCheckinDue = computeNextCheckinDue({
       lastTime: lastCheckin?.createdAt || user.createdAt,
+      scheduleAnchorTime: user.createdAt,
       intervalHours: userSettings.checkinIntervalHours,
       preferredCheckinTime: userSettings.preferredCheckinTime,
       timezone: user.timezone,
@@ -2015,12 +2040,10 @@ export class DatabaseStorage implements IStorage {
       .groupBy(checkins.userId)
       .as("latest_checkins");
 
-    // Production hardening: do not scan every user on every cron tick. Pull a
-    // bounded set of plausible candidates only, then do the precise
-    // timezone/preferred-time calculation in application code below. A future
-    // migration should persist next_checkin_due_at and index it, but this
-    // removes the immediate N+1 full-table scan risk.
-    const candidateCutoff = new Date(now.getTime() - 20 * 60 * 60 * 1000);
+    // Pull a bounded set, then do the precise timezone/preferred-time
+    // calculation in application code below. Do not pre-filter by
+    // lastCheckinAt + elapsed hours: a late check-in must not move tomorrow's
+    // scheduled local due time or hide the user from the cron candidate set.
     const candidateRows = await db
       .select({
         user: users,
@@ -2030,10 +2053,7 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .innerJoin(settings, eq(settings.userId, users.id))
       .leftJoin(latestCheckins, eq(latestCheckins.userId, users.id))
-      .where(and(
-        or(isNull(settings.pauseUntil), lte(settings.pauseUntil, now)),
-        sql`coalesce(${latestCheckins.lastCheckinAt}, ${users.createdAt}) <= ${candidateCutoff}`,
-      ))
+      .where(or(isNull(settings.pauseUntil), lte(settings.pauseUntil, now)))
       .orderBy(sql`coalesce(${latestCheckins.lastCheckinAt}, ${users.createdAt}) asc`)
       .limit(2000);
 
@@ -2051,6 +2071,7 @@ export class DatabaseStorage implements IStorage {
       const lastTime = row.lastCheckinAt || user.createdAt;
       const occurrence = computeMissedCheckinOccurrence({
         lastTime,
+        scheduleAnchorTime: user.createdAt,
         now,
         intervalHours: userSettings.checkinIntervalHours,
         preferredCheckinTime: userSettings.preferredCheckinTime,
@@ -2366,6 +2387,7 @@ export class DatabaseStorage implements IStorage {
 
       const nextCheckinDue = computeNextCheckinDue({
         lastTime: lastCheckin?.createdAt || user.createdAt,
+        scheduleAnchorTime: user.createdAt,
         intervalHours: userSettings?.checkinIntervalHours || 24,
         preferredCheckinTime: userSettings?.preferredCheckinTime,
         timezone: user.timezone,
