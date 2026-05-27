@@ -16,6 +16,7 @@ steps:
         sleep 5
         npm ci
         npm run db:push
+        npm run db:backfill-checkin-due
 availableSecrets:
   secretManager:
     - versionName: projects/stillhere-492915/secrets/DATABASE_URL/versions/latest

@@ -194,8 +194,11 @@ export const settings = pgTable("settings", {
   lastReminderAt: timestamp("last_reminder_at"),
   reminderTimeline: text("reminder_timeline").notNull().default("[]"),
   pauseUntil: timestamp("pause_until"),
+  nextCheckinDueAt: timestamp("next_checkin_due_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("settings_next_checkin_due_at_idx").on(table.nextCheckinDueAt),
+]);
 
 export const settingsRelations = relations(settings, ({ one }) => ({
   user: one(users, {

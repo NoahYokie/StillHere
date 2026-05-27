@@ -7692,6 +7692,7 @@ export async function registerRoutes(
       releaseCronLock = await tryAcquireDbAdvisoryLock(CRON_TICK_LOCK_ID);
       if (!releaseCronLock) {
         cronRunning = false;
+        console.log(JSON.stringify({ event: "CRON_LOCK_CONFLICT", lock: "cron_tick", timestamp: new Date().toISOString() }));
         return res.json({ skipped: true, reason: "cron already running on another instance" });
       }
 
@@ -7705,6 +7706,12 @@ export async function registerRoutes(
         console.error("[CRON] Legacy check-in interval cleanup failed:", err?.message || err);
       }
 
+      try {
+        await storage.backfillNextCheckinDueAt(500);
+      } catch (err: any) {
+        console.error("[CRON] next_checkin_due_at backfill failed:", err?.message || err);
+      }
+
       const overdueUsers = await storage.getOverdueUsersWithSettings();
       const baseUrl = getBaseUrl();
       
@@ -7712,7 +7719,7 @@ export async function registerRoutes(
       let alertsSent = 0;
       const now = new Date();
       
-      for (const { user, settings, isDueForAlert, dueTime, dueOccurrenceKey, localDueLabel } of overdueUsers) {
+      for (const { user, settings, incident: claimedIncident, isDueForAlert, dueTime, dueOccurrenceKey, localDueLabel } of overdueUsers) {
         if (isDueForAlert) {
           const existingOpenIncident = await storage.getOpenIncident(user.id);
           if (existingOpenIncident) {
@@ -7724,7 +7731,7 @@ export async function registerRoutes(
           const timeStr = now.toISOString();
           const graceMs = (settings.graceMinutes || 15) * 60 * 1000;
 
-          let incident = await storage.createIncident(user.id, "missed_checkin");
+          let incident = claimedIncident || await storage.createIncident(user.id, "missed_checkin");
           await storage.updateSafetyState(user.id, "concern", "Missed check-in");
           emitTrackingPolicyChanged(user.id, "missed_checkin_open").catch(() => {});
 

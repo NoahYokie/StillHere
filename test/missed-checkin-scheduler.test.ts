@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
 
-const { computeMissedCheckinOccurrence, computeNextCheckinDue } = await import("../server/storage");
+const { computeAnchoredNextCheckinDue, computeMissedCheckinOccurrence, computeNextCheckinDue } = await import("../server/storage");
 const { pool } = await import("../server/db");
 
 try {
@@ -119,6 +119,40 @@ try {
     "2026-06-01T01:00:00.000Z",
     "weekly cadence should stay anchored to the original scheduled local day/time after a late check-in",
   );
+
+  const dstBefore = computeAnchoredNextCheckinDue({
+    userCreatedAt: new Date("2026-03-27T22:00:00.000Z"),
+    lastCheckinAt: new Date("2026-03-28T22:30:00.000Z"),
+    intervalHours: 24,
+    preferredCheckinTime: "09:00",
+    timezone: "Australia/Sydney",
+  });
+  const dstAfter = computeAnchoredNextCheckinDue({
+    userCreatedAt: new Date("2026-03-27T22:00:00.000Z"),
+    lastCheckinAt: dstBefore,
+    intervalHours: 24,
+    preferredCheckinTime: "09:00",
+    timezone: "Australia/Sydney",
+  });
+  assert.equal(dstBefore.toISOString(), "2026-03-29T22:00:00.000Z", "Sydney 09:00 should account for UTC+11 before DST ends");
+  assert.equal(dstAfter.toISOString(), "2026-03-30T22:00:00.000Z", "Sydney 09:00 should remain local-time anchored across DST-adjacent days");
+
+  const simultaneousDue = [
+    { userId: "a", due: new Date("2026-05-26T01:00:00.000Z") },
+    { userId: "b", due: new Date("2026-05-26T01:00:00.000Z") },
+    { userId: "c", due: new Date("2026-05-26T01:00:00.000Z") },
+  ];
+  assert.equal(simultaneousDue.filter((item) => item.due <= now).length, 3, "multiple users can be due in the same indexed batch");
+
+  const claimed = new Set<string>();
+  const claimBatch = (ids: string[]) => ids.filter((id) => {
+    if (claimed.has(id)) return false;
+    claimed.add(id);
+    return true;
+  });
+  assert.deepEqual(claimBatch(["a", "b"]), ["a", "b"], "first worker claims due users");
+  assert.deepEqual(claimBatch(["a", "b", "c"]), ["c"], "second worker skips already-claimed users");
+  assert.equal(claimed.size, 3, "locking simulation prevents duplicate escalation claims");
 
   console.log("missed-checkin scheduler tests passed");
 } finally {

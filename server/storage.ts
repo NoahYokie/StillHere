@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { eq, desc, and, ne, gt, gte, lt, lte, or, isNull, isNotNull, inArray, sql } from "drizzle-orm";
-import { db } from "./db";
+import { db, pool } from "./db";
 import {
   users,
   settings,
@@ -297,6 +297,23 @@ export function computeMissedCheckinOccurrence(opts: {
   };
 }
 
+export function computeAnchoredNextCheckinDue(opts: {
+  userCreatedAt: Date;
+  lastCheckinAt: Date | null | undefined;
+  intervalHours: number;
+  preferredCheckinTime: string | null | undefined;
+  timezone: string | null | undefined;
+}): Date {
+  return computeNextCheckinDue({
+    lastTime: opts.lastCheckinAt || opts.userCreatedAt,
+    scheduleAnchorTime: opts.userCreatedAt,
+    intervalHours: opts.intervalHours,
+    preferredCheckinTime: opts.preferredCheckinTime,
+    timezone: opts.timezone,
+    lastTimeIsCheckin: !!opts.lastCheckinAt,
+  });
+}
+
 export function formatCheckinDueLocalLabel(dueTime: Date, timezone: string | null | undefined): string {
   const tz = timezone || "UTC";
   try {
@@ -344,6 +361,8 @@ export interface IStorage {
   getSettings(userId: string): Promise<Settings | undefined>;
   updateSettings(userId: string, settings: Partial<InsertSettings>): Promise<Settings>;
   normalizeLegacyCheckinIntervals(limit?: number): Promise<number>;
+  refreshNextCheckinDueAt(userId: string): Promise<Date | null>;
+  backfillNextCheckinDueAt(limit?: number): Promise<{ scanned: number; updated: number; skipped: number }>;
   incrementRemindersSent(userId: string): Promise<Settings>;
   addReminderTimelineEntry(userId: string, entry: { type: string; time: string; detail: string }): Promise<void>;
   getReminderTimeline(userId: string): Promise<{ type: string; time: string; detail: string }[]>;
@@ -399,6 +418,7 @@ export interface IStorage {
   getContactPageData(token: string): Promise<ContactPageData | undefined>;
   
   // Scheduler
+  getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; incident?: Incident; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[]>;
   getDueUsers(): Promise<User[]>;
   
   // Tokens
@@ -580,6 +600,7 @@ export class DatabaseStorage implements IStorage {
         graceMinutes: 15,
         locationMode: "off",
       });
+      await this.refreshNextCheckinDueAt(user.id);
 
       return user;
     } catch (err: any) {
@@ -600,6 +621,11 @@ export class DatabaseStorage implements IStorage {
         .set(updates)
         .where(eq(users.id, id))
         .returning();
+      if ((updates as any).timezone !== undefined) {
+        await this.refreshNextCheckinDueAt(id).catch((err: any) => {
+          console.error(`[CHECKIN_SCHEDULER] Failed to refresh next due after timezone update for user=${id}:`, err?.message || err);
+        });
+      }
       return user;
     } catch (err: any) {
       if (err?.code === "23505" && /users_phone_unique|users_phone_key/.test(err?.constraint || err?.detail || "")) {
@@ -760,6 +786,113 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async refreshNextCheckinDueAt(userId: string): Promise<Date | null> {
+    const latestCheckins = db
+      .select({
+        userId: checkins.userId,
+        lastCheckinAt: sql<Date>`max(${checkins.createdAt})`.as("last_checkin_at"),
+      })
+      .from(checkins)
+      .groupBy(checkins.userId)
+      .as("latest_checkins");
+    const [row] = await db
+      .select({
+        user: users,
+        settings,
+        lastCheckinAt: latestCheckins.lastCheckinAt,
+      })
+      .from(users)
+      .innerJoin(settings, eq(settings.userId, users.id))
+      .leftJoin(latestCheckins, eq(latestCheckins.userId, users.id))
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!row) return null;
+
+    const normalizedInterval = normalizeCheckinIntervalHours(row.settings.checkinIntervalHours);
+    const nextDue = computeAnchoredNextCheckinDue({
+      userCreatedAt: row.user.createdAt,
+      lastCheckinAt: row.lastCheckinAt || null,
+      intervalHours: normalizedInterval,
+      preferredCheckinTime: row.settings.preferredCheckinTime,
+      timezone: row.user.timezone,
+    });
+
+    await db
+      .update(settings)
+      .set({
+        checkinIntervalHours: normalizedInterval,
+        nextCheckinDueAt: nextDue,
+        updatedAt: new Date(),
+      })
+      .where(eq(settings.userId, userId));
+
+    return nextDue;
+  }
+
+  async backfillNextCheckinDueAt(limit = 2000): Promise<{ scanned: number; updated: number; skipped: number }> {
+    const latestCheckins = db
+      .select({
+        userId: checkins.userId,
+        lastCheckinAt: sql<Date>`max(${checkins.createdAt})`.as("last_checkin_at"),
+      })
+      .from(checkins)
+      .groupBy(checkins.userId)
+      .as("latest_checkins");
+    const rows = await db
+      .select({
+        user: users,
+        settings,
+        lastCheckinAt: latestCheckins.lastCheckinAt,
+      })
+      .from(settings)
+      .innerJoin(users, eq(users.id, settings.userId))
+      .leftJoin(latestCheckins, eq(latestCheckins.userId, users.id))
+      .where(isNull(settings.nextCheckinDueAt))
+      .orderBy(users.createdAt)
+      .limit(limit);
+
+    let updated = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      try {
+        const normalizedInterval = normalizeCheckinIntervalHours(row.settings.checkinIntervalHours);
+        const nextDue = computeAnchoredNextCheckinDue({
+          userCreatedAt: row.user.createdAt,
+          lastCheckinAt: row.lastCheckinAt || null,
+          intervalHours: normalizedInterval,
+          preferredCheckinTime: row.settings.preferredCheckinTime,
+          timezone: row.user.timezone,
+        });
+        await db
+          .update(settings)
+          .set({
+            checkinIntervalHours: normalizedInterval,
+            nextCheckinDueAt: nextDue,
+            updatedAt: new Date(),
+          })
+          .where(eq(settings.userId, row.user.id));
+        updated++;
+      } catch (err: any) {
+        skipped++;
+        console.error(JSON.stringify({
+          event: "NEXT_CHECKIN_BACKFILL_SKIP",
+          userId: row.user.id,
+          reason: err?.message || "unknown_error",
+        }));
+      }
+    }
+
+    console.log(JSON.stringify({
+      event: "NEXT_CHECKIN_BACKFILL_BATCH",
+      scanned: rows.length,
+      updated,
+      skipped,
+      limit,
+    }));
+
+    return { scanned: rows.length, updated, skipped };
+  }
+
   async normalizeLegacyCheckinIntervals(limit = 500): Promise<number> {
     // Some Replit-era rows used sub-daily check-in intervals such as 3 hours.
     // The product is now daily-or-longer, so persist the normalized value.
@@ -820,6 +953,7 @@ export class DatabaseStorage implements IStorage {
         reminderMode: updates.reminderMode ?? "one",
         pauseUntil: updates.pauseUntil,
       }).returning();
+      await this.refreshNextCheckinDueAt(userId);
       return result;
     }
     
@@ -828,6 +962,13 @@ export class DatabaseStorage implements IStorage {
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(settings.userId, userId))
       .returning();
+    if (
+      updates.checkinIntervalHours !== undefined
+      || updates.preferredCheckinTime !== undefined
+      || updates.pauseUntil !== undefined
+    ) {
+      await this.refreshNextCheckinDueAt(userId);
+    }
     return result;
   }
 
@@ -1614,6 +1755,8 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    await this.refreshNextCheckinDueAt(userId);
+
     return checkin;
   }
 
@@ -1812,13 +1955,12 @@ export class DatabaseStorage implements IStorage {
 
     // Calculate next checkin due, anchored to the user's preferred local
     // time-of-day for daily-cadence schedules.
-    const nextCheckinDue = computeNextCheckinDue({
-      lastTime: lastCheckin?.createdAt || user.createdAt,
-      scheduleAnchorTime: user.createdAt,
+    const nextCheckinDue = userSettings.nextCheckinDueAt || computeAnchoredNextCheckinDue({
+      userCreatedAt: user.createdAt,
+      lastCheckinAt: lastCheckin?.createdAt || null,
       intervalHours: userSettings.checkinIntervalHours,
       preferredCheckinTime: userSettings.preferredCheckinTime,
       timezone: user.timezone,
-      lastTimeIsCheckin: !!lastCheckin,
     });
 
     const contactLimit = await this.getContactLimit(userId);
@@ -2028,9 +2170,9 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[]> {
+  async getOverdueUsersWithSettings(): Promise<{ user: User; settings: Settings; incident?: Incident; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[]> {
     const now = new Date();
-    const results: { user: User; settings: Settings; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[] = [];
+    const results: { user: User; settings: Settings; incident?: Incident; isDueForReminder: boolean; isDueForAlert: boolean; dueTime: Date; nextDueTime: Date; dueOccurrenceKey: string; localDueLabel: string }[] = [];
     const latestCheckins = db
       .select({
         userId: checkins.userId,
@@ -2040,10 +2182,9 @@ export class DatabaseStorage implements IStorage {
       .groupBy(checkins.userId)
       .as("latest_checkins");
 
-    // Pull a bounded set, then do the precise timezone/preferred-time
-    // calculation in application code below. Do not pre-filter by
-    // lastCheckinAt + elapsed hours: a late check-in must not move tomorrow's
-    // scheduled local due time or hide the user from the cron candidate set.
+    // Scheduler source of truth: the persisted, indexed UTC due timestamp.
+    // A late check-in updates this field to the next anchored local occurrence
+    // and never shifts it by elapsed hours.
     const candidateRows = await db
       .select({
         user: users,
@@ -2053,8 +2194,12 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .innerJoin(settings, eq(settings.userId, users.id))
       .leftJoin(latestCheckins, eq(latestCheckins.userId, users.id))
-      .where(or(isNull(settings.pauseUntil), lte(settings.pauseUntil, now)))
-      .orderBy(sql`coalesce(${latestCheckins.lastCheckinAt}, ${users.createdAt}) asc`)
+      .where(and(
+        isNotNull(settings.nextCheckinDueAt),
+        lte(settings.nextCheckinDueAt, now),
+        or(isNull(settings.pauseUntil), lte(settings.pauseUntil, now)),
+      ))
+      .orderBy(settings.nextCheckinDueAt)
       .limit(2000);
 
     for (const row of candidateRows) {
@@ -2113,6 +2258,10 @@ export class DatabaseStorage implements IStorage {
           ))
           .limit(1);
         if (sameDueIncident) {
+          await db
+            .update(settings)
+            .set({ nextCheckinDueAt: occurrence.nextDueTime, updatedAt: now })
+            .where(eq(settings.userId, user.id));
           console.log(JSON.stringify({
             event: "MISSED_CHECKIN_SKIP",
             userId: user.id,
@@ -2127,6 +2276,10 @@ export class DatabaseStorage implements IStorage {
         // push -> SMS -> wellness call -> contacts. Older builds had an extra
         // pre-incident reminder layer, which made users see multiple reminder
         // systems around the same missed check-in.
+        await db
+          .update(settings)
+          .set({ nextCheckinDueAt: occurrence.nextDueTime, updatedAt: now })
+          .where(eq(settings.userId, user.id));
         results.push({
           user,
           settings: userSettings,
@@ -2138,15 +2291,34 @@ export class DatabaseStorage implements IStorage {
           localDueLabel,
         });
       } else {
+        const nextDue = computeAnchoredNextCheckinDue({
+          userCreatedAt: user.createdAt,
+          lastCheckinAt: row.lastCheckinAt || null,
+          intervalHours: userSettings.checkinIntervalHours,
+          preferredCheckinTime: userSettings.preferredCheckinTime,
+          timezone: user.timezone,
+        });
+        await db
+          .update(settings)
+          .set({ nextCheckinDueAt: nextDue, updatedAt: now })
+          .where(eq(settings.userId, user.id));
         console.log(JSON.stringify({
           event: "MISSED_CHECKIN_SKIP",
           userId: user.id,
           dueTimeUtc: null,
           localDueTime: null,
-          skipReason: "not_due",
+          skipReason: "due_index_stale_or_already_checked_in",
         }));
       }
     }
+
+    console.log(JSON.stringify({
+      event: "MISSED_CHECKIN_DUE_BATCH",
+      batchCount: candidateRows.length,
+      processedCount: results.length,
+      skippedCount: candidateRows.length - results.length,
+      source: "settings.next_checkin_due_at",
+    }));
 
     return results;
   }
@@ -2385,13 +2557,12 @@ export class DatabaseStorage implements IStorage {
       const lastCheckin = await this.getLastCheckin(user.id);
       const openIncident = await this.getOpenIncident(user.id);
 
-      const nextCheckinDue = computeNextCheckinDue({
-        lastTime: lastCheckin?.createdAt || user.createdAt,
-        scheduleAnchorTime: user.createdAt,
+      const nextCheckinDue = userSettings?.nextCheckinDueAt || computeAnchoredNextCheckinDue({
+        userCreatedAt: user.createdAt,
+        lastCheckinAt: lastCheckin?.createdAt || null,
         intervalHours: userSettings?.checkinIntervalHours || 24,
         preferredCheckinTime: userSettings?.preferredCheckinTime,
         timezone: user.timezone,
-        lastTimeIsCheckin: !!lastCheckin,
       });
 
       let lastLocationAt: Date | null = null;
