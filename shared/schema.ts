@@ -195,9 +195,12 @@ export const settings = pgTable("settings", {
   reminderTimeline: text("reminder_timeline").notNull().default("[]"),
   pauseUntil: timestamp("pause_until"),
   nextCheckinDueAt: timestamp("next_checkin_due_at", { withTimezone: true }),
+  processingLockId: text("processing_lock_id"),
+  processingLockedAt: timestamp("processing_locked_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("settings_next_checkin_due_at_idx").on(table.nextCheckinDueAt),
+  index("settings_checkin_processing_lock_idx").on(table.processingLockId, table.processingLockedAt),
 ]);
 
 export const settingsRelations = relations(settings, ({ one }) => ({

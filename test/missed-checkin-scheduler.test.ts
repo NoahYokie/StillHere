@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
 
-const { computeAnchoredNextCheckinDue, computeMissedCheckinOccurrence, computeNextCheckinDue } = await import("../server/storage");
+const { computeAnchoredNextCheckinDue, computeMissedCheckinOccurrence, computeNextCheckinDue, isCheckinLeaseClaimable } = await import("../server/storage");
 const { pool } = await import("../server/db");
 
 try {
@@ -153,6 +153,44 @@ try {
   assert.deepEqual(claimBatch(["a", "b"]), ["a", "b"], "first worker claims due users");
   assert.deepEqual(claimBatch(["a", "b", "c"]), ["c"], "second worker skips already-claimed users");
   assert.equal(claimed.size, 3, "locking simulation prevents duplicate escalation claims");
+
+  const leaseNow = new Date("2026-05-26T01:10:00.000Z");
+  const dueAt = new Date("2026-05-26T01:00:00.000Z");
+  assert.equal(
+    isCheckinLeaseClaimable({ nextDueAt: dueAt, now: leaseNow }),
+    true,
+    "unlocked due row should be claimable",
+  );
+  assert.equal(
+    isCheckinLeaseClaimable({
+      nextDueAt: dueAt,
+      now: leaseNow,
+      processingLockId: "worker-a",
+      processingLockedAt: new Date("2026-05-26T01:08:00.000Z"),
+      leaseMs: 5 * 60_000,
+    }),
+    false,
+    "fresh worker lease should block another worker",
+  );
+  assert.equal(
+    isCheckinLeaseClaimable({
+      nextDueAt: dueAt,
+      now: leaseNow,
+      processingLockId: "worker-a",
+      processingLockedAt: new Date("2026-05-26T01:04:59.000Z"),
+      leaseMs: 5 * 60_000,
+    }),
+    true,
+    "stale worker lease should be recoverable after timeout",
+  );
+  assert.equal(
+    isCheckinLeaseClaimable({
+      nextDueAt: new Date("2026-05-26T01:15:00.000Z"),
+      now: leaseNow,
+    }),
+    false,
+    "future due row should not be claimable even when unlocked",
+  );
 
   console.log("missed-checkin scheduler tests passed");
 } finally {

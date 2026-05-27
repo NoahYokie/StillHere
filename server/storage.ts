@@ -314,6 +314,19 @@ export function computeAnchoredNextCheckinDue(opts: {
   });
 }
 
+export function isCheckinLeaseClaimable(opts: {
+  nextDueAt: Date | null | undefined;
+  now: Date;
+  processingLockId?: string | null;
+  processingLockedAt?: Date | null;
+  leaseMs?: number;
+}): boolean {
+  if (!opts.nextDueAt || opts.nextDueAt > opts.now) return false;
+  if (!opts.processingLockId || !opts.processingLockedAt) return true;
+  const leaseMs = opts.leaseMs ?? 5 * 60_000;
+  return opts.processingLockedAt.getTime() <= opts.now.getTime() - leaseMs;
+}
+
 export function formatCheckinDueLocalLabel(dueTime: Date, timezone: string | null | undefined): string {
   const tz = timezone || "UTC";
   try {
@@ -822,6 +835,8 @@ export class DatabaseStorage implements IStorage {
       .set({
         checkinIntervalHours: normalizedInterval,
         nextCheckinDueAt: nextDue,
+        processingLockId: null,
+        processingLockedAt: null,
         updatedAt: new Date(),
       })
       .where(eq(settings.userId, userId));
@@ -868,6 +883,8 @@ export class DatabaseStorage implements IStorage {
           .set({
             checkinIntervalHours: normalizedInterval,
             nextCheckinDueAt: nextDue,
+            processingLockId: null,
+            processingLockedAt: null,
             updatedAt: new Date(),
           })
           .where(eq(settings.userId, row.user.id));
@@ -2182,6 +2199,37 @@ export class DatabaseStorage implements IStorage {
       .groupBy(checkins.userId)
       .as("latest_checkins");
 
+    const workerId = process.env.CHECKIN_WORKER_ID || `${process.env.K_SERVICE || "local"}:${process.pid}:${Date.now()}`;
+    const batchSize = Math.max(1, Math.min(500, Number(process.env.CHECKIN_DUE_BATCH_SIZE) || 100));
+    const leaseMs = Math.max(60_000, Math.min(30 * 60_000, Number(process.env.CHECKIN_DUE_LEASE_MS) || 5 * 60_000));
+    const staleBefore = new Date(now.getTime() - leaseMs);
+
+    // Security-guard claim model: atomically mark a small batch as owned by
+    // this worker, then do the actual safety work outside the claim statement.
+    const claimResult = await pool.query<{ user_id: string }>(`
+      UPDATE settings s
+      SET processing_lock_id = $1,
+          processing_locked_at = $2,
+          updated_at = $2
+      WHERE s.user_id IN (
+        SELECT user_id
+        FROM settings
+        WHERE next_checkin_due_at IS NOT NULL
+          AND next_checkin_due_at <= $2
+          AND (pause_until IS NULL OR pause_until <= $2)
+          AND (
+            processing_lock_id IS NULL
+            OR processing_locked_at IS NULL
+            OR processing_locked_at <= $3
+          )
+        ORDER BY next_checkin_due_at ASC
+        LIMIT $4
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING s.user_id
+    `, [workerId, now, staleBefore, batchSize]);
+    const claimedUserIds = claimResult.rows.map((row) => row.user_id);
+
     // Scheduler source of truth: the persisted, indexed UTC due timestamp.
     // A late check-in updates this field to the next anchored local occurrence
     // and never shifts it by elapsed hours.
@@ -2194,13 +2242,9 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .innerJoin(settings, eq(settings.userId, users.id))
       .leftJoin(latestCheckins, eq(latestCheckins.userId, users.id))
-      .where(and(
-        isNotNull(settings.nextCheckinDueAt),
-        lte(settings.nextCheckinDueAt, now),
-        or(isNull(settings.pauseUntil), lte(settings.pauseUntil, now)),
-      ))
+      .where(claimedUserIds.length > 0 ? inArray(users.id, claimedUserIds) : sql`false`)
       .orderBy(settings.nextCheckinDueAt)
-      .limit(2000);
+      .limit(batchSize);
 
     for (const row of candidateRows) {
       const user = row.user as User;
@@ -2227,6 +2271,14 @@ export class DatabaseStorage implements IStorage {
       // Skip if already has open incident
       const openIncident = await this.getOpenIncident(user.id);
       if (openIncident) {
+        await db
+          .update(settings)
+          .set({
+            processingLockId: null,
+            processingLockedAt: null,
+            updatedAt: now,
+          })
+          .where(and(eq(settings.userId, user.id), eq(settings.processingLockId, workerId)));
         console.log(JSON.stringify({
           event: "MISSED_CHECKIN_SKIP",
           userId: user.id,
@@ -2260,8 +2312,13 @@ export class DatabaseStorage implements IStorage {
         if (sameDueIncident) {
           await db
             .update(settings)
-            .set({ nextCheckinDueAt: occurrence.nextDueTime, updatedAt: now })
-            .where(eq(settings.userId, user.id));
+            .set({
+              nextCheckinDueAt: occurrence.nextDueTime,
+              processingLockId: null,
+              processingLockedAt: null,
+              updatedAt: now,
+            })
+            .where(and(eq(settings.userId, user.id), eq(settings.processingLockId, workerId)));
           console.log(JSON.stringify({
             event: "MISSED_CHECKIN_SKIP",
             userId: user.id,
@@ -2276,13 +2333,20 @@ export class DatabaseStorage implements IStorage {
         // push -> SMS -> wellness call -> contacts. Older builds had an extra
         // pre-incident reminder layer, which made users see multiple reminder
         // systems around the same missed check-in.
+        const incident = await this.createIncident(user.id, "missed_checkin");
         await db
           .update(settings)
-          .set({ nextCheckinDueAt: occurrence.nextDueTime, updatedAt: now })
-          .where(eq(settings.userId, user.id));
+          .set({
+            nextCheckinDueAt: occurrence.nextDueTime,
+            processingLockId: null,
+            processingLockedAt: null,
+            updatedAt: now,
+          })
+          .where(and(eq(settings.userId, user.id), eq(settings.processingLockId, workerId)));
         results.push({
           user,
           settings: userSettings,
+          incident,
           isDueForReminder: false,
           isDueForAlert: true,
           dueTime,
@@ -2300,8 +2364,13 @@ export class DatabaseStorage implements IStorage {
         });
         await db
           .update(settings)
-          .set({ nextCheckinDueAt: nextDue, updatedAt: now })
-          .where(eq(settings.userId, user.id));
+          .set({
+            nextCheckinDueAt: nextDue,
+            processingLockId: null,
+            processingLockedAt: null,
+            updatedAt: now,
+          })
+          .where(and(eq(settings.userId, user.id), eq(settings.processingLockId, workerId)));
         console.log(JSON.stringify({
           event: "MISSED_CHECKIN_SKIP",
           userId: user.id,
@@ -2314,6 +2383,10 @@ export class DatabaseStorage implements IStorage {
 
     console.log(JSON.stringify({
       event: "MISSED_CHECKIN_DUE_BATCH",
+      workerId,
+      batchSize,
+      leaseMs,
+      claimedCount: claimedUserIds.length,
       batchCount: candidateRows.length,
       processedCount: results.length,
       skippedCount: candidateRows.length - results.length,

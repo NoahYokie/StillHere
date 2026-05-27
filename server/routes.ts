@@ -7673,7 +7673,6 @@ export async function registerRoutes(
 
   // Cron tick - check for due users (internal only)
   app.get("/api/cron/tick", async (req, res) => {
-    let releaseCronLock: null | (() => Promise<void>) = null;
     try {
       const cronSecret = process.env.SESSION_SECRET;
       if (!cronSecret) {
@@ -7689,12 +7688,6 @@ export async function registerRoutes(
         return res.json({ skipped: true, reason: "previous tick still running" });
       }
       cronRunning = true;
-      releaseCronLock = await tryAcquireDbAdvisoryLock(CRON_TICK_LOCK_ID);
-      if (!releaseCronLock) {
-        cronRunning = false;
-        console.log(JSON.stringify({ event: "CRON_LOCK_CONFLICT", lock: "cron_tick", timestamp: new Date().toISOString() }));
-        return res.json({ skipped: true, reason: "cron already running on another instance" });
-      }
 
       let normalizedLegacyIntervals = 0;
       try {
@@ -8730,16 +8723,9 @@ export async function registerRoutes(
         console.error("[CRON] Stale-incident sweeper failed:", err);
       }
 
-      if (releaseCronLock) {
-        await releaseCronLock();
-        releaseCronLock = null;
-      }
       cronRunning = false;
       res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, placeScheduleAlerts, processorCleanup, staleArchived, normalizedLegacyIntervals });
     } catch (error) {
-      if (releaseCronLock) {
-        await releaseCronLock().catch((unlockError) => console.error("[CRON] Failed to release advisory lock:", unlockError));
-      }
       cronRunning = false;
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });
