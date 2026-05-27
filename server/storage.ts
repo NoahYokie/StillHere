@@ -327,6 +327,22 @@ export function isCheckinLeaseClaimable(opts: {
   return opts.processingLockedAt.getTime() <= opts.now.getTime() - leaseMs;
 }
 
+export function isIncidentEscalationLeaseClaimable(opts: {
+  nextActionAt: Date | null | undefined;
+  status: string;
+  now: Date;
+  processingLockId?: string | null;
+  processingLockedAt?: Date | null;
+  leaseMs?: number;
+}): boolean {
+  if (opts.status === "resolved") return false;
+  const due = !opts.nextActionAt || opts.nextActionAt <= opts.now;
+  if (!due) return false;
+  if (!opts.processingLockId || !opts.processingLockedAt) return true;
+  const leaseMs = opts.leaseMs ?? 5 * 60_000;
+  return opts.processingLockedAt.getTime() <= opts.now.getTime() - leaseMs;
+}
+
 export function formatCheckinDueLocalLabel(dueTime: Date, timezone: string | null | undefined): string {
   const tz = timezone || "UTC";
   try {
@@ -1801,30 +1817,53 @@ export class DatabaseStorage implements IStorage {
 
   async getIncidentsNeedingEscalation(limit = 500): Promise<Incident[]> {
     const now = new Date();
-    // Get incidents where:
-    // 1. Status is not resolved AND
-    // 2. Either:
-    //    a) nextActionAt is set and has passed (normal case), OR
-    //    b) nextActionAt is null (stalled incident needing recovery)
+    const workerId = process.env.INCIDENT_ESCALATION_WORKER_ID || process.env.CHECKIN_WORKER_ID || `${process.env.K_SERVICE || "local"}:${process.pid}:${Date.now()}`;
+    const batchSize = Math.max(1, Math.min(500, Number(process.env.INCIDENT_ESCALATION_BATCH_SIZE) || Math.min(limit, 100)));
+    const leaseMs = Math.max(60_000, Math.min(30 * 60_000, Number(process.env.INCIDENT_ESCALATION_LEASE_MS) || 5 * 60_000));
+    const staleBefore = new Date(now.getTime() - leaseMs);
+
+    const claimResult = await pool.query<{ id: string }>(`
+      UPDATE incidents i
+      SET processing_lock_id = $1,
+          processing_locked_at = $2
+      WHERE i.id IN (
+        SELECT id
+        FROM incidents
+        WHERE status <> 'resolved'
+          AND (
+            (next_action_at IS NOT NULL AND next_action_at > '1970-01-01'::timestamp AND next_action_at < $2)
+            OR next_action_at IS NULL
+          )
+          AND (
+            processing_lock_id IS NULL
+            OR processing_locked_at IS NULL
+            OR processing_locked_at <= $3
+          )
+        ORDER BY next_action_at NULLS FIRST, started_at
+        LIMIT $4
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING i.id
+    `, [workerId, now, staleBefore, batchSize]);
+    const claimedIds = claimResult.rows.map((row) => row.id);
+
+    console.log(JSON.stringify({
+      event: "INCIDENT_ESCALATION_CLAIM_BATCH",
+      workerId,
+      claimedCount: claimedIds.length,
+      batchSize,
+      leaseMs,
+      staleLeaseCutoff: staleBefore.toISOString(),
+    }));
+
+    if (claimedIds.length === 0) return [];
+
     const result = await db
       .select()
       .from(incidents)
-      .where(
-        and(
-          ne(incidents.status, "resolved"),
-          or(
-            // Normal case: nextActionAt has passed
-            and(
-              gt(incidents.nextActionAt, new Date(0)),
-              lt(incidents.nextActionAt, now)
-            ),
-            // Recovery case: active incident with null nextActionAt
-            isNull(incidents.nextActionAt)
-          )
-        )
-      )
+      .where(inArray(incidents.id, claimedIds))
       .orderBy(incidents.nextActionAt, incidents.startedAt)
-      .limit(limit);
+      .limit(batchSize);
     return result;
   }
 
@@ -1870,9 +1909,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateIncident(id: string, updates: Partial<Incident>): Promise<Incident> {
+    const shouldReleaseLease = Object.prototype.hasOwnProperty.call(updates, "nextActionAt")
+      || Object.prototype.hasOwnProperty.call(updates, "status")
+      || Object.prototype.hasOwnProperty.call(updates, "lastEscalationStep")
+      || Object.prototype.hasOwnProperty.call(updates, "escalationLevel")
+      || Object.prototype.hasOwnProperty.call(updates, "notifiedContactIds")
+      || Object.prototype.hasOwnProperty.call(updates, "userNotifiedNoResponseAt");
+    const patch: Partial<Incident> = shouldReleaseLease
+      ? { ...updates, processingLockId: null, processingLockedAt: null } as Partial<Incident>
+      : updates;
     const [incident] = await db
       .update(incidents)
-      .set(updates)
+      .set(patch)
       .where(eq(incidents.id, id))
       .returning();
     if (!incident) throw new Error("Incident not found");

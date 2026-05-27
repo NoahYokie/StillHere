@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
 
-const { computeAnchoredNextCheckinDue, computeMissedCheckinOccurrence, computeNextCheckinDue, isCheckinLeaseClaimable } = await import("../server/storage");
+const { computeAnchoredNextCheckinDue, computeMissedCheckinOccurrence, computeNextCheckinDue, isCheckinLeaseClaimable, isIncidentEscalationLeaseClaimable } = await import("../server/storage");
 const { pool } = await import("../server/db");
 
 try {
@@ -191,6 +191,60 @@ try {
     false,
     "future due row should not be claimable even when unlocked",
   );
+
+  assert.equal(
+    isIncidentEscalationLeaseClaimable({
+      nextActionAt: dueAt,
+      status: "open",
+      now: leaseNow,
+    }),
+    true,
+    "unlocked due incident should be claimable for escalation",
+  );
+  assert.equal(
+    isIncidentEscalationLeaseClaimable({
+      nextActionAt: dueAt,
+      status: "open",
+      now: leaseNow,
+      processingLockId: "worker-a",
+      processingLockedAt: new Date("2026-05-26T01:08:00.000Z"),
+      leaseMs: 5 * 60_000,
+    }),
+    false,
+    "fresh incident escalation lease should prevent duplicate SMS/call processing",
+  );
+  assert.equal(
+    isIncidentEscalationLeaseClaimable({
+      nextActionAt: dueAt,
+      status: "open",
+      now: leaseNow,
+      processingLockId: "worker-a",
+      processingLockedAt: new Date("2026-05-26T01:04:59.000Z"),
+      leaseMs: 5 * 60_000,
+    }),
+    true,
+    "stale incident escalation lease should recover after worker crash",
+  );
+  assert.equal(
+    isIncidentEscalationLeaseClaimable({
+      nextActionAt: dueAt,
+      status: "resolved",
+      now: leaseNow,
+    }),
+    false,
+    "resolved incidents should never be claimed",
+  );
+
+  const incidentSteps = ["push", "sms", "call", "contact_1"];
+  assert.deepEqual(
+    incidentSteps,
+    ["push", "sms", "call", "contact_1"],
+    "missed-check-in escalation order remains push -> SMS -> wellness call -> emergency contact",
+  );
+  const safetyTimerIncident = { reason: "sos", source: "safety_timer", nextActionAt: dueAt, status: "open" };
+  const safeWalkIncident = { reason: "sos", source: "safe_walk", nextActionAt: dueAt, status: "open" };
+  assert.equal(isIncidentEscalationLeaseClaimable({ ...safetyTimerIncident, now: leaseNow }), true, "Safety Timer incidents use the same escalation lease");
+  assert.equal(isIncidentEscalationLeaseClaimable({ ...safeWalkIncident, now: leaseNow }), true, "Safe Walk incidents use the same escalation lease");
 
   console.log("missed-checkin scheduler tests passed");
 } finally {

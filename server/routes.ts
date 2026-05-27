@@ -7782,8 +7782,33 @@ export async function registerRoutes(
       const MAX_SEQUENTIAL = 5;
 
       for (const incident of incidentsNeedingEscalation) {
+        console.log(JSON.stringify({
+          event: "INCIDENT_ESCALATION_PROCESS_START",
+          workerId: (incident as any).processingLockId || null,
+          incidentId: incident.id,
+          userId: incident.userId,
+          reason: incident.reason,
+          step: incident.lastEscalationStep || "initial",
+          nextActionAt: incident.nextActionAt?.toISOString?.() || null,
+          latencyMs: incident.nextActionAt ? Math.max(0, now.getTime() - incident.nextActionAt.getTime()) : null,
+        }));
         const user = await storage.getUser(incident.userId);
-        if (!user) continue;
+        if (!user) {
+          await storage.updateIncident(incident.id, {
+            nextActionAt: addMinutes(now, 30),
+            escalationTimeline: JSON.stringify([
+              ...parseEscalationTimeline(incident.escalationTimeline),
+              { type: "system", time: now.toISOString(), detail: "Escalation delayed because the user record was unavailable." },
+            ]),
+          });
+          console.warn(JSON.stringify({
+            event: "INCIDENT_ESCALATION_SKIPPED",
+            incidentId: incident.id,
+            reason: "user_not_found",
+            workerId: (incident as any).processingLockId || null,
+          }));
+          continue;
+        }
 
         const userSettings = await storage.getSettings(incident.userId);
         const escalationMinutes = userSettings?.escalationMinutes || 20;
@@ -7832,7 +7857,16 @@ export async function registerRoutes(
           continue;
         }
 
-        if (incident.status !== "open") continue;
+        if (incident.status !== "open") {
+          await storage.updateIncident(incident.id, { nextActionAt: addMinutes(now, 30) });
+          console.log(JSON.stringify({
+            event: "INCIDENT_ESCALATION_SKIPPED",
+            incidentId: incident.id,
+            reason: `status:${incident.status}`,
+            workerId: (incident as any).processingLockId || null,
+          }));
+          continue;
+        }
 
         if (step === "push") {
           console.log(JSON.stringify({ event: "CONTACT_BLOCKED", reason: "escalation in progress  -  step: push→sms", userId: user.id, incidentId: incident.id, timestamp: timeStr }));

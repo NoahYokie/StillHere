@@ -318,6 +318,8 @@ export const incidents = pgTable("incidents", {
   drillAcknowledgedByContactId: uuid("drill_acknowledged_by_contact_id").references(() => contacts.id),
   drillResponses: text("drill_responses").notNull().default("[]"),
   wellnessCallStatus: text("wellness_call_status"),
+  processingLockId: text("processing_lock_id"),
+  processingLockedAt: timestamp("processing_locked_at", { withTimezone: true }),
   // Set true when the notification engine could not deliver via the
   // primary intended channel (SMS or voice) due to a circuit-breaker /
   // policy block / provider error and had to fall back to push, in-app,
@@ -334,6 +336,7 @@ export const incidents = pgTable("incidents", {
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_status_idx").on(table.status),
   index("incidents_status_next_action_idx").on(table.status, table.nextActionAt),
+  index("incidents_escalation_processing_lock_idx").on(table.processingLockId, table.processingLockedAt),
 ]);
 
 export const incidentsRelations = relations(incidents, ({ one, many }) => ({
