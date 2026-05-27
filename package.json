@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:checkin-scheduler": "tsx test/missed-checkin-scheduler.test.ts",
+    "test:wellness-call": "tsx test/wellness-call-intelligence.test.ts",
     "db:push": "drizzle-kit push",
     "db:backfill-checkin-due": "tsx script/backfill-next-checkin-due.ts",
     "check:production": "tsx script/check-production-readiness.ts",
