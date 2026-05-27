@@ -61,6 +61,13 @@ interface ContactEntry {
   linkedUserId?: string | null;
 }
 
+interface StillHereContactInfo {
+  name: string;
+  phoneNumber: string | null;
+  hasPhoneNumber: boolean;
+  vcardUrl: string;
+}
+
 function SafetyHealthCard() {
   const health = usePermissionHealth();
   const [fixing, setFixing] = useState(false);
@@ -248,6 +255,10 @@ export default function SettingsPage() {
     queryKey: ["/api/status"],
   });
 
+  const { data: stillHereContact } = useQuery<StillHereContactInfo>({
+    queryKey: ["/api/stillhere-contact"],
+  });
+
   const { data: removedContacts } = useQuery<{ id: string; name: string; phone: string; softDeletedAt: string }[]>({
     queryKey: ["/api/contacts/removed"],
   });
@@ -287,6 +298,20 @@ export default function SettingsPage() {
       toast({ title: "Could not update contact", variant: "destructive" });
     },
   });
+
+  const copyStillHereNumber = async () => {
+    const phoneNumber = stillHereContact?.phoneNumber;
+    if (!phoneNumber) {
+      toast({ title: "StillHere number is not configured yet", variant: "destructive" });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(phoneNumber);
+      toast({ title: "StillHere number copied" });
+    } catch {
+      toast({ title: "Could not copy number", variant: "destructive" });
+    }
+  };
 
   const removeContactMutation = useMutation({
     mutationFn: async (contactId: string) => {
@@ -1243,6 +1268,44 @@ export default function SettingsPage() {
                   <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
                     If you miss your scheduled check-in, StillHere starts one clear flow: push notification, SMS, wellness call, then your Safety Circle if you still do not respond.
                   </p>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3" data-testid="card-save-stillhere-number">
+                  <div className="flex items-start gap-2">
+                    <Phone className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <Label className="text-sm font-medium">Save the StillHere Safety Number</Label>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                        StillHere may call you during missed check-ins or emergencies. Saving the number helps wellness calls ring correctly and avoids spam filtering.
+                      </p>
+                      {stillHereContact?.phoneNumber && (
+                        <p className="text-xs font-medium mt-2" data-testid="text-stillhere-phone">{stillHereContact.phoneNumber}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => { window.location.href = stillHereContact?.vcardUrl || "/assets/stillhere-safety.vcf"; }}
+                          disabled={!stillHereContact?.hasPhoneNumber}
+                          data-testid="button-download-stillhere-contact"
+                        >
+                          Download contact card
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8"
+                          onClick={copyStillHereNumber}
+                          disabled={!stillHereContact?.hasPhoneNumber}
+                          data-testid="button-copy-stillhere-number"
+                        >
+                          Copy number
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>

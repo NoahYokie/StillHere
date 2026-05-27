@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -8,9 +8,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings, Clock, MapPin } from "lucide-react";
+import { Settings, Clock, MapPin, Phone } from "lucide-react";
 import type { LocationMode } from "@shared/schema";
 import { Bell } from "lucide-react";
+
+interface StillHereContactInfo {
+  name: string;
+  phoneNumber: string | null;
+  hasPhoneNumber: boolean;
+  vcardUrl: string;
+}
 
 const timeOptions = [
   { value: "06:00", label: "6:00 AM" },
@@ -38,6 +45,9 @@ export default function SetupPreferencesPage() {
   const [preferredTime, setPreferredTime] = useState("09:00");
   const [locationMode, setLocationMode] = useState<LocationMode>("off");
   const [timezone, setTimezone] = useState("");
+  const { data: stillHereContact } = useQuery<StillHereContactInfo>({
+    queryKey: ["/api/stillhere-contact"],
+  });
 
   useEffect(() => {
     const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -76,6 +86,19 @@ export default function SetupPreferencesPage() {
 
   const handleComplete = () => {
     settingsMutation.mutate();
+  };
+
+  const copyStillHereNumber = async () => {
+    if (!stillHereContact?.phoneNumber) {
+      toast({ title: "StillHere number is not configured yet", variant: "destructive" });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(stillHereContact.phoneNumber);
+      toast({ title: "StillHere number copied" });
+    } catch {
+      toast({ title: "Could not copy number", variant: "destructive" });
+    }
   };
 
   return (
@@ -182,6 +205,41 @@ export default function SetupPreferencesPage() {
             <p className="text-sm text-muted-foreground leading-relaxed">
               If you miss your scheduled check-in, StillHere starts one clear flow: push notification, SMS, wellness call, then your Safety Circle if you still do not respond.
             </p>
+          </div>
+
+          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2" data-testid="card-save-stillhere-number">
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Save the StillHere Safety Number</Label>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              StillHere may call you during missed check-ins or emergencies. Saving the number helps wellness calls ring correctly and avoids spam filtering.
+            </p>
+            {stillHereContact?.phoneNumber && (
+              <p className="text-xs font-medium" data-testid="text-stillhere-phone">{stillHereContact.phoneNumber}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => { window.location.href = stillHereContact?.vcardUrl || "/assets/stillhere-safety.vcf"; }}
+                disabled={!stillHereContact?.hasPhoneNumber}
+                data-testid="button-download-stillhere-contact"
+              >
+                Download contact card
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={copyStillHereNumber}
+                disabled={!stillHereContact?.hasPhoneNumber}
+                data-testid="button-copy-stillhere-number"
+              >
+                Copy number
+              </Button>
+            </div>
           </div>
 
           <Button

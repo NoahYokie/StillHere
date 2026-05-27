@@ -59,6 +59,7 @@ import {
   classifyWellnessTwiMLAnswer,
   shouldAccelerateContactEscalation,
 } from "./wellness-call-intelligence";
+import { buildStillHereContactVCard, PRE_CALL_SMS_BODY } from "./stillhere-contact-card";
 
 // Helper to get userId from session
 // Per-user SOS in-flight lock. Set SYNCHRONOUSLY at the top of the SOS handler
@@ -420,6 +421,54 @@ async function createProtectedUserSystemAlert(
   }
 }
 
+async function appendIncidentTimelineEntry(
+  incidentId: string,
+  entry: { type: string; time: string; detail: string },
+): Promise<void> {
+  await pool.query(
+    `UPDATE incidents
+     SET escalation_timeline = (COALESCE(NULLIF(escalation_timeline, ''), '[]')::jsonb || $2::jsonb)::text
+     WHERE id = $1`,
+    [incidentId, JSON.stringify([entry])],
+  );
+}
+
+async function sendPreCallSmsForIncident(
+  user: { id: string; phone?: string | null },
+  incident: { id: string },
+): Promise<void> {
+  if (!user.phone) return;
+  const now = new Date();
+  const masked = `***${user.phone.slice(-4)}`;
+  try {
+    const result = await sendSms(user.phone, PRE_CALL_SMS_BODY, {
+      purpose: "wellness_call",
+      userId: user.id,
+      incidentId: incident.id,
+      dedupeKey: `wellness_pre_call_sms:${incident.id}`,
+    });
+    await appendIncidentTimelineEntry(incident.id, {
+      type: result.success ? "pre_call_sms_sent" : "pre_call_sms_failed",
+      time: now.toISOString(),
+      detail: result.success
+        ? "Pre-call SMS sent before wellness call"
+        : `Pre-call SMS failed before wellness call: ${result.error || "unknown error"}`,
+    });
+    if (result.success) {
+      console.log(`[WELLNESS CALL] Pre-call SMS sent to ${masked} incident=${incident.id}`);
+    } else {
+      console.warn(`[WELLNESS CALL] Pre-call SMS failed to ${masked} incident=${incident.id}: ${result.error || "unknown error"}`);
+    }
+  } catch (err: any) {
+    await appendIncidentTimelineEntry(incident.id, {
+      type: "pre_call_sms_failed",
+      time: now.toISOString(),
+      detail: `Pre-call SMS failed before wellness call: ${err?.message || err}`,
+    }).catch(() => {});
+    console.warn(`[WELLNESS CALL] Pre-call SMS error to ${masked} incident=${incident.id}: ${err?.message || err}`);
+  }
+}
+
 async function placeWellnessCallForIncident(
   user: { id: string; phone?: string | null; name?: string | null },
   incident: { id: string },
@@ -485,6 +534,12 @@ async function placeWellnessCallForIncident(
       throw new Error("Twilio voice caller number is not configured. Set TWILIO_VOICE_PHONE_NUMBER to a verified or purchased Twilio voice number.");
     }
     const baseUrl = getBaseUrl();
+    if (timeline.length > 0) {
+      await storage.updateIncident(incident.id, { escalationTimeline: JSON.stringify(timeline) });
+    }
+    sendPreCallSmsForIncident(user, incident).catch((err: any) => {
+      console.warn(`[WELLNESS CALL] Pre-call SMS async task failed incident=${incident.id}: ${err?.message || err}`);
+    });
     const callParams: any = {
       to: user.phone!,
       from: voiceFromNumber,
@@ -498,12 +553,11 @@ async function placeWellnessCallForIncident(
     };
     const callResult = await twilioVoiceLimiter.run(() => client.calls.create(callParams));
     await voicePolicy.markSendProviderResult(voiceAttemptId, "sent", { providerId: callResult.sid });
-    timeline.push({ type: "wellness_call_placed", time: timeStr, detail: `${detailPrefix} placed` });
     await storage.updateIncident(incident.id, {
       callSentAt: time,
       wellnessCallStatus: "placed",
-      escalationTimeline: JSON.stringify(timeline),
     });
+    await appendIncidentTimelineEntry(incident.id, { type: "wellness_call_placed", time: timeStr, detail: `${detailPrefix} placed` });
     console.log(`[SAFE-WALK] Wellness call placed for user=${user.id} (SID: ${callResult.sid})`);
     return true;
   } catch (err: any) {
@@ -697,6 +751,31 @@ export async function registerRoutes(
 ): Promise<Server> {
   const isNativeAuthRequest = (req: Request) =>
     req.get("Origin") === "capacitor://localhost" || req.get("X-StillHere-Native") === "1";
+
+  app.get("/api/stillhere-contact", (_req, res) => {
+    const phoneNumber = getTwilioVoiceFromNumber();
+    res.json({
+      name: "StillHere Safety",
+      phoneNumber,
+      hasPhoneNumber: !!phoneNumber,
+      vcardUrl: "/assets/stillhere-safety.vcf",
+    });
+  });
+
+  app.get("/assets/stillhere-safety.vcf", (_req, res) => {
+    const phoneNumber = getTwilioVoiceFromNumber();
+    if (!phoneNumber) {
+      return res.status(404).type("text/plain").send("StillHere safety number is not configured.");
+    }
+    res
+      .status(200)
+      .set({
+        "Content-Type": "text/vcard; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="stillhere-safety.vcf"',
+        "Cache-Control": "public, max-age=300",
+      })
+      .send(buildStillHereContactVCard(phoneNumber));
+  });
   
   // ============================================
   // HEALTH CHECK (public)
@@ -7999,6 +8078,12 @@ export async function registerRoutes(
               if (!voiceFromNumber) {
                 throw new Error("Twilio voice caller number is not configured. Set TWILIO_VOICE_PHONE_NUMBER to a verified or purchased Twilio voice number.");
               }
+              if (existingTimeline.length > 0) {
+                await storage.updateIncident(incident.id, { escalationTimeline: JSON.stringify(existingTimeline) });
+              }
+              sendPreCallSmsForIncident(user, incident).catch((err: any) => {
+                console.warn(`[WELLNESS CALL] Pre-call SMS async task failed incident=${incident.id}: ${err?.message || err}`);
+              });
               const callParams: any = {
                 to: user.phone,
                 from: voiceFromNumber,
@@ -8012,7 +8097,7 @@ export async function registerRoutes(
               };
               const callResult = await twilioVoiceLimiter.run(() => client.calls.create(callParams));
               await voicePolicy.markSendProviderResult(voiceAttemptId, "sent", { providerId: callResult.sid });
-              existingTimeline.push({ type: "wellness_call_placed", time: timeStr, detail: "Wellness call placed" });
+              await appendIncidentTimelineEntry(incident.id, { type: "wellness_call_placed", time: timeStr, detail: "Wellness call placed" });
               console.log(`[ESCALATION] Call placed (SID: ${callResult.sid})`);
 
               console.log(JSON.stringify({
@@ -8028,7 +8113,6 @@ export async function registerRoutes(
                 callSentAt: now,
                 wellnessCallStatus: "placed",
                 nextActionAt: addMinutes(now, 2),
-                escalationTimeline: JSON.stringify(existingTimeline),
               });
               escalations++;
               continue;
