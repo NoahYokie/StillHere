@@ -247,6 +247,44 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
+function TimezoneConfirmationBanner({ userTimezone }: { userTimezone?: string }) {
+  const DISMISSED_KEY = "stillhere:timezone_banner_dismissed";
+  const [visible, setVisible] = useState(false);
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!userTimezone || userTimezone !== "Australia/Melbourne") return;
+    if (localStorage.getItem(DISMISSED_KEY)) return;
+    try {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (detected && detected !== "Australia/Melbourne") setVisible(true);
+    } catch {}
+  }, [userTimezone]);
+
+  if (!visible) return null;
+  return (
+    <Card className="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-700" data-testid="banner-timezone-confirm">
+      <CardContent className="p-3">
+        <div className="flex items-start gap-2">
+          <Clock className="h-4 w-4 text-yellow-700 dark:text-yellow-400 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Your timezone may not be set correctly</p>
+            <p className="text-xs text-yellow-700/80 dark:text-yellow-400/70 mt-0.5">This can affect when check-in reminders fire. Update in Settings.</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" className="h-7 text-xs border-yellow-400" onClick={() => { setVisible(false); localStorage.setItem(DISMISSED_KEY, "1"); setLocation("/settings"); }}>
+              Update
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setVisible(false); localStorage.setItem(DISMISSED_KEY, "1"); }}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PushNotificationBanner() {
   const { toast } = useToast();
   const [pushState, setPushState] = useState<"loading" | "unsupported" | "denied" | "granted" | "prompt">("loading");
@@ -787,6 +825,7 @@ export default function Home() {
 
       <main className="max-w-md mx-auto px-6 pt-6 pb-12 space-y-7">
         <PushNotificationBanner />
+        <TimezoneConfirmationBanner userTimezone={status?.user?.timezone} />
         <PermissionRecoveryCard />
 
         {hasOpenIncident && status && (

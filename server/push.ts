@@ -225,6 +225,20 @@ export async function sendPushNotification(
     await recordOutcome("sent", failed > 0 ? `partial_failed=${failed}` : undefined);
   } else {
     await recordOutcome("failed", `all_subscriptions_failed=${failed}`);
+    // High-visibility warning for safety-critical zero-delivery. Surfaces
+    // silent push failures before the SMS fallback fires.
+    const purpose = options.purpose || "system_alert";
+    const { isSafetyCritical } = await import("./outbound-policy");
+    if (purpose === "system_alert" || isSafetyCritical(purpose)) {
+      console.warn(JSON.stringify({
+        event: "PUSH_DELIVERY_ZERO",
+        userId,
+        purpose,
+        subscriptionCount: subscriptions.length,
+        failed,
+        tag: payload.tag,
+      }));
+    }
   }
 
   return { sent, failed };

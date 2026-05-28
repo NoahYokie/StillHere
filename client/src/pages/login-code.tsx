@@ -73,8 +73,12 @@ export default function LoginCodePage() {
     mutationFn: async () => {
       // Only send ageConfirmed once the user has actually checked the box on
       // the age-gate screen. For routine logins we omit the field entirely.
-      const body: { phone: string; code: string; ageConfirmed?: boolean } = { phone, code };
+      const detectedTimezone = (() => {
+        try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return undefined; }
+      })();
+      const body: { phone: string; code: string; ageConfirmed?: boolean; timezone?: string } = { phone, code };
       if (showAgeGate && ageConfirmed) body.ageConfirmed = true;
+      if (detectedTimezone) body.timezone = detectedTimezone;
       if (nativeLogin) setNativeAuthStatus("Verifying code...");
       nativeAuthLog("otp_verify_started", { endpoint: "/api/auth/verify-code" });
       const res = await apiRequest("POST", "/api/auth/verify-code", body);

@@ -2398,6 +2398,18 @@ export class DatabaseStorage implements IStorage {
         // pre-incident reminder layer, which made users see multiple reminder
         // systems around the same missed check-in.
         const incident = await this.createIncident(user.id, "missed_checkin");
+
+        // Set concern state immediately on incident creation — this is the
+        // authoritative transition point. If the user is already in concern
+        // (SOS, Safety Timer, Safe Walk), preserve that state and reason.
+        if (user.safetyState !== "concern") {
+          await this.updateSafetyState(
+            user.id,
+            "concern",
+            "Missed check-in — we're trying to reach them.",
+          );
+        }
+
         await db
           .update(settings)
           .set({
@@ -2808,7 +2820,7 @@ export class DatabaseStorage implements IStorage {
       result.push({
         userId: user.id,
         userName: user.name,
-        userTimezone: user.timezone || "Australia/Melbourne",
+        userTimezone: user.timezone || "UTC",
         lastCheckinAt: lastCheckin?.createdAt || null,
         lastCheckinMethod: lastCheckin?.method || null,
         nextCheckinDue,

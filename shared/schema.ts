@@ -92,7 +92,7 @@ export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   phone: text("phone").unique(),
-  timezone: text("timezone").notNull().default("Australia/Melbourne"),
+  timezone: text("timezone").notNull().default("UTC"),
   isPremium: boolean("is_premium").notNull().default(false),
   publicKey: text("public_key"),
   lastHeartbeatAt: timestamp("last_heartbeat_at"),

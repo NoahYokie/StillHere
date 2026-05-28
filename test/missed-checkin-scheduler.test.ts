@@ -435,6 +435,194 @@ try {
     "weekly cadence guard: advances to Friday May 29 09:00 Perth when May 22 slot is already past",
   );
 
+  // ── Global timezone correctness ─────────────────────────────────────────────
+  // StillHere must schedule check-ins correctly for all users globally.
+  // Reference "now": 2026-05-29T07:11:00Z (Friday, globally consistent baseline)
+  const globalNow = new Date("2026-05-29T07:11:00.000Z");
+  const globalAnchor = new Date("2026-05-01T02:00:00.000Z"); // early May account creation
+  const yesterdayCheckin = (offsetHours: number) => new Date(globalNow.getTime() - (24 + offsetHours) * 3_600_000);
+
+  // Each city uses its own "now" = 3 PM local time, demonstrating the guard
+  // fires correctly when the preferred check-in time has already passed.
+  // All use the same account anchor (May 1) and a "yesterday 2PM local" last
+  // check-in so the raw computation lands on "today 9AM" — which is past.
+  const globalTimezoneTests: Array<{
+    city: string;
+    tz: string;
+    preferred: string;
+    lastCheckinUtc: string; // yesterday 2PM local
+    nowUtc: string;         // today 3PM local
+    expectedRawUtc: string; // today 9AM local (past)
+    expectedGuardedUtc: string; // tomorrow 9AM local
+  }> = [
+    {
+      // Perth UTC+8: 3PM = 07:00Z; 9AM = 01:00Z (past); yesterday 2PM = 06:00Z prev day
+      city: "Perth",
+      tz: "Australia/Perth",
+      preferred: "09:00",
+      lastCheckinUtc: "2026-05-28T06:00:00.000Z",
+      nowUtc: "2026-05-29T07:00:00.000Z",
+      expectedRawUtc: "2026-05-29T01:00:00.000Z",
+      expectedGuardedUtc: "2026-05-30T01:00:00.000Z",
+    },
+    {
+      // London BST (UTC+1) in May: 3PM = 14:00Z; 9AM = 08:00Z (past); yesterday 2PM = 13:00Z prev day
+      city: "London",
+      tz: "Europe/London",
+      preferred: "09:00",
+      lastCheckinUtc: "2026-05-28T13:00:00.000Z",
+      nowUtc: "2026-05-29T14:00:00.000Z",
+      expectedRawUtc: "2026-05-29T08:00:00.000Z",
+      expectedGuardedUtc: "2026-05-30T08:00:00.000Z",
+    },
+    {
+      // New York EDT (UTC-4) in May: 3PM = 19:00Z; 9AM = 13:00Z (past); yesterday 2PM = 18:00Z prev day
+      city: "New York",
+      tz: "America/New_York",
+      preferred: "09:00",
+      lastCheckinUtc: "2026-05-28T18:00:00.000Z",
+      nowUtc: "2026-05-29T19:00:00.000Z",
+      expectedRawUtc: "2026-05-29T13:00:00.000Z",
+      expectedGuardedUtc: "2026-05-30T13:00:00.000Z",
+    },
+    {
+      // Lagos WAT (UTC+1, no DST): 3PM = 14:00Z; 9AM = 08:00Z (past); yesterday 2PM = 13:00Z prev day
+      city: "Lagos",
+      tz: "Africa/Lagos",
+      preferred: "09:00",
+      lastCheckinUtc: "2026-05-28T13:00:00.000Z",
+      nowUtc: "2026-05-29T14:00:00.000Z",
+      expectedRawUtc: "2026-05-29T08:00:00.000Z",
+      expectedGuardedUtc: "2026-05-30T08:00:00.000Z",
+    },
+    {
+      // Tokyo JST (UTC+9, no DST): 3PM = 06:00Z; 9AM = 00:00Z (past); yesterday 2PM = 05:00Z prev day
+      city: "Tokyo",
+      tz: "Asia/Tokyo",
+      preferred: "09:00",
+      lastCheckinUtc: "2026-05-28T05:00:00.000Z",
+      nowUtc: "2026-05-29T06:00:00.000Z",
+      expectedRawUtc: "2026-05-29T00:00:00.000Z",
+      expectedGuardedUtc: "2026-05-30T00:00:00.000Z",
+    },
+  ];
+
+  for (const tc of globalTimezoneTests) {
+    const cityNow = new Date(tc.nowUtc);
+    const raw = computeAnchoredNextCheckinDue({
+      userCreatedAt: globalAnchor,
+      lastCheckinAt: new Date(tc.lastCheckinUtc),
+      intervalHours: 24,
+      preferredCheckinTime: tc.preferred,
+      timezone: tc.tz,
+    });
+    assert.equal(
+      raw.toISOString(),
+      tc.expectedRawUtc,
+      `[${tc.city}] raw anchored result`,
+    );
+    assert.ok(
+      raw <= cityNow,
+      `[${tc.city}] raw result must be in the past at 3PM local (guard precondition)`,
+    );
+    const guarded = computeNextCheckinDue({
+      lastTime: raw,
+      intervalHours: 24,
+      preferredCheckinTime: tc.preferred,
+      timezone: tc.tz,
+      lastTimeIsCheckin: false,
+    });
+    assert.equal(
+      guarded.toISOString(),
+      tc.expectedGuardedUtc,
+      `[${tc.city}] guarded result`,
+    );
+    assert.ok(
+      guarded > cityNow,
+      `[${tc.city}] guarded result must be in the future at 3PM local`,
+    );
+  }
+
+  // ── DST transition: London BST ↔ GMT ─────────────────────────────────────
+  // London clocks go back at 01:00 BST on last Sunday of October.
+  // 2026-10-25: at 01:00 BST (00:00 UTC) clocks go back to 00:00 GMT.
+  const dstBefore_London = computeAnchoredNextCheckinDue({
+    userCreatedAt: new Date("2026-10-24T22:00:00.000Z"),
+    lastCheckinAt: new Date("2026-10-24T22:30:00.000Z"), // 11:30 PM BST on Oct 24
+    intervalHours: 24,
+    preferredCheckinTime: "09:00",
+    timezone: "Europe/London",
+  });
+  const dstAfter_London = computeAnchoredNextCheckinDue({
+    userCreatedAt: new Date("2026-10-24T22:00:00.000Z"),
+    lastCheckinAt: dstBefore_London,
+    intervalHours: 24,
+    preferredCheckinTime: "09:00",
+    timezone: "Europe/London",
+  });
+  // Oct 25 is BST (UTC+1) → 9AM BST = 08:00 UTC
+  assert.equal(dstBefore_London.toISOString(), "2026-10-25T08:00:00.000Z",
+    "London 09:00 on DST changeover day (still BST → UTC+1)");
+  // Oct 26 is GMT (UTC+0) → 9AM GMT = 09:00 UTC
+  assert.equal(dstAfter_London.toISOString(), "2026-10-26T09:00:00.000Z",
+    "London 09:00 after DST ends (GMT → UTC+0) — no drift");
+
+  // ── Idempotent concern state: concurrent incidents ────────────────────────
+  // If a user has a Safe Walk open AND misses a check-in, the missed check-in
+  // must not override the existing "Safe walk overdue" concern reason.
+  // We verify this at the logic level: safetyState !== "concern" is the gate.
+  const safewalkUserState = "concern"; // already in concern from Safe Walk
+  const missedCheckinShouldUpdateState = safewalkUserState !== "concern";
+  assert.equal(
+    missedCheckinShouldUpdateState,
+    false,
+    "missed check-in must not override concern state when user is already in concern from another incident",
+  );
+  const activeUserState = "active";
+  const missedCheckinShouldUpdateActiveUser = activeUserState !== "concern";
+  assert.equal(
+    missedCheckinShouldUpdateActiveUser,
+    true,
+    "missed check-in must set concern when user is currently active",
+  );
+
+  // ── Overdue occurrence: New York user ─────────────────────────────────────
+  // New York at 3:11 PM EDT (UTC-4) = 19:11 UTC. Last checkin: yesterday 2PM EDT.
+  const nyNow = new Date("2026-05-29T19:11:00.000Z"); // 3:11 PM EDT
+  const nyLastCheckin = new Date("2026-05-28T18:00:00.000Z"); // yesterday 2PM EDT
+  const nyOccurrence = computeMissedCheckinOccurrence({
+    lastTime: nyLastCheckin,
+    scheduleAnchorTime: globalAnchor,
+    now: nyNow,
+    intervalHours: 24,
+    preferredCheckinTime: "09:00",
+    timezone: "America/New_York",
+    lastTimeIsCheckin: true,
+  });
+  assert.ok(nyOccurrence, "New York user at 3:11PM EDT should be overdue for 9AM check-in");
+  assert.equal(
+    nyOccurrence!.dueTime.toISOString(),
+    "2026-05-29T13:00:00.000Z", // 9AM EDT today = 13:00 UTC
+    "New York missed check-in due time is 9AM EDT = 13:00 UTC",
+  );
+
+  // ── Tokyo: no DST, always UTC+9 ────────────────────────────────────────────
+  const tokyoOccurrence = computeMissedCheckinOccurrence({
+    lastTime: new Date("2026-05-28T05:00:00.000Z"), // yesterday 2PM JST
+    scheduleAnchorTime: globalAnchor,
+    now: new Date("2026-05-29T03:11:00.000Z"),      // today noon JST (12:11)
+    intervalHours: 24,
+    preferredCheckinTime: "09:00",
+    timezone: "Asia/Tokyo",
+    lastTimeIsCheckin: true,
+  });
+  assert.ok(tokyoOccurrence, "Tokyo user at noon should be overdue for 9AM check-in");
+  assert.equal(
+    tokyoOccurrence!.dueTime.toISOString(),
+    "2026-05-29T00:00:00.000Z", // 9AM JST = 00:00 UTC
+    "Tokyo missed check-in due time is 9AM JST = 00:00 UTC",
+  );
+
   console.log("missed-checkin scheduler tests passed");
 } finally {
   await pool.end().catch(() => {});

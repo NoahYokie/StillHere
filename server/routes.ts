@@ -907,7 +907,10 @@ export async function registerRoutes(
       }
       
       const ageConfirmed = req.body?.ageConfirmed === true;
-      const result = await verifyOtp(phone, code, { ageConfirmed });
+      const clientTimezone = typeof req.body?.timezone === "string" && req.body.timezone.length <= 100 && req.body.timezone.includes("/")
+        ? req.body.timezone
+        : undefined;
+      const result = await verifyOtp(phone, code, { ageConfirmed, timezone: clientTimezone });
 
       if (!result.success) {
         // COPPA / age gate (Batch 3). New user did not tick the 13+ box.
@@ -7901,6 +7904,8 @@ export async function registerRoutes(
 
   // Cron tick - check for due users (internal only)
   app.get("/api/cron/tick", async (req, res) => {
+    // Declared outside try so the catch block can release the lock on error.
+    let releaseCronLock: (() => Promise<void>) | null = null;
     try {
       const cronSecret = process.env.SESSION_SECRET;
       if (!cronSecret) {
@@ -7915,6 +7920,15 @@ export async function registerRoutes(
       if (cronRunning) {
         return res.json({ skipped: true, reason: "previous tick still running" });
       }
+
+      // DB-level advisory lock prevents two Cloud Run instances from running
+      // the same tick simultaneously. cronRunning handles within-process
+      // overlap; the advisory lock handles across-process overlap.
+      releaseCronLock = await tryAcquireDbAdvisoryLock(CRON_TICK_LOCK_ID);
+      if (!releaseCronLock) {
+        return res.json({ skipped: true, reason: "cron tick lock held by another instance" });
+      }
+
       cronRunning = true;
 
       let normalizedLegacyIntervals = 0;
@@ -7943,8 +7957,11 @@ export async function registerRoutes(
       for (const { user, settings, incident: claimedIncident, isDueForAlert, dueTime, dueOccurrenceKey, localDueLabel } of overdueUsers) {
         if (isDueForAlert) {
           const existingOpenIncident = await storage.getOpenIncident(user.id);
-          if (existingOpenIncident) {
-            console.log(`[ALERT] Skipping checkin alert for user=${user.id}  -  open incident already exists (${existingOpenIncident.reason})`);
+          // Only skip if a *different* pre-existing open incident is found.
+          // claimedIncident was created by getOverdueUsersWithSettings and is
+          // expected to be found here — it is not a collision to avoid.
+          if (existingOpenIncident && existingOpenIncident.id !== claimedIncident?.id) {
+            console.log(`[ALERT] Skipping checkin alert for user=${user.id}  -  different open incident already exists (${existingOpenIncident.reason})`);
             continue;
           }
 
@@ -8400,6 +8417,21 @@ export async function registerRoutes(
 
         if (!step) {
           if (incident.reason === "missed_checkin") {
+            // Structured warning so we can track whether the architectural
+            // conflict (getOverdueUsersWithSettings creating the incident,
+            // routes.ts post-check finding it) is still active in production.
+            console.warn(JSON.stringify({
+              event: "MISSED_CHECKIN_LEGACY_RECOVERY",
+              incidentId: incident.id,
+              userId: user.id,
+              reason: "incident_reached_escalation_without_push_initialization",
+            }));
+            // Safety net: ensure concern state is set even if the storage
+            // path missed it. Idempotent — safe if already concern.
+            const freshUser = await storage.getUser(user.id);
+            if (freshUser && freshUser.safetyState !== "concern") {
+              await storage.updateSafetyState(user.id, "concern", "Missed check-in — we're trying to reach them.");
+            }
             existingTimeline.push({ type: "push", time: timeStr, detail: "Push notification sent (legacy recovery)" });
             await sendReminderPush(user.id, user.name);
             await createProtectedUserSystemAlert(
@@ -8989,9 +9021,11 @@ export async function registerRoutes(
       }
 
       cronRunning = false;
+      await releaseCronLock().catch((e: any) => console.error("[CRON] Failed to release cron advisory lock:", e?.message || e));
       res.json({ success: true, reminders: remindersSent, alerts: alertsSent, escalations, reportsSent, softDeletesCleaned, locationWakeups, timerEscalations, placeScheduleAlerts, processorCleanup, staleArchived, normalizedLegacyIntervals });
     } catch (error) {
       cronRunning = false;
+      if (releaseCronLock) await releaseCronLock().catch(() => {});
       console.error("Error in cron tick:", error);
       res.status(500).json({ error: "Cron tick failed" });
     }

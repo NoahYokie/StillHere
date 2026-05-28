@@ -144,7 +144,7 @@ export async function notifySubjectConfirmation(
 }
 
 function isUserInSleepHours(user: { sleepStart?: string; sleepEnd?: string; timezone?: string }): boolean {
-  const tz = user.timezone || "Australia/Melbourne";
+  const tz = user.timezone || "UTC";
   const now = new Date();
   const localTime = now.toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false });
   const [h, m] = localTime.split(":").map(Number);

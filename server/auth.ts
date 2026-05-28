@@ -402,7 +402,7 @@ export async function createOtp(phone: string): Promise<{
 // `ageConfirmed !== true`, we DO NOT create the user row, DO NOT issue a
 // session, and return `{ success: false, error: "age_gate_required" }`.
 // This keeps the audit trail clean: under-13 phones never produce a user row.
-export async function verifyOtp(phone: string, code: string, opts?: { ageConfirmed?: boolean }): Promise<{
+export async function verifyOtp(phone: string, code: string, opts?: { ageConfirmed?: boolean; timezone?: string }): Promise<{
   success: boolean;
   error?: "age_gate_required";
   sessionToken?: string;
@@ -501,7 +501,7 @@ export async function verifyOtp(phone: string, code: string, opts?: { ageConfirm
         .values({
           name: isReviewLogin ? "App Review" : "",
           phone: normalizedPhone,
-          timezone: "Australia/Melbourne",
+          timezone: opts?.timezone || "UTC",
           isReviewAccount: isReviewLogin,
           // Stamp the gate. Skipped for review login (internal account).
           ageGateAcceptedAt: isReviewLogin ? null : new Date(),
