@@ -724,6 +724,7 @@ export default function Home() {
     const tzRaw = status?.user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     const tz = tzRaw || "UTC";
     const now = new Date();
+    if (d < now) return "Overdue";
     const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
     const dueDay = dayFmt.format(d);
     const today = dayFmt.format(now);

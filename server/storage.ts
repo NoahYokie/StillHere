@@ -838,13 +838,29 @@ export class DatabaseStorage implements IStorage {
     if (!row) return null;
 
     const normalizedInterval = normalizeCheckinIntervalHours(row.settings.checkinIntervalHours);
-    const nextDue = computeAnchoredNextCheckinDue({
+    const refreshNow = new Date();
+    let nextDue = computeAnchoredNextCheckinDue({
       userCreatedAt: row.user.createdAt,
       lastCheckinAt: row.lastCheckinAt || null,
       intervalHours: normalizedInterval,
       preferredCheckinTime: row.settings.preferredCheckinTime,
       timezone: row.user.timezone,
     });
+
+    // Guard: if the anchored computation landed in the past (preferred time
+    // has already passed today with no check-in yet), advance one more step
+    // so we never persist a stale due-timestamp. The cron is the authoritative
+    // detector for missed check-ins; this function must not re-open a window
+    // the cron already processed, nor show "9:00 AM Today" at 3:11 PM.
+    if (nextDue <= refreshNow) {
+      nextDue = computeNextCheckinDue({
+        lastTime: nextDue,
+        intervalHours: normalizedInterval,
+        preferredCheckinTime: row.settings.preferredCheckinTime,
+        timezone: row.user.timezone,
+        lastTimeIsCheckin: false,
+      });
+    }
 
     await db
       .update(settings)
