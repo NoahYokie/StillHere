@@ -729,14 +729,11 @@ export default function Home() {
     const dueDay = dayFmt.format(d);
     const today = dayFmt.format(now);
     const tomorrow = dayFmt.format(new Date(now.getTime() + 24 * 60 * 60 * 1000));
-    const dayLabel = dueDay === today
+    return dueDay === today
       ? "Today"
       : dueDay === tomorrow
         ? "Tomorrow"
         : new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: tz }).format(d);
-    const tzCity = tzRaw.split("/").pop()?.replace(/_/g, " ") || "";
-
-    return tzCity ? `${dayLabel} \u00B7 ${tzCity}` : dayLabel;
   };
 
   if (isLoading) {
