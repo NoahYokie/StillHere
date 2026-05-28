@@ -488,6 +488,7 @@ export const calls = pgTable("calls", {
   receiverId: uuid("receiver_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: callStatusEnum("status").notNull().default("ringing"),
   callType: callTypeEnum("call_type").notNull().default("video"),
+  offer: text("offer"),
   startedAt: timestamp("started_at").defaultNow().notNull(),
   answeredAt: timestamp("answered_at"),
   endedAt: timestamp("ended_at"),

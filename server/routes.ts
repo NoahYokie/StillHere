@@ -3406,6 +3406,49 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/calls/:callId/incoming", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const callId = String(req.params.callId || "");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(callId)) {
+        return res.status(400).json({ error: "Invalid call id" });
+      }
+
+      const call = await storage.getCall(callId);
+      if (!call || call.receiverId !== userId) {
+        return res.status(404).json({ error: "Call not found" });
+      }
+      if (call.status !== "ringing") {
+        return res.status(409).json({ error: "Call is no longer ringing", status: call.status });
+      }
+      if (!call.offer) {
+        return res.status(409).json({ error: "Call offer is unavailable" });
+      }
+
+      const caller = await storage.getUser(call.callerId);
+      let offer: unknown;
+      try {
+        offer = JSON.parse(call.offer);
+      } catch {
+        return res.status(500).json({ error: "Stored call offer is invalid" });
+      }
+
+      res.json({
+        callId: call.id,
+        callerId: call.callerId,
+        callerName: caller?.name || "Someone",
+        callType: call.callType,
+        offer,
+      });
+    } catch (error) {
+      console.error("[CALL] Incoming call lookup failed:", error);
+      res.status(500).json({ error: "Failed to load call" });
+    }
+  });
+
   // ============================================
   // TURN CREDENTIALS FOR VIDEO CALLS
   // ============================================

@@ -468,7 +468,7 @@ export interface IStorage {
 
   // Calls
   getCall(id: string): Promise<Call | undefined>;
-  createCall(callerId: string, receiverId: string, callType: CallType): Promise<Call>;
+  createCall(callerId: string, receiverId: string, callType: CallType, offer?: string | null): Promise<Call>;
   updateCall(id: string, updates: Partial<Call>): Promise<Call>;
 
   // Contact Linking
@@ -2608,12 +2608,13 @@ export class DatabaseStorage implements IStorage {
     return call;
   }
 
-  async createCall(callerId: string, receiverId: string, callType: CallType): Promise<Call> {
+  async createCall(callerId: string, receiverId: string, callType: CallType, offer?: string | null): Promise<Call> {
     const [call] = await db.insert(calls).values({
       callerId,
       receiverId,
       status: "ringing",
       callType,
+      offer: offer || null,
     }).returning();
     return call;
   }

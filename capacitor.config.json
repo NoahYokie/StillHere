@@ -56,7 +56,7 @@
       "NSMicrophoneUsageDescription": "StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle.",
       "ITSAppUsesNonExemptEncryption": false,
       "WKAppBoundDomains": ["stillhere.health"],
-      "UIBackgroundModes": ["location", "fetch", "remote-notification"]
+      "UIBackgroundModes": ["location", "fetch", "remote-notification", "voip"]
     }
   },
   "android": {

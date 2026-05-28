@@ -5,6 +5,7 @@ import { Phone, PhoneOff } from "lucide-react";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/lib/auth";
 import { startIncomingRingtone, stopRingtone } from "@/lib/ringtone";
+import { isNativePlatform, getPlatform } from "@/lib/native-call";
 
 interface IncomingCallData {
   callId: string;
@@ -22,6 +23,17 @@ export function getPendingIncomingCall(): IncomingCallData | null {
   const call = pendingIncomingCall;
   pendingIncomingCall = null;
   return call;
+}
+
+export function setPendingIncomingCall(call: IncomingCallData): void {
+  pendingIncomingCall = call;
+  startBufferingIceCandidates(call.callerId);
+}
+
+export function clearPendingIncomingCall(callId?: string): void {
+  if (!callId || pendingIncomingCall?.callId === callId) {
+    pendingIncomingCall = null;
+  }
 }
 
 export function getBufferedIceCandidates(): RTCIceCandidateInit[] {
@@ -67,14 +79,18 @@ export function IncomingCallOverlay() {
     let ringTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const handleIncoming = (data: IncomingCallData) => {
+      setPendingIncomingCall(data);
+      // On iOS native, CallKit handles the incoming call UI via VoIP push.
+      // Still buffer ICE candidates above, but skip the in-app overlay and ringtone.
+      if (isNativePlatform() && getPlatform() === "ios") return;
       startIncomingRingtone();
-      startBufferingIceCandidates(data.callerId);
       setIncomingCall(data);
 
       ringTimeout = setTimeout(() => {
         stopRingtone();
         bufferedIceCandidates = [];
         iceCandidateBufferActive = false;
+        clearPendingIncomingCall(data.callId);
         setIncomingCall(null);
       }, 45000);
     };
@@ -84,6 +100,7 @@ export function IncomingCallOverlay() {
       stopRingtone();
       bufferedIceCandidates = [];
       iceCandidateBufferActive = false;
+      clearPendingIncomingCall();
       setIncomingCall(null);
     };
 
@@ -100,7 +117,6 @@ export function IncomingCallOverlay() {
   function acceptCall() {
     if (!incomingCall) return;
     stopRingtone();
-    pendingIncomingCall = incomingCall;
     setIncomingCall(null);
     setLocation(`/call/${incomingCall.callerId}?mode=answer`);
   }
@@ -110,6 +126,7 @@ export function IncomingCallOverlay() {
     stopRingtone();
     bufferedIceCandidates = [];
     iceCandidateBufferActive = false;
+    clearPendingIncomingCall(incomingCall.callId);
 
     const socket = getSocket();
     socket.emit("call:reject", {

@@ -4,9 +4,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, RequireAuth, RequireSetup, RedirectIfAuth, useAuth } from "@/lib/auth";
-import { IncomingCallOverlay } from "@/components/incoming-call";
+import { IncomingCallOverlay, setPendingIncomingCall } from "@/components/incoming-call";
 import { NotificationBanner } from "@/components/notification-banner";
-import { initNativeCall, isNativePlatform } from "@/lib/native-call";
+import { initNativeCall, isNativePlatform, setCallCallbacks } from "@/lib/native-call";
 import { initCapacitorPlugins, isNative } from "@/lib/capacitor";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BackgroundLocationProvider } from "@/components/background-location-provider";
@@ -361,6 +361,7 @@ function Router() {
 
 function CapacitorInit() {
   const { auth } = useAuth();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (isNative()) {
@@ -372,11 +373,28 @@ function CapacitorInit() {
 
   useEffect(() => {
     if (auth?.authenticated && isNativePlatform()) {
+      setCallCallbacks(
+        async (callId, callerId) => {
+          try {
+            const response = await fetch(`/api/calls/${callId}/incoming`, { credentials: "include" });
+            if (!response.ok) throw new Error(`status_${response.status}`);
+            const call = await response.json();
+            setPendingIncomingCall(call);
+            setLocation(`/call/${callerId || call.callerId}?mode=answer&source=callkit`);
+          } catch (err) {
+            console.error("[App] Failed to load native answered call:", err);
+            setLocation(callerId ? `/call/${callerId}` : "/watched");
+          }
+        },
+        (callId) => {
+          console.log("[App] Native call ended:", callId);
+        }
+      );
       initNativeCall().catch((err) =>
         console.error("[App] Native call init failed:", err)
       );
     }
-  }, [auth?.authenticated]);
+  }, [auth?.authenticated, setLocation]);
 
   useEffect(() => {
     const userId = auth?.user?.id;
@@ -405,6 +423,19 @@ function CapacitorInit() {
   return null;
 }
 
+function RouteMemory() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    if (!location.startsWith("/call/")) {
+      const search = typeof window !== "undefined" ? window.location.search : "";
+      sessionStorage.setItem("stillhere:lastNonCallRoute", `${location}${search}`);
+    }
+  }, [location]);
+
+  return null;
+}
+
 initErrorReporter();
 
 function App() {
@@ -418,6 +449,7 @@ function App() {
               <IncomingCallOverlay />
               <NotificationBanner />
               <RatingPrompt />
+              <RouteMemory />
               <CapacitorInit />
               <LimitationsGate />
               <Router />

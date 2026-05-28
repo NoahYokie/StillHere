@@ -9,6 +9,7 @@ import { WebRTCConnection, fetchIceServers } from "@/lib/webrtc";
 import { useToast } from "@/hooks/use-toast";
 import { getPendingIncomingCall, getBufferedIceCandidates } from "@/components/incoming-call";
 import { startOutgoingRingtone, stopRingtone, playCallConnected, playCallEnded } from "@/lib/ringtone";
+import { endNativeCall } from "@/lib/native-call";
 
 type CallState = "connecting" | "ringing" | "active" | "ended";
 
@@ -21,6 +22,7 @@ export default function CallPage() {
   const currentUserId = auth?.user?.id;
 
   const isAnswerMode = searchString.includes("mode=answer");
+  const returnTo = new URLSearchParams(searchString).get("returnTo");
 
   const [callState, setCallState] = useState<CallState>("connecting");
   const [isMuted, setIsMuted] = useState(false);
@@ -79,12 +81,28 @@ export default function CallPage() {
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
   }, []);
 
+  const navigateAfterCall = useCallback(() => {
+    const target = returnTo || sessionStorage.getItem("stillhere:lastNonCallRoute");
+    if (target && target.startsWith("/") && !target.startsWith("/call/")) {
+      setLocation(target);
+      return;
+    }
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    setLocation("/");
+  }, [returnTo, setLocation]);
+
   const handleCallEnd = useCallback((reason?: string, emitToServer = false) => {
     if (hasEndedRef.current) return;
     hasEndedRef.current = true;
     console.log("[CALL] Ending:", reason);
     stopRingtone();
     playCallEnded();
+    if (callIdRef.current) {
+      endNativeCall(callIdRef.current).catch(() => {});
+    }
     if (emitToServer && callIdRef.current && otherUserId) {
       try {
         const socket = getSocket();
@@ -96,8 +114,8 @@ export default function CallPage() {
     }
     doCleanup();
     setCallState("ended");
-    setTimeout(() => setLocation("/watched"), 1500);
-  }, [otherUserId, doCleanup, setLocation, toast]);
+    setTimeout(navigateAfterCall, 1500);
+  }, [otherUserId, doCleanup, navigateAfterCall, toast]);
 
   useEffect(() => {
     if (!currentUserId || !otherUserId || hasInitiatedRef.current) return;
@@ -263,7 +281,7 @@ export default function CallPage() {
           if (!pendingCall) {
             console.error("[CALL] No pending call data");
             toast({ title: "Call not found", variant: "destructive" });
-            setLocation("/watched");
+            navigateAfterCall();
             return;
           }
 
@@ -333,7 +351,7 @@ export default function CallPage() {
           description: "Please allow microphone access to make calls.",
           variant: "destructive",
         });
-        setLocation("/watched");
+        navigateAfterCall();
       }
     }
 
@@ -348,7 +366,7 @@ export default function CallPage() {
       socket.off("call:ice-restart-answer", onIceRestartAnswer);
       doCleanup();
     };
-  }, [currentUserId, otherUserId]);
+  }, [currentUserId, otherUserId, navigateAfterCall]);
 
   function toggleMute() {
     setIsMuted((prev) => {

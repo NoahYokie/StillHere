@@ -5,15 +5,22 @@ interface VoipPushPayload {
   callType: "video" | "audio";
 }
 
-// Phase-2 gate. The iOS PushKit/CallKit client wiring exists in
-// `client/src/lib/native-call.ts` but is NOT shipped for App Store launch:
-// the `capacitor-plugin-callkit-voip` pod is not installed, the `voip`
-// background mode is intentionally absent from capacitor.config.json, and
-// APNs VoIP credentials are not configured. Until all four blockers (plugin
-// install, voip background mode, APNs creds, Xcode VoIP capability) are
-// resolved, leave ENABLE_VOIP_PUSH unset so this code path is dormant. See
-// STORE_SUBMISSION.md → "Phase 2 — VoIP wake-up" for the full checklist.
-const VOIP_PUSH_ENABLED = process.env.ENABLE_VOIP_PUSH === "true";
+const VOIP_PUSH_ENABLED = process.env.ENABLE_VOIP_PUSH !== "false";
+const IOS_BUNDLE_ID = "com.daudabangoura.stillhere.safety";
+
+export function buildAPNsVoipPayload(payload: VoipPushPayload): Record<string, any> {
+  return {
+    aps: {},
+    type: "incoming_call",
+    callId: payload.callId,
+    callerId: payload.callerId,
+    callerName: payload.callerName,
+    callType: payload.callType,
+    uuid: payload.callId,
+    handle: payload.callerName,
+    id: `${payload.callId}|${payload.callerId}`,
+  };
+}
 
 export async function sendVoipPush(
   token: string,
@@ -21,8 +28,7 @@ export async function sendVoipPush(
   payload: VoipPushPayload
 ): Promise<boolean> {
   if (!VOIP_PUSH_ENABLED) {
-    // Silent no-op for launch. The caller (server/socket.ts) already falls
-    // back to a normal web push so an offline receiver still gets notified.
+    console.log("[VOIP-PUSH] Disabled (ENABLE_VOIP_PUSH=false). Normal call alert push will still be sent.");
     return false;
   }
   if (platform === "ios") {
@@ -42,9 +48,6 @@ async function sendAPNsVoipPush(
   const apnsKeyId = process.env.APNS_KEY_ID;
   const apnsTeamId = process.env.APNS_TEAM_ID;
   const apnsKey = process.env.APNS_AUTH_KEY;
-  // Must match capacitor.config.json `appId`. APNs `apns-topic` for VoIP
-  // pushes is `${bundleId}.voip`, and APNs rejects mismatched topics.
-  const bundleId = "com.daudabangoura.stillhere.safety";
 
   if (!apnsKeyId || !apnsTeamId || !apnsKey) {
     console.log("[VOIP-PUSH] APNs not configured (APNS_KEY_ID, APNS_TEAM_ID, APNS_AUTH_KEY required). Skipping VoIP push.");
@@ -53,44 +56,56 @@ async function sendAPNsVoipPush(
 
   try {
     const jwt = await generateAPNsJWT(apnsKeyId, apnsTeamId, apnsKey);
+    const host = process.env.APNS_ENV === "sandbox" || process.env.NODE_ENV !== "production"
+      ? "api.sandbox.push.apple.com"
+      : "api.push.apple.com";
 
-    const isProduction = process.env.NODE_ENV === "production";
-    const host = isProduction
-      ? "api.push.apple.com"
-      : "api.sandbox.push.apple.com";
+    const http2 = await import("http2");
+    const body = JSON.stringify(buildAPNsVoipPayload(payload));
+    const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const client = http2.connect(`https://${host}`);
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        try { client.close(); } catch {}
+        fn();
+      };
 
-    const url = `https://${host}/3/device/${deviceToken}`;
+      client.setTimeout(10_000, () => finish(() => reject(new Error("apns_voip_timeout"))));
+      client.on("error", (error) => finish(() => reject(error)));
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "authorization": `bearer ${jwt}`,
-        "apns-topic": `${bundleId}.voip`,
+      const req = client.request({
+        ":method": "POST",
+        ":path": `/3/device/${deviceToken}`,
+        authorization: `bearer ${jwt}`,
+        "apns-topic": `${IOS_BUNDLE_ID}.voip`,
         "apns-push-type": "voip",
         "apns-priority": "10",
         "apns-expiration": "0",
         "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        aps: {},
-        type: "incoming_call",
-        callId: payload.callId,
-        callerId: payload.callerId,
-        callerName: payload.callerName,
-        callType: payload.callType,
-        uuid: payload.callId,
-        handle: payload.callerName,
-      }),
+      });
+
+      let status = 0;
+      let chunks = "";
+      req.setEncoding("utf8");
+      req.on("response", (headers) => {
+        const rawStatus = headers[":status"];
+        status = typeof rawStatus === "number" ? rawStatus : parseInt(String(rawStatus || "0"), 10);
+      });
+      req.on("data", (chunk) => { chunks += chunk; });
+      req.on("end", () => finish(() => resolve({ status, body: chunks })));
+      req.on("error", (error) => finish(() => reject(error)));
+      req.end(body);
     });
 
-    if (response.ok) {
+    if (response.status >= 200 && response.status < 300) {
       console.log(`[VOIP-PUSH] APNs VoIP push sent successfully to ${deviceToken.substring(0, 10)}...`);
       return true;
-    } else {
-      const body = await response.text();
-      console.error(`[VOIP-PUSH] APNs error ${response.status}: ${body}`);
-      return false;
     }
+
+    console.error(`[VOIP-PUSH] APNs error ${response.status}: ${response.body}`);
+    return false;
   } catch (err) {
     console.error("[VOIP-PUSH] APNs push failed:", err);
     return false;
@@ -154,7 +169,7 @@ async function generateAPNsJWT(keyId: string, teamId: string, key: string): Prom
   const unsignedToken = `${header}.${claims}`;
 
   const privateKey = crypto.createPrivateKey({
-    key: key.includes("BEGIN") ? key : `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----`,
+    key: normalizeAPNsPrivateKey(key),
     format: "pem",
   });
 
@@ -164,4 +179,10 @@ async function generateAPNsJWT(keyId: string, teamId: string, key: string): Prom
   });
 
   return `${unsignedToken}.${signature.toString("base64url")}`;
+}
+
+function normalizeAPNsPrivateKey(key: string): string {
+  const trimmed = key.trim().replace(/\\n/g, "\n");
+  if (trimmed.includes("BEGIN PRIVATE KEY")) return trimmed;
+  return `-----BEGIN PRIVATE KEY-----\n${trimmed}\n-----END PRIVATE KEY-----`;
 }

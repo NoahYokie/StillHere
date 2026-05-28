@@ -278,7 +278,7 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
           console.warn(`[CALL] policy check failed, allowing call: ${e?.message || e}`);
         }
 
-        const call = await storage.createCall(userId, data.receiverId, callType);
+        const call = await storage.createCall(userId, data.receiverId, callType, offerStr);
         activeCallPairs.set(pairKey, call.id);
 
         const caller = await storage.getUser(userId);
@@ -295,19 +295,22 @@ export function setupSocketServer(httpServer: HttpServer): SocketServer {
 
         if (callback) callback({ success: true, callId: call.id });
 
-        if (!receiverOnline) {
-          const voipTokens = await storage.getVoipTokens(data.receiverId);
-          if (voipTokens.length > 0) {
-            console.log(`[CALL] Receiver has ${voipTokens.length} VoIP token(s), sending VoIP push`);
-            for (const vt of voipTokens) {
-              await sendVoipPush(vt.token, vt.platform, {
-                callId: call.id,
-                callerId: userId,
-                callerName: caller?.name || "Someone",
-                callType,
-              });
-            }
+        const voipTokens = await storage.getVoipTokens(data.receiverId);
+        if (voipTokens.length > 0) {
+          console.log(`[CALL] Receiver has ${voipTokens.length} VoIP token(s), sending VoIP push (online=${receiverOnline})`);
+          let voipSent = 0;
+          for (const vt of voipTokens) {
+            const sent = await sendVoipPush(vt.token, vt.platform, {
+              callId: call.id,
+              callerId: userId,
+              callerName: caller?.name || "Someone",
+              callType,
+            });
+            if (sent) voipSent++;
           }
+          console.log(`[CALL] VoIP push result call=${call.id} sent=${voipSent}/${voipTokens.length}`);
+        } else {
+          console.log(`[CALL] Receiver has no VoIP token; relying on normal APNs/web push fallback user=${data.receiverId}`);
         }
 
         // iOS can keep a socket around briefly after the user backgrounds the
