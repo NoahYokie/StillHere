@@ -163,14 +163,13 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
     ? signedMapImageUrl(context.lat, context.lng) : null;
   const addressLine = context?.address?.trim() || coords;
 
-  // Hosted PNG logo (icon-192) + adjacent wordmark. The wordmark text is the
-  // alt text AND a visible sibling, so if the image fails to load the brand
-  // is still legible. Width/height are explicit for Outlook/Gmail.
+  // Pure CSS logo badge — no external image dependency so it renders in all
+  // email clients regardless of image-loading settings or CDN availability.
   const logoBlock = `
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-block;vertical-align:middle;">
               <tr>
                 <td style="vertical-align:middle;padding:0 8px 0 0;line-height:0;">
-                  <img src="${BRAND_BASE_URL}/icons/icon-192x192.png" width="32" height="32" alt="StillHere" style="display:block;width:32px;height:32px;border:0;border-radius:7px;" />
+                  <div style="display:inline-block;width:32px;height:32px;background:#0ea5e9;border-radius:7px;text-align:center;vertical-align:middle;font-size:16px;font-weight:800;color:#ffffff;line-height:32px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">S</div>
                 </td>
                 <td style="vertical-align:middle;font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-0.015em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">StillHere</td>
               </tr>
@@ -186,9 +185,20 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
           </td></tr>
         </table>` : "";
 
-  const mapBlock = (mapImg && gmaps) ? `
-        <a href="${esc(gmaps)}" style="display:block;text-decoration:none;border-radius:10px;overflow:hidden;margin:0 0 18px 0;border:1px solid #e2e8f0;">
-          <img src="${esc(mapImg)}" alt="Map showing ${safeName}'s last known location" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;" />
+  // Map as a styled HTML link block — no image proxy, no Google Static Maps
+  // API dependency. Renders reliably in all email clients. Guardian taps once
+  // to open Google Maps at the exact coordinates.
+  const mapBlock = gmaps ? `
+        <a href="${esc(gmaps)}" style="display:block;text-decoration:none;border-radius:10px;margin:0 0 18px 0;border:2px solid ${style.accent};background:#ffffff;padding:14px 18px;" target="_blank" rel="noopener noreferrer">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="vertical-align:middle;padding-right:12px;font-size:22px;line-height:1;width:28px;">&#128205;</td>
+              <td style="vertical-align:middle;">
+                <p style="margin:0 0 2px 0;font-size:14px;font-weight:700;color:${style.accent};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">View on Google Maps</p>
+                <p style="margin:0;font-size:12px;color:#64748b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Tap to see ${safeName}'s last known location &rarr;</p>
+              </td>
+            </tr>
+          </table>
         </a>` : "";
 
   const fallbackLink = gmaps ? `
@@ -197,8 +207,8 @@ function renderEmail({ level, title, userName, eventLine, ctaUrl, ctaLabel, whyR
           </p>` : "";
 
   const emergencyHintHtml = emergencyHint ? `
-          <p style="margin:14px 0 0 0;font-size:14px;line-height:1.5;color:#0f172a;text-align:center;">
-            If you can't reach <strong>${safeName}</strong>, <strong>call emergency services immediately</strong>.
+          <p style="margin:14px 0 0 0;font-size:14px;line-height:1.5;color:#475569;text-align:center;">
+            If you cannot contact <strong>${safeName}</strong> and believe there is an immediate risk to their safety, contact emergency services.
           </p>` : "";
 
   const expiryNoteHtml = expiryNote ? `

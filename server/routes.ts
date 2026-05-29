@@ -7324,7 +7324,7 @@ export async function registerRoutes(
         );
         const twimlVoicemail = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm("This is StillHere. We couldn't confirm your safety check-in. We are notifying your emergency contacts now. If you are safe, please open the app or call your guardians immediately.")}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("This is StillHere. We called to check on your safety. If you're okay, please check in using the StillHere app, or reply YES to our SMS. Your Safety Circle has been notified.")}</Say>
   <Hangup/>
 </Response>`;
         return res.type("text/xml").send(twimlVoicemail);

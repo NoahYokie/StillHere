@@ -788,6 +788,9 @@ export default function Home() {
   const isPaused = status?.settings?.pauseUntil && new Date(status.settings.pauseUntil) > new Date();
   const hasOpenIncident = hasActiveIncident;
   const guardianCount = status?.contacts?.length || 0;
+  // Concern Mode: active missed check-in escalation — home screen shifts to
+  // a different mode so normal reassurance messaging doesn't conflict.
+  const isConcernMode = !!(hasOpenIncident && status?.openIncident?.reason === "missed_checkin");
 
   return (
     <div className="min-h-screen bg-background">
@@ -831,19 +834,6 @@ export default function Home() {
         {hasOpenIncident && status && (
           <div className="space-y-3">
             <EscalationBanner status={status} />
-            <div className="text-center">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-                onClick={() => resolveAlertMutation.mutate()}
-                disabled={resolveAlertMutation.isPending}
-                data-testid="button-resolve-alert"
-              >
-                <Check className="h-4 w-4 mr-2" />
-                {resolveAlertMutation.isPending ? "Resolving..." : "I'm OK now"}
-              </Button>
-            </div>
           </div>
         )}
 
@@ -851,35 +841,64 @@ export default function Home() {
           <ConcernTimelinePanel userId={status.user.id} isWatcher={false} />
         )}
 
-        <div className="text-center pt-1">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/40 mb-3">
-            <ShieldCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
+        {isConcernMode ? (
+          /* ── Concern Mode ─────────────────────────────────────────────── */
+          <div className="text-center pt-2 space-y-4">
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-amber-700 dark:text-amber-400" data-testid="text-concern-title">
+                Missed check-in active
+              </p>
+              <p className="text-sm text-muted-foreground" data-testid="text-concern-subtitle">
+                StillHere is trying to confirm you're safe.
+              </p>
+            </div>
+            <button
+              onClick={() => { checkinMutation.mutate(); resolveAlertMutation.mutate(); }}
+              disabled={checkinMutation.isPending || resolveAlertMutation.isPending}
+              className="w-52 h-52 rounded-full bg-amber-500 hover:bg-amber-600 active:bg-amber-600 text-white shadow-[0_12px_36px_-12px_rgba(245,158,11,0.6)] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 active:scale-[0.97] flex flex-col items-center justify-center mx-auto"
+              data-testid="button-im-ok-concern"
+            >
+              <Check className="h-14 w-14 mb-1.5" strokeWidth={3} />
+              <span className="text-2xl font-bold tracking-wide leading-tight">I'M OK<br />NOW</span>
+            </button>
+            <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
+              Tap to confirm you are safe and stop the alert
+            </p>
           </div>
-          <p className="text-base font-semibold text-foreground" data-testid="text-protected-status">
-            {guardianCount > 0 ? "Safety Circle ready" : "Set up your Safety Circle"}
-          </p>
-          <p className="text-sm text-muted-foreground mt-1" data-testid="text-guardian-count">
-            {guardianCount > 0
-              ? `Sharing with ${guardianCount} Guardian${guardianCount === 1 ? "" : "s"}`
-              : "Add an emergency contact to get started"}
-          </p>
-        </div>
+        ) : (
+          /* ── Normal Mode ──────────────────────────────────────────────── */
+          <>
+            <div className="text-center pt-1">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/40 mb-3">
+                <ShieldCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <p className="text-base font-semibold text-foreground" data-testid="text-protected-status">
+                {guardianCount > 0 ? "Safety Circle ready" : "Set up your Safety Circle"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1" data-testid="text-guardian-count">
+                {guardianCount > 0
+                  ? `Sharing with ${guardianCount} Guardian${guardianCount === 1 ? "" : "s"}`
+                  : "Add an emergency contact to get started"}
+              </p>
+            </div>
 
-        <div className="text-center pt-1">
-          <button
-            onClick={() => checkinMutation.mutate()}
-            disabled={checkinMutation.isPending}
-            className="w-44 h-44 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-600 text-white shadow-[0_12px_36px_-12px_rgba(34,197,94,0.55)] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 active:scale-[0.97] flex flex-col items-center justify-center mx-auto"
-            data-testid="button-im-ok"
-            data-tour="checkin"
-          >
-            <Check className="h-12 w-12 mb-1.5" strokeWidth={3} />
-            <span className="text-2xl font-bold tracking-wide">I'M OK</span>
-          </button>
-          <p className="text-sm text-muted-foreground mt-5 max-w-xs mx-auto leading-relaxed">
-            Tap anytime to let your guardian know you're okay
-          </p>
-        </div>
+            <div className="text-center pt-1">
+              <button
+                onClick={() => checkinMutation.mutate()}
+                disabled={checkinMutation.isPending}
+                className="w-44 h-44 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-600 text-white shadow-[0_12px_36px_-12px_rgba(34,197,94,0.55)] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 active:scale-[0.97] flex flex-col items-center justify-center mx-auto"
+                data-testid="button-im-ok"
+                data-tour="checkin"
+              >
+                <Check className="h-12 w-12 mb-1.5" strokeWidth={3} />
+                <span className="text-2xl font-bold tracking-wide">I'M OK</span>
+              </button>
+              <p className="text-sm text-muted-foreground mt-5 max-w-xs mx-auto leading-relaxed">
+                Tap anytime to let your guardian know you're okay
+              </p>
+            </div>
+          </>
+        )}
 
         {showQuote && (
           <Card className="border-accent/30 rounded-2xl" data-testid="card-quote">
