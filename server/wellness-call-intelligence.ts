@@ -44,15 +44,17 @@ export function classifyWellnessStatusCallback(input: {
   if (isMachineAnsweredBy(answeredBy)) {
     return {
       status: "voicemail_left",
-      detail: `Voicemail detected (${answeredBy || "machine"}). No safety confirmation received.`,
+      detail: `Voicemail detected. Message left. No safety confirmation received.`,
       shouldAccelerateContacts: true,
     };
   }
 
+  // AMD returned "human" — call connected, but this does NOT confirm a human
+  // answered. Only keypad confirmation counts as safety confirmation.
   if (isHumanAnsweredBy(answeredBy)) {
     return {
       status: "answered_human",
-      detail: "Wellness call answered by a human. Waiting for keypad confirmation.",
+      detail: "Call connected. Waiting for safety confirmation.",
       shouldAccelerateContacts: false,
     };
   }

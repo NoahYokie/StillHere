@@ -7294,7 +7294,21 @@ export async function registerRoutes(
       const durationSeconds = Number.parseInt(duration || "0", 10) || 0;
       const classification = classifyWellnessStatusCallback({ callStatus, answeredBy, durationSeconds });
 
-      if (classification.status) {
+      // If AMD previously returned "human" but the call completed with no
+      // keypad action, record that honestly — no false certainty.
+      if (
+        callStatus === "completed" &&
+        answeredBy === "human" &&
+        durationSeconds > 0 &&
+        !classification.status
+      ) {
+        await updateWellnessCallStatusForPhone(
+          to,
+          "no_response",
+          "Call connected. No safety confirmation received. Continuing escalation.",
+          { accelerateContacts: true },
+        );
+      } else if (classification.status) {
         await updateWellnessCallStatusForPhone(
           to,
           classification.status,
@@ -7315,11 +7329,28 @@ export async function registerRoutes(
       const answeredBy = String(req.body.AnsweredBy || "").toLowerCase();
       const calledNumber = req.body.To ? String(req.body.To) : null;
       const answerType = classifyWellnessTwiMLAnswer(answeredBy);
+      // Store raw AMD value internally for debugging — never shown to users.
+      const rawAmd = answeredBy || "unknown";
+      if (calledNumber) {
+        const phone = calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`;
+        const u = await storage.getUserByPhone(phone).catch(() => null);
+        if (u) {
+          const inc = await storage.getLatestRealOpenIncident(u.id).catch(() => null);
+          if (inc) {
+            await appendIncidentTimelineEntry(inc.id, {
+              type: "wellness_call_amd_raw",
+              time: new Date().toISOString(),
+              detail: `AMD raw result: ${rawAmd}`,
+            }).catch(() => {});
+          }
+        }
+      }
+
       if (answerType === "machine") {
         await updateWellnessCallStatusForPhone(
           calledNumber,
           "voicemail_left",
-          `Voicemail detected (${answeredBy || "machine"}). Voicemail left. No safety confirmation received.`,
+          "Voicemail detected. Message left. No safety confirmation received.",
           { accelerateContacts: true },
         );
         const twimlVoicemail = `<?xml version="1.0" encoding="UTF-8"?>
@@ -7330,7 +7361,13 @@ export async function registerRoutes(
         return res.type("text/xml").send(twimlVoicemail);
       }
       if (answerType === "human") {
-        await updateWellnessCallStatusForPhone(calledNumber, "answered_human", "Wellness call answered by a human. Waiting for keypad confirmation.");
+        // AMD returned "human" — call connected, but keypad confirmation is
+        // required before we can record safety. Do not record "human answered."
+        await updateWellnessCallStatusForPhone(
+          calledNumber,
+          "answered_human",
+          "Call connected. Waiting for safety confirmation.",
+        );
       }
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
