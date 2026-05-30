@@ -357,6 +357,9 @@ export default function ContactPage() {
             {incident?.escalationTimeline && (() => {
               let timeline: { type: string; time: string; detail: string }[] = [];
               try { timeline = JSON.parse(incident.escalationTimeline); } catch {}
+              // Filter internal telemetry events — guardians must never see raw AMD
+              // values or other debug-only entries. They remain stored in the DB.
+              timeline = timeline.filter(e => e.type !== "wellness_call_amd_raw");
               if (timeline.length === 0) return null;
 
               const getIcon = (type: string) => {

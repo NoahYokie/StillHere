@@ -747,6 +747,35 @@ export default function Home() {
     },
   });
 
+  // Atomic Concern Mode resolution — single endpoint so there is no
+  // dual-mutation race and no transient "Overdue" flash.
+  const resolveCheckinMutation = useMutation({
+    mutationFn: async () => {
+      const loc = await getCheckinLocation();
+      const body: any = {};
+      if (loc.lat != null) body.lat = loc.lat;
+      if (loc.lng != null) body.lng = loc.lng;
+      if (loc.timezone) body.timezone = loc.timezone;
+      return apiRequest("POST", "/api/resolve-checkin", body);
+    },
+    onSuccess: () => {
+      triggerHaptic(50);
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      setLocationEnabled(false);
+      toast({
+        title: "You're safe",
+        description: "Your Safety Circle has been notified.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Could not confirm you're safe. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const formatNextCheckinTime = (date: Date) => {
     const tz = status?.user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
     return new Date(date).toLocaleTimeString("en-US", {
@@ -853,8 +882,8 @@ export default function Home() {
               </p>
             </div>
             <button
-              onClick={() => { checkinMutation.mutate(); resolveAlertMutation.mutate(); }}
-              disabled={checkinMutation.isPending || resolveAlertMutation.isPending}
+              onClick={() => resolveCheckinMutation.mutate()}
+              disabled={resolveCheckinMutation.isPending}
               className="w-52 h-52 rounded-full bg-amber-500 hover:bg-amber-600 active:bg-amber-600 text-white shadow-[0_12px_36px_-12px_rgba(245,158,11,0.6)] disabled:opacity-50 disabled:active:scale-100 transition-all duration-150 active:scale-[0.97] flex flex-col items-center justify-center mx-auto"
               data-testid="button-im-ok-concern"
             >

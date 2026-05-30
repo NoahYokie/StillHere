@@ -953,9 +953,9 @@ export default function SettingsPage() {
                       {checkinInterval === 24 && timeOptions.find(t => t.value === preferredTime) && (
                         <span className="text-muted-foreground"> around <span className="font-medium text-foreground">{timeOptions.find(t => t.value === preferredTime)?.label}</span></span>
                       )}
-                      <span className="text-muted-foreground">. If you miss it, your safety circle is alerted after </span>
+                      <span className="text-muted-foreground">. If you miss it, StillHere tries to reach you first — then contacts your Safety Circle if there's no response after </span>
                       <span className="font-medium text-foreground">{graceMinutes} minutes</span>
-                      <span className="text-muted-foreground">.</span>
+                      <span className="text-muted-foreground"> between each attempt.</span>
                     </div>
                   </div>
                 </div>
@@ -1078,9 +1078,9 @@ export default function SettingsPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">3</span>
-                    <Label className="text-sm font-semibold text-foreground">How long should we wait before alerting your circle?</Label>
+                    <Label className="text-sm font-semibold text-foreground">How long between each attempt to reach you?</Label>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-3 ml-7">If you miss your check-in, we'll wait this long before reaching out to your contacts.</p>
+                  <p className="text-xs text-muted-foreground mb-3 ml-7">When you miss a check-in, StillHere tries to reach you first — by notification, SMS, and phone call. Your Safety Circle is only contacted if we can't reach you after all three attempts. This setting controls how long we wait between each try.</p>
                   <RadioGroup value={graceMinutes.toString()} onValueChange={handleGraceChange} className="grid grid-cols-3 gap-2 ml-7">
                     {[
                       { v: "10", label: "10 min", hint: "Strict" },

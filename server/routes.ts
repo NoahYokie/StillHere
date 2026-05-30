@@ -1918,18 +1918,53 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
-      
+
       const openIncident = await storage.getOpenIncident(userId);
       if (!openIncident) {
         return res.status(404).json({ error: "No active alert" });
       }
-      
+
       const result = await resolveCheckin(userId, "app");
-      
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error resolving alert:", error);
       res.status(500).json({ error: "Failed to resolve alert" });
+    }
+  });
+
+  // Atomic resolution endpoint — single call that records the check-in and
+  // resolves any active incident in one server round-trip. Used by Concern
+  // Mode "I'M OK NOW" button to eliminate the dual-mutation race that caused
+  // a transient "Overdue" flash. The existing /api/checkin and
+  // /api/resolve-alert routes are preserved for their individual use cases.
+  app.post("/api/resolve-checkin", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const method = "button";
+      let location: { lat?: number; lng?: number; timezone?: string } = {};
+      if (req.body?.lat != null && req.body?.lng != null) {
+        const lat = parseFloat(req.body.lat);
+        const lng = parseFloat(req.body.lng);
+        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          location.lat = lat;
+          location.lng = lng;
+        }
+      }
+      if (req.body?.timezone && typeof req.body.timezone === "string") {
+        location.timezone = req.body.timezone;
+      }
+      const hasLocation = location.lat != null || location.timezone;
+      const checkin = await storage.createCheckin(userId, method, hasLocation ? location as any : undefined);
+      await storage.resetReminderState(userId);
+      const result = await resolveCheckin(userId, "app", { skipCreateCheckin: true });
+      res.json({ success: true, checkin, resolved: result.resolved, hadIncident: result.hadIncident });
+    } catch (error) {
+      console.error("Error in resolve-checkin:", error);
+      res.status(500).json({ error: "Failed to resolve check-in" });
     }
   });
 
@@ -7252,6 +7287,13 @@ export async function registerRoutes(
     if (incident.wellnessCallStatus === "safe" || incident.wellnessCallStatus === "help") return;
     if (wellnessStatusRank(status) < wellnessStatusRank(incident.wellnessCallStatus)) {
       console.log(`[WELLNESS CALL] Keeping existing status ${incident.wellnessCallStatus} over lower-priority ${status} for incident=${incident.id}`);
+      return;
+    }
+    // Suppress duplicate timeline entries: /respond and /status both fire for
+    // voicemail calls. If the status is already set to the same value, skip
+    // writing another timeline entry (the DB update is still idempotent-safe).
+    if (incident.wellnessCallStatus === status) {
+      console.log(`[WELLNESS CALL] Suppressing duplicate timeline entry for status=${status} incident=${incident.id}`);
       return;
     }
     const update: any = {
