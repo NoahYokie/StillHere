@@ -28,10 +28,17 @@ async function tryNativeLocationCheck(): Promise<PermissionHealth["location"] | 
     const BackgroundGeolocation = BG.default || BG.BackgroundGeolocation;
     if (BackgroundGeolocation?.getProviderState) {
       const state = await BackgroundGeolocation.getProviderState();
+      // Transistorsoft iOS status codes:
+      // 0 = NOT_DETERMINED (plugin not yet initialized — fall through to Capacitor check)
+      // 2 = DENIED
+      // 3 = ALWAYS
+      // 4 = WHEN_IN_USE
       if (state.status === 3 || state.accuracyAuthorization === 0) return "always";
-      if (state.status === 2) return "when_in_use";
-      if (state.status === 0) return "denied";
-      return "prompt";
+      if (state.status === 4) return "when_in_use";
+      if (state.status === 2) return "denied";
+      if (state.status === 1) return "denied"; // RESTRICTED
+      // status === 0 means NOT_DETERMINED or plugin not initialized.
+      // Fall through to Capacitor Geolocation for a reliable iOS permission read.
     }
   } catch {}
 
