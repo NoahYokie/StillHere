@@ -48,7 +48,9 @@ async function tryNativeLocationCheck(): Promise<PermissionHealth["location"] | 
     const Geolocation = Geo.Geolocation;
     if (Geolocation?.checkPermissions) {
       const perms = await Geolocation.checkPermissions();
-      if (perms.location === "granted" && perms.coarseLocation === "granted") return "granted";
+      // coarseLocation is Android-specific. On iOS it may be undefined or
+      // behave differently — only require location === "granted" for iOS.
+      if (perms.location === "granted") return "granted";
       if (perms.location === "denied") return "denied";
       return "prompt";
     }
