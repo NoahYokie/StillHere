@@ -1968,13 +1968,12 @@ export async function registerRoutes(
       const checkin = await storage.createCheckin(userId, method, hasLocation ? location as any : undefined);
       await storage.resetReminderState(userId);
       const result = await resolveCheckin(userId, "app", { skipCreateCheckin: true });
-      // Return the server-confirmed next check-in time so the client can
-      // immediately patch its status cache without waiting for a full refetch.
-      // createCheckin already called refreshNextCheckinDueAt, so reading
-      // settings here gives the authoritative post-resolution value.
-      const updatedSettings = await storage.getSettings(userId);
-      const nextCheckinDue = updatedSettings?.nextCheckinDueAt?.toISOString() ?? null;
-      res.json({ success: true, checkin, resolved: result.resolved, hadIncident: result.hadIncident, nextCheckinDue });
+      // Return the full updated status so the client can replace its /api/status
+      // cache atomically. Using getUserStatus (same function as GET /api/status)
+      // guarantees the client sees exactly what the status endpoint would return,
+      // eliminating any field-level mismatch that caused the "Overdue" split state.
+      const updatedStatus = await storage.getUserStatus(userId);
+      res.json({ success: true, checkin, resolved: result.resolved, hadIncident: result.hadIncident, updatedStatus });
     } catch (error) {
       console.error("Error in resolve-checkin:", error);
       res.status(500).json({ error: "Failed to resolve check-in" });

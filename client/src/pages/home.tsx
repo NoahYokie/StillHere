@@ -760,17 +760,13 @@ export default function Home() {
       return res.json().catch(() => ({}));
     },
     onSuccess: (data: any) => {
-      // Immediately patch the status cache with server-confirmed values so
-      // there is no stale-while-revalidate window showing "Overdue".
-      // The server returns nextCheckinDue from refreshNextCheckinDueAt.
-      queryClient.setQueryData(["/api/status"], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          openIncident: null,
-          nextCheckinDue: data?.nextCheckinDue ? new Date(data.nextCheckinDue) : old.nextCheckinDue,
-        };
-      });
+      // Replace the entire /api/status cache with the server-confirmed full
+      // status object. Using the same getUserStatus payload as GET /api/status
+      // ensures nextCheckinDue, openIncident, and all related fields are
+      // consistent — eliminating the split state that showed "Overdue".
+      if (data?.updatedStatus) {
+        queryClient.setQueryData(["/api/status"], data.updatedStatus);
+      }
       triggerHaptic(50);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       setLocationEnabled(false);
