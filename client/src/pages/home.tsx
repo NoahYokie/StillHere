@@ -756,9 +756,21 @@ export default function Home() {
       if (loc.lat != null) body.lat = loc.lat;
       if (loc.lng != null) body.lng = loc.lng;
       if (loc.timezone) body.timezone = loc.timezone;
-      return apiRequest("POST", "/api/resolve-checkin", body);
+      const res = await apiRequest("POST", "/api/resolve-checkin", body);
+      return res.json().catch(() => ({}));
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Immediately patch the status cache with server-confirmed values so
+      // there is no stale-while-revalidate window showing "Overdue".
+      // The server returns nextCheckinDue from refreshNextCheckinDueAt.
+      queryClient.setQueryData(["/api/status"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          openIncident: null,
+          nextCheckinDue: data?.nextCheckinDue ? new Date(data.nextCheckinDue) : old.nextCheckinDue,
+        };
+      });
       triggerHaptic(50);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       setLocationEnabled(false);

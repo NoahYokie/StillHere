@@ -432,7 +432,14 @@ async function appendIncidentTimelineEntry(
      WHERE id = $1`,
     [incidentId, JSON.stringify([entry])],
   );
-  if (entry.type === "pre_call_sms_sent" || entry.type === "pre_call_sms_failed" || entry.type.startsWith("wellness_call_")) {
+  // wellness_call_amd_raw is internal telemetry — it must NEVER be injected
+  // into guardian threads or push notifications. The type is still stored in
+  // the DB timeline JSON (the write above) for internal debugging only.
+  if (
+    entry.type === "pre_call_sms_sent" ||
+    entry.type === "pre_call_sms_failed" ||
+    (entry.type.startsWith("wellness_call_") && entry.type !== "wellness_call_amd_raw")
+  ) {
     injectIncidentSystemMessageToWatchers(incidentId, entry).catch((err: any) => {
       console.warn(`[THREAD] Failed to inject incident system message incident=${incidentId}: ${err?.message || err}`);
     });
@@ -1961,7 +1968,13 @@ export async function registerRoutes(
       const checkin = await storage.createCheckin(userId, method, hasLocation ? location as any : undefined);
       await storage.resetReminderState(userId);
       const result = await resolveCheckin(userId, "app", { skipCreateCheckin: true });
-      res.json({ success: true, checkin, resolved: result.resolved, hadIncident: result.hadIncident });
+      // Return the server-confirmed next check-in time so the client can
+      // immediately patch its status cache without waiting for a full refetch.
+      // createCheckin already called refreshNextCheckinDueAt, so reading
+      // settings here gives the authoritative post-resolution value.
+      const updatedSettings = await storage.getSettings(userId);
+      const nextCheckinDue = updatedSettings?.nextCheckinDueAt?.toISOString() ?? null;
+      res.json({ success: true, checkin, resolved: result.resolved, hadIncident: result.hadIncident, nextCheckinDue });
     } catch (error) {
       console.error("Error in resolve-checkin:", error);
       res.status(500).json({ error: "Failed to resolve check-in" });
