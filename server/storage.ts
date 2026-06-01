@@ -314,6 +314,49 @@ export function computeAnchoredNextCheckinDue(opts: {
   });
 }
 
+export function computeFutureCheckinDueFromNow(opts: {
+  userCreatedAt: Date;
+  now: Date;
+  intervalHours: number;
+  preferredCheckinTime: string | null | undefined;
+  timezone: string | null | undefined;
+}): Date {
+  const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
+  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
+  if (!isDailyLike) {
+    return addHours(opts.now, intervalHours);
+  }
+
+  const tz = opts.timezone || "UTC";
+  const pref = (opts.preferredCheckinTime || "09:00").trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(pref);
+  const targetH = Math.max(0, Math.min(23, m ? parseInt(m[1], 10) : 9));
+  const targetM = Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0));
+  const stepDays = intervalHours / 24;
+  const stepMs = stepDays * 86_400_000;
+  const anchorDayStart = startOfDayInTimezone(opts.userCreatedAt, tz);
+  const nowDayStart = startOfDayInTimezone(opts.now, tz);
+  const approxDaysSinceAnchor = Math.max(
+    0,
+    Math.floor((nowDayStart.getTime() - anchorDayStart.getTime()) / 86_400_000),
+  );
+  let cycles = Math.max(0, Math.floor(approxDaysSinceAnchor / stepDays) - 1);
+
+  const candidateForCycle = (cycle: number): Date => {
+    const probe = new Date(anchorDayStart.getTime() + cycle * stepMs + 12 * 3_600_000);
+    const dayStart = startOfDayInTimezone(probe, tz);
+    return new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
+  };
+
+  let candidate = candidateForCycle(cycles);
+  for (let i = 0; candidate <= opts.now && i < 6; i++) {
+    cycles++;
+    candidate = candidateForCycle(cycles);
+  }
+
+  return candidate > opts.now ? candidate : addHours(opts.now, intervalHours);
+}
+
 export function isCheckinLeaseClaimable(opts: {
   nextDueAt: Date | null | undefined;
   now: Date;
@@ -847,19 +890,29 @@ export class DatabaseStorage implements IStorage {
       timezone: row.user.timezone,
     });
 
-    // Guard: if the anchored computation landed in the past (preferred time
-    // has already passed today with no check-in yet), advance one more step
-    // so we never persist a stale due-timestamp. The cron is the authoritative
-    // detector for missed check-ins; this function must not re-open a window
-    // the cron already processed, nor show "9:00 AM Today" at 3:11 PM.
     if (nextDue <= refreshNow) {
-      nextDue = computeNextCheckinDue({
-        lastTime: nextDue,
+      nextDue = computeFutureCheckinDueFromNow({
+        userCreatedAt: row.user.createdAt,
+        now: refreshNow,
         intervalHours: normalizedInterval,
         preferredCheckinTime: row.settings.preferredCheckinTime,
         timezone: row.user.timezone,
-        lastTimeIsCheckin: false,
       });
+    }
+
+    if (nextDue <= refreshNow) {
+      const fallbackDue = addHours(refreshNow, normalizedInterval);
+      console.error(JSON.stringify({
+        event: "NEXT_CHECKIN_INVARIANT_VIOLATION",
+        userId,
+        computedNextDue: nextDue.toISOString(),
+        fallbackNextDue: fallbackDue.toISOString(),
+        refreshNow: refreshNow.toISOString(),
+        intervalHours: normalizedInterval,
+        preferredCheckinTime: row.settings.preferredCheckinTime,
+        timezone: row.user.timezone,
+      }));
+      nextDue = fallbackDue;
     }
 
     await db

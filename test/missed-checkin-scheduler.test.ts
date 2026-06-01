@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
 
-const { computeAnchoredNextCheckinDue, computeMissedCheckinOccurrence, computeNextCheckinDue, isCheckinLeaseClaimable, isIncidentEscalationLeaseClaimable } = await import("../server/storage");
+const { computeAnchoredNextCheckinDue, computeFutureCheckinDueFromNow, computeMissedCheckinOccurrence, computeNextCheckinDue, isCheckinLeaseClaimable, isIncidentEscalationLeaseClaimable } = await import("../server/storage");
 const { pool } = await import("../server/db");
 
 try {
@@ -434,6 +434,84 @@ try {
     "2026-05-29T01:00:00.000Z",
     "weekly cadence guard: advances to Friday May 29 09:00 Perth when May 22 slot is already past",
   );
+
+  // ── Task 15.1.5: refresh projection must not grind from old anchors ───────
+  const oldAccountAnchor = new Date("2024-01-01T00:00:00.000Z");
+  const validationResolveNow = new Date("2026-06-01T09:10:16.968Z");
+  const oldAccountAgeDays = Math.floor((validationResolveNow.getTime() - oldAccountAnchor.getTime()) / 86_400_000);
+  assert.ok(oldAccountAgeDays > 400, "fixture must cover accounts older than the old 400-iteration cap");
+
+  const sydneyDailyFuture = computeFutureCheckinDueFromNow({
+    userCreatedAt: oldAccountAnchor,
+    now: validationResolveNow,
+    intervalHours: 24,
+    preferredCheckinTime: "18:00",
+    timezone: "Australia/Sydney",
+  });
+  assert.equal(
+    sydneyDailyFuture.toISOString(),
+    "2026-06-02T08:00:00.000Z",
+    "Sydney daily projection after 18:00 local must write tomorrow 18:00, not a historical timestamp",
+  );
+  assert.ok(sydneyDailyFuture > validationResolveNow, "Sydney daily projection must be future");
+
+  const perthDailyNow = new Date("2026-06-01T10:10:16.968Z");
+  const perthDailyFuture = computeFutureCheckinDueFromNow({
+    userCreatedAt: oldAccountAnchor,
+    now: perthDailyNow,
+    intervalHours: 24,
+    preferredCheckinTime: "18:00",
+    timezone: "Australia/Perth",
+  });
+  assert.equal(
+    perthDailyFuture.toISOString(),
+    "2026-06-02T10:00:00.000Z",
+    "Perth daily projection after 18:00 local must write tomorrow 18:00",
+  );
+  assert.ok(perthDailyFuture > perthDailyNow, "Perth daily projection must be future");
+
+  const weeklyOldAnchor = new Date("2024-01-05T00:00:00.000Z"); // Friday anchor
+  const weeklyOldFuture = computeFutureCheckinDueFromNow({
+    userCreatedAt: weeklyOldAnchor,
+    now: validationResolveNow,
+    intervalHours: 168,
+    preferredCheckinTime: "09:00",
+    timezone: "Australia/Perth",
+  });
+  assert.equal(
+    weeklyOldFuture.toISOString(),
+    "2026-06-05T01:00:00.000Z",
+    "weekly projection for an old Friday-anchored account must jump to the next Friday 09:00 Perth",
+  );
+  assert.ok(weeklyOldFuture > validationResolveNow, "weekly projection must be future");
+
+  const multipleMissedLastCheckin = new Date("2025-01-01T08:00:00.000Z");
+  const staleRawAfterMultipleMisses = computeAnchoredNextCheckinDue({
+    userCreatedAt: oldAccountAnchor,
+    lastCheckinAt: multipleMissedLastCheckin,
+    intervalHours: 24,
+    preferredCheckinTime: "18:00",
+    timezone: "Australia/Sydney",
+  });
+  assert.ok(
+    staleRawAfterMultipleMisses <= validationResolveNow,
+    "multiple consecutive missed check-ins can produce a stale raw anchored value before the Task 15.1.5 projection",
+  );
+  const resolutionPathProjection = staleRawAfterMultipleMisses <= validationResolveNow
+    ? computeFutureCheckinDueFromNow({
+        userCreatedAt: oldAccountAnchor,
+        now: validationResolveNow,
+        intervalHours: 24,
+        preferredCheckinTime: "18:00",
+        timezone: "Australia/Sydney",
+      })
+    : staleRawAfterMultipleMisses;
+  assert.equal(
+    resolutionPathProjection.toISOString(),
+    "2026-06-02T08:00:00.000Z",
+    "missed-check-in resolution refresh must project to the next future preferred check-in",
+  );
+  assert.ok(resolutionPathProjection > validationResolveNow, "resolution path projection must be future");
 
   // ── Global timezone correctness ─────────────────────────────────────────────
   // StillHere must schedule check-ins correctly for all users globally.
