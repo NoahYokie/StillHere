@@ -905,9 +905,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" data-testid="chat-page">
+    <div className="h-[100dvh] min-h-screen bg-background flex flex-col overflow-hidden" data-testid="chat-page">
       {/* Header with presence */}
-      <div className="border-b border-border/60 px-4 py-3 flex items-center gap-3 bg-card">
+      <div className="sticky top-0 z-30 shrink-0 border-b border-border/60 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 flex items-center gap-3 bg-card">
         <BackButton
           onClick={() => (window.history.length > 1 ? window.history.back() : setLocation("/"))}
           testId="button-back-chat"
@@ -953,7 +953,7 @@ export default function ChatPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 max-w-lg mx-auto w-full">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-1 max-w-lg mx-auto w-full">
         {isLoading && (
           <div className="flex justify-center py-8">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -1019,7 +1019,7 @@ export default function ChatPage() {
           card in this thread is in the "active" state. */}
       {isCurrentlySharing && (
         <div
-          className="border-t border-primary/30 bg-primary/5 px-3 py-2 flex items-center gap-2"
+          className="shrink-0 border-t border-primary/30 bg-primary/5 px-3 py-2 flex items-center gap-2"
           data-testid="banner-sharing-active"
         >
           <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -1043,7 +1043,7 @@ export default function ChatPage() {
       )}
 
       {/* Compact Quick Action Bar  -  pill-style icon+label, smaller and sharper */}
-      <div className="border-t border-border/60 bg-card px-3 pt-2 pb-1.5">
+      <div className="shrink-0 border-t border-border/60 bg-card px-3 pt-2 pb-1.5">
         <div className="max-w-lg mx-auto flex items-center justify-center gap-2">
           {/* Location */}
           <button
@@ -1117,7 +1117,7 @@ export default function ChatPage() {
       </div>
 
       {/* Composer */}
-      <div className="border-t border-border/60 px-4 py-3 bg-card">
+      <div className="shrink-0 border-t border-border/60 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] bg-card">
         <div className="max-w-lg mx-auto flex gap-2">
           <Input
             ref={inputRef}
