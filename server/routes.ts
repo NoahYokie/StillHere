@@ -1965,14 +1965,52 @@ export async function registerRoutes(
         location.timezone = req.body.timezone;
       }
       const hasLocation = location.lat != null || location.timezone;
+
+      // DIAGNOSTIC — Task 15.1.4: capture nextCheckinDueAt BEFORE createCheckin
+      const settingsBefore = await storage.getSettings(userId);
+      console.log(JSON.stringify({
+        event: "RESOLVE_CHECKIN_DIAGNOSTIC",
+        stage: "before_createCheckin",
+        userId,
+        serverTimestamp: new Date().toISOString(),
+        nextCheckinDueAt_db: settingsBefore?.nextCheckinDueAt?.toISOString() ?? null,
+        checkinIntervalHours: settingsBefore?.checkinIntervalHours,
+        preferredCheckinTime: settingsBefore?.preferredCheckinTime,
+      }));
+
       const checkin = await storage.createCheckin(userId, method, hasLocation ? location as any : undefined);
+
+      // DIAGNOSTIC — capture nextCheckinDueAt AFTER createCheckin (after refreshNextCheckinDueAt)
+      const settingsAfter = await storage.getSettings(userId);
+      console.log(JSON.stringify({
+        event: "RESOLVE_CHECKIN_DIAGNOSTIC",
+        stage: "after_createCheckin",
+        userId,
+        serverTimestamp: new Date().toISOString(),
+        nextCheckinDueAt_db: settingsAfter?.nextCheckinDueAt?.toISOString() ?? null,
+        checkin_createdAt: checkin.createdAt,
+      }));
+
       await storage.resetReminderState(userId);
       const result = await resolveCheckin(userId, "app", { skipCreateCheckin: true });
-      // Return the full updated status so the client can replace its /api/status
-      // cache atomically. Using getUserStatus (same function as GET /api/status)
-      // guarantees the client sees exactly what the status endpoint would return,
-      // eliminating any field-level mismatch that caused the "Overdue" split state.
+
       const updatedStatus = await storage.getUserStatus(userId);
+
+      // DIAGNOSTIC — capture what getUserStatus actually returns
+      console.log(JSON.stringify({
+        event: "RESOLVE_CHECKIN_DIAGNOSTIC",
+        stage: "after_getUserStatus",
+        userId,
+        serverTimestamp: new Date().toISOString(),
+        nextCheckinDue_returned: updatedStatus?.nextCheckinDue instanceof Date
+          ? updatedStatus.nextCheckinDue.toISOString()
+          : updatedStatus?.nextCheckinDue ?? null,
+        settings_nextCheckinDueAt: (updatedStatus?.settings as any)?.nextCheckinDueAt ?? null,
+        openIncident: updatedStatus?.openIncident?.id ?? null,
+        lastCheckin_createdAt: updatedStatus?.lastCheckin?.createdAt ?? null,
+        isOverdue: updatedStatus?.nextCheckinDue ? new Date(updatedStatus.nextCheckinDue) < new Date() : null,
+      }));
+
       res.json({ success: true, checkin, resolved: result.resolved, hadIncident: result.hadIncident, updatedStatus });
     } catch (error) {
       console.error("Error in resolve-checkin:", error);
