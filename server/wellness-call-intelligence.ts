@@ -44,7 +44,7 @@ export function classifyWellnessStatusCallback(input: {
   if (isMachineAnsweredBy(answeredBy)) {
     return {
       status: "voicemail_left",
-      detail: `Voicemail detected. Message left. No safety confirmation received.`,
+      detail: "Wellness call connected to voicemail. We attempted to leave a safety message. No safety confirmation received.",
       shouldAccelerateContacts: true,
     };
   }

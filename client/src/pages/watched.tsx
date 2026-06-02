@@ -61,7 +61,7 @@ function WellnessCallBadge({ user }: { user: WatchedUser }) {
     return (
       <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950/30" data-testid={`badge-wellness-call-${user.userId}`}>
         <Phone className="w-3.5 h-3.5 text-amber-600" />
-        <span className="text-xs text-amber-700 dark:text-amber-400">Reached voicemail</span>
+        <span className="text-xs text-amber-700 dark:text-amber-400">Voicemail attempted</span>
       </div>
     );
   }

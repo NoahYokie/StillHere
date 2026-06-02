@@ -211,9 +211,10 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
 
   if (openIncident) {
     hadIncident = true;
+    const allClearAt = new Date();
     await storage.updateIncident(openIncident.id, {
       status: "resolved",
-      resolvedAt: new Date(),
+      resolvedAt: allClearAt,
     });
     console.log(`[RESOLVE] Incident ${openIncident.id} resolved (${openIncident.reason})`);
 
@@ -224,8 +225,10 @@ async function resolveCheckin(userId: string, method: CheckinMethod, options?: R
     }
 
     const baseUrl = getBaseUrl();
-    const allClearAt = new Date();
     const allClearTimeLabel = formatOwnerLocalAlertTime(allClearAt, user.timezone);
+    await injectAllClearSystemMessageToWatchers(user, openIncident, allClearAt, allClearTimeLabel).catch((err: any) => {
+      console.warn(`[THREAD] Failed to inject all-clear system messages incident=${openIncident.id}: ${err?.message || err}`);
+    });
     const allContacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
     console.log(`[ALL-CLEAR] Preparing to send all-clear SMS. userId=${userId}, incidentId=${openIncident.id}, method=${method}, contacts=${allContacts.length}`);
 
@@ -485,6 +488,45 @@ async function injectIncidentSystemMessageToWatchers(
     }).catch((err: any) => {
       console.warn(`[THREAD] Safety system push failed receiver=${receiverId}: ${err?.message || err}`);
     });
+  }
+}
+
+async function injectAllClearSystemMessageToWatchers(
+  user: { id: string; name?: string | null },
+  incident: { id: string; isDrill?: boolean | null; reason?: string | null },
+  resolvedAt: Date,
+  timeLabel: string,
+): Promise<void> {
+  if (incident.isDrill) return;
+  const linkedContacts = (await storage.getContacts(user.id)).filter((contact) =>
+    !!contact.linkedUserId &&
+    contact.linkedUserId !== user.id &&
+    isAcceptedWatcherLink(contact, contact.linkedUserId) &&
+    isContactActiveForAlerts(contact)
+  );
+  const userName = user.name || "StillHere";
+  const content = `All clear — ${userName} confirmed they're safe at ${timeLabel}. No action needed.`;
+  const sentTo = new Set<string>();
+  for (const contact of linkedContacts) {
+    const receiverId = contact.linkedUserId!;
+    if (sentTo.has(receiverId)) continue;
+    sentTo.add(receiverId);
+    try {
+      const msg = await storage.saveMessage(user.id, receiverId, content, {
+        messageType: "system_safe",
+        meta: {
+          kind: "all_clear",
+          incidentId: incident.id,
+          incidentReason: incident.reason || null,
+          safetyCritical: false,
+          source: "incident_resolution",
+          resolvedAt: resolvedAt.toISOString(),
+        },
+      });
+      emitToUser(receiverId, "message:new", { ...msg, senderName: userName });
+    } catch (err: any) {
+      console.warn(`[THREAD] Failed to inject all-clear system message incident=${incident.id} receiver=${receiverId}: ${err?.message || err}`);
+    }
   }
 }
 
@@ -7442,7 +7484,7 @@ export async function registerRoutes(
         await updateWellnessCallStatusForPhone(
           calledNumber,
           "voicemail_left",
-          "Voicemail detected. Message left. No safety confirmation received.",
+          "Wellness call connected to voicemail. We attempted to leave a safety message. No safety confirmation received.",
           { accelerateContacts: true },
         );
         const twimlVoicemail = `<?xml version="1.0" encoding="UTF-8"?>
