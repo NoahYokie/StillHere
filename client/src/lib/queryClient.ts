@@ -1,9 +1,28 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-async function throwIfResNotOk(res: Response) {
+export class ApiError extends Error {
+  status: number;
+  body: string;
+  isAuthRecoverable: boolean;
+
+  constructor(status: number, body: string) {
+    super(`${status}: ${body}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+    this.isAuthRecoverable = status === 429 || status >= 500;
+  }
+}
+
+export function isRecoverableAuthError(error: unknown): boolean {
+  if (error instanceof ApiError) return error.isAuthRecoverable;
+  return error instanceof TypeError;
+}
+
+export async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    throw new ApiError(res.status, text);
   }
 }
 

@@ -1,5 +1,5 @@
 import { io, Socket } from "socket.io-client";
-import { getNativeSessionToken, isNativeApp, NATIVE_API_ORIGIN } from "./native-api";
+import { getNativeSessionToken, hydrateNativeSessionToken, isNativeApp, NATIVE_API_ORIGIN } from "./native-api";
 
 let socket: Socket | null = null;
 let lastNativeSessionToken: string | null = null;
@@ -47,6 +47,16 @@ export function getSocket(): Socket {
     socket.io.on("reconnect_attempt", (attempt: number) => {
       console.log("[SOCKET] Reconnecting attempt:", attempt);
     });
+
+    if (isNativeApp() && !nativeSessionToken) {
+      hydrateNativeSessionToken().then((token) => {
+        if (!socket || !token || token === lastNativeSessionToken) return;
+        lastNativeSessionToken = token;
+        socket.auth = { nativeSessionToken: token };
+        socket.disconnect();
+        socket.connect();
+      }).catch(() => {});
+    }
   }
 
   if (isNativeApp() && socket && nativeSessionToken !== lastNativeSessionToken) {
