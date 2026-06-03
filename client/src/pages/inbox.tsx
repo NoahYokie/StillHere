@@ -20,6 +20,7 @@ interface Conversation {
   lastMessageAt: string;
   unreadCount: number;
   lastMessageType: LastMessageType;
+  activeAlert?: boolean;
 }
 
 function isLiveLocationPreview(raw: string | null | undefined): boolean {
@@ -32,7 +33,7 @@ function isLiveLocationPreview(raw: string | null | undefined): boolean {
   );
 }
 
-function StatusDot({ type, isLiveLoc }: { type: LastMessageType; isLiveLoc?: boolean }) {
+function StatusDot({ type, isLiveLoc, activeAlert }: { type: LastMessageType; isLiveLoc?: boolean; activeAlert?: boolean }) {
   if (isLiveLoc) {
     return (
       <span
@@ -42,12 +43,21 @@ function StatusDot({ type, isLiveLoc }: { type: LastMessageType; isLiveLoc?: boo
       />
     );
   }
-  if (type === "system_alert") {
+  if (activeAlert) {
     return (
       <span
         className="inline-block w-2.5 h-2.5 rounded-full bg-destructive ring-2 ring-destructive/20 animate-pulse"
         aria-label="Emergency alert"
         data-testid="dot-alert"
+      />
+    );
+  }
+  if (type === "system_alert") {
+    return (
+      <span
+        className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-amber-500/20"
+        aria-label="Previous safety alert"
+        data-testid="dot-past-alert"
       />
     );
   }
@@ -78,10 +88,10 @@ function StatusDot({ type, isLiveLoc }: { type: LastMessageType; isLiveLoc?: boo
   );
 }
 
-function statusLabel(type: LastMessageType): string | null {
+function statusLabel(type: LastMessageType, activeAlert?: boolean): string | null {
   switch (type) {
     case "system_alert":
-      return "Emergency";
+      return activeAlert ? "Emergency" : "Past alert";
     case "system_info":
       return "Safety event";
     case "system_safe":
@@ -101,7 +111,7 @@ export default function InboxPage() {
   });
 
   const totalUnread = conversations?.reduce((sum, c) => sum + c.unreadCount, 0) || 0;
-  const activeAlerts = conversations?.filter((c) => c.lastMessageType === "system_alert").length || 0;
+  const activeAlerts = conversations?.filter((c) => c.activeAlert).length || 0;
 
   useEffect(() => {
     if (!auth?.authenticated) return;
@@ -219,8 +229,8 @@ export default function InboxPage() {
               // even though the underlying messageType is system_info. We
               // re-classify it locally so the row doesn't masquerade as an
               // emergency badge.
-              const isAlert = !isLiveLoc && convo.lastMessageType === "system_alert";
-              const label = isLiveLoc ? "Location" : statusLabel(convo.lastMessageType);
+              const isAlert = !isLiveLoc && !!convo.activeAlert;
+              const label = isLiveLoc ? "Location" : statusLabel(convo.lastMessageType, convo.activeAlert);
               return (
                 <Card
                   key={convo.partnerId}
@@ -261,7 +271,7 @@ export default function InboxPage() {
                           {convo.partnerName.charAt(0).toUpperCase()}
                         </div>
                         <span className="absolute -bottom-0.5 -right-0.5 bg-card rounded-full p-0.5">
-                          <StatusDot type={convo.lastMessageType} isLiveLoc={isLiveLoc} />
+                          <StatusDot type={convo.lastMessageType} isLiveLoc={isLiveLoc} activeAlert={convo.activeAlert} />
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">

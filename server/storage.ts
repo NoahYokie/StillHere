@@ -507,7 +507,7 @@ export interface IStorage {
   getMessages(userId1: string, userId2: string, limit?: number): Promise<Message[]>;
   markMessagesRead(senderId: string, receiverId: string): Promise<void>;
   getUnreadCount(userId: string): Promise<number>;
-  getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }[]>;
+  getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info"; activeAlert: boolean }[]>;
 
   // Calls
   getCall(id: string): Promise<Call | undefined>;
@@ -2643,7 +2643,7 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }[]> {
+  async getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info"; activeAlert: boolean }[]> {
     const allMessages = await db.select().from(messages).where(
       or(eq(messages.senderId, userId), eq(messages.receiverId, userId))
     ).orderBy(desc(messages.createdAt));
@@ -2667,9 +2667,10 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const conversations: { partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info" }[] = [];
+    const conversations: { partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info"; activeAlert: boolean }[] = [];
     for (const [partnerId, data] of Array.from(partnerMap)) {
       const partner = await this.getUser(partnerId);
+      const openIncident = await this.getOpenIncident(partnerId).catch(() => undefined);
       conversations.push({
         partnerId,
         partnerName: partner?.name || "Unknown",
@@ -2677,6 +2678,7 @@ export class DatabaseStorage implements IStorage {
         lastMessageAt: data.lastMessageAt,
         unreadCount: data.unreadCount,
         lastMessageType: data.lastMessageType,
+        activeAlert: !!openIncident && !openIncident.isDrill,
       });
     }
 
