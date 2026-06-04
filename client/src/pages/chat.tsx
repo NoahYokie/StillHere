@@ -38,6 +38,11 @@ interface LocalMessage extends Message {
 
 type SystemKind = "system_alert" | "system_safe" | "system_info";
 
+interface ConversationSummary {
+  partnerId: string;
+  activeAlert?: boolean;
+}
+
 interface LiveLocationMeta {
   kind: "live_location";
   lat: number;
@@ -140,6 +145,13 @@ export default function ChatPage() {
     queryKey: ["/api/messages", otherUserId],
     enabled: !!otherUserId,
   });
+
+  const { data: conversations = [] } = useQuery<ConversationSummary[]>({
+    queryKey: ["/api/conversations"],
+    enabled: !!otherUserId,
+  });
+  const currentConversation = conversations.find((c) => c.partnerId === otherUserId);
+  const showEmergencyContactingFooter = !otherIsOnline && currentConversation?.activeAlert === true;
 
   // Tracks whether the current user has ANY active live-location share, regardless
   // of which conversation it was started from. This drives the "You're sharing
@@ -1106,7 +1118,7 @@ export default function ChatPage() {
             </button>
           )}
         </div>
-        {!otherIsOnline && (
+        {showEmergencyContactingFooter && (
           <p
             className="text-[10px] text-muted-foreground text-center mt-1.5"
             data-testid="text-offline-hint"

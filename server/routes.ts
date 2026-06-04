@@ -7735,7 +7735,7 @@ export async function registerRoutes(
           await updateWellnessCallStatusForPhone(
             calledNumber,
             "no_response",
-            "Human answered but no keypad confirmation was received. Continuing escalation.",
+            "Wellness call connected — no safety confirmation received. Continuing escalation.",
             { accelerateContacts: true },
           );
           try {

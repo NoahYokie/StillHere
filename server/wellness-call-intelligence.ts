@@ -86,7 +86,7 @@ export function classifyWellnessStatusCallback(input: {
   if (callStatus === "completed" && durationSeconds > 0 && !answeredBy) {
     return {
       status: "no_response",
-      detail: "Wellness call connected but no keypad confirmation was received.",
+      detail: "Wellness call connected — no safety confirmation received.",
       shouldAccelerateContacts: true,
     };
   }
