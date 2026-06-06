@@ -84,6 +84,13 @@ async function refreshLocationIfPermitted(): Promise<void> {
   } catch {}
 }
 
+async function sendSosRequest(): Promise<{ data: any; hadLocation: boolean }> {
+  const sosBody = buildSosBody();
+  const res = await apiRequest("POST", "/api/sos", sosBody);
+  const data = await res.json().catch(() => ({}));
+  return { data, hadLocation: sosBody.lat != null };
+}
+
 function EscalationBanner({ status }: { status: UserStatus }) {
   const incident = status.openIncident;
   if (!incident || incident.status === "resolved") return null;
@@ -574,17 +581,23 @@ export default function Home() {
 
   useEffect(() => {
     if (fallCountdown === 0 && fallCountdown !== null) {
-      const sosBody = buildSosBody();
-      apiRequest("POST", "/api/sos", sosBody).then(() => {
+      sendSosRequest().then(({ data, hadLocation }) => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
-          title: "Fall sensed. SOS sent",
-          description: sosBody.lat != null
+          title: data?.degraded ? "Fall sensed. Help request active" : "Fall sensed. SOS sent",
+          description: hadLocation
             ? "We attempted to reach your emergency contacts with your location."
             : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
         });
         refreshLocationIfPermitted();
-      }).catch(() => {});
+      }).catch(() => {
+        triggerHaptic([80, 40, 80]);
+        toast({
+          title: "Fall SOS failed",
+          description: "Could not send the alert. Please try again.",
+          variant: "destructive",
+        });
+      });
       setFallCountdown(null);
     }
   }, [fallCountdown, toast]);
@@ -605,17 +618,21 @@ export default function Home() {
         if (longPressTimerRef.current) clearInterval(longPressTimerRef.current);
         longPressTimerRef.current = null;
         triggerHaptic([200, 100, 200, 100, 200]);
-        const sosBody = buildSosBody();
-        apiRequest("POST", "/api/sos", sosBody).then(() => {
+        sendSosRequest().then(({ data, hadLocation }) => {
           queryClient.invalidateQueries({ queryKey: ["/api/status"] });
           toast({
-            title: "Discreet SOS sent",
-            description: sosBody.lat != null
-              ? "We attempted to reach your emergency contacts with your location."
-              : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
+            title: data?.degraded ? "Help request active" : "Discreet SOS sent",
+            description: hadLocation ? "Location included." : "Using last known location.",
           });
           refreshLocationIfPermitted();
-        }).catch(() => {});
+        }).catch(() => {
+          triggerHaptic([35, 60, 35]);
+          toast({
+            title: "SOS not sent",
+            description: "Please try again.",
+            variant: "destructive",
+          });
+        });
         setLongPressProgress(0);
       }
     }, 50);
@@ -690,12 +707,9 @@ export default function Home() {
       // attach whatever the location service already has cached (sync, never blocks)
       // and let the server snapshot it. Fresh location is fetched async AFTER send,
       // and only if permission is already granted (no popup, ever).
-      const sosBody = buildSosBody();
-      const res = await apiRequest("POST", "/api/sos", sosBody);
-      const data = await res.json().catch(() => ({}));
-      return data;
+      return sendSosRequest();
     },
-    onSuccess: (data: any) => {
+    onSuccess: ({ data, hadLocation }: { data: any; hadLocation: boolean }) => {
       triggerHaptic([100, 50, 100, 50, 200]);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       if (data?.alreadyActive) {
@@ -705,10 +719,9 @@ export default function Home() {
         });
         return;
       }
-      const cached = getCachedPosition();
       toast({
-        title: "Alert sent",
-        description: cached
+        title: data?.degraded ? "Help request active" : "Alert sent",
+        description: hadLocation
           ? "We attempted to reach your emergency contacts with your location."
           : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
       });
