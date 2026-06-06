@@ -267,6 +267,11 @@ export default function Home() {
 
   const { auth } = useAuth();
 
+  const sendSosRequest = useCallback(async () => {
+    const response = await apiRequest("POST", "/api/sos", {});
+    return await response.json() as { degraded?: boolean; alreadyActive?: boolean; alreadyProcessing?: boolean };
+  }, []);
+
   const { data: status, isLoading } = useQuery<UserStatus>({
     queryKey: ["/api/status"],
     refetchInterval: (query) => {
@@ -380,16 +385,26 @@ export default function Home() {
 
   useEffect(() => {
     if (fallCountdown === 0 && fallCountdown !== null) {
-      apiRequest("POST", "/api/sos", {}).then(() => {
+      sendSosRequest().then((result) => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
           title: "Fall detected - SOS sent",
-          description: "Your emergency contacts have been alerted.",
+          description: result.degraded
+            ? "Your help request is active. Some notifications may be delayed."
+            : "Your help request is active. We are notifying your safety circle.",
+          variant: "destructive",
         });
-      }).catch(() => {});
+      }).catch(() => {
+        triggerHaptic([300, 100, 300]);
+        toast({
+          title: "Fall SOS failed",
+          description: "Could not send alert. Call emergency services directly.",
+          variant: "destructive",
+        });
+      });
       setFallCountdown(null);
     }
-  }, [fallCountdown, toast]);
+  }, [fallCountdown, sendSosRequest, toast]);
 
   const LONG_PRESS_DURATION = 3000;
 
@@ -407,17 +422,27 @@ export default function Home() {
         if (longPressTimerRef.current) clearInterval(longPressTimerRef.current);
         longPressTimerRef.current = null;
         triggerHaptic([200, 100, 200, 100, 200]);
-        apiRequest("POST", "/api/sos", {}).then(() => {
+        sendSosRequest().then((result) => {
           queryClient.invalidateQueries({ queryKey: ["/api/status"] });
           toast({
             title: "Discreet SOS sent",
-            description: "Your emergency contacts have been alerted.",
+            description: result.degraded
+              ? "Help request active. Some notifications may be delayed."
+              : "Help request active.",
+            variant: "destructive",
           });
-        }).catch(() => {});
+        }).catch(() => {
+          triggerHaptic([60, 60, 60]);
+          toast({
+            title: "SOS not sent",
+            description: "Try again or call emergency services.",
+            variant: "destructive",
+          });
+        });
         setLongPressProgress(0);
       }
     }, 50);
-  }, [toast]);
+  }, [sendSosRequest, toast]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimerRef.current) {
@@ -483,14 +508,17 @@ export default function Home() {
 
   const sosMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/sos", {});
+      return sendSosRequest();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       triggerHaptic([100, 50, 100, 50, 200]);
       queryClient.invalidateQueries({ queryKey: ["/api/status"] });
       toast({
         title: "Alert sent",
-        description: "Your emergency contacts were notified.",
+        description: result.degraded
+          ? "Your help request is active. Some notifications may be delayed."
+          : "Your help request is active. We are notifying your safety circle.",
+        variant: "destructive",
       });
       
       if (status?.settings?.locationMode !== "off") {
