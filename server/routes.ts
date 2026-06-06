@@ -72,6 +72,15 @@ const SOS_INFLIGHT_TTL_MS = 60_000;
 const CRON_TICK_LOCK_ID = 420_001;
 const SAFETY_STATE_TICK_LOCK_ID = 420_002;
 
+function logSosEvent(event: string, fields: Record<string, unknown> = {}): void {
+  console.log(JSON.stringify({
+    event,
+    scope: "sos",
+    timestamp: new Date().toISOString(),
+    ...fields,
+  }));
+}
+
 async function tryAcquireDbAdvisoryLock(lockId: number): Promise<null | (() => Promise<void>)> {
   const client = await pool.connect();
   let locked = false;
@@ -332,6 +341,8 @@ interface NotifyContactSummary {
   delivered: string[];
   smsAttempted: boolean;
   smsDelivered: boolean;
+  degraded?: boolean;
+  error?: string;
 }
 
 function isAcceptedWatcherLink(contact: { linkedUserId?: string | null; watcherConsentStatus?: string | null }, linkedUserId?: string | null): boolean {
@@ -840,6 +851,59 @@ async function notifyContact(
   }
 
   return summary;
+}
+
+async function tryNotifyContact(
+  contact: { id: string; phone: string; name: string; linkedUserId: string | null; userId: string; email?: string | null; watcherConsentStatus?: string | null },
+  userName: string,
+  link: string,
+  reason: "sos" | "missed_checkin",
+  sendSmsFn: (
+    phone: string,
+    userName: string,
+    link: string,
+    options?: { userId?: string | null; incidentId?: string | null; ipAddress?: string | null; dedupeKey?: string | null; scheduledCheckinLabel?: string | null; alertSentLabel?: string | null },
+  ) => Promise<{ success: boolean; error?: string } | any>,
+  audit?: { incidentId?: string | null; ipAddress?: string | null },
+): Promise<NotifyContactSummary> {
+  logSosEvent("SOS_NOTIFICATION_ATTEMPTED", {
+    incidentId: audit?.incidentId ?? null,
+    contactId: contact.id,
+    reason,
+  });
+  try {
+    const summary = await notifyContact(contact, userName, link, reason, sendSmsFn, audit);
+    const degraded = summary.attempted.length === 0 || summary.delivered.length === 0 || (summary.smsAttempted && !summary.smsDelivered);
+    if (degraded) {
+      logSosEvent("SOS_NOTIFICATION_FAILED", {
+        incidentId: audit?.incidentId ?? null,
+        contactId: contact.id,
+        reason,
+        attempted: summary.attempted,
+        delivered: summary.delivered,
+      });
+      return { ...summary, degraded: true };
+    }
+    logSosEvent("SOS_NOTIFICATION_SUCCEEDED", {
+      incidentId: audit?.incidentId ?? null,
+      contactId: contact.id,
+      reason,
+      delivered: summary.delivered,
+    });
+    return summary;
+  } catch (error: any) {
+    const message = error?.message || "unknown notification failure";
+    logSosEvent("SOS_NOTIFICATION_FAILED", {
+      incidentId: audit?.incidentId ?? null,
+      contactId: contact.id,
+      reason,
+      error: message,
+    });
+    if (audit?.incidentId) {
+      await storage.updateIncident(audit.incidentId, { degradedDelivery: true, deliveryFailed: true }).catch(() => {});
+    }
+    return { attempted: [], delivered: [], smsAttempted: false, smsDelivered: false, degraded: true, error: message };
+  }
 }
 
 export async function registerRoutes(
@@ -1735,8 +1799,32 @@ export async function registerRoutes(
 
   // SOS - immediate incident (supports both cookie auth and bearer token for watch)
   app.post("/api/sos", async (req, res) => {
+    let userId = "";
+    let incident: any = null;
+    let degraded = false;
+    const degradationReasons: string[] = [];
+    const markDegraded = async (reason: string, error?: unknown) => {
+      degraded = true;
+      degradationReasons.push(reason);
+      logSosEvent("SOS_DEGRADED_MODE_ENTERED", {
+        userId,
+        incidentId: incident?.id ?? null,
+        reason,
+        error: error instanceof Error ? error.message : typeof error === "string" ? error : undefined,
+      });
+      if (incident?.id) {
+        await storage.updateIncident(incident.id, { degradedDelivery: true }).catch(() => {});
+      }
+    };
+
     try {
-      let userId = getUserId(req);
+      logSosEvent("SOS_REQUEST_RECEIVED", {
+        auth: !!getUserId(req),
+        native: isNativeAuthRequest(req),
+        hasLocation: typeof req.body?.lat === "number" && typeof req.body?.lng === "number",
+      });
+
+      userId = getUserId(req) || "";
       if (!userId) {
         const bearerToken = req.headers["authorization"]?.replace("Bearer ", "");
         if (bearerToken) {
@@ -1747,6 +1835,7 @@ export async function registerRoutes(
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
       }
+      logSosEvent("SOS_USER_AUTHENTICATED", { userId });
 
       // STEP 1 - synchronous in-flight lock. This runs to completion before any
       // await yields, so two concurrent SOS taps from the same user cannot both
@@ -1870,13 +1959,20 @@ export async function registerRoutes(
       const hasLocation = sosLat !== null && sosLng !== null;
 
       // Create SOS incident and set safety state to concern
-      let incident = await storage.createIncident(userId, "sos");
+      incident = await storage.createIncident(userId, "sos");
+      logSosEvent("SOS_INCIDENT_CREATED", { userId, incidentId: incident.id });
       await storage.updateSafetyState(userId, "concern", "SOS triggered");
+      logSosEvent("SOS_SAFETY_STATE_UPDATED", { userId, incidentId: incident.id, state: "concern" });
       emitTrackingPolicyChanged(userId, "sos_open").catch(() => {});
 
       // Auto-post into family chat with push fan-out (best-effort, never blocks SOS).
       // Done early so family is paged even if downstream contact escalation hits errors.
-      const sosUser = await storage.getUser(userId);
+      let sosUser: Awaited<ReturnType<typeof storage.getUser>> | undefined;
+      try {
+        sosUser = await storage.getUser(userId);
+      } catch (error) {
+        await markDegraded("user_lookup_failed", error);
+      }
       broadcastToFamily(
         userId,
         `${sosUser?.name || "A family member"} triggered SOS. Please check on them right now.`,
@@ -1888,42 +1984,70 @@ export async function registerRoutes(
           url: "/family",
           tag: "family-sos",
         },
-      ).catch(() => {});
+      ).catch((error) => {
+        markDegraded("family_broadcast_failed", error).catch(() => {});
+      });
 
       // Snapshot moment-of-SOS location to user record so the emergency page
       // has it immediately. The open SOS incident above grants a real safety
       // purpose, so policy normally allows; only explicit paused/off settings
       // will short-circuit the snapshot.
       if (hasLocation) {
-        const sosPolicy = await getTrackingPolicyForUser(userId);
-        if (sosPolicy.nativeTrackingAllowed) {
-          await db.update(users).set({
-            lastLat: sosLat,
-            lastLng: sosLng,
-            lastLocationAt: new Date(),
-          }).where(eq(users.id, userId));
-        } else {
-          console.log(`[TRACKING_POLICY] SOS lat/lng snapshot stripped (policy deny)`);
+        try {
+          const sosPolicy = await getTrackingPolicyForUser(userId);
+          if (sosPolicy.nativeTrackingAllowed) {
+            await db.update(users).set({
+              lastLat: sosLat,
+              lastLng: sosLng,
+              lastLocationAt: new Date(),
+            }).where(eq(users.id, userId));
+          } else {
+            console.log(`[TRACKING_POLICY] SOS lat/lng snapshot stripped (policy deny)`);
+          }
+        } catch (error) {
+          await markDegraded("location_snapshot_failed", error);
         }
       }
 
       // Get contacts sorted by priority
-      const contacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
-      const settings = await storage.getSettings(userId);
+      let contacts: Awaited<ReturnType<typeof storage.getContacts>> = [];
+      try {
+        contacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
+      } catch (error) {
+        await markDegraded("contacts_lookup_failed", error);
+      }
+      let settings: Awaited<ReturnType<typeof storage.getSettings>> | undefined;
+      try {
+        settings = await storage.getSettings(userId);
+      } catch (error) {
+        await markDegraded("settings_lookup_failed", error);
+      }
 
       // Create location session if allowed, seeded with the moment-of-SOS coordinates
       if (settings?.locationMode === "emergency_only" || settings?.locationMode === "both") {
-        await storage.createLocationSession(
-          userId,
-          "emergency",
-          incident.id,
-          hasLocation ? { lat: sosLat!, lng: sosLng!, accuracy: sosAccuracy } : undefined,
-        );
+        try {
+          await storage.createLocationSession(
+            userId,
+            "emergency",
+            incident.id,
+            hasLocation ? { lat: sosLat!, lng: sosLng!, accuracy: sosAccuracy } : undefined,
+          );
+        } catch (error) {
+          await markDegraded("location_session_failed", error);
+        }
       }
       
       // Phase 2: incident-scoped tokens, fresh per incident, reused within it.
-      const tokens = await storage.getOrMintIncidentTokensForUser(userId, incident.startedAt);
-      const user = await storage.getUser(userId);
+      let tokens: Awaited<ReturnType<typeof storage.getOrMintIncidentTokensForUser>> = [];
+      try {
+        tokens = await storage.getOrMintIncidentTokensForUser(userId, incident.startedAt);
+      } catch (error) {
+        await markDegraded("incident_token_generation_failed", error);
+      }
+      const user = sosUser || await storage.getUser(userId).catch(async (error) => {
+        await markDegraded("user_lookup_failed", error);
+        return undefined;
+      });
       const baseUrl = getBaseUrl();
       
       const now = new Date();
@@ -1935,26 +2059,45 @@ export async function registerRoutes(
         if (token) {
           const link = `${baseUrl}/emergency/${token.token}`;
           console.log(`[SOS] Alerting Contact #${firstContact.priority}`);
-          await notifyContact(firstContact, user?.name || "User", link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
+          const summary = await tryNotifyContact(firstContact, user?.name || "User", link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
+          if (summary.degraded) await markDegraded("primary_contact_notification_degraded", summary.error);
           console.log("[SOS] Alert sent\n");
+        } else {
+          await markDegraded("primary_contact_token_missing");
         }
+      } else {
+        await markDegraded("no_active_contacts");
       }
       
-      const sosSettings = await storage.getSettings(userId);
-      incident = await storage.updateIncident(incident.id, {
-        escalationLevel: 1,
-        lastEscalationStep: "contact_1",
-        notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
-        lastContactNotifiedAt: now,
-        contact1NotifiedAt: now,
-        nextActionAt: addMinutes(now, sosSettings?.escalationMinutes || 20),
-      });
+      try {
+        const sosSettings = settings || await storage.getSettings(userId);
+        incident = await storage.updateIncident(incident.id, {
+          escalationLevel: 1,
+          lastEscalationStep: "contact_1",
+          notifiedContactIds: JSON.stringify(firstContact ? [firstContact.id] : []),
+          lastContactNotifiedAt: now,
+          contact1NotifiedAt: now,
+          nextActionAt: addMinutes(now, sosSettings?.escalationMinutes || 20),
+          ...(degraded ? { degradedDelivery: true } : {}),
+        });
+      } catch (error) {
+        await markDegraded("incident_escalation_metadata_failed", error);
+      }
       
       notifyConcern(userId, user?.name || "Someone", "sos").catch((err) => {
+        markDegraded("watcher_notification_failed", err).catch(() => {});
         console.error(`[SOS] notifyConcern failed for user=${userId}:`, err?.message || err);
       });
 
-      res.json({ success: true, incident });
+      res.json({
+        success: true,
+        incident,
+        degraded,
+        degradationReasons,
+        message: degraded
+          ? "Help request active. Some notification channels may be delayed."
+          : "Help request active. Your Safety Circle is being contacted.",
+      });
     } catch (error) {
       console.error("Error sending SOS:", error);
       res.status(500).json({ error: "Failed to send SOS" });
@@ -3364,7 +3507,11 @@ export async function registerRoutes(
           console.log(`[ESCALATION] Re-notifying Contact #${firstContact.priority}`);
           const reason = data.incident!.reason as "sos" | "missed_checkin";
           const smsFn = reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-          await notifyContact(firstContact, data.user.name, link, reason, smsFn, { incidentId: data.incident!.id, ipAddress: req.ip });
+          if (reason === "sos") {
+            await tryNotifyContact(firstContact, data.user.name, link, reason, smsFn, { incidentId: data.incident!.id, ipAddress: req.ip });
+          } else {
+            await notifyContact(firstContact, data.user.name, link, reason, smsFn, { incidentId: data.incident!.id, ipAddress: req.ip });
+          }
           console.log("[ESCALATION] Contact re-notified, escalation will continue via cron\n");
         }
       }
@@ -4981,7 +5128,7 @@ export async function registerRoutes(
         await storage.updateSafetyState(user.id, "concern", isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.");
         emitTrackingPolicyChanged(user.id, isNegative ? "sms_no_help" : "sms_help").catch(() => {});
 
-        const allContacts = await storage.getContacts(user.id);
+        const allContacts = (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
         const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
         const tokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
         const baseUrl = getBaseUrl();
@@ -4991,12 +5138,8 @@ export async function registerRoutes(
           const tok = tokens.find(t => t.contact.id === contact.id);
           if (!tok) continue;
           const link = `${baseUrl}/emergency/${tok.token}`;
-          try {
-            await notifyContact(contact, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
-            notifiedIds.push(contact.id);
-          } catch (err: any) {
-            console.error(`[SMS-CHECKIN] Help escalation failed for contact=${contact.id}:`, err?.message || err);
-          }
+          const summary = await tryNotifyContact(contact, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
+          if (summary.delivered.length > 0) notifiedIds.push(contact.id);
         }
 
         let existingTimeline: any[] = [];
@@ -6236,7 +6379,8 @@ export async function registerRoutes(
         const existing = await storage.getOpenIncident(user.id);
         if (!existing) {
           const incident = await storage.createIncident(user.id, "sos");
-          const allContacts = await storage.getContacts(user.id);
+          await storage.updateSafetyState(user.id, "concern", "SOS triggered by satellite");
+          const allContacts = (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
           const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
           // Phase 2: incident-scoped token for this brand-new incident.
           const tokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
@@ -6246,7 +6390,7 @@ export async function registerRoutes(
             const tok = tokens.find(t => t.contact.id === first.id);
             if (tok) {
               const link = `${baseUrl}/emergency/${tok.token}`;
-              await notifyContact(first, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
+              await tryNotifyContact(first, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
             }
           }
           const userSettings = await storage.getSettings(user.id);
@@ -7599,7 +7743,7 @@ export async function registerRoutes(
 
         // Fan out to ALL contacts in parallel (SMS + push)  -  the user audibly
         // confirmed they need help, so we don't wait for sequential escalation.
-        const sosCont = await storage.getContacts(user.id);
+        const sosCont = (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
         const sortedSos = [...sosCont].sort((a, b) => a.priority - b.priority);
         // Phase 2: incident-scoped tokens for the active wellness-call incident.
         const sosTokens = await storage.getOrMintIncidentTokensForUser(user.id, incident.startedAt);
@@ -7610,12 +7754,8 @@ export async function registerRoutes(
           const tok = sosTokens.find(t => t.contact.id === contact.id);
           if (!tok) return;
           const link = `${sosBaseUrl}/emergency/${tok.token}`;
-          try {
-            await notifyContact(contact, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
-            notifiedIds.push(contact.id);
-          } catch (err: any) {
-            console.error(`[WELLNESS CALL] SOS notify failed for contact ${contact.id}:`, err?.message || err);
-          }
+          const summary = await tryNotifyContact(contact, user.name, link, "sos", sendSosAlert, { incidentId: incident.id, ipAddress: req.ip });
+          if (summary.delivered.length > 0) notifiedIds.push(contact.id);
         }));
 
         const now = new Date();
@@ -8438,7 +8578,12 @@ export async function registerRoutes(
               const link = `${baseUrl}/emergency/${token.token}`;
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: firstContact.id, reason: incident.reason, userId: user.id, step: "sms_fallthrough", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-              await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
+              const reason = incident.reason as "sos" | "missed_checkin";
+              if (reason === "sos") {
+                await tryNotifyContact(firstContact, user.name, link, reason, smsFn, { incidentId: incident.id });
+              } else {
+                await notifyContact(firstContact, user.name, link, reason, smsFn, { incidentId: incident.id });
+              }
               existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contacts alerted after no response. First contact notified: ${firstContact.name}` });
             }
           }
@@ -8466,7 +8611,12 @@ export async function registerRoutes(
               const link = `${baseUrl}/emergency/${token.token}`;
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: firstContact.id, reason: incident.reason, userId: user.id, step: "call_unanswered", timestamp: timeStr }));
               const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-              await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
+              const reason = incident.reason as "sos" | "missed_checkin";
+              if (reason === "sos") {
+                await tryNotifyContact(firstContact, user.name, link, reason, smsFn, { incidentId: incident.id });
+              } else {
+                await notifyContact(firstContact, user.name, link, reason, smsFn, { incidentId: incident.id });
+              }
               existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contacts alerted after no response to the wellness call. First contact notified: ${firstContact.name}` });
             }
           }
@@ -8528,7 +8678,11 @@ export async function registerRoutes(
               const link = `${baseUrl}/emergency/${token.token}`;
               console.log(JSON.stringify({ event: "CONTACT_SENT", type: "alert", contactId: nextSequential.id, reason: incident.reason, userId: user.id, step: `escalation_contact_${notifiedIds.length + 1}`, timestamp: timeStr }));
               const reason = incident.reason as "sos" | "missed_checkin";
-              await notifyContact(nextSequential, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
+              if (reason === "sos") {
+                await tryNotifyContact(nextSequential, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
+              } else {
+                await notifyContact(nextSequential, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
+              }
             }
             existingTimeline.push({ type: "contact_escalation", time: timeStr, detail: `Escalated to: ${nextSequential.name}` });
             notifiedIds.push(nextSequential.id);
@@ -8555,7 +8709,11 @@ export async function registerRoutes(
               if (token) {
                 const link = `${baseUrl}/emergency/${token.token}`;
                 const reason = incident.reason as "sos" | "missed_checkin";
-                await notifyContact(contact, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
+                if (reason === "sos") {
+                  await tryNotifyContact(contact, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
+                } else {
+                  await notifyContact(contact, user.name, link, reason, (p, n, l, opts) => sendEscalationAlert(p, n, l, reason, opts), { incidentId: incident.id });
+                }
               }
               notifiedIds.push(contact.id);
             }
@@ -8628,7 +8786,12 @@ export async function registerRoutes(
               if (token) {
                 const link = `${baseUrl}/emergency/${token.token}`;
                 const smsFn = incident.reason === "sos" ? sendSosAlert : sendMissedCheckinAlert;
-                await notifyContact(firstContact, user.name, link, incident.reason as "sos" | "missed_checkin", smsFn, { incidentId: incident.id });
+                const reason = incident.reason as "sos" | "missed_checkin";
+                if (reason === "sos") {
+                  await tryNotifyContact(firstContact, user.name, link, reason, smsFn, { incidentId: incident.id });
+                } else {
+                  await notifyContact(firstContact, user.name, link, reason, smsFn, { incidentId: incident.id });
+                }
                 existingTimeline.push({ type: "contact_alert", time: timeStr, detail: `Emergency contact notified: ${firstContact.name} (legacy recovery)` });
               }
             }
