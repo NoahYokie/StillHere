@@ -10,6 +10,7 @@ import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatTimeForViewer } from "@/lib/timezone";
 import { useToast } from "@/hooks/use-toast";
+import { getIncidentDisplayState, isResolvedDisplayState } from "@/lib/incident-display-state";
 
 interface TimelineEntry {
   type: string;
@@ -24,6 +25,13 @@ interface ConcernTimelineData {
   safetyStateReason: string | null;
   safetyStateChangedAt: string | null;
   lastHeartbeatAt: string | null;
+  incident: {
+    id: string;
+    status: string;
+    reason: string;
+    startedAt: string;
+    resolvedAt: string | null;
+  } | null;
   timeline: TimelineEntry[];
 }
 
@@ -127,25 +135,32 @@ export function ConcernTimelinePanel({ userId, isWatcher }: { userId: string; is
   if (!data) return null;
 
   const isConcern = data.safetyState === "concern";
-  const isRecovered = justResolved || (data.safetyState === "active" && data.timeline.length > 0);
+  const displayState = getIncidentDisplayState({
+    safetyState: data.safetyState,
+    incident: data.incident,
+    resolvedAt: resolvedAt || data.incident?.resolvedAt,
+  });
+  const isRecovered = justResolved || isResolvedDisplayState(displayState) || (data.safetyState === "active" && data.timeline.length > 0);
 
   if (isRecovered && !isConcern) {
+    const resolvedLabel = displayState === "PastAlert" ? "Past alert resolved" : "All clear";
+    const resolvedDetail = resolvedBy === "auto"
+      ? "Connection restored. Guardians do not need to take action."
+      : resolvedBy === "watcher"
+        ? `Marked safe${resolvedAt ? ` at ${format(new Date(resolvedAt), "h:mm a")}` : ""}. Guardians do not need to take action.`
+        : resolvedBy === "you"
+          ? `Confirmed safe${resolvedAt ? ` at ${format(new Date(resolvedAt), "h:mm a")}` : ""}. Guardians do not need to take action.`
+          : `Resolved${(resolvedAt || data.incident?.resolvedAt) ? ` at ${format(new Date(resolvedAt || data.incident!.resolvedAt!), "h:mm a")}` : ""}. Guardians do not need to take action.`;
     return (
-      <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-4 mb-3" data-testid="panel-concern-resolved">
+      <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 mb-3" data-testid="panel-concern-resolved">
         <div className="flex items-center gap-2 mb-2">
-          <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400" />
-          <span className="text-sm font-medium text-green-700 dark:text-green-300" data-testid="text-resolved-headline">
-            {data.userName.split(" ")[0]} is safe now
+          <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300" data-testid="text-resolved-headline">
+            {resolvedLabel}: {data.userName.split(" ")[0]} is safe now
           </span>
         </div>
-        <p className="text-xs text-green-600 dark:text-green-400" data-testid="text-resolved-detail">
-          {resolvedBy === "auto"
-            ? "Connection restored. No further action needed"
-            : resolvedBy === "watcher"
-              ? `Marked safe${resolvedAt ? ` at ${format(new Date(resolvedAt), "h:mm a")}` : ""}`
-              : resolvedBy === "you"
-                ? `Confirmed safe${resolvedAt ? ` at ${format(new Date(resolvedAt), "h:mm a")}` : ""}`
-                : `Resolved${resolvedAt ? ` at ${format(new Date(resolvedAt), "h:mm a")}` : ""}`}
+        <p className="text-xs text-emerald-700 dark:text-emerald-300" data-testid="text-resolved-detail">
+          {resolvedDetail}
         </p>
       </div>
     );

@@ -5,6 +5,7 @@ import {
   Battery, BatteryLow, BatteryCharging, BatteryWarning,
   Navigation, Clock,
 } from "lucide-react";
+import { getIncidentDisplayState } from "@/lib/incident-display-state";
 
 export type ConnectionStatus = "connected" | "weak" | "unreachable";
 export type LocationStatus = "live" | "stale" | "unavailable";
@@ -209,6 +210,10 @@ export function getEtaInfo(user: WatchedUser): EtaInfo | null {
 }
 
 export function getWatcherInsight(user: WatchedUser): WatcherInsight {
+  const displayState = getIncidentDisplayState({
+    safetyState: user.safetyState,
+    hasOpenIncident: user.hasOpenIncident,
+  });
   const heartbeatAge = minutesAgo(user.lastHeartbeatAt);
   const locationAge = minutesAgo(user.lastLocationAt ?? user.lastHeartbeatAt);
   const stateChangedAge = minutesAgo(user.safetyStateChangedAt);
@@ -247,7 +252,7 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
     }
   }
 
-  if (user.hasOpenIncident) {
+  if (displayState === "Concern" && user.hasOpenIncident) {
     const reason = user.incidentReason === "sos" ? "SOS" : "Missed check-in";
     let subtext = user.lastHeartbeatAt
       ? `Last heard from ${friendlyTimeAgo(user.lastHeartbeatAt)}`
@@ -279,7 +284,7 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
     };
   }
 
-  if (user.safetyState === "concern") {
+  if (displayState === "Concern") {
     let subtext = "Trying to reach them now";
     if (user.wellnessCallStatus === "no_response") {
       subtext = `We called them ${friendlyTimeAgo(user.wellnessCallAt)}. No answer yet.`;
@@ -302,7 +307,7 @@ export function getWatcherInsight(user: WatchedUser): WatcherInsight {
     };
   }
 
-  if (user.safetyState === "quiet") {
+  if (displayState === "Quiet") {
     const mins = heartbeatAge ?? stateChangedAge ?? 0;
     return {
       trustLevel: "watching",

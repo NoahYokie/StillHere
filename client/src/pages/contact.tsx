@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getSocket } from "@/lib/socket";
 import { Phone, MessageSquare, CheckCircle2, AlertTriangle, MapPin, Clock, User, Navigation, Bell, MessageCircleMore, PhoneCall, Shield, Smartphone, Sparkles, CloudSun, Wind, Droplets } from "lucide-react";
 import logoPath from "@assets/F0BE7587-0A49-40F7-A9A8-E7C53E58260F_1777863919813.png";
 import type { ContactPageData, WeatherSummary } from "@shared/schema";
@@ -23,6 +24,7 @@ import GoogleMap from "@/components/google-map";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { formatDualTime, getViewerTimezone } from "@/lib/timezone";
 import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
+import { getIncidentDisplayState } from "@/lib/incident-display-state";
 
 function WeatherPanel({ weather, name }: { weather: WeatherSummary | null | undefined; name: string }) {
   if (!weather) return null;
@@ -82,6 +84,7 @@ export default function ContactPage() {
   const { data, isLoading, error } = useQuery<ContactPageData>({
     queryKey: [`/api/emergency/${token}`],
     enabled: !!token,
+    refetchInterval: 30000,
   });
 
   const locationLat =
@@ -124,6 +127,20 @@ export default function ContactPage() {
         });
     }
   }, [locationLat, locationLng]);
+
+  useEffect(() => {
+    if (!token) return;
+    const socket = getSocket();
+    const handleResolved = (payload?: { userId?: string }) => {
+      if (!payload?.userId || payload.userId === data?.user?.id) {
+        queryClient.invalidateQueries({ queryKey: [`/api/emergency/${token}`] });
+      }
+    };
+    socket.on("concern:resolved", handleResolved);
+    return () => {
+      socket.off("concern:resolved", handleResolved);
+    };
+  }, [token, data?.user?.id]);
 
   const handleMutation = useMutation({
     mutationFn: async () => {
@@ -202,18 +219,23 @@ export default function ContactPage() {
     const resolvedTime = data.resolvedAt
       ? formatDualTime(data.resolvedAt, data.user.timezone || viewerTimezone, viewerTimezone)
       : null;
+    const displayState = getIncidentDisplayState({ resolvedAt: data.resolvedAt });
+    const title = displayState === "PastAlert" ? "Past alert" : "All clear";
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12" data-testid="page-resolved">
-        <Card className="max-w-md w-full">
+        <Card className="max-w-md w-full border-emerald-500/30 bg-emerald-500/5">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
-            <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-              <CheckCircle2 className="h-10 w-10 text-accent" />
+            <div className="mx-auto w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold mb-2" data-testid="text-resolved-title">This alert has been resolved.</h2>
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2">
+                {title}
+              </p>
+              <h2 className="text-2xl font-semibold mb-2" data-testid="text-resolved-title">{data.user.name} is safe.</h2>
               {resolvedTime && (
                 <p className="text-base text-muted-foreground" data-testid="text-resolved-summary">
-                  {data.user.name} confirmed they are safe at {resolvedTime}. No further action is needed.
+                  This alert was resolved at {resolvedTime}. No further action is needed.
                 </p>
               )}
             </div>
@@ -232,15 +254,19 @@ export default function ContactPage() {
     const resolvedTime = data.resolvedAt
       ? formatDualTime(data.resolvedAt, data.user.timezone || viewerTimezone, viewerTimezone)
       : null;
+    const displayState = getIncidentDisplayState({ resolvedAt: data.resolvedAt });
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-6 py-12" data-testid="page-allclear">
-        <Card className="max-w-md w-full border-accent/30">
+        <Card className="max-w-md w-full border-emerald-500/30 bg-emerald-500/5">
           <CardContent className="pt-8 pb-8 text-center space-y-4">
-            <div className="mx-auto w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-              <CheckCircle2 className="h-10 w-10 text-accent" />
+            <div className="mx-auto w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold mb-1">All clear</h2>
+              <p className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400 mb-2">
+                {displayState === "PastAlert" ? "Past alert" : "All clear"}
+              </p>
+              <h2 className="text-2xl font-semibold mb-1">{data.user.name} is safe.</h2>
               <p className="text-base text-muted-foreground" data-testid="text-allclear-summary">
                 {data.user.name} confirmed they are safe{resolvedTime ? ` at ${resolvedTime}` : ""}. No action is needed.
               </p>

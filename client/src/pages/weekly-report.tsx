@@ -48,14 +48,14 @@ const toneConfig = {
     barBg: "bg-amber-100 dark:bg-amber-900/30",
   },
   concern: {
-    bg: "bg-red-50 dark:bg-red-950/30",
-    border: "border-red-200 dark:border-red-800",
-    accent: "text-red-700 dark:text-red-400",
-    iconBg: "bg-red-100 dark:bg-red-900/50",
+    bg: "bg-slate-50 dark:bg-slate-900/60",
+    border: "border-slate-200 dark:border-slate-700",
+    accent: "text-slate-700 dark:text-slate-300",
+    iconBg: "bg-slate-100 dark:bg-slate-800",
     icon: ShieldAlert,
-    label: "Needs Attention",
-    dot: "bg-red-500",
-    barBg: "bg-red-100 dark:bg-red-900/30",
+    label: "Past Safety Event",
+    dot: "bg-slate-400",
+    barBg: "bg-slate-100 dark:bg-slate-800",
   },
 };
 
