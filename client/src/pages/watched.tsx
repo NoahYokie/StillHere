@@ -284,8 +284,8 @@ export default function WatchedPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-lg mx-auto px-4 py-6">
-        <div className="flex items-center gap-3 mb-6">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3">
+        <div className="max-w-lg mx-auto flex items-center gap-3">
           <BackButton />
           <div className="flex-1">
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Watcher Dashboard</h1>
@@ -306,6 +306,8 @@ export default function WatchedPage() {
             </Button>
           )}
         </div>
+      </header>
+      <div className="max-w-lg mx-auto px-4 py-6">
 
         {isLoading && (
           <div className="flex items-center justify-center py-12">

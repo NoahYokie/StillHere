@@ -184,7 +184,7 @@ export default function SafetyTimerPage() {
 
     return (
       <div className={`min-h-screen ${timerIsEscalated ? "bg-destructive" : "bg-primary"} pb-8`}>
-        <header className="px-6 pt-6 pb-4 flex items-center gap-3">
+        <header className="sticky top-0 z-10 px-6 pt-6 pb-4 flex items-center gap-3">
           <BackButton tone="onPrimary" />
           <div>
             <h1 className="text-xl font-semibold text-primary-foreground" data-testid="text-title">{headerTitle}</h1>

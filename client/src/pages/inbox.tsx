@@ -172,8 +172,8 @@ export default function InboxPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-lg mx-auto px-4 py-6">
-        <div className="flex items-center gap-3 mb-5">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <BackButton />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -197,6 +197,8 @@ export default function InboxPage() {
             )}
           </div>
         </div>
+      </header>
+      <div className="max-w-lg mx-auto px-4 py-6">
 
         {isLoading && (
           <div className="flex items-center justify-center py-12">
