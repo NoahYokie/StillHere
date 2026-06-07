@@ -441,14 +441,26 @@ export default function SafeWalkPage() {
                 </Button>
               </>
             ) : (
-              <Button
-                size="lg"
-                className="w-full"
-                onClick={() => navigate("/")}
-                data-testid="button-safe-walk-escalated-home"
-              >
-                Back to Home
-              </Button>
+              <>
+                <Button
+                  size="lg"
+                  className="w-full bg-green-500 hover:bg-green-600 text-white text-lg"
+                  onClick={() => arrivedMutation.mutate()}
+                  disabled={arrivedMutation.isPending}
+                  data-testid="button-safe-walk-escalated-safe"
+                >
+                  <CheckCircle2 className="h-5 w-5 mr-2" />
+                  I'm Safe - End Safe Walk
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  onClick={() => navigate("/")}
+                  data-testid="button-safe-walk-escalated-home"
+                >
+                  Back to Home
+                </Button>
+              </>
             )}
           </div>
         </main>

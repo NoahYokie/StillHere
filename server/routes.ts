@@ -5186,16 +5186,7 @@ export async function registerRoutes(
           .limit(1);
 
         if (safeWalkAwaitingResponse) {
-          await storage.updateSafeWalk(safeWalkAwaitingResponse.id, {
-            status: "arrived",
-            resolvedAt: new Date(),
-          });
-          emitTrackingPolicyChanged(user.id, "safe_walk_sms_arrived").catch(() => {});
-
-          const openIncident = await storage.getOpenIncident(user.id);
-          if (openIncident) {
-            await resolveCheckin(user.id, "sms");
-          }
+          await resolveSafeWalk(user.id, "sms");
 
           return res.type("text/xml").send(`<Response><Message>${escapeXml(`StillHere Confirmation\n\nHi ${user.name}, your Safe Walk has been marked arrived safely. Thank you for confirming.`)}</Message></Response>`);
         }
@@ -7043,6 +7034,115 @@ export async function registerRoutes(
     return latestAttentionWalk;
   }
 
+  async function getOpenSafeWalkIncident(userId: string) {
+    const [incident] = await db.select().from(incidents)
+      .where(and(
+        eq(incidents.userId, userId),
+        eq(incidents.status, "open"),
+        sql`${incidents.escalationTimeline} LIKE '%safe_walk_escalated%'`,
+      ))
+      .orderBy(desc(incidents.startedAt))
+      .limit(1);
+    return incident;
+  }
+
+  async function notifySafeWalkEnded(user: { id: string; name?: string | null }, incidentId: string | null, resolvedAt: Date, method: CheckinMethod): Promise<void> {
+    const userName = user.name || "Someone";
+    const message = `${userName} is safe. Safe Walk ended.`;
+    const contacts = (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
+    const sentPhones = new Set<string>();
+    const sentLinkedUsers = new Set<string>();
+    const notificationTasks: Promise<unknown>[] = [];
+
+    for (const contact of contacts) {
+      if (contact.phone) {
+        const normalizedPhone = normalizePhone(contact.phone);
+        if (!sentPhones.has(normalizedPhone)) {
+          sentPhones.add(normalizedPhone);
+          notificationTasks.push(sendSms(normalizedPhone, message, {
+            purpose: "recovery",
+            userId: user.id,
+            incidentId,
+            dedupeKey: incidentId ? `safe_walk_resolved:${incidentId}:${normalizedPhone}` : `safe_walk_resolved:${user.id}:${resolvedAt.getTime()}:${normalizedPhone}`,
+          }).catch((err: any) => {
+            console.error(`[SAFE-WALK] Resolution SMS failed for contact=${contact.id}:`, err?.message || err);
+          }));
+        }
+      }
+
+      if (contact.linkedUserId && contact.linkedUserId !== user.id && isAcceptedWatcherLink(contact, contact.linkedUserId) && !sentLinkedUsers.has(contact.linkedUserId)) {
+        const receiverId = contact.linkedUserId;
+        sentLinkedUsers.add(receiverId);
+        notificationTasks.push(storage.saveMessage(user.id, receiverId, message, {
+          messageType: "system_safe",
+          meta: {
+            kind: "safe_walk_resolved",
+            incidentId,
+            source: "safe_walk_resolution",
+            resolvedAt: resolvedAt.toISOString(),
+            method,
+          },
+        }).then((msg) => {
+          emitToUser(receiverId, "message:new", { ...msg, senderName: userName });
+        }).catch((err: any) => {
+          console.warn(`[SAFE-WALK] Resolution message failed receiver=${receiverId}: ${err?.message || err}`);
+        }));
+        emitToUser(receiverId, "concern:resolved", {
+          userId: user.id,
+          userName,
+          resolvedBy: "user",
+          method,
+          methodLabel: method === "sms" ? "Safe Walk ended by SMS" : "Safe Walk ended in app",
+          timeLabel: `at ${resolvedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`,
+          resolvedAt: resolvedAt.toISOString(),
+        });
+      }
+    }
+
+    notificationTasks.push(sendLinkedWatcherPresencePush(user.id, "Safe Walk ended", message, "safe-walk-ended", "/watched")
+      .catch((err) => console.warn("[SAFE-WALK] watcher ended push failed:", err?.message || err)));
+    await Promise.allSettled(notificationTasks);
+  }
+
+  async function resolveSafeWalk(userId: string, method: CheckinMethod): Promise<{ walk: any; incident: any | null }> {
+    const user = await storage.getUser(userId);
+    if (!user) throw new Error(`Safe Walk resolution failed: user ${userId} not found`);
+
+    const walk = await getCurrentSafeWalkForAttention(userId);
+    if (!walk) return { walk: null, incident: null };
+
+    const resolvedAt = new Date();
+    const incident = await getOpenSafeWalkIncident(userId);
+    const destination = walk.destinationName ? ` to ${walk.destinationName}` : "";
+    await storage.updateSafeWalk(walk.id, { status: "arrived", resolvedAt });
+
+    if (incident) {
+      await appendIncidentTimelineEntry(incident.id, {
+        type: "safe_walk_resolved",
+        time: resolvedAt.toISOString(),
+        detail: `Safe Walk${destination} ended safely by ${method === "sms" ? "SMS reply" : "the user"}.`,
+      });
+      await storage.updateIncident(incident.id, {
+        status: "resolved",
+        resolvedAt,
+        nextActionAt: null,
+      });
+    }
+
+    if (user.safetyState === "concern" || user.safetyState === "quiet") {
+      await storage.updateSafetyState(userId, "active", "Safe Walk ended safely");
+    }
+
+    await notifySafeWalkEnded(user, incident?.id ?? null, resolvedAt, method);
+    await notifySubjectConfirmation(userId, method, !!incident).catch((err) => {
+      console.error(`[SAFE-WALK] Subject confirmation failed:`, err?.message || err);
+    });
+    emitTrackingPolicyChanged(userId, "safe_walk_resolved").catch(() => {});
+    console.log(`[SAFE-WALK] Resolved walk=${walk.id} user=${userId} incident=${incident?.id || "none"} via=${method}`);
+
+    return { walk, incident: incident || null };
+  }
+
   app.post("/api/safety-timer/start", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
@@ -7270,11 +7370,10 @@ export async function registerRoutes(
   app.post("/api/safe-walk/arrived", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
-      const walk = await storage.getActiveSafeWalk(userId);
+      const walk = await getCurrentSafeWalkForAttention(userId);
       if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
-      await storage.updateSafeWalk(walk.id, { status: "arrived", resolvedAt: new Date() });
-      emitTrackingPolicyChanged(userId, "safe_walk_arrived").catch(() => {});
-      res.json({ success: true });
+      const result = await resolveSafeWalk(userId, "app");
+      res.json({ success: true, incidentResolved: !!result.incident });
     } catch (error) {
       res.status(500).json({ error: "Failed to mark arrival" });
     }
