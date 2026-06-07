@@ -17,7 +17,7 @@ import {
   Shield, ShieldCheck, ShieldAlert, FileText, ChevronDown, ChevronUp, Heart, Mail, UserMinus, Undo2, Car,
   MapPin,
 } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import type { WatchedUser, DailyStatus, ReportPreference, Contact } from "@shared/schema";
 import { formatDistanceToNow, format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getWatcherInsight, getDeviceInfo, getEtaInfo, ConnectionBadge, LocationBadge, BatteryBadge, ConfidenceBadge, EtaBadge, TrustIndicator } from "@/components/watcher-status";
 import { ConcernTimelinePanel } from "@/components/concern-resolution";
 import { Hand } from "lucide-react";
+import { getIncidentDisplayState } from "@/lib/incident-display-state";
 
 interface RemovedContact extends Contact {
   ownerName: string;
@@ -38,6 +39,15 @@ interface WatcherRequest {
   contactName: string;
   role: string;
   requestedAt: string | Date | null;
+}
+
+interface GuardianReview {
+  id: string;
+  subjectName: string;
+  incidentReason: string | null;
+  incidentLevel: number | null;
+  createdAt: string | Date;
+  incidentStartedAt: string | Date | null;
 }
 
 function WellnessCallBadge({ user }: { user: WatchedUser }) {
@@ -186,13 +196,18 @@ export default function WatchedPage() {
     const socket = getSocket();
     const handleInvalidate = () => {
       queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews/count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread/count"] });
     };
     socket.on("watched-users:invalidate", handleInvalidate);
     socket.on("concern:resolved", handleInvalidate);
+    socket.on("guardian-reviews:changed", handleInvalidate);
     socket.on("incident:claimed", handleInvalidate);
     return () => {
       socket.off("watched-users:invalidate", handleInvalidate);
       socket.off("concern:resolved", handleInvalidate);
+      socket.off("guardian-reviews:changed", handleInvalidate);
       socket.off("incident:claimed", handleInvalidate);
     };
   }, []);
@@ -208,6 +223,27 @@ export default function WatchedPage() {
   const { data: watcherRequests } = useQuery<{ requests: WatcherRequest[] }>({
     queryKey: ["/api/watcher-requests"],
     refetchInterval: 30000,
+  });
+
+  const { data: guardianReviews } = useQuery<GuardianReview[]>({
+    queryKey: ["/api/guardian-reviews"],
+    refetchInterval: 30000,
+  });
+
+  const acknowledgeReviewMutation = useMutation({
+    mutationFn: async (reviewId: string) => {
+      const res = await apiRequest("POST", `/api/guardian-reviews/${reviewId}/acknowledge`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews/count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/unread/count"] });
+      toast({ title: "Review cleared", description: "This safety event will no longer count toward your badge." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not clear review", description: err.message || "Please try again.", variant: "destructive" });
+    },
   });
 
   const acceptRequestMutation = useMutation({
@@ -283,31 +319,22 @@ export default function WatchedPage() {
   const safeUsers = sortedUsers.filter(u => getWatcherInsight(u).trustLevel === "safe");
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center gap-3">
-          <BackButton />
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold" data-testid="text-page-title">Watcher Dashboard</h1>
-            <p className="text-sm text-muted-foreground">
-              {watchedUsers ? `Watching ${watchedUsers.length} ${watchedUsers.length === 1 ? "person" : "people"}` : "Loading..."}
-            </p>
-          </div>
-          {watchedUsers && watchedUsers.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation("/watched/map")}
-              className="gap-2"
-              data-testid="button-open-guardian-map"
-            >
-              <MapPin className="w-4 h-4" />
-              Map
-            </Button>
-          )}
-        </div>
-      </header>
-      <div className="max-w-lg mx-auto px-4 py-6">
+    <MobilePageShell
+      title="Watcher Dashboard"
+      subtitle={watchedUsers ? `Watching ${watchedUsers.length} ${watchedUsers.length === 1 ? "person" : "people"}` : "Loading..."}
+      actions={watchedUsers && watchedUsers.length > 0 ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setLocation("/watched/map")}
+          className="gap-2"
+          data-testid="button-open-guardian-map"
+        >
+          <MapPin className="w-4 h-4" />
+          Map
+        </Button>
+      ) : null}
+    >
 
         {isLoading && (
           <div className="flex items-center justify-center py-12">
@@ -365,6 +392,52 @@ export default function WatchedPage() {
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {(guardianReviews?.length || 0) > 0 && (
+          <div className="mb-4 space-y-3" data-testid="section-guardian-reviews">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">
+                Reviews to clear ({guardianReviews!.length})
+              </span>
+            </div>
+            {guardianReviews!.map((review) => {
+              const startedAt = review.incidentStartedAt || review.createdAt;
+              const label = review.incidentReason === "sos"
+                ? "Emergency alert"
+                : review.incidentReason === "missed_checkin"
+                  ? "Missed check-in"
+                  : "Safety event";
+              return (
+                <Card key={review.id} className="border-primary/30 bg-primary/5" data-testid={`card-guardian-review-${review.id}`}>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm">{review.subjectName} safety review</p>
+                        <p className="text-xs text-muted-foreground">
+                          {label} from {formatDistanceToNow(new Date(startedAt), { addSuffix: true })}. Clear this only after you have reviewed the event.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => acknowledgeReviewMutation.mutate(review.id)}
+                      disabled={acknowledgeReviewMutation.isPending}
+                      data-testid={`button-ack-review-${review.id}`}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                      Acknowledge & Clear
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         )}
 
         {worriedUsers.length > 0 && (
@@ -450,8 +523,6 @@ export default function WatchedPage() {
             </div>
           </div>
         )}
-      </div>
-
       <AlertDialog open={!!confirmOptOut} onOpenChange={(open) => !open && setConfirmOptOut(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -472,7 +543,7 @@ export default function WatchedPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </MobilePageShell>
   );
 
   function renderUserCard(user: WatchedUser) {
@@ -482,6 +553,10 @@ export default function WatchedPage() {
     const device = getDeviceInfo(user);
     const eta = getEtaInfo(user);
     const hasLoc = user.lastLocationLat != null || user.lastHeartbeatLat != null;
+    const displayState = getIncidentDisplayState({
+      safetyState: user.safetyState,
+      hasOpenIncident: user.hasOpenIncident,
+    });
 
     return (
       <Card key={user.userId} data-testid={`card-watched-user-${user.userId}`} className={`${insight.borderClass} transition-colors`}>
@@ -542,7 +617,7 @@ export default function WatchedPage() {
             </div>
           )}
 
-          {(insight.trustLevel === "worried" || user.safetyState === "concern") && (
+          {(insight.trustLevel === "worried" || displayState === "Concern") && (
             <>
               {user.incidentIsDrill && (
                 <div className="mb-2 space-y-2">
@@ -925,13 +1000,13 @@ const weeklyToneConfig = {
     dot: "bg-amber-500",
   },
   concern: {
-    bg: "bg-red-50 dark:bg-red-950/30",
-    border: "border-red-200 dark:border-red-800",
-    accent: "text-red-700 dark:text-red-400",
-    iconBg: "bg-red-100 dark:bg-red-900/50",
+    bg: "bg-slate-50 dark:bg-slate-900/60",
+    border: "border-slate-200 dark:border-slate-700",
+    accent: "text-slate-700 dark:text-slate-300",
+    iconBg: "bg-slate-100 dark:bg-slate-800",
     icon: ShieldAlert,
-    label: "Needs Attention",
-    dot: "bg-red-500",
+    label: "Past Safety Event",
+    dot: "bg-slate-400",
   },
 };
 

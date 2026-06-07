@@ -8,6 +8,7 @@ import {
   contactTokens,
   checkins,
   incidents,
+  guardianActivityReviews,
   locationSessions,
   pushSubscriptions,
   messages,
@@ -32,6 +33,7 @@ import {
   type Checkin,
   type Incident,
   type IncidentReason,
+  type GuardianActivityReview,
   type LocationSession,
   type LocationSessionType,
   type UserStatus,
@@ -116,6 +118,64 @@ function isSubscriptionActive(user: { isPremium?: boolean | null; premiumUntil?:
   if (user.isPremium) return true;
   if (!user.premiumUntil) return false;
   return new Date(user.premiumUntil).getTime() > Date.now();
+}
+
+export type IncidentOwnershipType =
+  | "sos"
+  | "fall_detection"
+  | "crash_detection"
+  | "safe_walk"
+  | "safety_timer"
+  | "drive_mode"
+  | "missed_checkin"
+  | "quiet_state"
+  | "test";
+
+export interface CreateIncidentOptions {
+  incidentType?: IncidentOwnershipType;
+  createGuardianReviews?: boolean;
+  isDrill?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+const INCIDENT_LEVEL_BY_TYPE: Record<IncidentOwnershipType, 0 | 1 | 2 | 3> = {
+  sos: 1,
+  fall_detection: 1,
+  crash_detection: 1,
+  safe_walk: 2,
+  safety_timer: 2,
+  drive_mode: 2,
+  missed_checkin: 3,
+  quiet_state: 3,
+  test: 0,
+};
+
+function inferIncidentType(reason: IncidentReason, stateReason?: string, explicit?: IncidentOwnershipType): IncidentOwnershipType {
+  if (explicit) return explicit;
+  const normalized = (stateReason || "").toLowerCase();
+  if (normalized.includes("safe walk")) return "safe_walk";
+  if (normalized.includes("safety timer")) return "safety_timer";
+  if (normalized.includes("drive") || normalized.includes("crash")) return normalized.includes("crash") ? "crash_detection" : "drive_mode";
+  if (normalized.includes("fall")) return "fall_detection";
+  if (normalized.includes("quiet")) return "quiet_state";
+  if (reason === "missed_checkin") return "missed_checkin";
+  if (reason === "test") return "test";
+  return "sos";
+}
+
+function getIncidentLevel(type: IncidentOwnershipType): 0 | 1 | 2 | 3 {
+  return INCIDENT_LEVEL_BY_TYPE[type] ?? 3;
+}
+
+function isContactActiveForGuardianReview(contact: { softDeletedAt?: Date | string | null; pausedUntil?: Date | string | null; linkedUserId?: string | null; watcherConsentStatus?: string | null }): boolean {
+  if (!contact.linkedUserId || contact.watcherConsentStatus !== "accepted") return false;
+  if (contact.softDeletedAt) return false;
+  if (!contact.pausedUntil) return true;
+  return new Date(contact.pausedUntil).getTime() <= Date.now();
+}
+
+function isGuardianReviewSystemEnabled(): boolean {
+  return process.env.GUARDIAN_REVIEWS_ENABLED !== "false";
 }
 
 function trialEndsAt(user: { createdAt?: Date | string | null } | null | undefined): Date | null {
@@ -475,9 +535,12 @@ export interface IStorage {
   getOpenIncident(userId: string): Promise<Incident | undefined>;
   getIncidentsNeedingEscalation(limit?: number): Promise<Incident[]>;
   getStaleOpenIncidents(stalenessMs: number, limit?: number): Promise<Incident[]>;
-  createIncident(userId: string, reason: IncidentReason): Promise<Incident>;
-  createIncidentWithSafetyState(userId: string, reason: IncidentReason, newState: string, stateReason: string): Promise<Incident>;
+  createIncident(userId: string, reason: IncidentReason, options?: CreateIncidentOptions): Promise<Incident>;
+  createIncidentWithSafetyState(userId: string, reason: IncidentReason, newState: string, stateReason: string, options?: CreateIncidentOptions): Promise<Incident>;
   updateIncident(id: string, updates: Partial<Incident>): Promise<Incident>;
+  getPendingGuardianReviewCount(guardianUserId: string): Promise<number>;
+  getPendingGuardianReviews(guardianUserId: string): Promise<(GuardianActivityReview & { subjectName: string; incidentStartedAt: Date | null; incidentResolvedAt: Date | null })[]>;
+  acknowledgeGuardianReview(reviewId: string, guardianUserId: string): Promise<GuardianActivityReview>;
   
   // Location Sessions
   getActiveLocationSession(userId: string): Promise<LocationSession | undefined>;
@@ -1937,13 +2000,40 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async createIncident(userId: string, reason: IncidentReason): Promise<Incident> {
-    const [incident] = await db.insert(incidents).values({
-      userId,
-      status: "open",
-      reason,
-    }).returning();
-    return incident;
+  async createIncident(userId: string, reason: IncidentReason, options: CreateIncidentOptions = {}): Promise<Incident> {
+    const incidentType = inferIncidentType(reason, undefined, options.incidentType);
+    const level = getIncidentLevel(incidentType);
+
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM incidents WHERE user_id = ${userId} AND status <> 'resolved' FOR UPDATE`);
+      const [existing] = await tx
+        .select()
+        .from(incidents)
+        .where(and(eq(incidents.userId, userId), ne(incidents.status, "resolved")))
+        .orderBy(desc(incidents.startedAt))
+        .limit(1);
+
+      if (existing?.isDrill && options.isDrill !== true) {
+        await this.cancelDrillIncidentTx(tx, existing, incidentType);
+      } else if (existing && !existing.isDrill) {
+        const existingType = inferIncidentType(existing.reason as IncidentReason, existing.escalationTimeline || "", undefined);
+        const existingLevel = getIncidentLevel(existingType);
+        if (level <= existingLevel) {
+          return { ...existing, ownershipSuppressed: true } as any;
+        }
+        await this.supersedePreviousIncidentTx(tx, existing, incidentType, "Higher-priority safety event superseded active incident");
+      }
+
+      const [incident] = await tx.insert(incidents).values({
+        userId,
+        status: "open",
+        reason,
+        isDrill: options.isDrill === true,
+      }).returning();
+
+      await this.createGuardianReviewsTx(tx, incident, incidentType, options);
+      return incident;
+    });
   }
 
   async createIncidentWithSafetyState(
@@ -1951,15 +2041,46 @@ export class DatabaseStorage implements IStorage {
     reason: IncidentReason,
     newState: string,
     stateReason: string,
+    options: CreateIncidentOptions = {},
   ): Promise<Incident> {
     const oldUser = await this.getUser(userId);
     const oldState = oldUser?.safetyState || "active";
+    const incidentType = inferIncidentType(reason, stateReason, options.incidentType);
+    const level = getIncidentLevel(incidentType);
 
     const incident = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM incidents WHERE user_id = ${userId} AND status <> 'resolved' FOR UPDATE`);
+      const [existing] = await tx
+        .select()
+        .from(incidents)
+        .where(and(eq(incidents.userId, userId), ne(incidents.status, "resolved")))
+        .orderBy(desc(incidents.startedAt))
+        .limit(1);
+
+      if (existing?.isDrill && options.isDrill !== true) {
+        await this.cancelDrillIncidentTx(tx, existing, incidentType);
+      } else if (existing && !existing.isDrill) {
+        const existingType = inferIncidentType(existing.reason as IncidentReason, existing.escalationTimeline || "", undefined);
+        const existingLevel = getIncidentLevel(existingType);
+        if (level <= existingLevel) {
+          await tx
+            .update(users)
+            .set({
+              safetyState: newState as any,
+              safetyStateReason: stateReason,
+              safetyStateChangedAt: new Date(),
+            })
+            .where(eq(users.id, userId));
+          return { ...existing, ownershipSuppressed: true } as any;
+        }
+        await this.supersedePreviousIncidentTx(tx, existing, incidentType, stateReason);
+      }
+
       const [createdIncident] = await tx.insert(incidents).values({
         userId,
         status: "open",
         reason,
+        isDrill: options.isDrill === true,
       }).returning();
 
       const [updatedUser] = await tx
@@ -1976,11 +2097,111 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Atomic safety event failed: user ${userId} was not updated`);
       }
 
+      await this.createGuardianReviewsTx(tx, createdIncident, incidentType, options);
       return createdIncident;
     });
 
     console.log(`[SafetyState] user ${userId} ${oldState} -> ${newState} (${stateReason})`);
     return incident;
+  }
+
+  private async supersedePreviousIncidentTx(
+    tx: any,
+    incident: Incident,
+    newIncidentType: IncidentOwnershipType,
+    reason: string,
+  ): Promise<void> {
+    const now = new Date();
+    const timeline: any[] = (() => {
+      try { return JSON.parse(incident.escalationTimeline || "[]"); } catch { return []; }
+    })();
+    timeline.push({
+      type: "superseded",
+      time: now.toISOString(),
+      detail: `Superseded by ${newIncidentType}: ${reason}`,
+    });
+    await tx.update(incidents)
+      .set({
+        status: "resolved",
+        resolvedAt: now,
+        resolutionReason: "superseded",
+        escalationTimeline: JSON.stringify(timeline),
+        processingLockId: null,
+        processingLockedAt: null,
+      })
+      .where(eq(incidents.id, incident.id));
+
+    await tx.update(guardianActivityReviews)
+      .set({
+        status: "superseded",
+        countsTowardBadge: false,
+        supersededAt: now,
+      })
+      .where(and(
+        eq(guardianActivityReviews.incidentId, incident.id),
+        eq(guardianActivityReviews.status, "pending"),
+      ));
+  }
+
+  private async cancelDrillIncidentTx(tx: any, incident: Incident, newIncidentType: IncidentOwnershipType): Promise<void> {
+    const now = new Date();
+    await tx.update(incidents)
+      .set({
+        status: "resolved",
+        resolvedAt: now,
+        resolutionReason: "superseded",
+        processingLockId: null,
+        processingLockedAt: null,
+      })
+      .where(eq(incidents.id, incident.id));
+    await tx.update(guardianActivityReviews)
+      .set({
+        status: "cancelled",
+        countsTowardBadge: false,
+        supersededAt: now,
+      })
+      .where(and(
+        eq(guardianActivityReviews.drillId, incident.id),
+        eq(guardianActivityReviews.status, "pending"),
+      ));
+    console.log(`[INCIDENT_OWNERSHIP] Cancelled active drill ${incident.id} before ${newIncidentType}`);
+  }
+
+  private async createGuardianReviewsTx(
+    tx: any,
+    incident: Incident,
+    incidentType: IncidentOwnershipType,
+    options: CreateIncidentOptions,
+  ): Promise<void> {
+    const incidentLevel = getIncidentLevel(incidentType);
+    const isDrill = options.isDrill === true || incident.isDrill || incidentLevel === 0;
+    if (!isGuardianReviewSystemEnabled()) return;
+    if (isDrill || options.createGuardianReviews === false) return;
+
+    const guardianContacts = await tx.select().from(contacts).where(
+      and(
+        eq(contacts.userId, incident.userId),
+        isNull(contacts.softDeletedAt),
+      ),
+    );
+    const rows = guardianContacts
+      .filter(isContactActiveForGuardianReview)
+      .filter((contact: Contact) => contact.linkedUserId !== incident.userId)
+      .map((contact: Contact) => ({
+        incidentId: incident.id,
+        drillId: null,
+        subjectUserId: incident.userId,
+        guardianContactId: contact.id,
+        guardianUserId: contact.linkedUserId,
+        reviewKind: "incident",
+        incidentLevel,
+        incidentReason: incidentType,
+        status: "pending",
+        countsTowardBadge: true,
+        metadata: options.metadata ? JSON.stringify(options.metadata) : null,
+      }));
+    if (rows.length === 0) return;
+    await tx.insert(guardianActivityReviews).values(rows).onConflictDoNothing();
   }
 
   async getStaleOpenIncidents(stalenessMs: number, limit = 500): Promise<Incident[]> {
@@ -2488,17 +2709,23 @@ export class DatabaseStorage implements IStorage {
         // push -> SMS -> wellness call -> contacts. Older builds had an extra
         // pre-incident reminder layer, which made users see multiple reminder
         // systems around the same missed check-in.
-        const incident = await this.createIncident(user.id, "missed_checkin");
-
-        // Set concern state immediately on incident creation — this is the
-        // authoritative transition point. If the user is already in concern
-        // (SOS, Safety Timer, Safe Walk), preserve that state and reason.
-        if (user.safetyState !== "concern") {
-          await this.updateSafetyState(
-            user.id,
-            "concern",
-            "Missed check-in — we're trying to reach them.",
-          );
+        const incident = await this.createIncidentWithSafetyState(
+          user.id,
+          "missed_checkin",
+          "concern",
+          "Missed check-in alert triggered",
+          { incidentType: "missed_checkin" },
+        );
+        if ((incident as any).ownershipSuppressed) {
+          await db
+            .update(settings)
+            .set({
+              processingLockId: null,
+              processingLockedAt: null,
+              updatedAt: now,
+            })
+            .where(and(eq(settings.userId, user.id), eq(settings.processingLockId, workerId)));
+          continue;
         }
 
         await db
@@ -2676,9 +2903,65 @@ export class DatabaseStorage implements IStorage {
 
   async getUnreadCount(userId: string): Promise<number> {
     const result = await db.select().from(messages).where(
-      and(eq(messages.receiverId, userId), eq(messages.read, false))
+      and(eq(messages.receiverId, userId), eq(messages.read, false), eq(messages.messageType, "user"))
     );
     return result.length;
+  }
+
+  async getPendingGuardianReviewCount(guardianUserId: string): Promise<number> {
+    if (!isGuardianReviewSystemEnabled()) return 0;
+    const result = await db.select({ id: guardianActivityReviews.id })
+      .from(guardianActivityReviews)
+      .where(and(
+        eq(guardianActivityReviews.guardianUserId, guardianUserId),
+        eq(guardianActivityReviews.status, "pending"),
+        eq(guardianActivityReviews.countsTowardBadge, true),
+      ));
+    return result.length;
+  }
+
+  async getPendingGuardianReviews(guardianUserId: string): Promise<(GuardianActivityReview & { subjectName: string; incidentStartedAt: Date | null; incidentResolvedAt: Date | null })[]> {
+    if (!isGuardianReviewSystemEnabled()) return [];
+    const rows = await db.select({
+      review: guardianActivityReviews,
+      subjectName: users.name,
+      incidentStartedAt: incidents.startedAt,
+      incidentResolvedAt: incidents.resolvedAt,
+    })
+      .from(guardianActivityReviews)
+      .innerJoin(users, eq(users.id, guardianActivityReviews.subjectUserId))
+      .leftJoin(incidents, eq(incidents.id, guardianActivityReviews.incidentId))
+      .where(and(
+        eq(guardianActivityReviews.guardianUserId, guardianUserId),
+        eq(guardianActivityReviews.status, "pending"),
+        eq(guardianActivityReviews.countsTowardBadge, true),
+      ))
+      .orderBy(desc(guardianActivityReviews.createdAt));
+    return rows.map((row) => ({
+      ...row.review,
+      subjectName: row.subjectName,
+      incidentStartedAt: row.incidentStartedAt || null,
+      incidentResolvedAt: row.incidentResolvedAt || null,
+    }));
+  }
+
+  async acknowledgeGuardianReview(reviewId: string, guardianUserId: string): Promise<GuardianActivityReview> {
+    if (!isGuardianReviewSystemEnabled()) throw new Error("Guardian review system disabled");
+    const [review] = await db.update(guardianActivityReviews)
+      .set({
+        status: "acknowledged",
+        acknowledgedAt: new Date(),
+        acknowledgedByUserId: guardianUserId,
+        countsTowardBadge: false,
+      })
+      .where(and(
+        eq(guardianActivityReviews.id, reviewId),
+        eq(guardianActivityReviews.guardianUserId, guardianUserId),
+        eq(guardianActivityReviews.status, "pending"),
+      ))
+      .returning();
+    if (!review) throw new Error("Guardian review not found");
+    return review;
   }
 
   async getConversations(userId: string): Promise<{ partnerId: string; partnerName: string; lastMessage: string; lastMessageAt: Date; unreadCount: number; lastMessageType: "user" | "system_alert" | "system_safe" | "system_info"; activeAlert: boolean }[]> {
@@ -2701,7 +2984,7 @@ export class DatabaseStorage implements IStorage {
       }
       if (msg.receiverId === userId && !msg.read) {
         const entry = partnerMap.get(partnerId)!;
-        entry.unreadCount++;
+        if (msg.messageType === "user") entry.unreadCount++;
       }
     }
 

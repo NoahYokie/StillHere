@@ -478,16 +478,27 @@ export default function Home() {
     queryKey: ["/api/messages/unread/count"],
     refetchInterval: 30000,
   });
+  const { data: guardianReviewData } = useQuery<{ count: number }>({
+    queryKey: ["/api/guardian-reviews/count"],
+    refetchInterval: 30000,
+  });
   const unreadCount = unreadData?.count || 0;
+  const pendingReviewCount = guardianReviewData?.count || 0;
+  const activityBadgeCount = unreadCount + pendingReviewCount;
 
   useEffect(() => {
     if (!auth?.authenticated) return;
     const socket = getSocket();
     const handleNewMessage = () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages/unread/count"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews/count"] });
     };
     socket.on("message:new", handleNewMessage);
-    return () => { socket.off("message:new", handleNewMessage); };
+    socket.on("guardian-reviews:changed", handleNewMessage);
+    return () => {
+      socket.off("message:new", handleNewMessage);
+      socket.off("guardian-reviews:changed", handleNewMessage);
+    };
   }, [auth?.authenticated]);
 
   const sendLocationToServer = async (state: { lat: number; lng: number; accuracy: number }) => {
@@ -866,7 +877,7 @@ export default function Home() {
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
+            {activityBadgeCount > 0 && (
               <span
                 className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"
                 data-testid="badge-unread-count"

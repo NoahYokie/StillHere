@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { db } from "./db";
-import { contacts, incidents, messages, pushSubscriptions } from "@shared/schema";
-import { and, eq, ne } from "drizzle-orm";
+import { guardianActivityReviews, messages, pushSubscriptions } from "@shared/schema";
+import { and, eq } from "drizzle-orm";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
@@ -38,26 +38,20 @@ export interface PushNotificationOptions {
 
 export async function computeAuthoritativeBadgeCount(userId: string): Promise<number> {
   const unreadRows = await db.select({ id: messages.id }).from(messages).where(
-    and(eq(messages.receiverId, userId), eq(messages.read, false)),
+    and(eq(messages.receiverId, userId), eq(messages.read, false), eq(messages.messageType, "user")),
   );
 
-  const ownOpenIncidents = await db.select({ id: incidents.id }).from(incidents).where(
-    and(eq(incidents.userId, userId), ne(incidents.status, "resolved"), eq(incidents.isDrill, false)),
-  );
-
-  const watchedRows = await db.select({ ownerId: contacts.userId }).from(contacts).where(
-    and(eq(contacts.linkedUserId, userId), eq(contacts.watcherConsentStatus, "accepted")),
-  );
-  const watchedOwnerIds = Array.from(new Set(watchedRows.map((row) => row.ownerId).filter(Boolean)));
-  let watchedOpenCount = 0;
-  for (const ownerId of watchedOwnerIds) {
-    const rows = await db.select({ id: incidents.id }).from(incidents).where(
-      and(eq(incidents.userId, ownerId), ne(incidents.status, "resolved"), eq(incidents.isDrill, false)),
+  const pendingReviews = process.env.GUARDIAN_REVIEWS_ENABLED === "false"
+    ? []
+    : await db.select({ id: guardianActivityReviews.id }).from(guardianActivityReviews).where(
+      and(
+        eq(guardianActivityReviews.guardianUserId, userId),
+        eq(guardianActivityReviews.status, "pending"),
+        eq(guardianActivityReviews.countsTowardBadge, true),
+      ),
     );
-    watchedOpenCount += rows.length;
-  }
 
-  return unreadRows.length + ownOpenIncidents.length + watchedOpenCount;
+  return unreadRows.length + pendingReviews.length;
 }
 
 export function buildAPNsAlertPayload(

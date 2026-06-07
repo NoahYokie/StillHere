@@ -297,6 +297,7 @@ export const incidents = pgTable("incidents", {
   reason: incidentReasonEnum("reason").notNull(),
   startedAt: timestamp("started_at").defaultNow().notNull(),
   resolvedAt: timestamp("resolved_at"),
+  resolutionReason: text("resolution_reason"),
   handledByContactId: uuid("handled_by_contact_id").references(() => contacts.id),
   nextActionAt: timestamp("next_action_at"),
   escalationLevel: integer("escalation_level").notNull().default(0),
@@ -349,6 +350,53 @@ export const incidentsRelations = relations(incidents, ({ one, many }) => ({
     references: [contacts.id],
   }),
   locationSessions: many(locationSessions),
+}));
+
+// Guardian review debt for resolved/current safety incidents. Rows are only
+// created for deployment-day real incidents; historical incidents are not
+// backfilled and drills are isolated from emergency badge/review counts.
+export const guardianActivityReviews = pgTable("guardian_activity_reviews", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  incidentId: uuid("incident_id").references(() => incidents.id, { onDelete: "cascade" }),
+  drillId: uuid("drill_id").references(() => incidents.id, { onDelete: "cascade" }),
+  subjectUserId: uuid("subject_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  guardianContactId: uuid("guardian_contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  guardianUserId: uuid("guardian_user_id").references(() => users.id, { onDelete: "cascade" }),
+  reviewKind: text("review_kind").notNull().default("incident"),
+  incidentLevel: integer("incident_level"),
+  incidentReason: text("incident_reason"),
+  status: text("status").notNull().default("pending"),
+  countsTowardBadge: boolean("counts_toward_badge").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  acknowledgedByUserId: uuid("acknowledged_by_user_id").references(() => users.id),
+  supersededAt: timestamp("superseded_at"),
+  supersededByIncidentId: uuid("superseded_by_incident_id").references(() => incidents.id),
+  metadata: text("metadata"),
+}, (table) => [
+  index("guardian_activity_reviews_guardian_pending_idx").on(table.guardianUserId, table.status, table.countsTowardBadge),
+  index("guardian_activity_reviews_subject_idx").on(table.subjectUserId),
+  index("guardian_activity_reviews_incident_idx").on(table.incidentId),
+  index("guardian_activity_reviews_drill_idx").on(table.drillId),
+]);
+
+export const guardianActivityReviewsRelations = relations(guardianActivityReviews, ({ one }) => ({
+  incident: one(incidents, {
+    fields: [guardianActivityReviews.incidentId],
+    references: [incidents.id],
+  }),
+  subjectUser: one(users, {
+    fields: [guardianActivityReviews.subjectUserId],
+    references: [users.id],
+  }),
+  guardianContact: one(contacts, {
+    fields: [guardianActivityReviews.guardianContactId],
+    references: [contacts.id],
+  }),
+  guardianUser: one(users, {
+    fields: [guardianActivityReviews.guardianUserId],
+    references: [users.id],
+  }),
 }));
 
 // Auth Sessions table
@@ -1273,6 +1321,7 @@ export type Checkin = typeof checkins.$inferSelect;
 export type Incident = typeof incidents.$inferSelect;
 export type IncidentStatus = Incident["status"];
 export type IncidentReason = Incident["reason"];
+export type GuardianActivityReview = typeof guardianActivityReviews.$inferSelect;
 
 export type LocationSession = typeof locationSessions.$inferSelect;
 export type LocationSessionType = LocationSession["type"];

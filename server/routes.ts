@@ -460,6 +460,36 @@ async function appendIncidentTimelineEntry(
   }
 }
 
+function getIncidentLevelForSmsResolution(incident: {
+  reason?: string | null;
+  escalationTimeline?: string | null;
+} | null | undefined): 0 | 1 | 2 | 3 {
+  if (!incident) return 0;
+  const timeline = (incident.escalationTimeline || "").toLowerCase();
+  if (incident.reason === "missed_checkin") return 3;
+  if (
+    timeline.includes("safe_walk_escalated") ||
+    timeline.includes("safety_timer_expired") ||
+    timeline.includes("drive_mode")
+  ) {
+    return 2;
+  }
+  if (incident.reason === "test") return 0;
+  return 1;
+}
+
+async function recordBlockedSmsAffirmativeForLevel1Incident(incident: {
+  id: string;
+  reason?: string | null;
+  escalationTimeline?: string | null;
+}, detail = "SMS affirmative received"): Promise<void> {
+  await appendIncidentTimelineEntry(incident.id, {
+    type: "sms_affirmative_received",
+    time: new Date().toISOString(),
+    detail,
+  });
+}
+
 async function injectIncidentSystemMessageToWatchers(
   incidentId: string,
   entry: { type: string; time: string; detail: string },
@@ -1710,6 +1740,16 @@ export async function registerRoutes(
       }
 
       const openIncident = await storage.getOpenIncident(targetUserId);
+      const [latestIncident] = await db.select({
+        id: incidents.id,
+        status: incidents.status,
+        reason: incidents.reason,
+        startedAt: incidents.startedAt,
+        resolvedAt: incidents.resolvedAt,
+      }).from(incidents)
+        .where(eq(incidents.userId, targetUserId))
+        .orderBy(desc(incidents.startedAt))
+        .limit(1);
       if (openIncident) {
         timeline.push({
           type: "incident",
@@ -1729,6 +1769,7 @@ export async function registerRoutes(
         safetyStateReason: user.safetyStateReason,
         safetyStateChangedAt: user.safetyStateChangedAt,
         lastHeartbeatAt: user.lastHeartbeatAt,
+        incident: latestIncident || null,
         timeline,
       });
     } catch (error) {
@@ -1961,7 +2002,7 @@ export async function registerRoutes(
       // Atomic success boundary: incident creation and concern state update
       // are one committed safety event. If either write fails, the transaction
       // rolls back so retries start from a clean state.
-      incident = await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered");
+      incident = await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered", { incidentType: "sos" });
       logSosEvent("SOS_INCIDENT_CREATED", { userId, incidentId: incident.id });
       logSosEvent("SOS_SAFETY_STATE_UPDATED", { userId, incidentId: incident.id, state: "concern" });
       emitTrackingPolicyChanged(userId, "sos_open").catch(() => {});
@@ -3064,7 +3105,10 @@ export async function registerRoutes(
       }
 
       // Create test incident
-      const incident = await storage.createIncident(userId, "test");
+      const incident = await storage.createIncident(userId, "test", {
+        incidentType: "test",
+        createGuardianReviews: false,
+      });
 
       // Get contacts
       const contacts = (await storage.getContacts(userId)).filter(isContactActiveForAlerts);
@@ -4002,6 +4046,56 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/guardian-reviews/count", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const count = await storage.getPendingGuardianReviewCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error getting guardian review count:", error);
+      res.status(500).json({ error: "Failed to get guardian review count" });
+    }
+  });
+
+  app.get("/api/guardian-reviews", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const reviews = await storage.getPendingGuardianReviews(userId);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Error getting guardian reviews:", error);
+      res.status(500).json({ error: "Failed to get guardian reviews" });
+    }
+  });
+
+  app.post("/api/guardian-reviews/:reviewId/acknowledge", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated", requiresLogin: true });
+      }
+      const review = await storage.acknowledgeGuardianReview(req.params.reviewId, userId);
+      emitToUser(userId, "guardian-reviews:changed", { reviewId: review.id, status: review.status });
+      const badgeCount = await syncBadgeCount(userId).catch((error: any) => {
+        console.warn(`[REVIEWS] Badge sync failed after acknowledge user=${userId}: ${error?.message || error}`);
+        return null;
+      });
+      res.json({ success: true, review, badgeCount });
+    } catch (error: any) {
+      if (error?.message === "Guardian review not found") {
+        return res.status(404).json({ error: "Review not found" });
+      }
+      console.error("Error acknowledging guardian review:", error);
+      res.status(500).json({ error: "Failed to acknowledge guardian review" });
+    }
+  });
+
   app.get("/api/watched-users", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -4336,8 +4430,7 @@ export async function registerRoutes(
       try {
         const existingIncident = await storage.getOpenIncident(userId);
         if (!existingIncident) {
-          await storage.createIncident(userId, "sos");
-          await storage.updateSafetyState(userId, "concern", "SOS triggered from messages");
+          await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered from messages", { incidentType: "sos" });
           emitTrackingPolicyChanged(userId, "sos_msg_open").catch(() => {});
           notifyConcern(userId, userName, "sos").catch(() => {});
         }
@@ -4638,8 +4731,9 @@ export async function registerRoutes(
         return res.json({ incident: existingIncident, message: "Incident already open" });
       }
 
-      const incident = await storage.createIncident(userId, "sos");
-      await storage.updateSafetyState(userId, "concern", "Crash detected");
+      const incident = await storage.createIncidentWithSafetyState(userId, "sos", "concern", "Crash detected", {
+        incidentType: "crash_detection",
+      });
       emitTrackingPolicyChanged(userId, "crash_open").catch(() => {});
       notifyConcern(userId, user.name, "crash_detection").catch((err) => {
         console.error(`[CRASH] notifyConcern failed for user=${userId}:`, err?.message || err);
@@ -5115,6 +5209,7 @@ export async function registerRoutes(
 
       if (isNegative || body === "help" || body === "sos") {
         let incident = await storage.getOpenIncident(user.id);
+        const hadOpenIncident = !!incident;
         const now = new Date();
         if (incident) {
           incident = await storage.updateIncident(incident.id, {
@@ -5123,10 +5218,18 @@ export async function registerRoutes(
             handledByContactId: null,
           });
         } else {
-          incident = await storage.createIncident(user.id, "sos");
+          incident = await storage.createIncidentWithSafetyState(
+            user.id,
+            "sos",
+            "concern",
+            isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.",
+            { incidentType: "sos" },
+          );
         }
 
-        await storage.updateSafetyState(user.id, "concern", isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.");
+        if (hadOpenIncident) {
+          await storage.updateSafetyState(user.id, "concern", isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.");
+        }
         emitTrackingPolicyChanged(user.id, isNegative ? "sms_no_help" : "sms_help").catch(() => {});
 
         const allContacts = (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
@@ -5177,6 +5280,18 @@ export async function registerRoutes(
       const isCheckin = affirmatives.some(a => body === a || body.includes(a));
       
       if (isCheckin) {
+        const activeIncident = await storage.getOpenIncident(user.id);
+        if (getIncidentLevelForSmsResolution(activeIncident) === 1 && activeIncident) {
+          await recordBlockedSmsAffirmativeForLevel1Incident(
+            activeIncident,
+            "SMS affirmative received. Emergency remains active until resolved in app or by guardian action.",
+          ).catch((err: any) => {
+            console.error(`[SMS-CHECKIN] Failed to record Level 1 affirmative incident=${activeIncident.id}:`, err?.message || err);
+          });
+          console.log(`[SMS-CHECKIN] Level 1 incident kept active after affirmative SMS user=${user.id} incident=${activeIncident.id}`);
+          return res.type("text/xml").send(`<Response><Message>${escapeXml("StillHere: Your message was received. This emergency remains active until it is resolved in the app or by your guardian.")}</Message></Response>`);
+        }
+
         const [safeWalkAwaitingResponse] = await db.select().from(safeWalks)
           .where(and(
             eq(safeWalks.userId, user.id),
@@ -6370,8 +6485,9 @@ export async function registerRoutes(
       } else if (cleanAction === "sos") {
         const existing = await storage.getOpenIncident(user.id);
         if (!existing) {
-          const incident = await storage.createIncident(user.id, "sos");
-          await storage.updateSafetyState(user.id, "concern", "SOS triggered by satellite");
+          const incident = await storage.createIncidentWithSafetyState(user.id, "sos", "concern", "SOS triggered by satellite", {
+            incidentType: "sos",
+          });
           const allContacts = (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
           const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
           // Phase 2: incident-scoped token for this brand-new incident.
@@ -7829,16 +7945,25 @@ export async function registerRoutes(
           return res.type("text/xml").send(twimlDup);
         }
 
+        const hadOpenIncident = !!incident;
         if (incident) {
           await storage.updateIncident(incident.id, {
             reason: "sos",
             wellnessCallStatus: "help",
           });
         } else {
-          incident = await storage.createIncident(user.id, "sos");
+          incident = await storage.createIncidentWithSafetyState(
+            user.id,
+            "sos",
+            "concern",
+            "User pressed 2 on wellness call. Needs help.",
+            { incidentType: "sos" },
+          );
           await storage.updateIncident(incident.id, { wellnessCallStatus: "help" });
         }
-        await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call. Needs help.");
+        if (hadOpenIncident) {
+          await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call. Needs help.");
+        }
         emitTrackingPolicyChanged(user.id, "wellness_call_help").catch(() => {});
 
         // Fan out to ALL contacts in parallel (SMS + push)  -  the user audibly
@@ -8381,8 +8506,18 @@ export async function registerRoutes(
           const timeStr = now.toISOString();
           const graceMs = (settings.graceMinutes || 15) * 60 * 1000;
 
-          let incident = claimedIncident || await storage.createIncident(user.id, "missed_checkin");
-          await storage.updateSafetyState(user.id, "concern", "Missed check-in");
+          let incident = claimedIncident || await storage.createIncidentWithSafetyState(
+            user.id,
+            "missed_checkin",
+            "concern",
+            "Missed check-in",
+            { incidentType: "missed_checkin" },
+          );
+          if ((incident as any).ownershipSuppressed) {
+            console.log(`[CRON] Missed check-in escalation suppressed by higher-priority incident for user=${user.id}`);
+            continue;
+          }
+          if (claimedIncident) await storage.updateSafetyState(user.id, "concern", "Missed check-in");
           emitTrackingPolicyChanged(user.id, "missed_checkin_open").catch(() => {});
 
           const timeline: any[] = [...reminderHistory];
@@ -9054,8 +9189,17 @@ export async function registerRoutes(
             // enum only supports missed_checkin/sos/test, and an expired
             // Safety Timer is treated as an urgent emergency escalation. The
             // timeline marks the exact source so reports can distinguish it.
-            const incident = await storage.createIncident(timer.userId, "sos");
-            await storage.updateSafetyState(timer.userId, "concern", "Safety timer expired");
+            const incident = await storage.createIncidentWithSafetyState(
+              timer.userId,
+              "sos",
+              "concern",
+              "Safety timer expired",
+              { incidentType: "safety_timer", metadata: { timerId: timer.id } },
+            );
+            if ((incident as any).ownershipSuppressed) {
+              console.log(`[CRON] Safety timer escalation suppressed by higher-priority incident for user=${timer.userId}`);
+              continue;
+            }
             emitTrackingPolicyChanged(timer.userId, "safety_timer_escalated").catch(() => {});
             await createProtectedUserSystemAlert(
               user,
@@ -9190,8 +9334,17 @@ export async function registerRoutes(
             const user = await storage.getUser(walk.userId);
             if (!user) continue;
 
-            const incident = await storage.createIncident(walk.userId, "sos");
-            await storage.updateSafetyState(walk.userId, "concern", "Safe walk overdue. Not responding");
+            const incident = await storage.createIncidentWithSafetyState(
+              walk.userId,
+              "sos",
+              "concern",
+              "Safe walk overdue. Not responding",
+              { incidentType: "safe_walk", metadata: { safeWalkId: walk.id } },
+            );
+            if ((incident as any).ownershipSuppressed) {
+              console.log(`[CRON] Safe Walk escalation suppressed by higher-priority incident for user=${walk.userId}`);
+              continue;
+            }
             emitTrackingPolicyChanged(walk.userId, "safe_walk_escalated").catch(() => {});
             const destInfo = walk.destinationName ? ` to ${walk.destinationName}` : "";
             await createProtectedUserSystemAlert(
