@@ -174,7 +174,7 @@ export default function InboxPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center gap-3 mb-5">
-          <BackButton to="/" />
+          <BackButton />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <MessageCircle className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />

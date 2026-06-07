@@ -103,7 +103,7 @@ export default function SatellitePage() {
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="flex items-center gap-3 p-4">
-          <BackButton to="/" testId="button-back-satellite" />
+          <BackButton testId="button-back-satellite" />
           <div>
             <h1 className="text-lg font-semibold">Satellite devices</h1>
             <p className="text-xs text-muted-foreground">Stay connected off-grid</p>

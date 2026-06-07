@@ -686,7 +686,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-background pb-12">
       <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center gap-4">
-          <BackButton to="/" tone="onPrimary" />
+          <BackButton tone="onPrimary" />
           <div className="flex items-center gap-2">
             <img src={logoPath} alt="StillHere" className="h-7 w-7 object-contain" />
             <h1 className="text-xl font-semibold" data-testid="text-settings-title">Settings</h1>

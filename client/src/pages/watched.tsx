@@ -286,7 +286,7 @@ export default function WatchedPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center gap-3 mb-6">
-          <BackButton to="/" />
+          <BackButton />
           <div className="flex-1">
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Watcher Dashboard</h1>
             <p className="text-sm text-muted-foreground">

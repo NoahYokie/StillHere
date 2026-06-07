@@ -254,7 +254,7 @@ export default function SavedPlacesPage() {
     <div className="min-h-screen bg-background">
       <header className="bg-primary text-primary-foreground px-4 py-3">
         <div className="max-w-md mx-auto flex items-center gap-3">
-          <BackButton to="/" tone="onPrimary" />
+          <BackButton tone="onPrimary" />
           <h1 className="text-lg font-semibold flex-1">Saved Places</h1>
           {!showAdd && (
             <Button

@@ -137,7 +137,7 @@ export default function FeedbackPage() {
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="flex items-center gap-3 p-4">
-          <BackButton to="/" testId="button-back-feedback" />
+          <BackButton testId="button-back-feedback" />
           <h1 className="text-lg font-semibold">Feedback</h1>
         </div>
         <div className="flex border-b">

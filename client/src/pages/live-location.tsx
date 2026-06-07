@@ -305,7 +305,7 @@ export default function LiveLocationPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
-        <BackButton onClick={() => navigate("/")} tone="onPrimary" />
+        <BackButton tone="onPrimary" />
         <div className="flex-1">
           <h1 className="text-lg font-semibold">Live Location</h1>
           <p className="text-xs opacity-80">
