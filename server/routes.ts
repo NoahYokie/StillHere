@@ -1958,10 +1958,11 @@ export async function registerRoutes(
       const sosAccuracy = typeof req.body?.accuracy === "number" && isFinite(req.body.accuracy) ? req.body.accuracy : null;
       const hasLocation = sosLat !== null && sosLng !== null;
 
-      // Create SOS incident and set safety state to concern
-      incident = await storage.createIncident(userId, "sos");
+      // Atomic success boundary: incident creation and concern state update
+      // are one committed safety event. If either write fails, the transaction
+      // rolls back so retries start from a clean state.
+      incident = await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered");
       logSosEvent("SOS_INCIDENT_CREATED", { userId, incidentId: incident.id });
-      await storage.updateSafetyState(userId, "concern", "SOS triggered");
       logSosEvent("SOS_SAFETY_STATE_UPDATED", { userId, incidentId: incident.id, state: "concern" });
       emitTrackingPolicyChanged(userId, "sos_open").catch(() => {});
 

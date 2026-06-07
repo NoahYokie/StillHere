@@ -476,6 +476,7 @@ export interface IStorage {
   getIncidentsNeedingEscalation(limit?: number): Promise<Incident[]>;
   getStaleOpenIncidents(stalenessMs: number, limit?: number): Promise<Incident[]>;
   createIncident(userId: string, reason: IncidentReason): Promise<Incident>;
+  createIncidentWithSafetyState(userId: string, reason: IncidentReason, newState: string, stateReason: string): Promise<Incident>;
   updateIncident(id: string, updates: Partial<Incident>): Promise<Incident>;
   
   // Location Sessions
@@ -1942,6 +1943,43 @@ export class DatabaseStorage implements IStorage {
       status: "open",
       reason,
     }).returning();
+    return incident;
+  }
+
+  async createIncidentWithSafetyState(
+    userId: string,
+    reason: IncidentReason,
+    newState: string,
+    stateReason: string,
+  ): Promise<Incident> {
+    const oldUser = await this.getUser(userId);
+    const oldState = oldUser?.safetyState || "active";
+
+    const incident = await db.transaction(async (tx) => {
+      const [createdIncident] = await tx.insert(incidents).values({
+        userId,
+        status: "open",
+        reason,
+      }).returning();
+
+      const [updatedUser] = await tx
+        .update(users)
+        .set({
+          safetyState: newState as any,
+          safetyStateReason: stateReason,
+          safetyStateChangedAt: new Date(),
+        })
+        .where(eq(users.id, userId))
+        .returning({ id: users.id });
+
+      if (!updatedUser) {
+        throw new Error(`Atomic safety event failed: user ${userId} was not updated`);
+      }
+
+      return createdIncident;
+    });
+
+    console.log(`[SafetyState] user ${userId} ${oldState} -> ${newState} (${stateReason})`);
     return incident;
   }
 
