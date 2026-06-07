@@ -26,7 +26,7 @@ import {
   Home as HomeIcon, GraduationCap, Briefcase, Dumbbell, Trees, Plus, Navigation,
   Phone, Clock, CheckCircle2, X, Pencil,
 } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -765,12 +765,7 @@ export default function FamilyPage() {
   // No family yet - simple create screen
   if (!family) {
     return (
-      <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-10 bg-card/80 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-          <BackButton />
-          <h1 className="text-lg font-bold">Family</h1>
-        </header>
-        <div className="px-4 py-8 max-w-md mx-auto space-y-4">
+      <MobilePageShell title="Family" contentClassName="max-w-md space-y-4 py-8">
           {renderInvitations()}
           <Card>
             <CardContent className="p-6 space-y-4 text-center">
@@ -815,94 +810,94 @@ export default function FamilyPage() {
               </Dialog>
             </CardContent>
           </Card>
-        </div>
-      </div>
+      </MobilePageShell>
     );
   }
 
+  const familyHeaderActions = isAdmin ? (
+    <Dialog open={showInvite} onOpenChange={setShowInvite}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" data-testid="button-invite">
+          <UserPlus className="w-4 h-4 mr-1" /> Invite
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Invite someone you trust</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="inv-name">Name</Label>
+            <Input id="inv-name" value={inviteForm.name}
+              onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
+              placeholder="Mom" data-testid="input-invite-name" />
+          </div>
+          <div>
+            <Label htmlFor="inv-phone">Phone number</Label>
+            <Input id="inv-phone" value={inviteForm.phone}
+              onChange={(e) => setInviteForm({ ...inviteForm, phone: e.target.value })}
+              placeholder="+1 555 000 1234" data-testid="input-invite-phone" />
+          </div>
+          <div>
+            <Label>Role</Label>
+            <Select value={inviteForm.role}
+              onValueChange={(v) => setInviteForm({ ...inviteForm, role: v })}>
+              <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="adult">Member</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Round 3 consent disclosure: make the opt-in explicit at
+              invite time. The same wording is repeated in the SMS body
+              and in the post-send toast for consistency. */}
+          <div
+            className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground flex gap-2"
+            data-testid="text-invite-disclosure"
+          >
+            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
+            <span>
+              {(inviteForm.name.trim().split(" ")[0] || "They")} will need to accept before
+              you can see their safety status or location. They can decline at any time.
+            </span>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={() => inviteMutation.mutate({
+              ...inviteForm,
+              parentalConsentRequired: false,
+            })}
+            disabled={!inviteForm.name.trim() || !inviteForm.phone.trim() || inviteMutation.isPending}
+            data-testid="button-invite-confirm"
+          >
+            {inviteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Send invite
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ) : null;
+
   // ===== Family exists - the real experience =====
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-card/90 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-        <BackButton />
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-bold truncate" data-testid="text-family-name">{family.name}</h1>
-          <p className="text-xs text-muted-foreground">
-            {members.filter((m) => m.status === "active" || m.status === "active_legacy").length} members
-            {members.some((m) => m.status === "pending") && (
-              <span className="ml-1">
-                · {members.filter((m) => m.status === "pending").length} awaiting accept
-              </span>
-            )}
-          </p>
-        </div>
-        {isAdmin && (
-          <Dialog open={showInvite} onOpenChange={setShowInvite}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" data-testid="button-invite">
-                <UserPlus className="w-4 h-4 mr-1" /> Invite
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Invite someone you trust</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div>
-                  <Label htmlFor="inv-name">Name</Label>
-                  <Input id="inv-name" value={inviteForm.name}
-                    onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
-                    placeholder="Mom" data-testid="input-invite-name" />
-                </div>
-                <div>
-                  <Label htmlFor="inv-phone">Phone number</Label>
-                  <Input id="inv-phone" value={inviteForm.phone}
-                    onChange={(e) => setInviteForm({ ...inviteForm, phone: e.target.value })}
-                    placeholder="+1 555 000 1234" data-testid="input-invite-phone" />
-                </div>
-                <div>
-                  <Label>Role</Label>
-                  <Select value={inviteForm.role}
-                    onValueChange={(v) => setInviteForm({ ...inviteForm, role: v })}>
-                    <SelectTrigger data-testid="select-invite-role"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="adult">Member</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Round 3 consent disclosure: make the opt-in explicit at
-                    invite time. The same wording is repeated in the SMS body
-                    and in the post-send toast for consistency. */}
-                <div
-                  className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground flex gap-2"
-                  data-testid="text-invite-disclosure"
-                >
-                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-primary" />
-                  <span>
-                    {(inviteForm.name.trim().split(" ")[0] || "They")} will need to accept before
-                    you can see their safety status or location. They can decline at any time.
-                  </span>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => inviteMutation.mutate({
-                    ...inviteForm,
-                    parentalConsentRequired: false,
-                  })}
-                  disabled={!inviteForm.name.trim() || !inviteForm.phone.trim() || inviteMutation.isPending}
-                  data-testid="button-invite-confirm"
-                >
-                  {inviteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Send invite
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-      </header>
+    <MobilePageShell
+      title={<span data-testid="text-family-name">{family.name}</span>}
+      subtitle={
+        <>
+          {members.filter((m) => m.status === "active" || m.status === "active_legacy").length} members
+          {members.some((m) => m.status === "pending") && (
+            <span className="ml-1">
+              {" - "}{members.filter((m) => m.status === "pending").length} awaiting accept
+            </span>
+          )}
+        </>
+      }
+      actions={familyHeaderActions}
+      bodyClassName="bg-background"
+      contentClassName="max-w-none px-0 py-0 pb-[calc(env(safe-area-inset-bottom)+1rem)] flex flex-col min-h-full"
+    >
 
       {invitations.length > 0 && (
         <div className="px-4 pt-3">{renderInvitations()}</div>
@@ -1855,6 +1850,6 @@ export default function FamilyPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+    </MobilePageShell>
   );
 }

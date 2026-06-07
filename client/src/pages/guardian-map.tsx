@@ -388,7 +388,7 @@ export default function GuardianMapPage() {
   return (
     <div className="fixed inset-0 bg-background flex flex-col" data-testid="page-guardian-map">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
+      <div className="absolute top-0 left-0 right-0 z-20 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 pointer-events-none">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
           <BackButton className="pointer-events-auto shadow-lg" />
           <Card className="pointer-events-auto flex-1 px-3 py-2 flex items-center gap-3 shadow-lg">

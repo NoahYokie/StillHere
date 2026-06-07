@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Eye, MapPin, BatteryFull, Clock, CheckCircle2, Lock, AlertTriangle } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { Eye, MapPin, BatteryFull, Clock, CheckCircle2, Lock, AlertTriangle } from "lucide-react";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import GoogleMap from "@/components/google-map";
 import { formatTimeForViewer } from "@/lib/timezone";
 import type { UserStatus } from "@shared/schema";
@@ -51,15 +51,7 @@ export default function SafetyCircleGuardianViewPage() {
   const concernOverride = preview?.safetyState === "concern" && hasCoords && (mode === "presence" || mode === "paused");
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <BackButton to="/safety-circle" />
-          <h1 className="text-base font-semibold tracking-tight">Guardian's View</h1>
-        </div>
-      </header>
-
-      <main className="max-w-md mx-auto px-5 py-6 space-y-4 pb-20">
+    <MobilePageShell title="Guardian's View" backTo="/safety-circle" contentClassName="max-w-md px-5 space-y-4">
         <section className="text-center pt-2 pb-2" data-testid="section-hero">
           <div className="w-16 h-16 mx-auto rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center mb-3">
             <Eye className="h-7 w-7 text-green-600 dark:text-green-500" />
@@ -172,8 +164,7 @@ export default function SafetyCircleGuardianViewPage() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </MobilePageShell>
   );
 }
 

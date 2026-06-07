@@ -4,8 +4,8 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MessageCircle, Users, AlertTriangle, CheckCircle2, Info, MapPin } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { MessageCircle, Users, AlertTriangle, CheckCircle2, Info, MapPin } from "lucide-react";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import { formatDistanceToNow } from "date-fns";
 import { getSocket } from "@/lib/socket";
 import { queryClient } from "@/lib/queryClient";
@@ -170,35 +170,17 @@ export default function InboxPage() {
     };
   }, [auth?.authenticated]);
 
+  const subtitle = activeAlerts > 0
+    ? `${activeAlerts} active alert${activeAlerts !== 1 ? "s" : ""}`
+    : totalUnread > 0
+      ? `${totalUnread} new message${totalUnread !== 1 ? "s" : ""}`
+      : "Safety alerts and messages from your circle";
+
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <BackButton />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
-              <h1 className="text-xl font-semibold tracking-tight" data-testid="text-page-title">
-                Messages
-              </h1>
-            </div>
-            {activeAlerts > 0 ? (
-              <p className="text-sm text-destructive font-medium mt-0.5" data-testid="text-alert-banner">
-                {activeAlerts} active alert{activeAlerts !== 1 ? "s" : ""}
-              </p>
-            ) : totalUnread > 0 ? (
-              <p className="text-sm text-primary mt-0.5" data-testid="text-unread-total">
-                {totalUnread} new message{totalUnread !== 1 ? "s" : ""}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Safety alerts and messages from your circle
-              </p>
-            )}
-          </div>
-        </div>
-      </header>
-      <div className="max-w-lg mx-auto px-4 py-6">
+    <MobilePageShell
+      title={<span className="inline-flex items-center gap-2"><MessageCircle className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />Messages</span>}
+      subtitle={<span className={activeAlerts > 0 ? "text-destructive font-medium" : totalUnread > 0 ? "text-primary" : undefined}>{subtitle}</span>}
+    >
 
         {isLoading && (
           <div className="flex items-center justify-center py-12">
@@ -366,7 +348,6 @@ export default function InboxPage() {
             })}
           </div>
         )}
-      </div>
-    </div>
+    </MobilePageShell>
   );
 }

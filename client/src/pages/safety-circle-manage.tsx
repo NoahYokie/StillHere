@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Plus, Clock, Info } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import { formatDistanceToNow } from "date-fns";
 
 type Readiness = "ready" | "idle" | "needs_attention" | "unknown";
@@ -69,25 +69,23 @@ export default function SafetyCircleManagePage() {
   const readyCount = data?.readyCount ?? 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <BackButton to="/safety-circle" />
-          <h1 className="text-base font-semibold tracking-tight">Manage Guardians</h1>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto text-primary font-semibold gap-1"
-            onClick={() => setLocation("/settings")}
-            data-testid="button-add-guardian"
-          >
-            <Plus className="h-4 w-4" />
-            Add
-          </Button>
-        </div>
-      </header>
-
-      <main className="max-w-md mx-auto px-5 py-6 space-y-3 pb-20">
+    <MobilePageShell
+      title="Manage Guardians"
+      backTo="/safety-circle"
+      contentClassName="max-w-md px-5 space-y-3"
+      actions={
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-primary font-semibold gap-1"
+          onClick={() => setLocation("/settings")}
+          data-testid="button-add-guardian"
+        >
+          <Plus className="h-4 w-4" />
+          Add
+        </Button>
+      }
+    >
         <p className="text-xs text-center text-muted-foreground px-4 mb-2" data-testid="text-helper">
           Your guardians are the people we contact if you miss a check-in or need help.
         </p>
@@ -176,7 +174,6 @@ export default function SafetyCircleManagePage() {
             </CardContent>
           </Card>
         )}
-      </main>
-    </div>
+    </MobilePageShell>
   );
 }

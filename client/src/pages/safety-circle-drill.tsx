@@ -3,8 +3,8 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ShieldCheck, Bell, MessageCircle, CheckCircle2, X, Check, Loader2, Lock, Hourglass } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { ShieldCheck, Bell, MessageCircle, CheckCircle2, X, Check, Loader2, Lock, Hourglass } from "lucide-react";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -88,23 +88,16 @@ export default function SafetyCircleDrillPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          {drillId ? (
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/safety-circle")} data-testid="button-close-results" aria-label="Close">
-              <X className="h-5 w-5" />
-            </Button>
-          ) : (
-            <BackButton to="/safety-circle" />
-          )}
-          <h1 className="text-base font-semibold tracking-tight">
-            {drillId ? "Drill Results" : "Run Safety Drill"}
-          </h1>
-        </div>
-      </header>
-
-      <main className="max-w-md mx-auto px-5 py-6 pb-20">
+    <MobilePageShell
+      title={drillId ? "Drill Results" : "Run Safety Drill"}
+      backTo="/safety-circle"
+      contentClassName="max-w-md px-5"
+      backButton={drillId ? (
+        <Button variant="ghost" size="icon" onClick={() => setLocation("/safety-circle")} data-testid="button-close-results" aria-label="Close">
+          <X className="h-5 w-5" />
+        </Button>
+      ) : undefined}
+    >
         {!drillId ? (
           <DrillIntro
             onStart={() => startMutation.mutate()}
@@ -124,8 +117,7 @@ export default function SafetyCircleDrillPage() {
             onDone={() => setLocation("/safety-circle")}
           />
         )}
-      </main>
-    </div>
+    </MobilePageShell>
   );
 }
 

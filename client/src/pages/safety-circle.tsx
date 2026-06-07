@@ -6,7 +6,7 @@ import {
   ChevronRight, Eye, ShieldCheck, Bell, MessageSquare, PhoneCall,
   Check, Clock, UserPlus,
 } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { MobilePageShell } from "@/components/mobile-page-shell";
 import { formatDistanceToNow } from "date-fns";
 
 type Readiness = "ready" | "idle" | "needs_attention" | "unknown";
@@ -76,15 +76,7 @@ export default function SafetyCirclePage() {
   const allReady = linkedCount > 0 && readyCount === linkedCount;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <BackButton />
-          <h1 className="text-base font-semibold tracking-tight">Safety Circle</h1>
-        </div>
-      </header>
-
-      <main className="max-w-md mx-auto px-5 py-6 space-y-5 pb-20">
+    <MobilePageShell title="Safety Circle" contentClassName="max-w-md px-5 space-y-5">
         {/* Hero */}
         <section className="text-center pt-4 pb-2" data-testid="section-hero">
           <div className="relative w-32 h-32 mx-auto mb-5">
@@ -289,8 +281,7 @@ export default function SafetyCirclePage() {
             </ul>
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </MobilePageShell>
   );
 }
 
