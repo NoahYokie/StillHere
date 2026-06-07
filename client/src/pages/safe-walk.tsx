@@ -228,11 +228,24 @@ export default function SafeWalkPage() {
   });
 
   const arrivedMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/safe-walk/arrived"),
+    mutationFn: () => apiRequest("POST", "/api/safe-walk/arrived", {}),
     onSuccess: () => {
       escalation.setActiveWarning(null);
       queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/current"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/safe-walk/trail"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/family"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/watched-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/guardian-reviews/count"] });
       toast({ title: "You've arrived safely!" });
+    },
+    onError: () => {
+      toast({
+        title: "Could not end Safe Walk",
+        description: "Please try again. If this is urgent, contact your guardian directly.",
+        variant: "destructive",
+      });
     },
   });
 
