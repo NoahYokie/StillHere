@@ -125,7 +125,7 @@ export default function BillingPage() {
     <div className="min-h-screen bg-background pb-12">
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-2">
-          <BackButton to="/" />
+          <BackButton />
           <h1 className="text-base font-semibold">Subscription</h1>
         </div>
       </header>

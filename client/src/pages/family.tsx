@@ -767,7 +767,7 @@ export default function FamilyPage() {
     return (
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-10 bg-card/80 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-          <BackButton to="/" />
+          <BackButton />
           <h1 className="text-lg font-bold">Family</h1>
         </header>
         <div className="px-4 py-8 max-w-md mx-auto space-y-4">
@@ -825,7 +825,7 @@ export default function FamilyPage() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-card/90 backdrop-blur border-b border-border px-4 py-3 flex items-center gap-2">
-        <BackButton to="/" />
+        <BackButton />
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-bold truncate" data-testid="text-family-name">{family.name}</h1>
           <p className="text-xs text-muted-foreground">

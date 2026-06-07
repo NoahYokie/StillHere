@@ -223,7 +223,7 @@ export default function DrivePage() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-drive">
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <BackButton to="/" testId="button-back-drive" />
+        <BackButton testId="button-back-drive" />
         <div className="flex-1">
           <h1 className="text-lg font-semibold" data-testid="text-drive-title">Driving Safety</h1>
         </div>

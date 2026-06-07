@@ -390,7 +390,7 @@ export default function GuardianMapPage() {
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 p-3 pointer-events-none">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <BackButton to="/" className="pointer-events-auto shadow-lg" />
+          <BackButton className="pointer-events-auto shadow-lg" />
           <Card className="pointer-events-auto flex-1 px-3 py-2 flex items-center gap-3 shadow-lg">
             <MapIcon className="w-4 h-4 text-primary" />
             <div className="flex-1 min-w-0">

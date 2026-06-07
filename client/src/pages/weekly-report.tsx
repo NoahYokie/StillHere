@@ -158,7 +158,7 @@ export default function WeeklyReportPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
         <div className="flex items-center gap-3 px-4 py-3 max-w-lg mx-auto">
-          <BackButton to="/" />
+          <BackButton />
           <div>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white" data-testid="text-page-title">
               Safety Report

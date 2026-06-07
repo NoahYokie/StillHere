@@ -185,7 +185,7 @@ export default function SafetyTimerPage() {
     return (
       <div className={`min-h-screen ${timerIsEscalated ? "bg-destructive" : "bg-primary"} pb-8`}>
         <header className="px-6 pt-6 pb-4 flex items-center gap-3">
-          <BackButton onClick={() => navigate("/")} tone="onPrimary" />
+          <BackButton tone="onPrimary" />
           <div>
             <h1 className="text-xl font-semibold text-primary-foreground" data-testid="text-title">{headerTitle}</h1>
             <p className="text-sm text-primary-foreground/90">{statusText}</p>
@@ -288,7 +288,7 @@ export default function SafetyTimerPage() {
   return (
     <div className="min-h-screen bg-background pb-8">
       <header className="bg-primary text-primary-foreground px-6 py-4 flex items-center gap-3">
-        <BackButton onClick={() => navigate("/")} tone="onPrimary" />
+        <BackButton tone="onPrimary" />
         <div>
           <h1 className="text-xl font-semibold" data-testid="text-title">Safety Timer</h1>
           <p className="text-sm opacity-90">Set a countdown before doing something</p>

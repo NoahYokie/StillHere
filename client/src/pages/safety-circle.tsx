@@ -79,7 +79,7 @@ export default function SafetyCirclePage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
         <div className="max-w-md mx-auto px-4 h-14 flex items-center gap-2">
-          <BackButton to="/" />
+          <BackButton />
           <h1 className="text-base font-semibold tracking-tight">Safety Circle</h1>
         </div>
       </header>
