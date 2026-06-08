@@ -4785,12 +4785,46 @@ export async function registerRoutes(
 
       const existingIncident = await storage.getOpenIncident(userId);
       if (existingIncident) {
-        return res.json({ incident: existingIncident, message: "Incident already open" });
+        const incomingIncidentType = "crash_detection";
+        const incomingIncidentLevel = getIncidentLevel(incomingIncidentType);
+        const existingOwnership = getIncidentOwnershipForIncident(existingIncident);
+        const existingIncidentType = existingOwnership?.type ?? "missed_checkin";
+        const existingIncidentLevel = existingOwnership?.level ?? 3;
+        const decision = existingIncidentLevel === 1
+          ? "suppress_duplicate_level_1"
+          : "continue_to_supersession";
+        console.log(JSON.stringify({
+          event: "CRASH_DEDUPE_DECISION",
+          userId,
+          incomingIncidentType,
+          incomingIncidentLevel,
+          existingIncidentId: existingIncident.id,
+          existingIncidentType,
+          existingIncidentLevel,
+          decision,
+        }));
+
+        if (existingIncidentLevel === 1) {
+          return res.json({
+            incident: existingIncident,
+            alreadyActive: true,
+            deduped: true,
+            message: "Level 1 emergency already active",
+          });
+        }
       }
 
       const incident = await storage.createIncidentWithSafetyState(userId, "sos", "concern", "Crash detected", {
         incidentType: "crash_detection",
       });
+      if ((incident as any).ownershipSuppressed) {
+        return res.json({
+          incident,
+          alreadyActive: true,
+          deduped: true,
+          message: "Level 1 emergency already active",
+        });
+      }
       emitTrackingPolicyChanged(userId, "crash_open").catch(() => {});
       notifyConcern(userId, user.name, "crash_detection").catch((err) => {
         console.error(`[CRASH] notifyConcern failed for user=${userId}:`, err?.message || err);
