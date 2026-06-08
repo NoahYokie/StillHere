@@ -7135,19 +7135,41 @@ export async function registerRoutes(
     return latestAttentionTimer;
   }
 
-  async function getCurrentSafeWalkForAttention(userId: string) {
-    const active = await storage.getActiveSafeWalk(userId);
-    if (active) return active;
+  const SAFE_WALK_ATTENTION_STATUSES = ["active", "overdue", "escalated"] as const;
 
+  function isResolvableSafeWalk(walk: any): boolean {
+    return !!walk && SAFE_WALK_ATTENTION_STATUSES.includes(walk.status) && !walk.resolvedAt;
+  }
+
+  async function getCurrentSafeWalkForAttention(userId: string) {
     const [latestAttentionWalk] = await db.select().from(safeWalks)
       .where(and(
         eq(safeWalks.userId, userId),
-        inArray(safeWalks.status, ["active", "overdue", "escalated"]),
+        inArray(safeWalks.status, [...SAFE_WALK_ATTENTION_STATUSES]),
+        isNull(safeWalks.resolvedAt),
       ))
       .orderBy(desc(safeWalks.startedAt))
       .limit(1);
 
     return latestAttentionWalk;
+  }
+
+  async function getCurrentSafeWalkForDisplay(userId: string) {
+    const attentionWalk = await getCurrentSafeWalkForAttention(userId);
+    if (attentionWalk) return attentionWalk;
+
+    const [latest] = await db.select().from(safeWalks)
+      .where(eq(safeWalks.userId, userId))
+      .orderBy(desc(safeWalks.startedAt))
+      .limit(1);
+
+    if (!latest) return null;
+    if (isResolvableSafeWalk(latest)) return latest;
+    if (latest.status === "arrived" || latest.status === "cancelled") return latest;
+
+    // Legacy rows can be status=escalated with resolved_at set after an
+    // incident auto-resolution. They are terminal and must not render as active.
+    return null;
   }
 
   async function getOpenSafeWalkIncident(userId: string) {
@@ -7455,15 +7477,9 @@ export async function registerRoutes(
   app.get("/api/safe-walk/current", async (req, res) => {
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
-      const active = await storage.getActiveSafeWalk(userId);
-      if (active) return res.json(active);
-
-      const [latest] = await db.select().from(safeWalks)
-        .where(eq(safeWalks.userId, userId))
-        .orderBy(desc(safeWalks.startedAt))
-        .limit(1);
-
-      res.json(latest || null);
+      res.setHeader("Cache-Control", "no-store");
+      const walk = await getCurrentSafeWalkForDisplay(userId);
+      res.json(walk || null);
     } catch (error) {
       console.error("Error getting current Safe Walk:", error);
       res.status(500).json({ error: "Failed to get current Safe Walk" });
@@ -7487,7 +7503,13 @@ export async function registerRoutes(
     const userId = getUserId(req); if (!userId) return res.status(401).json({ error: "Not authenticated" });
     try {
       const walk = await getCurrentSafeWalkForAttention(userId);
-      if (!walk) return res.status(404).json({ error: "No active Safe Walk" });
+      if (!walk) {
+        const visibleWalk = await getCurrentSafeWalkForDisplay(userId);
+        if (visibleWalk && !isResolvableSafeWalk(visibleWalk)) {
+          return res.status(409).json({ error: "Safe Walk already ended" });
+        }
+        return res.status(404).json({ error: "No active Safe Walk" });
+      }
       const result = await resolveSafeWalk(userId, "app");
       res.json({ success: true, incidentResolved: !!result.incident });
     } catch (error) {

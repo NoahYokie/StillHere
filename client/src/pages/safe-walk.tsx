@@ -115,8 +115,9 @@ export default function SafeWalkPage() {
     refetchInterval: 5000,
   });
 
-  const walkIsRunning = !!activeWalk && ["active", "overdue"].includes(activeWalk.status);
-  const walkIsEscalated = activeWalk?.status === "escalated";
+  const walkIsTerminal = !!activeWalk?.resolvedAt || activeWalk?.status === "arrived" || activeWalk?.status === "cancelled";
+  const walkIsRunning = !!activeWalk && !walkIsTerminal && ["active", "overdue"].includes(activeWalk.status);
+  const walkIsEscalated = !!activeWalk && !walkIsTerminal && activeWalk.status === "escalated";
   const walkNeedsAttention = walkIsRunning || walkIsEscalated;
 
   const { data: trail } = useQuery<TripPoint[]>({
