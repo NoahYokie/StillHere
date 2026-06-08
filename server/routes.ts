@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { getIncidentLevel, getIncidentOwnershipForIncident, storage } from "./storage";
+import { normalizeInboundSmsBody, normalizeSmsKeyword, parseInboundSmsCommand } from "./sms-command-parser";
 import { processLocationContext, getUserContext, getRecentContextEvents } from "./context-processor";
 import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
@@ -5217,7 +5218,8 @@ export async function registerRoutes(
   app.post("/api/sms/incoming", verifyTwilioSignature, async (req, res) => {
     try {
       const from = req.body?.From || req.body?.from;
-      const body = (req.body?.Body || req.body?.body || "").trim().toLowerCase();
+      const normalizedBody = normalizeInboundSmsBody(req.body?.Body || req.body?.body || "");
+      const smsCommand = parseInboundSmsCommand(normalizedBody);
       
       if (!from) {
         return res.status(400).send("<Response></Response>");
@@ -5229,7 +5231,7 @@ export async function registerRoutes(
       // lookup, because the sender may be a contact (not a registered user)
       // who only ever receives alerts. Both users and contacts get tracked.
       // Case- and punctuation-insensitive (Twilio sends raw text).
-      const cleaned = body.replace(/[^a-z]/g, "");
+      const cleaned = normalizeSmsKeyword(normalizedBody);
       const STOP_WORDS = new Set(["stop", "stopall", "unsubscribe", "cancel", "end", "quit"]);
       const START_WORDS = new Set(["start", "unstop"]);
       const isStopWord = STOP_WORDS.has(cleaned);
@@ -5251,6 +5253,13 @@ export async function registerRoutes(
         return res.type("text/xml").send('<Response></Response>');
       }
 
+      console.log(JSON.stringify({
+        event: "SMS_COMMAND_PARSED",
+        fromLast4: normalized.slice(-4),
+        normalizedBody,
+        command: smsCommand,
+      }));
+
       const user = await storage.getUserByPhone(normalized);
       
       if (!user) {
@@ -5260,10 +5269,8 @@ export async function registerRoutes(
 
       const userSettings = await storage.getSettings(user.id);
 
-      const negatives = ["no", "n", "nope", "not ok", "not okay", "not safe", "unsafe", "need help", "help me", "emergency"];
-      const isNegative = negatives.some(a => body === a || body.includes(a));
-
-      if (isNegative || body === "help" || body === "sos") {
+      if (smsCommand === "no" || smsCommand === "help" || smsCommand === "sos") {
+        const isNegative = smsCommand === "no";
         let incident = await storage.getOpenIncident(user.id);
         const hadOpenIncident = !!incident;
         const now = new Date();
@@ -5332,10 +5339,7 @@ export async function registerRoutes(
         return res.type("text/xml").send(`<Response><Message>${escapeXml(reply)}</Message></Response>`);
       }
 
-      const affirmatives = ["yes", "ok", "y", "yep", "yeah", "im ok", "i'm ok", "safe", "good", "fine", "here", "alive", "checkin", "check in"];
-      const isCheckin = affirmatives.some(a => body === a || body.includes(a));
-      
-      if (isCheckin) {
+      if (smsCommand === "yes") {
         const activeIncident = await storage.getOpenIncident(user.id);
         if (getIncidentLevelForSmsResolution(activeIncident) === 1 && activeIncident) {
           await recordBlockedSmsAffirmativeForLevel1Incident(
@@ -5380,8 +5384,16 @@ export async function registerRoutes(
         
         return res.type("text/xml").send(`<Response><Message>${replyMsg}</Message></Response>`);
       }
+
+      console.log(JSON.stringify({
+        event: "SMS_COMMAND_UNRECOGNIZED_NO_MUTATION",
+        userId: user.id,
+        fromLast4: normalized.slice(-4),
+        normalizedBody,
+        command: smsCommand,
+      }));
       
-      return res.type("text/xml").send('<Response><Message>Reply YES to check in, or NO if you need help. StillHere is part of your safety loop.</Message></Response>');
+      return res.type("text/xml").send(`<Response><Message>${escapeXml("StillHere received your message, but did not recognize a safety command. Reply YES if you are safe, NO if you need help, SOS for emergency, or open the app.")}</Message></Response>`);
     } catch (error) {
       console.error("Error in SMS incoming webhook:", error);
       res.type("text/xml").send('<Response><Message>Something went wrong. Please try again.</Message></Response>');
