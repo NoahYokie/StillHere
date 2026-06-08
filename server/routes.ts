@@ -4422,10 +4422,8 @@ export async function registerRoutes(
     }
   });
 
-  // Broadcast a system_alert message to every member of the user's Safety Circle.
-  // Used by the in-chat "Trigger SOS" quick action  -  also triggers the standard
-  // SOS incident pipeline if one is not already open. MUST be registered before
-  // POST /api/messages/:userId so Express does not match "sos" as a userId param.
+  // Retired chat SOS endpoint. Kept before POST /api/messages/:userId so old
+  // clients cannot accidentally match "sos" as a userId or mutate safety state.
   app.post("/api/messages/sos", sosLimiter, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -4447,55 +4445,16 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       const userName = user?.name || "Someone";
 
-      // Broadcast a system_alert to every linked Safety Circle member
-      const contacts = await storage.getContacts(userId);
-      const linked = contacts.filter((c) => c.linkedUserId);
-      const alertContent = `${userName} triggered an SOS. They need help right now.`;
-      const meta = { kind: "sos", triggeredAt: new Date().toISOString() };
-
-      const { emitToUser } = await import("./socket");
-      const created: any[] = [];
-      for (const contact of linked) {
-        try {
-          const msg = await storage.saveMessage(userId, contact.linkedUserId!, alertContent, {
-            messageType: "system_alert",
-            meta,
-          });
-          emitToUser(contact.linkedUserId!, "message:new", { ...msg, senderName: userName });
-          emitToUser(userId, "message:sent", msg);
-          created.push(msg);
-        } catch (err: any) {
-          console.error(`[SOS-MSG] Failed for contact ${contact.id}:`, err?.message || err);
-        }
-      }
-
-      recentSosByUser.set(userId, { at: Date.now(), sentCount: created.length });
-
-      // Trigger the standard SOS incident flow (idempotent  -  will no-op if already open).
-      // Wrapped so any failure here cannot lose the broadcast result.
-      try {
-        const existingIncident = await storage.getOpenIncident(userId);
-        const existingOwnership = getIncidentOwnershipForIncident(existingIncident);
-        const shouldCreateSosIncident = !existingIncident || (existingOwnership?.level ?? 3) > getIncidentLevel("sos");
-        logSosEvent("SOS_MESSAGE_INCIDENT_DECISION", {
-          userId,
-          existingIncidentId: existingIncident?.id ?? null,
-          existingIncidentType: existingOwnership?.type ?? null,
-          existingIncidentLevel: existingOwnership?.level ?? null,
-          incomingIncidentType: "sos",
-          incomingIncidentLevel: getIncidentLevel("sos"),
-          decision: shouldCreateSosIncident ? "create_or_supersede" : "suppress_duplicate_level_1",
-        });
-        if (shouldCreateSosIncident) {
-          await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered from messages", { incidentType: "sos" });
-          emitTrackingPolicyChanged(userId, "sos_msg_open").catch(() => {});
-          notifyConcern(userId, userName, "sos").catch(() => {});
-        }
-      } catch (err: any) {
-        console.error("[SOS-MSG] Incident creation failed:", err?.message || err);
-      }
-
-      res.json({ success: true, sentCount: created.length });
+      console.log(JSON.stringify({
+        event: "CHAT_SOS_RETIRED",
+        userId,
+        userName,
+      }));
+      res.status(410).json({
+        success: false,
+        error: "Chat SOS has moved to the Home screen",
+        message: "Need emergency help? Use the SOS button on your Home screen.",
+      });
     } catch (error) {
       console.error("Error broadcasting SOS message:", error);
       res.status(500).json({ error: "Failed to broadcast SOS" });
@@ -5305,27 +5264,26 @@ export async function registerRoutes(
 
       if (smsCommand === "no" || smsCommand === "help" || smsCommand === "sos") {
         const isNegative = smsCommand === "no";
-        let incident = await storage.getOpenIncident(user.id);
-        const hadOpenIncident = !!incident;
         const now = new Date();
-        if (incident) {
+        let incident = await storage.createIncidentWithSafetyState(
+          user.id,
+          "sos",
+          "concern",
+          isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.",
+          { incidentType: "sos" },
+        );
+        if ((incident as any).ownershipSuppressed) {
+          console.log(JSON.stringify({
+            event: "SMS_LEVEL1_OWNERSHIP_SUPPRESSED",
+            userId: user.id,
+            incidentId: incident.id,
+            command: smsCommand,
+          }));
+        }
+        if (incident.handledByContactId) {
           incident = await storage.updateIncident(incident.id, {
-            reason: "sos",
-            status: "open",
             handledByContactId: null,
           });
-        } else {
-          incident = await storage.createIncidentWithSafetyState(
-            user.id,
-            "sos",
-            "concern",
-            isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.",
-            { incidentType: "sos" },
-          );
-        }
-
-        if (hadOpenIncident) {
-          await storage.updateSafetyState(user.id, "concern", isNegative ? "User replied NO to SMS check-in. Needs help." : "User requested help by SMS.");
         }
         emitTrackingPolicyChanged(user.id, isNegative ? "sms_no_help" : "sms_help").catch(() => {});
 
@@ -8066,39 +8024,32 @@ export async function registerRoutes(
       if (digits === "2" && user) {
         console.log(`[WELLNESS CALL] User ***${(user.phone || user.id).slice(-4)} pressed 2. SOS triggered via phone call.`);
 
-        // Reuse the latest real (non-drill) open incident if one exists.
-        // Never mutate a drill incident into a real SOS. If the only open
-        // incident is a drill, create a fresh SOS incident alongside it.
-        let incident = await storage.getLatestRealOpenIncident(user.id);
+        const latestOpenIncident = await storage.getLatestRealOpenIncident(user.id);
 
         // Idempotency: if this incident already records wellnessCallStatus
         // "help" (duplicate Twilio webhook delivery), skip the fan-out.
-        if (incident?.wellnessCallStatus === "help") {
-          console.log(`[WELLNESS CALL] Press 2 received but incident ${incident.id} already marked help. Ignoring duplicate.`);
+        if (latestOpenIncident?.wellnessCallStatus === "help") {
+          console.log(`[WELLNESS CALL] Press 2 received but incident ${latestOpenIncident.id} already marked help. Ignoring duplicate.`);
           const twimlDup = `<?xml version="1.0" encoding="UTF-8"?>
 <Response><Say voice="Polly.Joanna-Neural">${calm("We hear you. We are reaching out to your safety circle right now. We are right here with you.")}</Say><Pause length="2"/><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`;
           return res.type("text/xml").send(twimlDup);
         }
 
-        const hadOpenIncident = !!incident;
-        if (incident) {
-          await storage.updateIncident(incident.id, {
-            reason: "sos",
-            wellnessCallStatus: "help",
-          });
-        } else {
-          incident = await storage.createIncidentWithSafetyState(
-            user.id,
-            "sos",
-            "concern",
-            "User pressed 2 on wellness call. Needs help.",
-            { incidentType: "sos" },
-          );
-          await storage.updateIncident(incident.id, { wellnessCallStatus: "help" });
+        let incident = await storage.createIncidentWithSafetyState(
+          user.id,
+          "sos",
+          "concern",
+          "User pressed 2 on wellness call. Needs help.",
+          { incidentType: "sos" },
+        );
+        if ((incident as any).ownershipSuppressed) {
+          console.log(JSON.stringify({
+            event: "WELLNESS_LEVEL1_OWNERSHIP_SUPPRESSED",
+            userId: user.id,
+            incidentId: incident.id,
+          }));
         }
-        if (hadOpenIncident) {
-          await storage.updateSafetyState(user.id, "concern", "User pressed 2 on wellness call. Needs help.");
-        }
+        incident = await storage.updateIncident(incident.id, { wellnessCallStatus: "help" });
         emitTrackingPolicyChanged(user.id, "wellness_call_help").catch(() => {});
 
         // Fan out to ALL contacts in parallel (SMS + push)  -  the user audibly

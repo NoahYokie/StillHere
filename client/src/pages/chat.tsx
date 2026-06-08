@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Info,
   MapPin,
-  AlertOctagon,
   ExternalLink,
   Navigation,
   StopCircle,
@@ -113,7 +112,6 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
-  const [sosConfirm, setSosConfirm] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -514,37 +512,6 @@ export default function ChatPage() {
     if (!otherUserId) return;
     await postSystemMessage("system_safe", `${auth?.user?.name || "User"} confirmed they are safe.`);
     toast({ title: "Marked safe", description: "We let your circle know." });
-  }
-
-  async function handleTriggerSos() {
-    try {
-      // SOS must fire instantly. We attach cached location (sync, no popup) so the
-      // server has a snapshot, but we never await a fresh geolocation fetch here -
-      // that would trigger an OS permission prompt and block the alert.
-      let sosBody: any = {};
-      try {
-        const { getCurrentPosition: getCachedPos } = await import("@/lib/location-service");
-        const cached = getCachedPos();
-        if (cached) {
-          sosBody.lat = cached.lat;
-          sosBody.lng = cached.lng;
-          sosBody.accuracy = cached.accuracy;
-        }
-      } catch {}
-      const res = await apiRequest("POST", "/api/messages/sos", sosBody);
-      const data = await res.json();
-      toast({
-        title: "SOS sent",
-        description: `${data.sentCount} circle member${data.sentCount === 1 ? "" : "s"} notified.`,
-      });
-      setSosConfirm(false);
-    } catch {
-      toast({
-        title: "SOS failed",
-        description: "Please try again or call directly.",
-        variant: "destructive",
-      });
-    }
   }
 
   function renderLiveLocationCard(msg: LocalMessage, locMeta: LiveLocationMeta) {
@@ -1084,40 +1051,20 @@ export default function ChatPage() {
             <span>Call</span>
           </button>
 
-          {/* SOS */}
-          {sosConfirm ? (
-            <div className="inline-flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleTriggerSos}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-destructive text-destructive-foreground text-xs font-semibold shadow-sm hover:shadow-md active:scale-[0.97] transition-all"
-                data-testid="button-quick-sos-confirm"
-              >
-                <AlertOctagon className="h-3.5 w-3.5" />
-                <span className="uppercase tracking-wide">Send SOS</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSosConfirm(false)}
-                className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-border bg-card text-muted-foreground hover:bg-muted transition-colors"
-                data-testid="button-quick-sos-cancel"
-                aria-label="Cancel SOS"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSosConfirm(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-destructive/30 bg-destructive/5 text-destructive text-xs font-semibold transition-all hover:bg-destructive/10 hover:border-destructive/50 active:scale-[0.97]"
-              data-testid="button-quick-sos"
-            >
-              <AlertOctagon className="h-3.5 w-3.5" />
-              <span>SOS</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setLocation("/")}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-destructive/30 bg-destructive/5 text-destructive text-xs font-semibold transition-all hover:bg-destructive/10 hover:border-destructive/50 active:scale-[0.97]"
+            data-testid="button-quick-sos-home"
+            aria-label="Open Home screen SOS"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>Home SOS</span>
+          </button>
         </div>
+        <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+          Need emergency help? Use the SOS button on your Home screen.
+        </p>
         {showEmergencyContactingFooter && (
           <p
             className="text-[10px] text-muted-foreground text-center mt-1.5"
