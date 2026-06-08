@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
-import { storage } from "./storage";
+import { getIncidentLevel, getIncidentOwnershipForIncident, storage } from "./storage";
 import { processLocationContext, getUserContext, getRecentContextEvents } from "./context-processor";
 import { notifyConcern, notifyRecovery, notifySubjectConfirmation } from "./notification-engine";
 import { addMinutes, addHours, addDays } from "date-fns";
@@ -1929,6 +1929,11 @@ export async function registerRoutes(
       // lock has expired but an incident from a prior press is still open).
       const existingIncident = await storage.getOpenIncident(userId);
       if (existingIncident) {
+        const incomingIncidentType = "sos";
+        const incomingIncidentLevel = getIncidentLevel(incomingIncidentType);
+        const existingOwnership = getIncidentOwnershipForIncident(existingIncident);
+        const existingIncidentLevel = existingOwnership?.level ?? 3;
+        const existingIncidentType = existingOwnership?.type ?? "missed_checkin";
         // If the prior incident has had no escalation activity for a long time
         // it is almost certainly stuck open from a past session that never got
         // resolved. Without this, every future SOS press for this user would
@@ -1941,6 +1946,16 @@ export async function registerRoutes(
         const stalenessMs = Date.now() - lastTouchedMs;
         const STALE_INCIDENT_MS = 30 * 60_000; // 30 minutes
         if (stalenessMs > STALE_INCIDENT_MS) {
+          logSosEvent("SOS_DEDUPE_DECISION", {
+            userId,
+            incomingIncidentType,
+            incomingIncidentLevel,
+            existingIncidentId: existingIncident.id,
+            existingIncidentType,
+            existingIncidentLevel,
+            stalenessMinutes: Math.round(stalenessMs / 60_000),
+            decision: "auto_archive_stale_existing",
+          });
           try {
             const timeline: any[] = (() => {
               try { return JSON.parse(existingIncident.escalationTimeline || "[]"); } catch { return []; }
@@ -1960,7 +1975,16 @@ export async function registerRoutes(
           }
           console.log(`[SOS] Auto-archived stale open incident ${existingIncident.id} for user=${userId} (${Math.round(stalenessMs / 60_000)}min stale); proceeding with fresh SOS`);
           // Fall through to the new-incident creation path below.
-        } else {
+        } else if (existingIncidentLevel === 1 && incomingIncidentLevel === 1) {
+          logSosEvent("SOS_DEDUPE_DECISION", {
+            userId,
+            incomingIncidentType,
+            incomingIncidentLevel,
+            existingIncidentId: existingIncident.id,
+            existingIncidentType,
+            existingIncidentLevel,
+            decision: "suppress_duplicate_level_1",
+          });
           const ageMs = Date.now() - new Date(existingIncident.startedAt).getTime();
           const COOLDOWN_MS = 60_000;
           if (ageMs >= COOLDOWN_MS) {
@@ -1990,6 +2014,16 @@ export async function registerRoutes(
               ? "SOS already active. Your Safety Circle is being contacted right now."
               : "SOS already active. We are still contacting your Safety Circle.",
           });
+        } else {
+          logSosEvent("SOS_DEDUPE_DECISION", {
+            userId,
+            incomingIncidentType,
+            incomingIncidentLevel,
+            existingIncidentId: existingIncident.id,
+            existingIncidentType,
+            existingIncidentLevel,
+            decision: "continue_to_supersession",
+          });
         }
       }
       
@@ -2002,7 +2036,18 @@ export async function registerRoutes(
       // Atomic success boundary: incident creation and concern state update
       // are one committed safety event. If either write fails, the transaction
       // rolls back so retries start from a clean state.
+      logSosEvent("SOS_CREATE_INCIDENT_WITH_SAFETY_STATE_REACHED", { userId, incomingIncidentType: "sos", incomingIncidentLevel: getIncidentLevel("sos") });
       incident = await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered", { incidentType: "sos" });
+      if ((incident as any).ownershipSuppressed) {
+        logSosEvent("SOS_OWNERSHIP_SUPPRESSED", { userId, incidentId: incident.id });
+        return res.json({
+          success: true,
+          incident,
+          alreadyActive: true,
+          deduped: true,
+          message: "SOS already active. Your Safety Circle is being contacted right now.",
+        });
+      }
       logSosEvent("SOS_INCIDENT_CREATED", { userId, incidentId: incident.id });
       logSosEvent("SOS_SAFETY_STATE_UPDATED", { userId, incidentId: incident.id, state: "concern" });
       emitTrackingPolicyChanged(userId, "sos_open").catch(() => {});
@@ -4429,7 +4474,18 @@ export async function registerRoutes(
       // Wrapped so any failure here cannot lose the broadcast result.
       try {
         const existingIncident = await storage.getOpenIncident(userId);
-        if (!existingIncident) {
+        const existingOwnership = getIncidentOwnershipForIncident(existingIncident);
+        const shouldCreateSosIncident = !existingIncident || (existingOwnership?.level ?? 3) > getIncidentLevel("sos");
+        logSosEvent("SOS_MESSAGE_INCIDENT_DECISION", {
+          userId,
+          existingIncidentId: existingIncident?.id ?? null,
+          existingIncidentType: existingOwnership?.type ?? null,
+          existingIncidentLevel: existingOwnership?.level ?? null,
+          incomingIncidentType: "sos",
+          incomingIncidentLevel: getIncidentLevel("sos"),
+          decision: shouldCreateSosIncident ? "create_or_supersede" : "suppress_duplicate_level_1",
+        });
+        if (shouldCreateSosIncident) {
           await storage.createIncidentWithSafetyState(userId, "sos", "concern", "SOS triggered from messages", { incidentType: "sos" });
           emitTrackingPolicyChanged(userId, "sos_msg_open").catch(() => {});
           notifyConcern(userId, userName, "sos").catch(() => {});
@@ -6484,7 +6540,18 @@ export async function registerRoutes(
         res.json({ ok: true, action: "checkin_recorded" });
       } else if (cleanAction === "sos") {
         const existing = await storage.getOpenIncident(user.id);
-        if (!existing) {
+        const existingOwnership = getIncidentOwnershipForIncident(existing);
+        const shouldCreateSatelliteSos = !existing || (existingOwnership?.level ?? 3) > getIncidentLevel("sos");
+        logSosEvent("SOS_SATELLITE_INCIDENT_DECISION", {
+          userId: user.id,
+          existingIncidentId: existing?.id ?? null,
+          existingIncidentType: existingOwnership?.type ?? null,
+          existingIncidentLevel: existingOwnership?.level ?? null,
+          incomingIncidentType: "sos",
+          incomingIncidentLevel: getIncidentLevel("sos"),
+          decision: shouldCreateSatelliteSos ? "create_or_supersede" : "suppress_duplicate_level_1",
+        });
+        if (shouldCreateSatelliteSos) {
           const incident = await storage.createIncidentWithSafetyState(user.id, "sos", "concern", "SOS triggered by satellite", {
             incidentType: "sos",
           });

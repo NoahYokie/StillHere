@@ -150,7 +150,7 @@ const INCIDENT_LEVEL_BY_TYPE: Record<IncidentOwnershipType, 0 | 1 | 2 | 3> = {
   test: 0,
 };
 
-function inferIncidentType(reason: IncidentReason, stateReason?: string, explicit?: IncidentOwnershipType): IncidentOwnershipType {
+export function inferIncidentType(reason: IncidentReason, stateReason?: string, explicit?: IncidentOwnershipType): IncidentOwnershipType {
   if (explicit) return explicit;
   const normalized = (stateReason || "").toLowerCase();
   if (normalized.includes("safe walk")) return "safe_walk";
@@ -163,8 +163,17 @@ function inferIncidentType(reason: IncidentReason, stateReason?: string, explici
   return "sos";
 }
 
-function getIncidentLevel(type: IncidentOwnershipType): 0 | 1 | 2 | 3 {
+export function getIncidentLevel(type: IncidentOwnershipType): 0 | 1 | 2 | 3 {
   return INCIDENT_LEVEL_BY_TYPE[type] ?? 3;
+}
+
+export function getIncidentOwnershipForIncident(incident: {
+  reason?: IncidentReason | string | null;
+  escalationTimeline?: string | null;
+} | null | undefined): { type: IncidentOwnershipType; level: 0 | 1 | 2 | 3 } | null {
+  if (!incident?.reason) return null;
+  const type = inferIncidentType(incident.reason as IncidentReason, incident.escalationTimeline || "", undefined);
+  return { type, level: getIncidentLevel(type) };
 }
 
 function isContactActiveForGuardianReview(contact: { softDeletedAt?: Date | string | null; pausedUntil?: Date | string | null; linkedUserId?: string | null; watcherConsentStatus?: string | null }): boolean {
@@ -2018,7 +2027,17 @@ export class DatabaseStorage implements IStorage {
       } else if (existing && !existing.isDrill) {
         const existingType = inferIncidentType(existing.reason as IncidentReason, existing.escalationTimeline || "", undefined);
         const existingLevel = getIncidentLevel(existingType);
-        if (level <= existingLevel) {
+        console.log(JSON.stringify({
+          event: "INCIDENT_OWNERSHIP_DECISION",
+          userId,
+          incomingType: incidentType,
+          incomingLevel: level,
+          existingIncidentId: existing.id,
+          existingType,
+          existingLevel,
+          decision: level < existingLevel ? "supersede_existing" : "suppress_incoming",
+        }));
+        if (level >= existingLevel) {
           return { ...existing, ownershipSuppressed: true } as any;
         }
         await this.supersedePreviousIncidentTx(tx, existing, incidentType, "Higher-priority safety event superseded active incident");
@@ -2062,15 +2081,17 @@ export class DatabaseStorage implements IStorage {
       } else if (existing && !existing.isDrill) {
         const existingType = inferIncidentType(existing.reason as IncidentReason, existing.escalationTimeline || "", undefined);
         const existingLevel = getIncidentLevel(existingType);
-        if (level <= existingLevel) {
-          await tx
-            .update(users)
-            .set({
-              safetyState: newState as any,
-              safetyStateReason: stateReason,
-              safetyStateChangedAt: new Date(),
-            })
-            .where(eq(users.id, userId));
+        console.log(JSON.stringify({
+          event: "INCIDENT_OWNERSHIP_DECISION",
+          userId,
+          incomingType: incidentType,
+          incomingLevel: level,
+          existingIncidentId: existing.id,
+          existingType,
+          existingLevel,
+          decision: level < existingLevel ? "supersede_existing" : "suppress_incoming",
+        }));
+        if (level >= existingLevel) {
           return { ...existing, ownershipSuppressed: true } as any;
         }
         await this.supersedePreviousIncidentTx(tx, existing, incidentType, stateReason);
