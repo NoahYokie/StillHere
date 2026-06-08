@@ -33,6 +33,8 @@ import {
   type Checkin,
   type Incident,
   type IncidentReason,
+  type Level1IncidentSource,
+  type Level1IncidentSubtype,
   type GuardianActivityReview,
   type LocationSession,
   type LocationSessionType,
@@ -133,6 +135,8 @@ export type IncidentOwnershipType =
 
 export interface CreateIncidentOptions {
   incidentType?: IncidentOwnershipType;
+  incidentSubtype?: Level1IncidentSubtype;
+  incidentSource?: Level1IncidentSource;
   createGuardianReviews?: boolean;
   isDrill?: boolean;
   metadata?: Record<string, unknown>;
@@ -169,10 +173,16 @@ export function getIncidentLevel(type: IncidentOwnershipType): 0 | 1 | 2 | 3 {
 
 export function getIncidentOwnershipForIncident(incident: {
   reason?: IncidentReason | string | null;
+  incidentSubtype?: string | null;
   escalationTimeline?: string | null;
 } | null | undefined): { type: IncidentOwnershipType; level: 0 | 1 | 2 | 3 } | null {
   if (!incident?.reason) return null;
-  const type = inferIncidentType(incident.reason as IncidentReason, incident.escalationTimeline || "", undefined);
+  const subtype: IncidentOwnershipType | undefined = incident.incidentSubtype === "fall_detection" || incident.incidentSubtype === "crash_detection"
+    ? incident.incidentSubtype
+    : incident.incidentSubtype === "manual_sos"
+    ? "sos"
+    : undefined;
+  const type = inferIncidentType(incident.reason as IncidentReason, incident.escalationTimeline || "", subtype);
   return { type, level: getIncidentLevel(type) };
 }
 
@@ -2047,6 +2057,8 @@ export class DatabaseStorage implements IStorage {
         userId,
         status: "open",
         reason,
+        incidentSubtype: options.incidentSubtype ?? null,
+        incidentSource: options.incidentSource ?? null,
         isDrill: options.isDrill === true,
       }).returning();
 
@@ -2101,6 +2113,8 @@ export class DatabaseStorage implements IStorage {
         userId,
         status: "open",
         reason,
+        incidentSubtype: options.incidentSubtype ?? null,
+        incidentSource: options.incidentSource ?? null,
         isDrill: options.isDrill === true,
       }).returning();
 

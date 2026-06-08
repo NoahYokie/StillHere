@@ -8,6 +8,8 @@ export const locationModeEnum = pgEnum("location_mode", ["off", "emergency_only"
 export const reminderModeEnum = pgEnum("reminder_mode", ["none", "one", "two"]);
 export const incidentStatusEnum = pgEnum("incident_status", ["open", "paused", "resolved"]);
 export const incidentReasonEnum = pgEnum("incident_reason", ["missed_checkin", "sos", "test"]);
+export const level1IncidentSubtypes = ["manual_sos", "fall_detection", "crash_detection"] as const;
+export const level1IncidentSources = ["mobile_app", "driving_monitor", "apple_watch", "accessory_telemetry"] as const;
 export const locationSessionTypeEnum = pgEnum("location_session_type", ["emergency", "shift"]);
 export const checkinMethodEnum = pgEnum("checkin_method", ["button", "auto", "sms"]);
 export const callStatusEnum = pgEnum("call_status", ["ringing", "active", "ended", "missed"]);
@@ -295,6 +297,8 @@ export const incidents = pgTable("incidents", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: incidentStatusEnum("status").notNull().default("open"),
   reason: incidentReasonEnum("reason").notNull(),
+  incidentSubtype: text("incident_subtype"),
+  incidentSource: text("incident_source"),
   startedAt: timestamp("started_at").defaultNow().notNull(),
   resolvedAt: timestamp("resolved_at"),
   resolutionReason: text("resolution_reason"),
@@ -1321,6 +1325,8 @@ export type Checkin = typeof checkins.$inferSelect;
 export type Incident = typeof incidents.$inferSelect;
 export type IncidentStatus = Incident["status"];
 export type IncidentReason = Incident["reason"];
+export type Level1IncidentSubtype = typeof level1IncidentSubtypes[number];
+export type Level1IncidentSource = typeof level1IncidentSources[number];
 export type GuardianActivityReview = typeof guardianActivityReviews.$inferSelect;
 
 export type LocationSession = typeof locationSessions.$inferSelect;

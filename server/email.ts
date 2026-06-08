@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { createHmac } from "crypto";
+import type { Level1IncidentSource, Level1IncidentSubtype } from "@shared/schema";
 
 const SENDER_NAME = "StillHere";
 const SENDER_EMAIL = process.env.EMAIL_FROM || "alerts@stillhere.health";
@@ -302,6 +303,33 @@ export interface SendEmailOptions {
   userId?: string | null;
   incidentId?: string | null;
   dedupeKey?: string | null;
+  incidentSubtype?: Level1IncidentSubtype | null;
+  incidentSource?: Level1IncidentSource | null;
+}
+
+function level1EmailCopy(userName: string, subtype?: Level1IncidentSubtype | null): { subject: string; title: string; eventLine: string } {
+  const safeName = esc(userName);
+  switch (subtype) {
+    case "fall_detection":
+      return {
+        subject: `Urgent: Possible fall detected for ${userName} (StillHere)`,
+        title: "Possible fall detected",
+        eventLine: `StillHere detected a possible fall for <strong>${safeName}</strong>. Check their live location now.`,
+      };
+    case "crash_detection":
+      return {
+        subject: `Urgent: Possible vehicle impact detected for ${userName} (StillHere)`,
+        title: "Possible vehicle impact detected",
+        eventLine: `StillHere detected a possible vehicle impact for <strong>${safeName}</strong>. Check their live location now.`,
+      };
+    case "manual_sos":
+    default:
+      return {
+        subject: `Urgent: ${userName} needs help (StillHere)`,
+        title: "Emergency SOS activated",
+        eventLine: `<strong>${safeName}</strong> manually activated emergency SOS. StillHere is notifying their Safety Circle now using the available contact methods on their account.`,
+      };
+  }
 }
 
 export async function sendEmail(
@@ -385,13 +413,10 @@ export async function sendEmergencyEmail(
   const issos = reason === "sos";
   const safeName = esc(userName);
   const level: AlertLevel = issos ? "emergency" : "warning";
-  const subject = safeSubject(issos
-    ? `Urgent: ${userName} needs help (StillHere)`
-    : `Safety alert: ${userName} missed a check-in (StillHere)`);
-  const title = issos ? "Emergency SOS activated" : "Missed safety check-in";
-  const eventLine = issos
-    ? `<strong>${safeName}</strong> just activated an emergency SOS. StillHere is notifying their Safety Circle now using the available contact methods on their account.`
-    : `<strong>${safeName}</strong> hasn't responded to a scheduled safety check-in. StillHere is notifying their Safety Circle now using the available contact methods on their account.`;
+  const level1Copy = issos ? level1EmailCopy(userName, options.incidentSubtype) : null;
+  const subject = safeSubject(level1Copy?.subject || `Safety alert: ${userName} missed a check-in (StillHere)`);
+  const title = level1Copy?.title || "Missed safety check-in";
+  const eventLine = level1Copy?.eventLine || `<strong>${safeName}</strong> hasn't responded to a scheduled safety check-in. StillHere is notifying their Safety Circle now using the available contact methods on their account.`;
   const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. They asked us to attempt to reach you when a possible safety event is detected. StillHere is not an emergency response service.`;
 
   const enriched = await enrichContext(context);
@@ -418,13 +443,13 @@ export async function sendCrashEmail(
 ): Promise<SendEmailResult> {
   const safeName = esc(userName);
   const speedInfo = speedKmh ? ` while travelling at about <strong>${Math.round(speedKmh)} km/h</strong>` : "";
-  const subject = safeSubject(`Urgent: Possible crash detected for ${userName} (StillHere)`);
-  const eventLine = `A possible vehicle crash has been detected for <strong>${safeName}</strong>${speedInfo}. Their phone reported a sudden impact and stopped moving.`;
-  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We attempt to reach you when a possible crash is detected. StillHere is not an emergency response service.`;
+  const subject = safeSubject(`Urgent: Possible vehicle impact detected for ${userName} (StillHere)`);
+  const eventLine = `StillHere detected a possible vehicle impact for <strong>${safeName}</strong>${speedInfo}. Check their live location now.`;
+  const whyReceiving = `You're listed as an emergency contact for <strong>${safeName}</strong> on StillHere. We attempt to reach you when a possible vehicle impact is detected. StillHere is not an emergency response service.`;
 
   const enriched = await enrichContext(context);
   const body = renderEmail({
-    level: "emergency", title: "Possible vehicle crash detected",
+    level: "emergency", title: "Possible vehicle impact detected",
     userName, eventLine,
     ctaUrl: link, ctaLabel: "View live status",
     whyReceiving, emergencyHint: true,

@@ -53,14 +53,17 @@ async function getCheckinLocation(): Promise<{ lat?: number; lng?: number; timez
 // popup and never blocks. If no cache exists (permission never granted, app
 // just opened, etc.) the body is empty and the server uses the user's last
 // stored location instead.
-function buildSosBody(): { lat?: number; lng?: number; accuracy?: number } {
+type SOSTriggerSubtype = "manual_sos" | "fall_detection";
+
+function buildSosBody(subtype: SOSTriggerSubtype = "manual_sos"): { lat?: number; lng?: number; accuracy?: number; incidentSubtype: SOSTriggerSubtype; incidentSource: "mobile_app" } {
+  const identity = { incidentSubtype: subtype, incidentSource: "mobile_app" as const };
   try {
     const cached = getCachedPosition();
     if (cached) {
-      return { lat: cached.lat, lng: cached.lng, accuracy: cached.accuracy };
+      return { ...identity, lat: cached.lat, lng: cached.lng, accuracy: cached.accuracy };
     }
   } catch {}
-  return {};
+  return identity;
 }
 
 // Best-effort post-SOS location refresh. Only fires if the OS has already
@@ -84,8 +87,8 @@ async function refreshLocationIfPermitted(): Promise<void> {
   } catch {}
 }
 
-async function sendSosRequest(): Promise<{ data: any; hadLocation: boolean }> {
-  const sosBody = buildSosBody();
+async function sendSosRequest(subtype: SOSTriggerSubtype = "manual_sos"): Promise<{ data: any; hadLocation: boolean }> {
+  const sosBody = buildSosBody(subtype);
   const res = await apiRequest("POST", "/api/sos", sosBody);
   const data = await res.json().catch(() => ({}));
   return { data, hadLocation: sosBody.lat != null };
@@ -592,7 +595,7 @@ export default function Home() {
 
   useEffect(() => {
     if (fallCountdown === 0 && fallCountdown !== null) {
-      sendSosRequest().then(({ data, hadLocation }) => {
+      sendSosRequest("fall_detection").then(({ data, hadLocation }) => {
         queryClient.invalidateQueries({ queryKey: ["/api/status"] });
         toast({
           title: data?.degraded ? "Fall sensed. Help request active" : "Fall sensed. SOS sent",
@@ -1117,7 +1120,23 @@ export default function Home() {
             <AlertDialogAction
               onClick={() => {
                 dismissFallAlert();
-                sosMutation.mutate();
+                sendSosRequest("fall_detection").then(({ data, hadLocation }) => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/status"] });
+                  toast({
+                    title: data?.degraded ? "Fall sensed. Help request active" : "Fall sensed. SOS sent",
+                    description: hadLocation
+                      ? "We attempted to reach your emergency contacts with your location."
+                      : "We attempted to reach your emergency contacts. Location unavailable, last known location used.",
+                  });
+                  refreshLocationIfPermitted();
+                }).catch(() => {
+                  triggerHaptic([80, 40, 80]);
+                  toast({
+                    title: "Fall SOS failed",
+                    description: "Could not send the alert. Please try again.",
+                    variant: "destructive",
+                  });
+                });
               }}
               className="bg-destructive text-destructive-foreground"
               data-testid="button-fall-sos"

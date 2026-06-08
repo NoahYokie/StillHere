@@ -1,5 +1,6 @@
 import twilio from "twilio";
 import type { Request, Response, NextFunction } from "express";
+import type { Level1IncidentSource, Level1IncidentSubtype } from "@shared/schema";
 import { twilioSmsLimiter } from "./throughput";
 
 let client: twilio.Twilio | null = null;
@@ -106,6 +107,29 @@ export interface SendSmsOptions {
   dedupeKey?: string | null;
   scheduledCheckinLabel?: string | null;
   alertSentLabel?: string | null;
+  incidentSubtype?: Level1IncidentSubtype | null;
+  incidentSource?: Level1IncidentSource | null;
+}
+
+function level1SmsCopy(userName: string, subtype?: Level1IncidentSubtype | null): { title: string; lead: string } {
+  switch (subtype) {
+    case "fall_detection":
+      return {
+        title: "StillHere Fall Alert",
+        lead: `StillHere detected a possible fall for ${userName}. Check their live location now.`,
+      };
+    case "crash_detection":
+      return {
+        title: "StillHere Crash Alert",
+        lead: `StillHere detected a possible vehicle impact for ${userName}. Check their live location now.`,
+      };
+    case "manual_sos":
+    default:
+      return {
+        title: "StillHere SOS Alert",
+        lead: `${userName} manually activated emergency SOS.`,
+      };
+  }
 }
 
 function appendTimingContext(
@@ -355,7 +379,8 @@ export async function sendSosAlert(
   link: string,
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const body = `StillHere SOS Alert\n\n${userName} has activated an SOS in the StillHere app and is requesting help right now.\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services. StillHere is not an emergency response service.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
+  const copy = level1SmsCopy(userName, options.incidentSubtype);
+  const body = `${copy.title}\n\n${copy.lead}\n\nPlease try to reach them immediately. If you have the StillHere app, open it for live location and one-tap actions. If not, view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services. StillHere is not an emergency response service.\n\nYou are receiving this because you are listed as an emergency contact for ${userName} on StillHere.`;
   return sendSms(contactPhone, body, { purpose: "sos_alert", ...options });
 }
 
@@ -420,11 +445,10 @@ export async function sendEscalationAlert(
   reason: "sos" | "missed_checkin",
   options: SendSmsOptions = {},
 ): Promise<SendSmsResult> {
-  const reasonText = reason === "sos"
-    ? "activated an emergency SOS"
-    : "has not responded to a safety check-in";
+  const level1Copy = reason === "sos" ? level1SmsCopy(userName, options.incidentSubtype) : null;
+  const reasonText = level1Copy?.lead || "has not responded to a safety check-in";
   const body = appendTimingContext(
-    `StillHere Safety Alert\n\n${userName} ${reasonText}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services.`,
+    `StillHere Safety Alert\n\n${reason === "sos" ? reasonText : `${userName} ${reasonText}`}, and their primary emergency contact has not responded yet.\n\nPlease try to reach ${userName} as soon as possible. If you have the StillHere app, open it for live status and one-tap actions. If not, you can view status and respond from any browser:\n${link}\n\nLink expires in 24 hours.\n\nIf you cannot reach them, please contact your local emergency services.`,
     reason === "missed_checkin" ? options : { alertSentLabel: options.alertSentLabel },
   );
   return sendSms(contactPhone, body, { purpose: "escalation_alert", ...options });

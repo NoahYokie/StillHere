@@ -175,6 +175,27 @@ function formatPreferredCheckinLabel(preferredTime?: string | null, timezone?: s
   return `${hour12}:${String(minute).padStart(2, "0")} ${suffix} ${timezonePlaceLabel(timezone)}`;
 }
 
+function level1ConcernCopy(userName: string, subtype?: string | null): { title: string; body: string } {
+  switch (subtype) {
+    case "fall_detection":
+      return {
+        title: "Possible fall detected",
+        body: `StillHere detected a possible fall for ${userName}. Check their live location now.`,
+      };
+    case "crash_detection":
+      return {
+        title: "Possible vehicle impact detected",
+        body: `StillHere detected a possible vehicle impact for ${userName}. Check their live location now.`,
+      };
+    case "manual_sos":
+    default:
+      return {
+        title: "Emergency alert",
+        body: `${userName} manually activated emergency SOS.`,
+      };
+  }
+}
+
 export async function notifyConcern(
   userId: string,
   userName: string,
@@ -187,6 +208,8 @@ export async function notifyConcern(
   const isEmergency = reason === "sos" || reason === "crash_detection";
   const protectedUser = await storage.getUser(userId);
   const protectedSettings = reason === "missed_checkin" ? await storage.getSettings(userId).catch(() => null) : null;
+  const activeIncident = isEmergency ? await storage.getOpenIncident(userId).catch(() => null) : null;
+  const level1Copy = isEmergency ? level1ConcernCopy(userName, activeIncident?.incidentSubtype || (reason === "crash_detection" ? "crash_detection" : "manual_sos")) : null;
   const scheduledCheckinLabel = reason === "missed_checkin"
     ? formatPreferredCheckinLabel(protectedSettings?.preferredCheckinTime, protectedUser?.timezone)
     : null;
@@ -205,16 +228,16 @@ export async function notifyConcern(
       reasonText = `We haven't heard from ${userName}.${scheduledCheckinLabel ? ` Their scheduled check-in was ${scheduledCheckinLabel}.` : ""} Tap here to try reaching them.`;
       break;
     case "sos":
-      title = "Emergency alert";
-      reasonText = `${userName} needs help right now. Tap here to see what's happening.`;
+      title = level1Copy!.title;
+      reasonText = level1Copy!.body;
       break;
     case "heartbeat_silence":
       title = "Still trying to reach them";
       reasonText = `We're still trying to reach ${userName}. No action needed yet.`;
       break;
     case "crash_detection":
-      title = "Possible incident";
-      reasonText = `We detected something unusual for ${userName}. Tap here for details.`;
+      title = level1Copy!.title;
+      reasonText = level1Copy!.body;
       break;
     default:
       title = "Heads up";
