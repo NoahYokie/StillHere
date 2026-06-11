@@ -888,7 +888,7 @@ export default function ChatPage() {
       {/* Header with presence */}
       <div className="sticky top-0 z-30 shrink-0 border-b border-border/60 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 flex items-center gap-3 bg-card">
         <BackButton
-          onClick={() => (window.history.length > 1 ? window.history.back() : setLocation("/"))}
+          to="/inbox"
           testId="button-back-chat"
         />
         <div className="relative shrink-0">

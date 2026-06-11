@@ -322,6 +322,7 @@ export default function WatchedPage() {
     <MobilePageShell
       title="Watcher Dashboard"
       subtitle={watchedUsers ? `Watching ${watchedUsers.length} ${watchedUsers.length === 1 ? "person" : "people"}` : "Loading..."}
+      backTo="/"
       actions={watchedUsers && watchedUsers.length > 0 ? (
         <Button
           variant="outline"

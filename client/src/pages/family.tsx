@@ -765,7 +765,7 @@ export default function FamilyPage() {
   // No family yet - simple create screen
   if (!family) {
     return (
-      <MobilePageShell title="Family" contentClassName="max-w-md space-y-4 py-8">
+      <MobilePageShell title="Family" backTo="/" contentClassName="max-w-md space-y-4 py-8">
           {renderInvitations()}
           <Card>
             <CardContent className="p-6 space-y-4 text-center">
@@ -884,6 +884,7 @@ export default function FamilyPage() {
   return (
     <MobilePageShell
       title={<span data-testid="text-family-name">{family.name}</span>}
+      backTo="/"
       subtitle={
         <>
           {members.filter((m) => m.status === "active" || m.status === "active_legacy").length} members

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useLocation } from "wouter";
-import { ArrowLeft, Satellite, Plus, Trash2, Radio, Copy, Check, Signal, Clock } from "lucide-react";
+import { Satellite, Plus, Trash2, Radio, Copy, Check, Signal, Clock } from "lucide-react";
 import { BackButton } from "@/components/back-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +35,6 @@ function getDeviceLabel(type: string) {
 }
 
 export default function SatellitePage() {
-  const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
@@ -100,10 +98,10 @@ export default function SatellitePage() {
   const canSubmit = deviceType && deviceId.trim() && deviceName.trim();
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
-        <div className="flex items-center gap-3 p-4">
-          <BackButton testId="button-back-satellite" />
+    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
+      <div className="shrink-0 z-40 bg-background/95 backdrop-blur border-b">
+        <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4">
+          <BackButton to="/" testId="button-back-satellite" />
           <div>
             <h1 className="text-lg font-semibold">Satellite devices</h1>
             <p className="text-xs text-muted-foreground">Stay connected off-grid</p>
@@ -111,7 +109,8 @@ export default function SatellitePage() {
         </div>
       </div>
 
-      <div className="p-4 max-w-lg mx-auto space-y-4">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="p-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] max-w-lg mx-auto space-y-4">
         <Card data-testid="card-satellite-info">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
@@ -297,7 +296,8 @@ Header: x-satellite-secret: [StillHere webhook secret]
             <p className="text-sm mt-1">Add a device to get started</p>
           </div>
         )}
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

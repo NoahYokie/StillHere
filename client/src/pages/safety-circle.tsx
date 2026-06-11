@@ -76,7 +76,7 @@ export default function SafetyCirclePage() {
   const allReady = linkedCount > 0 && readyCount === linkedCount;
 
   return (
-    <MobilePageShell title="Safety Circle" contentClassName="max-w-md px-5 space-y-5">
+    <MobilePageShell title="Safety Circle" backTo="/" contentClassName="max-w-md px-5 space-y-5">
         {/* Hero */}
         <section className="text-center pt-4 pb-2" data-testid="section-hero">
           <div className="relative w-32 h-32 mx-auto mb-5">

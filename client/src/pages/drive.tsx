@@ -221,9 +221,9 @@ export default function DrivePage() {
   }));
 
   return (
-    <div className="min-h-screen bg-background" data-testid="page-drive">
-      <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <BackButton testId="button-back-drive" />
+    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden" data-testid="page-drive">
+      <div className="shrink-0 z-40 bg-background border-b px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 flex items-center gap-3">
+        <BackButton to="/" testId="button-back-drive" />
         <div className="flex-1">
           <h1 className="text-lg font-semibold" data-testid="text-drive-title">Driving Safety</h1>
         </div>
@@ -235,7 +235,8 @@ export default function DrivePage() {
         )}
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-4 space-y-4">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="max-w-lg mx-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-4">
         {!drivingSafetyEnabled && (
           <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
             <CardContent className="pt-4 pb-4">
@@ -520,7 +521,8 @@ export default function DrivePage() {
             )}
           </>
         )}
-      </div>
+        </div>
+      </main>
 
       {crashDetected !== null && (
         <CrashCountdown

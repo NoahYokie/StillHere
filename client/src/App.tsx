@@ -429,7 +429,12 @@ function RouteMemory() {
   useEffect(() => {
     if (!location.startsWith("/call/")) {
       const search = typeof window !== "undefined" ? window.location.search : "";
-      sessionStorage.setItem("stillhere:lastNonCallRoute", `${location}${search}`);
+      const currentRoute = `${location}${search}`;
+      const lastRoute = sessionStorage.getItem("stillhere:lastNonCallRoute");
+      if (lastRoute && lastRoute !== currentRoute) {
+        sessionStorage.setItem("stillhere:previousRoute", lastRoute);
+      }
+      sessionStorage.setItem("stillhere:lastNonCallRoute", currentRoute);
     }
   }, [location]);
 

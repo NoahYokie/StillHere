@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,7 +35,6 @@ function formatPrice(amount: number, currency: string) {
 }
 
 export default function BillingPage() {
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { isPremium, premiumUntil, source, hasStripeSubscription, isLoading: entLoading } = useEntitlement();
 
@@ -120,17 +118,21 @@ export default function BillingPage() {
   const product = productsQuery.data?.products?.[0];
   const monthlyPrice = useMemo(() => product?.prices.find((p) => p.recurring?.interval === "month"), [product]);
   const yearlyPrice = useMemo(() => product?.prices.find((p) => p.recurring?.interval === "year"), [product]);
+  const backTo = typeof window !== "undefined" && sessionStorage.getItem("stillhere:previousRoute")?.startsWith("/settings")
+    ? "/settings"
+    : "/";
 
   return (
-    <div className="min-h-screen bg-background pb-12">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-2">
-          <BackButton />
+    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
+      <header className="shrink-0 z-40 bg-background/95 backdrop-blur border-b">
+        <div className="max-w-2xl mx-auto px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 min-h-14 flex items-center gap-2">
+          <BackButton to={backTo} />
           <h1 className="text-base font-semibold">Subscription</h1>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="max-w-2xl mx-auto px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex w-14 h-14 rounded-full bg-primary/10 items-center justify-center">
             <Shield className="w-7 h-7 text-primary" />
@@ -259,6 +261,7 @@ export default function BillingPage() {
         <p className="text-[11px] text-muted-foreground text-center pt-2 px-4 leading-relaxed">
           On the website, billing is handled by Stripe. Inside the iOS and Android apps, purchases go through Apple or Google as required by their store rules. In every case the same Premium features unlock for your account.
         </p>
+        </div>
       </main>
     </div>
   );

@@ -380,9 +380,9 @@ export default function SafeWalkPage() {
       : `${activeWalk.destinationName || "Destination"} - ${formatCountdown(remaining)} ${isOverdue ? "overdue" : "remaining"}`;
 
     return (
-      <div className="min-h-screen bg-background pb-8">
-        <header className={`sticky top-0 z-10 ${isOverdue ? "bg-destructive" : "bg-primary"} text-primary-foreground px-6 py-4 flex items-center gap-3`}>
-          <BackButton tone="onPrimary" />
+      <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
+        <header className={`shrink-0 z-40 ${isOverdue ? "bg-destructive" : "bg-primary"} text-primary-foreground px-6 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 flex items-center gap-3`}>
+          <BackButton to="/" tone="onPrimary" />
           <div>
             <h1 className="text-xl font-semibold" data-testid="text-title">
               {title}
@@ -393,7 +393,8 @@ export default function SafeWalkPage() {
           </div>
         </header>
 
-        <main className="max-w-md mx-auto px-6 py-4 space-y-4">
+        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+          <div className="max-w-md mx-auto px-6 py-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-4">
           <Card>
             <CardContent className="p-2">
               <GoogleMap
@@ -477,6 +478,7 @@ export default function SafeWalkPage() {
               </>
             )}
           </div>
+          </div>
         </main>
       </div>
     );
@@ -495,16 +497,17 @@ export default function SafeWalkPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-background pb-8">
-      <header className="sticky top-0 z-10 bg-primary text-primary-foreground px-6 py-4 flex items-center gap-3">
-        <BackButton tone="onPrimary" />
+    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
+      <header className="shrink-0 z-40 bg-primary text-primary-foreground px-6 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 flex items-center gap-3">
+        <BackButton to="/" tone="onPrimary" />
         <div>
           <h1 className="text-xl font-semibold" data-testid="text-title">Safe Walk</h1>
           <p className="text-sm opacity-90">We'll watch until you arrive safely</p>
         </div>
       </header>
 
-      <main className="max-w-md mx-auto px-6 py-6 space-y-4">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="max-w-md mx-auto px-6 py-6 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-4">
         {lastStatusText && (
           <Card>
             <CardContent className="py-3 px-4">
@@ -682,6 +685,7 @@ export default function SafeWalkPage() {
           <Navigation className="h-5 w-5 mr-2" />
           Start Safe Walk
         </Button>
+        </div>
       </main>
     </div>
   );

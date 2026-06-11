@@ -26,10 +26,7 @@ export function BackButton({
   const handleClick = () => {
     if (onClick) return onClick();
     if (to) return setLocation(to);
-    if (typeof window !== "undefined") {
-      if (window.history.length > 1) window.history.back();
-      else setLocation("/");
-    }
+    setLocation("/");
   };
 
   const base =
