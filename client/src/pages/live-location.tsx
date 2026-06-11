@@ -303,8 +303,8 @@ export default function LiveLocationPage() {
   const selectedShare = selectedPerson ? watchedLocations[selectedPerson] : null;
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <div className="shrink-0 z-40 bg-primary text-primary-foreground px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 flex items-center gap-3">
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
         <BackButton to="/" tone="onPrimary" />
         <div className="flex-1">
           <h1 className="text-lg font-semibold">Live Location</h1>
@@ -321,7 +321,6 @@ export default function LiveLocationPage() {
         )}
       </div>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
       {locationDenied && (
         <div className="p-4 pb-0">
           <Card className="border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950">
@@ -580,7 +579,6 @@ export default function LiveLocationPage() {
           </Card>
         </div>
       )}
-      </main>
     </div>
   );
 }

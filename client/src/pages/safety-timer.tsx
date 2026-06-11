@@ -183,8 +183,8 @@ export default function SafetyTimerPage() {
       : "Backend timer is active. You can confirm safe or extend before it expires.";
 
     return (
-      <div className={`h-[100dvh] min-h-[100dvh] ${timerIsEscalated ? "bg-destructive" : "bg-primary"} flex flex-col overflow-hidden`}>
-        <header className="shrink-0 z-40 px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-4 flex items-center gap-3">
+      <div className={`min-h-screen ${timerIsEscalated ? "bg-destructive" : "bg-primary"} pb-8`}>
+        <header className="sticky top-0 z-10 px-6 pt-6 pb-4 flex items-center gap-3">
           <BackButton to="/" tone="onPrimary" />
           <div>
             <h1 className="text-xl font-semibold text-primary-foreground" data-testid="text-title">{headerTitle}</h1>
@@ -192,7 +192,7 @@ export default function SafetyTimerPage() {
           </div>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col items-center px-6 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
+        <div className="flex flex-col items-center px-6">
           <div className="relative w-56 h-56 mb-6">
             <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
               <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="6" />
@@ -286,8 +286,8 @@ export default function SafetyTimerPage() {
       : null;
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <header className="shrink-0 z-40 bg-primary text-primary-foreground px-6 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 flex items-center gap-3">
+    <div className="min-h-screen bg-background pb-8">
+      <header className="bg-primary text-primary-foreground px-6 py-4 flex items-center gap-3">
         <BackButton to="/" tone="onPrimary" />
         <div>
           <h1 className="text-xl font-semibold" data-testid="text-title">Safety Timer</h1>
@@ -295,8 +295,7 @@ export default function SafetyTimerPage() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="max-w-md mx-auto px-6 py-6 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-6">
+      <main className="max-w-md mx-auto px-6 py-6 space-y-6">
         {lastStatusText && (
           <Card>
             <CardContent className="py-3 px-4">
@@ -389,7 +388,6 @@ export default function SafetyTimerPage() {
         <p className="text-xs text-muted-foreground text-center">
           Your contacts will be alerted if you don't check back in time
         </p>
-        </div>
       </main>
     </div>
   );

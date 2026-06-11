@@ -240,8 +240,8 @@ export default function HelpPage() {
   });
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <header className="shrink-0 bg-primary text-primary-foreground px-6 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 z-50">
+    <div className="min-h-screen bg-background">
+      <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-50">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BackButton to="/" tone="onPrimary" />
@@ -261,8 +261,7 @@ export default function HelpPage() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="max-w-3xl mx-auto px-6 py-10 md:py-14 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
+      <main className="max-w-3xl mx-auto px-6 py-10 md:py-14">
         <div className="text-center mb-10">
           <h1 className="text-2xl md:text-3xl font-bold mb-3" data-testid="text-faq-title">Frequently Asked Questions</h1>
           <p className="text-muted-foreground">Everything you need to know about StillHere.</p>
@@ -292,7 +291,6 @@ export default function HelpPage() {
               support@stillhere.health
             </a>
           </p>
-        </div>
         </div>
       </main>
     </div>

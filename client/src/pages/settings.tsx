@@ -683,8 +683,8 @@ export default function SettingsPage() {
   const isPaused = status?.settings?.pauseUntil && new Date(status.settings.pauseUntil) > new Date();
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <header className="shrink-0 bg-primary text-primary-foreground px-6 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 z-40">
+    <div className="min-h-screen bg-background pb-12">
+      <header className="bg-primary text-primary-foreground px-6 py-4 sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center gap-4">
           <BackButton to="/" tone="onPrimary" />
           <div className="flex items-center gap-2">
@@ -694,8 +694,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="max-w-md mx-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-3">
+      <main className="max-w-md mx-auto px-4 py-4 space-y-3">
         {/* Emergency Contacts  -  Always visible, compact */}
         <Card>
           <CardContent className="pt-4 pb-3">
@@ -1458,7 +1457,6 @@ export default function SettingsPage() {
             </AccordionItem>
           </Accordion>
         </Card>
-        </div>
       </main>
 
       <AlertDialog open={showRotateConfirm} onOpenChange={setShowRotateConfirm}>

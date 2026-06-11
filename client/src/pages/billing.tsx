@@ -123,16 +123,15 @@ export default function BillingPage() {
     : "/";
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <header className="shrink-0 z-40 bg-background/95 backdrop-blur border-b">
-        <div className="max-w-2xl mx-auto px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 min-h-14 flex items-center gap-2">
+    <div className="min-h-screen bg-background pb-12">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-2">
           <BackButton to={backTo} />
           <h1 className="text-base font-semibold">Subscription</h1>
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="max-w-2xl mx-auto px-4 pt-6 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-6">
+      <main className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
         <div className="text-center space-y-2">
           <div className="inline-flex w-14 h-14 rounded-full bg-primary/10 items-center justify-center">
             <Shield className="w-7 h-7 text-primary" />
@@ -261,7 +260,6 @@ export default function BillingPage() {
         <p className="text-[11px] text-muted-foreground text-center pt-2 px-4 leading-relaxed">
           On the website, billing is handled by Stripe. Inside the iOS and Android apps, purchases go through Apple or Google as required by their store rules. In every case the same Premium features unlock for your account.
         </p>
-        </div>
       </main>
     </div>
   );

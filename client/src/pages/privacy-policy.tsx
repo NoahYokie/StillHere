@@ -8,14 +8,13 @@ export default function PrivacyPolicyPage() {
   });
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden" data-testid="page-privacy-policy">
-      <header className="shrink-0 z-40 bg-background/95 backdrop-blur border-b px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 flex items-center gap-3">
+    <div className="min-h-screen bg-background" data-testid="page-privacy-policy">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center gap-3">
         <BackButton to="/" />
         <h1 className="text-lg font-semibold">Privacy Policy</h1>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+3rem)] max-w-2xl mx-auto space-y-6 text-sm text-muted-foreground leading-relaxed">
+      <main className="px-4 py-6 max-w-2xl mx-auto space-y-6 text-sm text-muted-foreground leading-relaxed">
         <p className="text-xs">Last updated: April 2026</p>
 
         <section>
@@ -95,7 +94,6 @@ export default function PrivacyPolicyPage() {
           <p>If you have questions about this Privacy Policy, please contact us at:</p>
           <p className="mt-1 text-foreground">support@stillhere.health</p>
         </section>
-        </div>
       </main>
     </div>
   );

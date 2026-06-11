@@ -251,8 +251,8 @@ export default function SavedPlacesPage() {
   }
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <header className="shrink-0 z-40 bg-primary text-primary-foreground px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-10 bg-primary text-primary-foreground px-4 py-3">
         <div className="max-w-md mx-auto flex items-center gap-3">
           <BackButton to="/" tone="onPrimary" />
           <h1 className="text-lg font-semibold flex-1">Saved Places</h1>
@@ -270,8 +270,7 @@ export default function SavedPlacesPage() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="max-w-md mx-auto p-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] space-y-4">
+      <div className="max-w-md mx-auto p-4 space-y-4">
         {showAdd && (
           <Card>
             <CardContent className="pt-4 space-y-4">
@@ -452,8 +451,7 @@ export default function SavedPlacesPage() {
         <p className="text-xs text-muted-foreground text-center leading-relaxed px-4">
           Saved places are used for Safe Walk shortcuts and saved-place alerts while StillHere is allowed to receive location updates.
         </p>
-        </div>
-      </main>
+      </div>
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>

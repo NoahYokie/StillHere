@@ -465,8 +465,8 @@ export default function LiveLocationViewPage() {
     const fallbackLat = liveLat ?? -31.95;
     const fallbackLng = liveLng ?? 115.86;
     return (
-      <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-        <div className="shrink-0 z-40 bg-primary text-primary-foreground px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 flex items-center gap-3">
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
           <BackButton onClick={handleBack} tone="onPrimary" />
           <h1 className="text-lg font-semibold truncate">{userName}</h1>
         </div>
@@ -492,8 +492,8 @@ export default function LiveLocationViewPage() {
   }
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <div className="shrink-0 z-40 bg-primary text-primary-foreground px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 flex items-center gap-3">
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="sticky top-0 z-20 bg-primary text-primary-foreground p-4 flex items-center gap-3">
         <BackButton onClick={handleBack} tone="onPrimary" />
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-semibold truncate">{userName}</h1>

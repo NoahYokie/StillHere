@@ -897,7 +897,7 @@ export default function FamilyPage() {
       }
       actions={familyHeaderActions}
       bodyClassName="bg-background"
-      contentClassName="max-w-none px-0 py-0 pb-[calc(env(safe-area-inset-bottom)+1rem)] flex flex-col min-h-full"
+      contentClassName="max-w-none px-0 py-0 pb-4 flex flex-col min-h-full"
     >
 
       {invitations.length > 0 && (

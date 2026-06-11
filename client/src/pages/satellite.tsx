@@ -98,9 +98,9 @@ export default function SatellitePage() {
   const canSubmit = deviceType && deviceId.trim() && deviceName.trim();
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden">
-      <div className="shrink-0 z-40 bg-background/95 backdrop-blur border-b">
-        <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4">
+    <div className="min-h-screen bg-background">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+        <div className="flex items-center gap-3 p-4">
           <BackButton to="/" testId="button-back-satellite" />
           <div>
             <h1 className="text-lg font-semibold">Satellite devices</h1>
@@ -109,8 +109,7 @@ export default function SatellitePage() {
         </div>
       </div>
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="p-4 pb-[calc(env(safe-area-inset-bottom)+3rem)] max-w-lg mx-auto space-y-4">
+      <div className="p-4 max-w-lg mx-auto space-y-4">
         <Card data-testid="card-satellite-info">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
@@ -296,8 +295,7 @@ Header: x-satellite-secret: [StillHere webhook secret]
             <p className="text-sm mt-1">Add a device to get started</p>
           </div>
         )}
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

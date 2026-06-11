@@ -32,14 +32,10 @@ export function MobilePageShell({
   testId,
 }: MobilePageShellProps) {
   return (
-    <div
-      className={cn("h-[100dvh] min-h-[100dvh] bg-background flex flex-col overflow-hidden", className)}
-      data-testid={testId}
-    >
+    <div className={cn("min-h-screen bg-background", className)} data-testid={testId}>
       <header
         className={cn(
-          "sticky top-0 z-40 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85",
-          "pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3",
+          "sticky top-0 z-40 border-b border-border bg-background/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85",
           headerClassName,
         )}
       >
@@ -55,8 +51,8 @@ export function MobilePageShell({
         </div>
       </header>
 
-      <main className={cn("flex-1 min-h-0 overflow-y-auto overscroll-contain", bodyClassName)}>
-        <div className={cn("max-w-lg mx-auto px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+5rem)]", contentClassName)}>
+      <main className={bodyClassName}>
+        <div className={cn("max-w-lg mx-auto px-4 py-6 pb-20", contentClassName)}>
           {children}
         </div>
       </main>
