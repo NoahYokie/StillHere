@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ import { formatDistanceToNow } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isFreshLocation, locationFreshnessLabel } from "@/lib/location-freshness";
+import { getValidInternalReturnPath } from "@/lib/internal-return-path";
 
 type MapPerson = {
   id: string;
@@ -167,6 +168,11 @@ function watchedLocationTimestamp(user: Pick<WatchedUser, "lastKnownLocationAt" 
 
 export default function GuardianMapPage() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const returnPath = useMemo(
+    () => getValidInternalReturnPath(new URLSearchParams(search).get("returnTo")),
+    [search],
+  );
   const { toast } = useToast();
   const [threeD, setThreeD] = useState(false);
   const [mapType, setMapType] = useState<"roadmap" | "satellite" | "hybrid">("roadmap");
@@ -390,7 +396,10 @@ export default function GuardianMapPage() {
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3 pointer-events-none">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <BackButton to="/watched/list" className="pointer-events-auto shadow-lg" />
+          <BackButton
+            onClick={() => setLocation(returnPath || "/watched/list")}
+            className="pointer-events-auto shadow-lg"
+          />
           <Card className="pointer-events-auto flex-1 px-3 py-2 flex items-center gap-3 shadow-lg">
             <MapIcon className="w-4 h-4 text-primary" />
             <div className="flex-1 min-w-0">

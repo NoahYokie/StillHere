@@ -267,7 +267,7 @@ export default function DriveReportPage() {
   return (
     <div className="min-h-screen bg-background" data-testid="page-drive-report">
       <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 flex items-center gap-3">
-        <BackButton onClick={() => navigate(isWatcher ? "/watched" : "/drive")} />
+        <BackButton onClick={() => navigate(isWatcher ? "/watched/map?returnTo=%2Fwatched%2Flist" : "/drive")} />
         <div className="flex-1">
           <h1 className="text-lg font-semibold" data-testid="text-title">Driving Report</h1>
           {report && isWatcher && (

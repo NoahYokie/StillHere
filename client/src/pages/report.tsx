@@ -87,7 +87,7 @@ export default function ReportPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6 print:hidden">
           <div className="flex items-center gap-3">
-            <BackButton to="/watched" />
+            <BackButton to="/watched/map?returnTo=%2Fwatched%2Flist" />
             <h1 className="text-xl font-semibold" data-testid="text-page-title">Safety Report</h1>
           </div>
           <Button variant="outline" size="sm" onClick={handlePrint} data-testid="button-print">

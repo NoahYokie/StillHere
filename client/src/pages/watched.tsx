@@ -327,7 +327,7 @@ export default function WatchedPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setLocation("/watched/map")}
+          onClick={() => setLocation("/watched/map?returnTo=%2Fwatched%2Flist")}
           className="gap-2"
           data-testid="button-open-guardian-map"
         >

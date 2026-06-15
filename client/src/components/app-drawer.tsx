@@ -104,6 +104,11 @@ export function AppDrawer({ userName, onSosTap }: AppDrawerProps) {
       }
       return;
     }
+    if (route === "/watched") {
+      const returnTo = location.startsWith("/watched") ? "/" : location;
+      setLocation(`/watched/map?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
     setLocation(route);
   };
 

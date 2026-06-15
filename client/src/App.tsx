@@ -383,7 +383,7 @@ function CapacitorInit() {
             setLocation(`/call/${callerId || call.callerId}?mode=answer&source=callkit`);
           } catch (err) {
             console.error("[App] Failed to load native answered call:", err);
-            setLocation(callerId ? `/call/${callerId}` : "/watched");
+            setLocation(callerId ? `/call/${callerId}` : "/watched/map?returnTo=%2F");
           }
         },
         (callId) => {

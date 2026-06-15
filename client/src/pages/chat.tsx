@@ -731,7 +731,7 @@ export default function ChatPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setLocation("/watched")}
+                    onClick={() => setLocation(`/watched/map?returnTo=${encodeURIComponent(`/chat/${otherUserId}`)}`)}
                     className="h-9 text-xs"
                     data-testid={`button-alert-location-${msg.id}`}
                   >
