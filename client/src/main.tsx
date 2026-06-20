@@ -1,6 +1,8 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+// TEMPORARY — Task 15.9E-D.1 diagnostic telemetry overlay. Remove after audit.
+import { DiagnosticTelemetryOverlay } from "./components/diagnostic-telemetry-overlay";
 import { resumeLiveTrackingIfNeeded } from "./lib/live-location";
 import { installNativeFetchBridge, isNativeApp } from "./lib/native-api";
 import { isIOS } from "./lib/capacitor";
@@ -44,4 +46,19 @@ if (!isNativeApp() && 'serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+// TEMPORARY — Task 15.9E-D.1. When the flag is unset (production), the render
+// tree is byte-identical to `<App />`. Remove this gate and the import above
+// once telemetry capture is complete.
+const SHOW_DIAGNOSTIC_TELEMETRY =
+  import.meta.env.VITE_DIAGNOSTIC_TELEMETRY === "true";
+
+createRoot(document.getElementById("root")!).render(
+  SHOW_DIAGNOSTIC_TELEMETRY ? (
+    <>
+      <App />
+      <DiagnosticTelemetryOverlay />
+    </>
+  ) : (
+    <App />
+  ),
+);
