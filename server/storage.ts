@@ -365,6 +365,18 @@ export function computeMissedCheckinOccurrence(opts: {
     safety++;
   }
 
+  if (opts.now > nextDueTime) {
+    const projected = computeCheckinDueWindowAroundNow({
+      userCreatedAt: opts.scheduleAnchorTime || opts.lastTime,
+      now: opts.now,
+      intervalHours,
+      preferredCheckinTime: opts.preferredCheckinTime,
+      timezone: opts.timezone,
+    });
+    dueTime = projected.dueTime;
+    nextDueTime = projected.nextDueTime;
+  }
+
   if (opts.lastTimeIsCheckin && isCheckinWithinDueWindow(opts.lastTime, dueTime, nextDueTime, opts.timezone)) {
     return null;
   }
@@ -434,6 +446,88 @@ export function computeFutureCheckinDueFromNow(opts: {
   }
 
   return candidate > opts.now ? candidate : addHours(opts.now, intervalHours);
+}
+
+function computeCheckinDueWindowAroundNow(opts: {
+  userCreatedAt: Date;
+  now: Date;
+  intervalHours: number;
+  preferredCheckinTime: string | null | undefined;
+  timezone: string | null | undefined;
+}): { dueTime: Date; nextDueTime: Date } {
+  const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
+  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
+  if (!isDailyLike) {
+    const intervalMs = intervalHours * 3_600_000;
+    const elapsedCycles = Math.max(0, Math.floor((opts.now.getTime() - opts.userCreatedAt.getTime()) / intervalMs));
+    let dueTime = new Date(opts.userCreatedAt.getTime() + elapsedCycles * intervalMs);
+    let nextDueTime = new Date(dueTime.getTime() + intervalMs);
+    while (dueTime > opts.now) {
+      nextDueTime = dueTime;
+      dueTime = new Date(dueTime.getTime() - intervalMs);
+    }
+    while (nextDueTime < opts.now) {
+      dueTime = nextDueTime;
+      nextDueTime = new Date(nextDueTime.getTime() + intervalMs);
+    }
+    return { dueTime, nextDueTime };
+  }
+
+  const tz = opts.timezone || "UTC";
+  const pref = (opts.preferredCheckinTime || "09:00").trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(pref);
+  const targetH = Math.max(0, Math.min(23, m ? parseInt(m[1], 10) : 9));
+  const targetM = Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0));
+  const stepDays = intervalHours / 24;
+  const stepMs = stepDays * 86_400_000;
+  const anchorDayStart = startOfDayInTimezone(opts.userCreatedAt, tz);
+  const nowDayStart = startOfDayInTimezone(opts.now, tz);
+  const approxDaysSinceAnchor = Math.max(
+    0,
+    Math.floor((nowDayStart.getTime() - anchorDayStart.getTime()) / 86_400_000),
+  );
+  let cycle = Math.max(0, Math.floor(approxDaysSinceAnchor / stepDays) - 2);
+
+  const candidateForCycle = (candidateCycle: number): Date => {
+    const probe = new Date(anchorDayStart.getTime() + candidateCycle * stepMs + 12 * 3_600_000);
+    const dayStart = startOfDayInTimezone(probe, tz);
+    return new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
+  };
+
+  let dueTime = candidateForCycle(cycle);
+  while (dueTime > opts.now && cycle > 0) {
+    cycle--;
+    dueTime = candidateForCycle(cycle);
+  }
+
+  let nextDueTime = candidateForCycle(cycle + 1);
+  let safety = 0;
+  while (nextDueTime < opts.now && safety < 12) {
+    cycle++;
+    dueTime = nextDueTime;
+    nextDueTime = candidateForCycle(cycle + 1);
+    safety++;
+  }
+
+  if (nextDueTime < opts.now) {
+    nextDueTime = computeFutureCheckinDueFromNow({
+      userCreatedAt: opts.userCreatedAt,
+      now: opts.now,
+      intervalHours,
+      preferredCheckinTime: opts.preferredCheckinTime,
+      timezone: opts.timezone,
+    });
+    dueTime = computeNextCheckinDue({
+      lastTime: new Date(nextDueTime.getTime() - stepMs - 12 * 3_600_000),
+      scheduleAnchorTime: opts.userCreatedAt,
+      intervalHours,
+      preferredCheckinTime: opts.preferredCheckinTime,
+      timezone: opts.timezone,
+      lastTimeIsCheckin: false,
+    });
+  }
+
+  return { dueTime, nextDueTime };
 }
 
 export function isCheckinLeaseClaimable(opts: {

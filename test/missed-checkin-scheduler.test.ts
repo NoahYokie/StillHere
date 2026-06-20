@@ -513,6 +513,48 @@ try {
   );
   assert.ok(resolutionPathProjection > validationResolveNow, "resolution path projection must be future");
 
+  const oldDailyMissedOccurrence = computeMissedCheckinOccurrence({
+    lastTime: multipleMissedLastCheckin,
+    scheduleAnchorTime: oldAccountAnchor,
+    now: validationResolveNow,
+    intervalHours: 24,
+    preferredCheckinTime: "18:00",
+    timezone: "Australia/Sydney",
+    lastTimeIsCheckin: true,
+  });
+  assert.ok(oldDailyMissedOccurrence, "old daily account with stale last check-in should still produce a current missed occurrence");
+  assert.equal(
+    oldDailyMissedOccurrence!.dueTime.toISOString(),
+    "2026-06-01T08:00:00.000Z",
+    "old daily account missed occurrence must project to today's 18:00 Sydney due window, not a 400-day historical window",
+  );
+  assert.equal(
+    oldDailyMissedOccurrence!.nextDueTime.toISOString(),
+    "2026-06-02T08:00:00.000Z",
+    "old daily account missed occurrence must advance the persisted next due to the next future slot",
+  );
+
+  const oldWeeklyMissedOccurrence = computeMissedCheckinOccurrence({
+    lastTime: new Date("2025-01-03T02:00:00.000Z"),
+    scheduleAnchorTime: weeklyOldAnchor,
+    now: new Date("2026-06-06T02:00:00.000Z"),
+    intervalHours: 168,
+    preferredCheckinTime: "09:00",
+    timezone: "Australia/Perth",
+    lastTimeIsCheckin: true,
+  });
+  assert.ok(oldWeeklyMissedOccurrence, "old weekly account with stale last check-in should produce a current missed occurrence");
+  assert.equal(
+    oldWeeklyMissedOccurrence!.dueTime.toISOString(),
+    "2026-06-05T01:00:00.000Z",
+    "old weekly account missed occurrence must project to the current anchored Friday 09:00 Perth window",
+  );
+  assert.equal(
+    oldWeeklyMissedOccurrence!.nextDueTime.toISOString(),
+    "2026-06-12T01:00:00.000Z",
+    "old weekly account missed occurrence must advance to the next anchored weekly slot",
+  );
+
   // ── Global timezone correctness ─────────────────────────────────────────────
   // StillHere must schedule check-ins correctly for all users globally.
   // Reference "now": 2026-05-29T07:11:00Z (Friday, globally consistent baseline)
