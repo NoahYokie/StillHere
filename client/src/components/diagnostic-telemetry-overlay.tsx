@@ -41,7 +41,7 @@ function box(el: Element | null): Box {
 export function DiagnosticTelemetryOverlay() {
   const probeRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("collecting…");
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     const collect = () => {
