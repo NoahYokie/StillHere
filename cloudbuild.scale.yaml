@@ -1,0 +1,47 @@
+substitutions:
+  _REGION: australia-southeast1
+  _SERVICE: stillhere-web
+  _ARTIFACT_REPO: stillhere
+  _MIN_INSTANCES: "5"
+  _MAX_INSTANCES: "250"
+  _CONCURRENCY: "80"
+  _CPU: "4"
+  _MEMORY: "4Gi"
+  _DB_POOL_MAX: "3"
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/${_SERVICE}:$BUILD_ID
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/${_SERVICE}:$BUILD_ID
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/${_SERVICE}:$BUILD_ID
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --min-instances=${_MIN_INSTANCES}
+      - --max-instances=${_MAX_INSTANCES}
+      - --concurrency=${_CONCURRENCY}
+      - --cpu=${_CPU}
+      - --memory=${_MEMORY}
+      - --timeout=300
+      - --set-env-vars=NODE_ENV=production,BASE_URL=https://stillhere.health,BRAND_BASE_URL=https://stillhere.health,DB_POOL_MAX=${_DB_POOL_MAX},DB_POOL_CONNECTION_TIMEOUT_MS=5000,DB_POOL_IDLE_TIMEOUT_MS=30000,DB_STATEMENT_TIMEOUT_MS=15000,INTERNAL_CRON_ENABLED=true,TWILIO_SMS_MAX_CONCURRENT=5,TWILIO_VOICE_MAX_CONCURRENT=2,MAX_OUTBOUND_SMS_PER_HOUR=500,MAX_OUTBOUND_CALLS_PER_HOUR=100,MAX_OUTBOUND_PUSH_PER_HOUR=5000,MAX_OUTBOUND_EMAILS_PER_HOUR=2000
+      - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:stillhere-prod
+      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,OUTBOUND_LOG_SECRET=OUTBOUND_LOG_SECRET:latest,GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,EMAIL_FROM=EMAIL_FROM:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,TWILIO_MESSAGING_SERVICE_SID=TWILIO_MESSAGING_SERVICE_SID:latest,TWILIO_PHONE_NUMBER=TWILIO_PHONE_NUMBER:latest,TWILIO_VOICE_PHONE_NUMBER=TWILIO_VOICE_PHONE_NUMBER:latest,VAPID_PUBLIC_KEY=VAPID_PUBLIC_KEY:latest,VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest,APNS_KEY_ID=APNS_KEY_ID:latest,APNS_TEAM_ID=APNS_TEAM_ID:latest,APNS_AUTH_KEY=APNS_AUTH_KEY:latest
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REPO}/${_SERVICE}:$BUILD_ID

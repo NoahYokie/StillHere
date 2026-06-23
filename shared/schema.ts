@@ -165,7 +165,10 @@ export const users = pgTable("users", {
   // supported in v1; no parental consent flow exists.
   ageGateAcceptedAt: timestamp("age_gate_accepted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("users_safety_state_idx").on(table.safetyState, table.safetyStateChangedAt),
+  index("users_last_heartbeat_idx").on(table.lastHeartbeatAt),
+]);
 
 export const usersRelations = relations(users, ({ one, many }) => ({
   settings: one(settings),
@@ -282,7 +285,9 @@ export const checkins = pgTable("checkins", {
   lng: doublePrecision("lng"),
   timezone: text("timezone"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("checkins_user_created_idx").on(table.userId, table.createdAt),
+]);
 
 export const checkinsRelations = relations(checkins, ({ one }) => ({
   user: one(users, {
@@ -339,6 +344,8 @@ export const incidents = pgTable("incidents", {
   deliveryFailed: boolean("delivery_failed").notNull().default(false),
 }, (table) => [
   index("incidents_user_id_idx").on(table.userId),
+  index("incidents_user_status_idx").on(table.userId, table.status),
+  index("incidents_user_reason_status_idx").on(table.userId, table.reason, table.status),
   index("incidents_status_idx").on(table.status),
   index("incidents_status_next_action_idx").on(table.status, table.nextActionAt),
   index("incidents_escalation_processing_lock_idx").on(table.processingLockId, table.processingLockedAt),
@@ -410,7 +417,10 @@ export const authSessions = pgTable("auth_sessions", {
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("auth_sessions_user_id_idx").on(table.userId),
+  index("auth_sessions_expires_at_idx").on(table.expiresAt),
+]);
 
 export const authSessionsRelations = relations(authSessions, ({ one }) => ({
   user: one(users, {
@@ -444,7 +454,10 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("push_subscriptions_user_id_idx").on(table.userId),
+  index("push_subscriptions_endpoint_idx").on(table.endpoint),
+]);
 
 export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
   user: one(users, {
@@ -466,7 +479,11 @@ export const locationSessions = pgTable("location_sessions", {
   lastAccuracy: real("last_accuracy"),
   lastTimestamp: timestamp("last_timestamp"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("location_sessions_user_active_idx").on(table.userId, table.active),
+  index("location_sessions_incident_idx").on(table.incidentId),
+  index("location_sessions_expires_at_idx").on(table.expiresAt),
+]);
 
 export const locationSessionsRelations = relations(locationSessions, ({ one }) => ({
   user: one(users, {
