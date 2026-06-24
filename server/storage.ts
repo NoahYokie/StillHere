@@ -260,6 +260,162 @@ function getTimezoneOffsetMs(date: Date, tz: string): number {
   return new Date(tzStr).getTime() - new Date(utcStr).getTime();
 }
 
+type LocalDateParts = { year: number; month: number; day: number };
+type LocalDateTimeParts = LocalDateParts & { hour: number; minute: number };
+
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
+
+function parsePreferredCheckinTime(value: string | null | undefined): { hour: number; minute: number } {
+  const pref = (value || "09:00").trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(pref);
+  return {
+    hour: Math.max(0, Math.min(23, m ? parseInt(m[1], 10) : 9)),
+    minute: Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0)),
+  };
+}
+
+function localDateOrdinal(parts: LocalDateParts): number {
+  return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / DAY_MS);
+}
+
+function localDateFromOrdinal(ordinal: number): LocalDateParts {
+  const date = new Date(ordinal * DAY_MS);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+function localDateTimeEpoch(parts: LocalDateTimeParts): number {
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+}
+
+function getLocalDateTimeParts(date: Date, tz: string): LocalDateTimeParts {
+  const fmt = getLocalDateTimeFormatter(tz);
+  const out: Record<string, number> = {};
+  for (const part of fmt.formatToParts(date)) {
+    if (part.type === "year" || part.type === "month" || part.type === "day" || part.type === "hour" || part.type === "minute") {
+      out[part.type] = Number(part.value);
+    }
+  }
+  return {
+    year: out.year,
+    month: out.month,
+    day: out.day,
+    hour: out.hour,
+    minute: out.minute,
+  };
+}
+
+const localDateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getLocalDateTimeFormatter(tz: string): Intl.DateTimeFormat {
+  const cached = localDateTimeFormatters.get(tz);
+  if (cached) return cached;
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  localDateTimeFormatters.set(tz, fmt);
+  return fmt;
+}
+
+function isSameLocalMinute(actual: LocalDateTimeParts, target: LocalDateTimeParts): boolean {
+  return actual.year === target.year
+    && actual.month === target.month
+    && actual.day === target.day
+    && actual.hour === target.hour
+    && actual.minute === target.minute;
+}
+
+function zonedLocalTimeToDate(parts: LocalDateTimeParts, tz: string): Date {
+  let guess = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute));
+  const targetEpoch = localDateTimeEpoch(parts);
+
+  for (let i = 0; i < 4; i++) {
+    const actual = getLocalDateTimeParts(guess, tz);
+    if (isSameLocalMinute(actual, parts)) return guess;
+    const delta = targetEpoch - localDateTimeEpoch(actual);
+    guess = new Date(guess.getTime() + delta);
+  }
+
+  // For a skipped DST local minute, choose the earliest real instant after the
+  // requested wall-clock minute. This keeps the search bounded and explicit.
+  const start = guess.getTime() - 3 * HOUR_MS;
+  const end = guess.getTime() + 3 * HOUR_MS;
+  for (let t = start; t <= end; t += MINUTE_MS) {
+    const candidate = new Date(t);
+    const actual = getLocalDateTimeParts(candidate, tz);
+    if (localDateTimeEpoch(actual) >= targetEpoch) return candidate;
+  }
+
+  return guess;
+}
+
+function computeBoundedDailyLikeCheckinWindow(opts: {
+  userCreatedAt: Date;
+  now: Date;
+  intervalHours: number;
+  preferredCheckinTime: string | null | undefined;
+  timezone: string | null | undefined;
+}): { dueTime: Date; nextDueTime: Date } {
+  const tz = opts.timezone || "UTC";
+  const { hour, minute } = parsePreferredCheckinTime(opts.preferredCheckinTime);
+  const stepDays = Math.max(1, normalizeCheckinIntervalHours(opts.intervalHours) / 24);
+  const anchorParts = getLocalDateTimeParts(opts.userCreatedAt, tz);
+  const nowParts = getLocalDateTimeParts(opts.now, tz);
+  const anchorOrdinal = localDateOrdinal(anchorParts);
+  const nowOrdinal = localDateOrdinal(nowParts);
+  const candidateForCycle = (cycle: number): Date => {
+    const dateParts = localDateFromOrdinal(anchorOrdinal + cycle * stepDays);
+    return zonedLocalTimeToDate({ ...dateParts, hour, minute }, tz);
+  };
+
+  const firstCycle = candidateForCycle(0) <= opts.userCreatedAt ? 1 : 0;
+  const approxCycle = Math.max(firstCycle, Math.floor((nowOrdinal - anchorOrdinal) / stepDays));
+
+  for (let offset = -4; offset <= 4; offset++) {
+    const cycle = Math.max(firstCycle, approxCycle + offset);
+    const dueTime = candidateForCycle(cycle);
+    const nextDueTime = candidateForCycle(cycle + 1);
+    if (dueTime <= opts.now && opts.now < nextDueTime) {
+      return { dueTime, nextDueTime };
+    }
+  }
+
+  const dueTime = candidateForCycle(approxCycle);
+  if (dueTime > opts.now && approxCycle > firstCycle) {
+    return { dueTime: candidateForCycle(approxCycle - 1), nextDueTime: dueTime };
+  }
+  return { dueTime, nextDueTime: candidateForCycle(approxCycle + 1) };
+}
+
+function computeBoundedElapsedCheckinWindow(opts: {
+  userCreatedAt: Date;
+  now: Date;
+  intervalHours: number;
+}): { dueTime: Date; nextDueTime: Date } {
+  const intervalMs = normalizeCheckinIntervalHours(opts.intervalHours) * HOUR_MS;
+  const elapsedCycles = Math.max(1, Math.floor((opts.now.getTime() - opts.userCreatedAt.getTime()) / intervalMs));
+  const dueTime = new Date(opts.userCreatedAt.getTime() + elapsedCycles * intervalMs);
+  const nextDueTime = new Date(dueTime.getTime() + intervalMs);
+  if (opts.now < dueTime && elapsedCycles > 1) {
+    return {
+      dueTime: new Date(dueTime.getTime() - intervalMs),
+      nextDueTime: dueTime,
+    };
+  }
+  return { dueTime, nextDueTime };
+}
+
 // Compute the next check-in due moment as the next occurrence of the user's
 // preferred local time-of-day in their timezone, strictly after `lastTime`.
 // For sub-daily intervals (< 24h, or non-daily multiples) we fall back to
@@ -331,51 +487,23 @@ export function computeMissedCheckinOccurrence(opts: {
   lastTimeIsCheckin?: boolean;
 }): { dueTime: Date; nextDueTime: Date; occurrenceKey: string } | null {
   const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
-  let dueTime = computeNextCheckinDue({
-    lastTime: opts.scheduleAnchorTime || opts.lastTime,
-    scheduleAnchorTime: opts.scheduleAnchorTime,
-    intervalHours,
-    preferredCheckinTime: opts.preferredCheckinTime,
-    timezone: opts.timezone,
-    lastTimeIsCheckin: false,
-  });
+  const userCreatedAt = opts.scheduleAnchorTime || opts.lastTime;
+  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
+  const { dueTime, nextDueTime } = isDailyLike
+    ? computeBoundedDailyLikeCheckinWindow({
+        userCreatedAt,
+        now: opts.now,
+        intervalHours,
+        preferredCheckinTime: opts.preferredCheckinTime,
+        timezone: opts.timezone,
+      })
+    : computeBoundedElapsedCheckinWindow({
+        userCreatedAt,
+        now: opts.now,
+        intervalHours,
+      });
 
-  if (opts.now <= dueTime) return null;
-
-  let nextDueTime = computeNextCheckinDue({
-    lastTime: dueTime,
-    scheduleAnchorTime: opts.scheduleAnchorTime || opts.lastTime,
-    intervalHours,
-    preferredCheckinTime: opts.preferredCheckinTime,
-    timezone: opts.timezone,
-    lastTimeIsCheckin: false,
-  });
-
-  let safety = 0;
-  while (opts.now > nextDueTime && safety < 400) {
-    dueTime = nextDueTime;
-    nextDueTime = computeNextCheckinDue({
-      lastTime: dueTime,
-      scheduleAnchorTime: opts.scheduleAnchorTime || opts.lastTime,
-      intervalHours,
-      preferredCheckinTime: opts.preferredCheckinTime,
-      timezone: opts.timezone,
-      lastTimeIsCheckin: false,
-    });
-    safety++;
-  }
-
-  if (opts.now > nextDueTime) {
-    const projected = computeCheckinDueWindowAroundNow({
-      userCreatedAt: opts.scheduleAnchorTime || opts.lastTime,
-      now: opts.now,
-      intervalHours,
-      preferredCheckinTime: opts.preferredCheckinTime,
-      timezone: opts.timezone,
-    });
-    dueTime = projected.dueTime;
-    nextDueTime = projected.nextDueTime;
-  }
+  if (opts.now < dueTime || opts.now >= nextDueTime) return null;
 
   if (opts.lastTimeIsCheckin && isCheckinWithinDueWindow(opts.lastTime, dueTime, nextDueTime, opts.timezone)) {
     return null;
@@ -446,88 +574,6 @@ export function computeFutureCheckinDueFromNow(opts: {
   }
 
   return candidate > opts.now ? candidate : addHours(opts.now, intervalHours);
-}
-
-function computeCheckinDueWindowAroundNow(opts: {
-  userCreatedAt: Date;
-  now: Date;
-  intervalHours: number;
-  preferredCheckinTime: string | null | undefined;
-  timezone: string | null | undefined;
-}): { dueTime: Date; nextDueTime: Date } {
-  const intervalHours = normalizeCheckinIntervalHours(opts.intervalHours);
-  const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
-  if (!isDailyLike) {
-    const intervalMs = intervalHours * 3_600_000;
-    const elapsedCycles = Math.max(0, Math.floor((opts.now.getTime() - opts.userCreatedAt.getTime()) / intervalMs));
-    let dueTime = new Date(opts.userCreatedAt.getTime() + elapsedCycles * intervalMs);
-    let nextDueTime = new Date(dueTime.getTime() + intervalMs);
-    while (dueTime > opts.now) {
-      nextDueTime = dueTime;
-      dueTime = new Date(dueTime.getTime() - intervalMs);
-    }
-    while (nextDueTime < opts.now) {
-      dueTime = nextDueTime;
-      nextDueTime = new Date(nextDueTime.getTime() + intervalMs);
-    }
-    return { dueTime, nextDueTime };
-  }
-
-  const tz = opts.timezone || "UTC";
-  const pref = (opts.preferredCheckinTime || "09:00").trim();
-  const m = /^(\d{1,2}):(\d{2})$/.exec(pref);
-  const targetH = Math.max(0, Math.min(23, m ? parseInt(m[1], 10) : 9));
-  const targetM = Math.max(0, Math.min(59, m ? parseInt(m[2], 10) : 0));
-  const stepDays = intervalHours / 24;
-  const stepMs = stepDays * 86_400_000;
-  const anchorDayStart = startOfDayInTimezone(opts.userCreatedAt, tz);
-  const nowDayStart = startOfDayInTimezone(opts.now, tz);
-  const approxDaysSinceAnchor = Math.max(
-    0,
-    Math.floor((nowDayStart.getTime() - anchorDayStart.getTime()) / 86_400_000),
-  );
-  let cycle = Math.max(0, Math.floor(approxDaysSinceAnchor / stepDays) - 2);
-
-  const candidateForCycle = (candidateCycle: number): Date => {
-    const probe = new Date(anchorDayStart.getTime() + candidateCycle * stepMs + 12 * 3_600_000);
-    const dayStart = startOfDayInTimezone(probe, tz);
-    return new Date(dayStart.getTime() + targetH * 3_600_000 + targetM * 60_000);
-  };
-
-  let dueTime = candidateForCycle(cycle);
-  while (dueTime > opts.now && cycle > 0) {
-    cycle--;
-    dueTime = candidateForCycle(cycle);
-  }
-
-  let nextDueTime = candidateForCycle(cycle + 1);
-  let safety = 0;
-  while (nextDueTime < opts.now && safety < 12) {
-    cycle++;
-    dueTime = nextDueTime;
-    nextDueTime = candidateForCycle(cycle + 1);
-    safety++;
-  }
-
-  if (nextDueTime < opts.now) {
-    nextDueTime = computeFutureCheckinDueFromNow({
-      userCreatedAt: opts.userCreatedAt,
-      now: opts.now,
-      intervalHours,
-      preferredCheckinTime: opts.preferredCheckinTime,
-      timezone: opts.timezone,
-    });
-    dueTime = computeNextCheckinDue({
-      lastTime: new Date(nextDueTime.getTime() - stepMs - 12 * 3_600_000),
-      scheduleAnchorTime: opts.userCreatedAt,
-      intervalHours,
-      preferredCheckinTime: opts.preferredCheckinTime,
-      timezone: opts.timezone,
-      lastTimeIsCheckin: false,
-    });
-  }
-
-  return { dueTime, nextDueTime };
 }
 
 export function isCheckinLeaseClaimable(opts: {
@@ -2878,13 +2924,22 @@ export class DatabaseStorage implements IStorage {
           localDueLabel,
         });
       } else {
-        const nextDue = computeAnchoredNextCheckinDue({
-          userCreatedAt: user.createdAt,
-          lastCheckinAt: row.lastCheckinAt || null,
-          intervalHours: userSettings.checkinIntervalHours,
-          preferredCheckinTime: userSettings.preferredCheckinTime,
-          timezone: user.timezone,
-        });
+        const intervalHours = normalizeCheckinIntervalHours(userSettings.checkinIntervalHours);
+        const isDailyLike = intervalHours >= 24 && intervalHours % 24 === 0;
+        const currentWindow = isDailyLike
+          ? computeBoundedDailyLikeCheckinWindow({
+              userCreatedAt: user.createdAt,
+              now,
+              intervalHours,
+              preferredCheckinTime: userSettings.preferredCheckinTime,
+              timezone: user.timezone,
+            })
+          : computeBoundedElapsedCheckinWindow({
+              userCreatedAt: user.createdAt,
+              now,
+              intervalHours,
+            });
+        const nextDue = now < currentWindow.dueTime ? currentWindow.dueTime : currentWindow.nextDueTime;
         await db
           .update(settings)
           .set({
