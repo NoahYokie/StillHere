@@ -35,8 +35,12 @@ function expectWindow(label: string, result: any, dueTime: string, nextDueTime: 
 try {
   const anchor = "2026-01-01T00:00:00.000Z";
 
+  // Task 15.9F council-ratified boundary convention:
+  // canonical occurrence windows are [due, next).
+  // Exact due belongs to the current occurrence; exact nextDue belongs to the
+  // next occurrence. Do not restore the old (due, next] behavior.
   expectWindow(
-    "now exactly equals dueTime",
+    "[due,next) canonical: now exactly equals dueTime resolves to current occurrence",
     occurrence({ anchor, now: "2026-01-03T09:00:00.000Z", preferredCheckinTime: "09:00", timezone: "UTC" }),
     "2026-01-03T09:00:00.000Z",
     "2026-01-04T09:00:00.000Z",
@@ -70,7 +74,7 @@ try {
     "2026-01-04T09:00:00.000Z",
   );
   expectWindow(
-    "now exactly equals nextDueTime starts next window",
+    "[due,next) canonical: now exactly equals nextDueTime resolves to next occurrence",
     occurrence({ anchor, now: "2026-01-04T09:00:00.000Z", preferredCheckinTime: "09:00", timezone: "UTC" }),
     "2026-01-04T09:00:00.000Z",
     "2026-01-05T09:00:00.000Z",
@@ -119,6 +123,51 @@ try {
     "lastCheckinAt 1ms before dueTime satisfies the window under the existing same-local-day early check-in rule",
   );
 
+  const straddleAnchor = "2026-01-01T00:00:00.000Z";
+  const straddlePreviousDue = "2026-01-02T09:00:00.000Z";
+  const straddleDue = "2026-01-03T09:00:00.000Z";
+  const straddleNextDue = "2026-01-04T09:00:00.000Z";
+  const beforeStraddle = occurrence({
+    anchor: straddleAnchor,
+    lastTime: straddlePreviousDue,
+    now: "2026-01-03T08:59:59.999Z",
+    preferredCheckinTime: "09:00",
+    timezone: "UTC",
+    lastTimeIsCheckin: true,
+  });
+  const afterStraddle = occurrence({
+    anchor: straddleAnchor,
+    lastTime: straddlePreviousDue,
+    now: "2026-01-03T09:00:00.001Z",
+    preferredCheckinTime: "09:00",
+    timezone: "UTC",
+    lastTimeIsCheckin: true,
+  });
+  const repeatedAfterStraddle = occurrence({
+    anchor: straddleAnchor,
+    lastTime: straddlePreviousDue,
+    now: "2026-01-03T09:00:00.500Z",
+    preferredCheckinTime: "09:00",
+    timezone: "UTC",
+    lastTimeIsCheckin: true,
+  });
+  assert.equal(
+    beforeStraddle,
+    null,
+    "boundary-straddle dedup: worker just before dueTime does not enter the next cycle when prior cycle is satisfied",
+  );
+  expectWindow(
+    "boundary-straddle dedup: worker just after dueTime enters one deterministic current occurrence",
+    afterStraddle,
+    straddleDue,
+    straddleNextDue,
+  );
+  assert.equal(
+    repeatedAfterStraddle?.occurrenceKey,
+    afterStraddle?.occurrenceKey,
+    "boundary-straddle dedup: repeated post-boundary evaluations use the same occurrenceKey for the same logical cycle",
+  );
+
   expectWindow(
     "spring-forward skipped local hour resolves to first valid local time after skip",
     occurrence({
@@ -152,6 +201,28 @@ try {
     "2026-01-03T03:30:00.000Z",
     "2026-01-04T03:30:00.000Z",
   );
+  expectWindow(
+    "[due,next) DST exact boundary: skipped local hour due instant belongs to current occurrence",
+    occurrence({
+      anchor: "2026-03-01T05:00:00.000Z",
+      now: "2026-03-08T07:00:00.000Z",
+      preferredCheckinTime: "02:30",
+      timezone: "America/New_York",
+    }),
+    "2026-03-08T07:00:00.000Z",
+    "2026-03-09T06:30:00.000Z",
+  );
+  expectWindow(
+    "[due,next) DST exact nextDue boundary: next due instant starts the next occurrence",
+    occurrence({
+      anchor: "2026-03-01T05:00:00.000Z",
+      now: "2026-03-09T06:30:00.000Z",
+      preferredCheckinTime: "02:30",
+      timezone: "America/New_York",
+    }),
+    "2026-03-09T06:30:00.000Z",
+    "2026-03-10T06:30:00.000Z",
+  );
 
   expectWindow(
     "ancient daily account resolves to current intended window",
@@ -165,6 +236,32 @@ try {
     }),
     "2026-06-24T08:00:00.000Z",
     "2026-06-25T08:00:00.000Z",
+  );
+  expectWindow(
+    "[due,next) long-stale exact due boundary resolves to current occurrence",
+    occurrence({
+      anchor: "2016-06-01T00:00:00.000Z",
+      lastTime: "2018-01-01T08:00:00.000Z",
+      now: "2026-06-24T08:00:00.000Z",
+      preferredCheckinTime: "18:00",
+      timezone: "Australia/Sydney",
+      lastTimeIsCheckin: true,
+    }),
+    "2026-06-24T08:00:00.000Z",
+    "2026-06-25T08:00:00.000Z",
+  );
+  expectWindow(
+    "[due,next) long-stale exact nextDue boundary resolves to next occurrence",
+    occurrence({
+      anchor: "2016-06-01T00:00:00.000Z",
+      lastTime: "2018-01-01T08:00:00.000Z",
+      now: "2026-06-25T08:00:00.000Z",
+      preferredCheckinTime: "18:00",
+      timezone: "Australia/Sydney",
+      lastTimeIsCheckin: true,
+    }),
+    "2026-06-25T08:00:00.000Z",
+    "2026-06-26T08:00:00.000Z",
   );
   assert.equal(
     occurrence({
