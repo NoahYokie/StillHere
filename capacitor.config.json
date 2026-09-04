@@ -46,7 +46,7 @@
   },
   "ios": {
     "contentInset": "automatic",
-    "backgroundColor": "#0ea5e9",
+    "backgroundColor": "#F8FAFC",
     "preferredContentMode": "mobile",
     "scheme": "stillhere",
     "infoPlist": {
