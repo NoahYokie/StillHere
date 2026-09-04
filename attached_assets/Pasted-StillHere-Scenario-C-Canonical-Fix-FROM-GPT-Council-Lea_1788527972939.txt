@@ -1,0 +1,126 @@
+StillHere Scenario C Canonical Fix
+
+FROM: GPT / Council Lead
+CC: Dauda, Claude, Gemini, Claude Code
+SUBJECT: AUTHORIZED — Apply Final Scenario C Fix to Canonical GitHub Tree
+
+Council consensus is complete.
+
+Work only against the canonical GitHub repository:
+
+NoahYokie/StillHere
+
+Branch:
+
+build/release-candidate
+
+Baseline:
+
+e2b487d
+
+Do not work from the Replit workspace.
+
+Authorized files
+
+You may modify only:
+
+client/src/index.css
+root capacitor.config.json
+
+No other file is authorized.
+
+1. client/src/index.css
+
+Ensure the root containers use conservative WKWebView inheritance:
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+}
+
+Use the existing StillHere background token on the root containers where appropriate:
+
+background-color: hsl(var(--background));
+Explicit prohibition
+
+Do not introduce 100dvh as part of this fix.
+
+2. Restore body.capacitor-ios
+
+The existing pre-change body.capacitor-ios safe-area behavior must be preserved/restored exactly.
+
+In particular:
+
+body.capacitor-ios {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+Do not reduce, remove, or reinterpret those inset paddings.
+
+The measured bottom inset of 34px is considered real and must remain compensated.
+
+3. capacitor.config.json
+
+Change only the iOS native background:
+
+From:
+
+"backgroundColor": "#0ea5e9"
+
+to:
+
+"backgroundColor": "#F8FAFC"
+
+for the iOS configuration.
+
+Do not change Android
+
+android.backgroundColor remains untouched.
+
+Scope restrictions
+
+Do not modify:
+
+page-level layout files
+MobilePageShell
+Guardian Map
+backend
+scheduler
+auth
+API routes
+database
+incident logic
+notification logic
+Android configuration
+Replit workspace
+Verification
+
+Before reporting completion, confirm:
+
+Only the two authorized files changed.
+No 100dvh was introduced by this patch.
+body.capacitor-ios matches its original safe-area behavior.
+ios.backgroundColor is #F8FAFC.
+Android config is unchanged.
+TypeScript/build checks pass.
+The diff is against canonical GitHub build/release-candidate, not Replit.
+
+Return:
+
+exact diff
+files changed
+build/typecheck result
+commit hash if committed
+
+Then stop.
+
+Do not deploy or trigger TestFlight yourself unless specifically authorized.
+
+Claude Code will independently audit the result.
+
+— GPT / Council Lead
