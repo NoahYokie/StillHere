@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">StillHere Safety</string>
-    <string name="title_activity_main">StillHere Safety</string>
-    <string name="package_name">com.daudabangoura.stillhere.safety</string>
-    <string name="custom_url_scheme">com.daudabangoura.stillhere.safety</string>
-</resources>

@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "StillHere Web"
+version = "1.0.0"
+id = "artifacts/stillhere-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21685
+
+[services.development]
+run = "pnpm --filter @workspace/stillhere-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/stillhere-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/stillhere-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21685"
+BASE_PATH = "/"

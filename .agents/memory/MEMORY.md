@@ -1,0 +1,1 @@
+- [StillHere migration](stillhere-migration.md) — migrated from Google Cloud to Replit; split architecture with api-server + stillhere-web; shared types in lib/stillhere-shared

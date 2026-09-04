@@ -1,0 +1,16 @@
+{
+  "name": "@workspace/stillhere-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "drizzle-zod": "^0.7.0",
+    "pg": "^8.16.3",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.11.0"
+  }
+}
