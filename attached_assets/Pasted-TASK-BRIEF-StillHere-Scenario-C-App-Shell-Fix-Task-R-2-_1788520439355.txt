@@ -1,0 +1,94 @@
+TASK BRIEF â€” StillHere Scenario C App-Shell Fix, Task R-2
+(Council-authorized by GPT / Council Lead. Codex is no longer on this project; you hold the
+implementation seat. Claude Code audits your diff read-only before any deployment or TestFlight.)
+
+OBJECTIVE
+Remove the persistent blue native gap at the top/bottom of the iOS Capacitor app, by making the web
+root fully own the WebView canvas and making the native iOS background match the real StillHere app
+background.
+
+TWO CORRECTIONS TO THE COUNCIL BRIEF â€” I inspected the tree, these are confirmed facts.
+
+  1. The council brief says modify `capacitor.config.ts`. THAT FILE DOES NOT EXIST. The real file is
+     `capacitor.config.json` (repo root). The brief explicitly permits the differently-named
+     equivalent when inspection proves it. It does. Use `capacitor.config.json`.
+
+  2. The brief says "do not guess the colour." You do not have to. I resolved it from the theme
+     source. `client/src/index.css` defines:
+         :root  --background: 210 40% 98%   ->  #F8FAFC   (light, the app default)
+         .dark  --background: 222 47% 8%    ->  #0B111E   (dark)
+     Use **#F8FAFC**. Do not invent a colour, do not sample a screenshot.
+
+AUTHORIZED SCOPE â€” exactly two files. Nothing else.
+  - `client/src/index.css`
+  - `capacitor.config.json`
+
+CHANGE 1 â€” root stylesheet (`client/src/index.css`)
+Ensure `html`, `body` and `#root` all get `height: 100%` and `min-height: 100%`.
+The existing blocks are at the top of the file and currently set width/overflow only:
+    line 27  html { width:100%; min-width:0; max-width:100%; overflow-x:hidden; font-size:16px; ... }
+    line 37  body, #root { width:100%; min-width:0; max-width:100%; overflow-x:hidden; }
+Add the height declarations to those existing blocks (or an adjacent block covering the same three
+selectors). Also give `html` the app background so the root cannot expose an unintended fallback:
+    background-color: hsl(var(--background));
+Verify that token form against `tailwind.config.*` before using it - the file stores `--background`
+as a bare "H S% L%" triplet, so it must be wrapped in `hsl()` in raw CSS. `body` already gets it via
+`@apply bg-background`; `html` is the one currently missing it.
+
+CHANGE 2 â€” `capacitor.config.json`
+Set the iOS native background to the app background:
+    "ios": { "backgroundColor": "#0ea5e9" }   ->   "#F8FAFC"
+This is the native strip outside the WebView canvas, which is why Capacitor blue shows through during
+paint and transitions.
+
+  - ALSO REPORT (do not change without saying so): `StatusBar.backgroundColor` and
+    `SplashScreen.backgroundColor` are ALSO `#0ea5e9`, and `android.backgroundColor` is `#0ea5e9`.
+    The council brief authorizes the iOS background. State clearly in your report which of these you
+    changed and which you left, so the audit can see the intent. Do not touch `android`.
+  - NOTE FOR THE COUNCIL, report it, do not act on it: `StatusBar.style` is `"Light"`. In Capacitor
+    that means "light background, dark text", which is CORRECT once the background becomes #F8FAFC.
+    Flag it if you find evidence otherwise.
+
+HARD PROHIBITIONS
+  - **Do not introduce `100dvh` anywhere.** There is a known regression with it in nested layouts.
+    BASELINE FOR THE AUDIT, recorded now: `100dvh` already exists in exactly two PAGE-LEVEL files,
+    `client/src/pages/chat.tsx:887` and `client/src/pages/landing.tsx:353`. Those are pre-existing,
+    they are out of scope, and you must NOT touch them. The audit will treat any third occurrence as
+    a failure.
+  - **`body.capacitor-ios` must stay byte-for-byte identical.** It is at `client/src/index.css`
+    lines 67-79 and carries all four `env(safe-area-inset-*)` paddings. The
+    `padding-bottom: env(safe-area-inset-bottom)` behaviour must remain intact. If your editor
+    reformats it at all, say so explicitly in your report.
+  - Do not modify: safe-area padding rules, MobilePageShell, any page-level layout, component CSS,
+    Guardian Map layout, backend code, API routes, scheduler logic, incident logic, database, auth,
+    or notification systems.
+
+BRANCH / GIT â€” READ THIS CAREFULLY
+The council directed this fix at GitHub `NoahYokie/StillHere`, branch `build/release-candidate`, and
+explicitly said **do not use or merge the divergent `replit-agent` branch.**
+
+  - **Make the change in the working tree and STOP. Do NOT commit. Do NOT push. Do NOT open a PR.**
+  - Then report: which branch this repl's git is currently on, whether a GitHub remote is configured,
+    and whether `build/release-candidate` is reachable from here.
+  - If these two files do not exist at the paths above in this workspace (the migration restructured
+    the frontend under `artifacts/stillhere-web/`), **STOP IMMEDIATELY and report that** with the real
+    paths you find. Do not improvise a different location.
+
+VALIDATION BEFORE HANDOFF â€” static/local only
+  - Diff contains ONLY the two authorized files.
+  - No `100dvh` introduced (grep and show the count).
+  - `body.capacitor-ios` unchanged.
+  - Web build still succeeds.
+  - `capacitor.config.json` is still valid JSON (parse it and show the result).
+  - No backend files changed.
+  - **Do NOT claim real-device success.** That belongs to TestFlight validation with Dauda.
+  - Do not deploy or republish. stillhere.health is live.
+
+DELIVERABLE â€” return exactly this
+  1. Exact files changed.
+  2. Concise before/after explanation.
+  3. The full diff.
+  4. Build result (real command, real output pasted).
+  5. Git branch + remote status. NO commit hash, because you are not committing.
+  6. Anything that prevented strict scope compliance.
+Then stop. Label anything unverified as unverified.
