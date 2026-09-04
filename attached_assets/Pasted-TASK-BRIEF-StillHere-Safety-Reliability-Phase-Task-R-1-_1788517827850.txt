@@ -1,0 +1,91 @@
+TASK BRIEF â€” StillHere Safety Reliability Phase, Task R-1
+(from the StillHere Council, via Claude Code in the auditor role)
+
+STATUS UPDATE FIRST â€” two things in your earlier assessment have changed.
+
+1. The missing tests are NO LONGER MISSING. Your read-only assessment correctly found no
+   backend test directory, no *.test.ts files and no operational scripts. That has since been
+   fixed. All 10 council-approved test files are now in artifacts/api-server/test/ and all 11
+   scripts are in artifacts/api-server/script/. They were md5-verified against the council's
+   approved blobs: 10 matching, 0 failures. Do NOT go looking for them again, and do NOT
+   recreate them.
+
+2. The suite currently runs 9 PASS / 1 FAIL, and that is the expected baseline. The single
+   failure is test/wellness-call-intelligence.test.ts. It is a stale test, not a code defect,
+   and it is awaiting a council decision. DO NOT "fix" it. Leave it red.
+
+HOW TO RUN THE SUITE (this matters â€” the obvious way fails):
+
+    cd artifacts/api-server && npx tsx test/<name>.test.ts
+
+Running from the workspace root fails with "Cannot find '@shared/schema'", because server/db.ts
+needs the tsconfig alias and tsx will not resolve it from the root. Always cd into the artifact
+first.
+
+WHAT THE AUDIT FOUND â€” the real gap
+
+The problem is not that tests are missing. It is that every existing test is a pure-function or
+payload-shape test. Not one of them exercises an HTTP route, the database, a worker loop, or a
+notification provider.
+
+    192 routes in server/routes.ts.  0 route tests.
+    ~1,562 test lines total, of which 1,106 (71%) are the check-in scheduler.
+    Guardian authorization: zero coverage.  Location reliability: zero coverage.
+
+So the assignment is not "write more tests." It is "build the missing test LAYER that makes the
+safety-critical paths testable at all."
+
+YOUR TASK â€” R-1. Three deliverables, in this order.
+
+R-1a. Provider mock helpers.
+  Create artifacts/api-server/test/helpers/providers.ts.
+  Model it on the stubbing pattern already used in test/outbound-policy-phase11.test.ts â€” read
+  that file first, it is the reference implementation and it is hermetic (no Postgres, no
+  network). Provide in-memory mocks for sendSms, sendEmail, sendPush and sendVoip, each
+  supporting four modes: success, hard-fail, transient-fail, and timeout. Each mock records the
+  calls it received so a test can assert ordering and recipients.
+
+R-1b. In-process route harness.
+  Create artifacts/api-server/test/helpers/app-harness.ts.
+  It mounts the Express app in-process against a stubbed storage layer and drives it with fetch.
+  No network, no real database, no real providers. Provide a way to set the authenticated user
+  per request so authorization can be tested from both sides of a boundary.
+
+R-1c. First route test â€” guardian authorization.
+  Create artifacts/api-server/test/guardian-authorization.test.ts using the harness.
+  Cover, at minimum:
+    - A guardian WITH permission can read a watched user's location.
+    - A user with NO relationship gets 403.
+    - A contact with canViewLocation === false gets 403.
+    - Removing a contact immediately revokes access.
+    - A user can always read their own location.
+  The relevant guard is checkWatcherLocationPermission in server/routes.ts, which delegates to
+  getWatcherContact and honours canViewLocation !== false. Test the BEHAVIOUR through the route,
+  not the internals.
+
+HARD CONSTRAINTS FOR THIS TASK
+
+  - ADD TEST FILES ONLY. Do not modify anything under server/, lib/, or artifacts/stillhere-web/.
+    If a route turns out to be untestable without a production-code change, STOP and report what
+    change would be needed and why. Do not make it.
+  - Feature 1 (the Check-In Engine) is FROZEN: scheduling, escalation, SMS, wellness calls,
+    emergency email, the emergency web page, guardian notifications, the guardian thread, and
+    emergency-contact fanout. Tests may observe it. Nothing may modify it.
+  - DO NOT DEPLOY OR REPUBLISH. stillhere.health is live and serving real users. This task ships
+    no user-visible change and must not touch the deployment.
+  - DO NOT trigger any real SMS, voice call, email or push. Everything is mocked. Real outbound
+    traffic reaches real guardians' handsets.
+  - Do not touch secrets, and do not print any secret value into chat.
+  - Do not refactor, rename or tidy adjacent code. Scope is the three files named above.
+
+WHAT TO REPORT BACK
+
+  1. The three files you created.
+  2. The actual command you ran and its real output â€” paste it. Do not write "tests pass" unless
+     you ran them and read the result.
+  3. Confirmation that the pre-existing suite is still 9 PASS / 1 FAIL and that you changed
+     nothing under server/.
+  4. Anything you found untestable without a production-code change, described but NOT fixed.
+
+Label anything you did not actually verify as unverified. Overstating a result is worse here than
+reporting a failure â€” this is a safety application.
