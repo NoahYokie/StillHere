@@ -1,0 +1,115 @@
+tillHere App Shell Scenario C Fix
+
+FROM: GPT / Council Lead
+CC: Dauda, Claude, Gemini, Claude Code
+SUBJECT: Authorized Task — Surgical App-Shell Fix Before Replit Stage 1
+
+Council direction is now aligned.
+
+Your task is narrowly scoped to the confirmed Scenario C app-shell defect.
+
+Objective
+
+Remove the persistent blue/native gap at the top/bottom of the iOS Capacitor app by ensuring the web root fully owns the WebView canvas and the native iOS background matches the StillHere application background.
+
+Source
+
+Work from:
+
+NoahYokie/StillHere
+
+Branch:
+
+build/release-candidate
+
+Do not use or merge the divergent replit-agent branch.
+
+Authorized scope
+
+Modify only:
+
+The global root stylesheet, likely index.css or equivalent.
+capacitor.config.ts.
+
+No other files unless inspection proves one of those exact concerns lives in a differently named equivalent file.
+
+Required CSS change
+
+At the global root level, ensure:
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+}
+
+Use the existing StillHere app background where appropriate so the root does not expose an unintended fallback background.
+
+Important prohibition
+
+Do not use:
+
+100dvh
+
+The codebase already had a regression associated with 100dvh in nested layout contexts. Council has chosen the conservative 100% inheritance approach first.
+
+Capacitor change
+
+In capacitor.config.ts, align the iOS native background colour with the actual StillHere application background.
+
+This is specifically intended to cover the native status-bar region that sits outside the WebView canvas so Capacitor blue cannot show through during paint or transitions.
+
+Do not guess the colour. Inspect the current application/theme source and use the actual approved background value.
+
+Explicitly forbidden
+
+Do not modify:
+
+body.capacitor-ios
+safe-area padding rules
+MobilePageShell
+page-level layout files
+component CSS
+Guardian Map layout
+backend code
+API routes
+scheduler logic
+incident logic
+database
+auth
+notification systems
+
+The bottom safe-area-inset-bottom behaviour must remain intact.
+
+Validation before handoff
+
+Perform local/static checks only.
+
+Confirm:
+
+Diff contains only the authorized root CSS/config changes.
+No 100dvh was introduced.
+Existing body.capacitor-ios rules are byte-for-byte untouched unless unavoidable formatting changed automatically; if so, report it.
+Web build still succeeds.
+Capacitor config remains valid.
+No backend files changed.
+
+Do not claim real-device success. That belongs to TestFlight validation.
+
+Deliverable
+
+Return:
+
+exact files changed
+concise before/after explanation
+diff summary
+build result
+commit hash if committed
+anything that prevented strict scope compliance
+
+Then stop.
+
+Claude Code will independently audit your diff before deployment/TestFlight.
+
+— GPT / Council Lead

@@ -1,0 +1,66 @@
+{
+  "appId": "com.daudabangoura.stillhere.safety",
+  "appName": "StillHere Safety",
+  "webDir": "dist/public",
+  "server": {
+    "iosScheme": "capacitor",
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#0ea5e9",
+      "showSpinner": false,
+      "iosSpinnerStyle": "small",
+      "spinnerColor": "#ffffff",
+      "launchFadeOutDuration": 300
+    },
+    "StatusBar": {
+      "style": "Light",
+      "backgroundColor": "#0ea5e9",
+      "overlaysWebView": false
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
+    },
+    "CapacitorCookies": {
+      "enabled": true
+    },
+    "BackgroundGeolocation": {
+      "locationAuthorizationRequest": "Always",
+      "backgroundPermissionRationale": {
+        "title": "Background location for safety features",
+        "message": "StillHere uses background location only while a safety feature you turned on is running, such as Safe Walk, Safety Timer, Drive Safety, an active SOS, or active sharing with your Safety Circle. We will attempt to share your location with the contacts you chose so they can reach you. Background location is off when you are not using one of these features.",
+        "positiveAction": "Allow",
+        "negativeAction": "Cancel"
+      }
+    },
+    "Geolocation": {
+      "iosLocationPermission": "whenInUse"
+    }
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#F8FAFC",
+    "preferredContentMode": "mobile",
+    "scheme": "stillhere",
+    "infoPlist": {
+      "NSLocationWhenInUseUsageDescription": "StillHere uses your location only when you choose to share it or when you start a safety feature like a check-in, Safe Walk, Safety Timer, Drive Safety, or SOS. Location sharing is off by default.",
+      "NSLocationAlwaysAndWhenInUseUsageDescription": "StillHere uses background location only when you turn on a feature that needs it, such as Safe Walk, Safety Timer, Drive Safety, active sharing with your Safety Circle, or an SOS in progress. If a check-in is missed or you trigger help, we will attempt to share your location with the contacts you chose so they can reach you. StillHere is not a continuous tracking app and does not collect location during calm time when you are in Presence mode or have sharing paused.",
+      "NSMotionUsageDescription": "StillHere uses motion sensors to look for possible fall or vehicle-crash signals during Drive Safety and Safe Walk. These are best-effort sensor signals, not medical-grade detection. If a possible event is detected we will attempt to notify your Safety Circle.",
+      "NSMicrophoneUsageDescription": "StillHere uses the microphone only for voice calls you start or answer inside the app with your Safety Circle.",
+      "ITSAppUsesNonExemptEncryption": false,
+      "WKAppBoundDomains": ["stillhere.health"],
+      "UIBackgroundModes": ["location", "fetch", "remote-notification", "voip"]
+    }
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#0ea5e9"
+  }
+}
