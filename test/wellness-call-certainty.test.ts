@@ -15,9 +15,10 @@ const source = readFileSync(new URL("../server/routes.ts", import.meta.url), "ut
 const tree = ts.createSourceFile("routes.ts", source, ts.ScriptTarget.Latest, true);
 const helpers = new Set([
   "isContactActiveForAlerts", "wellnessEscalationMessage",
-  "getWellnessEscalationState", "wellnessComfortUrl",
+  "getWellnessEscalationState", "wellnessComfortUrl", "wellnessHelpAcknowledgement",
 ]);
 const paths = new Set([
+  "/api/wellness-call/gather",
   "/api/wellness-call/help-followup", "/api/wellness-call/dial-result",
   "/api/wellness-call/post-contact-followup", "/api/wellness-call/comfort",
 ]);
@@ -41,15 +42,15 @@ function visit(node: ts.Node) {
   ts.forEachChild(node, visit);
 }
 visit(tree);
-assert.equal(helperCount, 5);
-assert.equal(routeCount, 4);
+assert.equal(helperCount, 6);
+assert.equal(routeCount, 5);
 const compiled = ts.transpileModule(parts.join("\n"), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
 }).outputText;
 const dialect = new PgDialect();
 const fallback = "There is no one else in your Safety Circle available to contact. If you are in immediate danger, please contact your local emergency services now.";
 const activeMessage = "You are still marked as needing help. We are continuing your Safety Circle escalation.";
-const forbidden = /alerting the next|attempting to reach|still trying to reach|have reached out|has been contacted|on the way|safety circle has already been alerted/i;
+const forbidden = /reaching out|we will keep them updated|we keep trying|alerting the next|attempting to reach|still trying to reach|have reached out|has been contacted|on the way|safety circle has already been alerted/i;
 const contact = (id: string, priority = 1, extra = {}) => ({
   id, priority, name: id, phone: "+15555550101", userId: "user-1",
   softDeletedAt: null, pausedUntil: null, ...extra,
@@ -63,10 +64,13 @@ const openIncident = (extra = {}) => ({
   deliveryFailed: true, degradedDelivery: true, ...extra,
 });
 type Row = ReturnType<typeof openIncident>;
-function harness(options: { row?: Row | null; contacts?: ReturnType<typeof contact>[]; user?: boolean } = {}) {
+function harness(options: { row?: Row | null; contacts?: ReturnType<typeof contact>[]; user?: boolean; gather?: boolean; delivered?: string[] } = {}) {
   let row = options.row === undefined ? openIncident() : options.row;
   let circle = options.contacts ?? [contact("contact-1")];
   let beforeWrite: (() => void) | undefined;
+  let beforeRead: ((count: number) => void) | undefined;
+  let reads = 0;
+  let mockNotifications = 0;
   let failRead = false;
   let writes = 0;
   let resolves = 0;
@@ -76,14 +80,22 @@ function harness(options: { row?: Row | null; contacts?: ReturnType<typeof conta
   const clone = <T>(value: T): T => structuredClone(value);
   const noOutbound = () => { outbound++; throw new Error("Outbound forbidden in hermetic test"); };
   const storage = {
-    async getUserByPhone() { return options.user === false ? null : { id: "user-1", name: "User" }; },
+    async getUserByPhone() { return options.user === false ? null : { id: "user-1", name: "User", ...(options.gather ? { phone: "+15555550102" } : {}) }; },
     async getLatestRealOpenIncident() {
+      beforeRead?.(++reads);
       if (failRead) throw new Error("Simulated database failure");
       return row?.status === "open" && !row.isDrill ? clone(row) : undefined;
     },
     // Include removed entries to assert that the production active predicate
     // also rejects them, even though real getContacts already filters them.
     async getContacts() { return clone(circle); },
+    async createIncidentWithSafetyState() {
+      assert.ok(options.gather, "only initial-gather tests may use this existing path");
+      assert.ok(row);
+      return clone(row);
+    },
+    async getOrMintIncidentTokensForUser() { return circle.map(c => ({ contact: c, token: `test-${c.id}` })); },
+    async getContactsLinkedToUser() { return []; },
     async updateIncident(id: string, patch: Partial<Row>) {
       assert.equal(id, row?.id);
       writes++;
@@ -120,8 +132,22 @@ function harness(options: { row?: Row | null; contacts?: ReturnType<typeof conta
     verifyTwilioSignature() {}, storage, db, incidents, and, eq, sql, Date,
     escapeXml: (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"),
     getTwilioVoiceFromNumber: () => "+15555550100",
-    getEmergencyInfoForUser: noOutbound, sendSms: noOutbound,
-    sendPushNotification: noOutbound, sendEmergencyEmail: noOutbound, fetch: noOutbound,
+    // The initial production path already has SMS/push side effects before
+    // rendering its menu. Simulate those boundaries, never load providers.
+    // Other routes still reject use of the emergency-number heuristic.
+    getEmergencyInfoForUser: options.gather ? async () => ({ number: "12345", country: null }) : noOutbound,
+    sendSms: options.gather ? async () => ({ success: false }) : noOutbound,
+    sendPushNotification: options.gather ? async () => ({ sent: 0 }) : noOutbound,
+    sendEmergencyEmail: noOutbound, fetch: noOutbound,
+    sendSosAlert: noOutbound,
+    async tryNotifyContact() {
+      assert.ok(options.gather);
+      mockNotifications++;
+      return { attempted: ["sms"], delivered: options.delivered ?? [] };
+    },
+    emitTrackingPolicyChanged: async () => {}, notifyConcern: async () => {},
+    getBaseUrl: () => "https://test.invalid",
+    addMinutes: (date: Date, minutes: number) => new Date(date.getTime() + minutes * 60000),
     async resolveCheckin(userId: string, method: string, metadata: unknown) {
       assert.equal(userId, "user-1"); assert.equal(method, "call");
       assert.equal(JSON.stringify(metadata), '{"resolvedBy":"user"}');
@@ -145,6 +171,8 @@ function harness(options: { row?: Row | null; contacts?: ReturnType<typeof conta
   }
   return {
     request, get row() { return row; }, get writes() { return writes; }, get resolves() { return resolves; }, errors,
+    get mockNotifications() { return mockNotifications; },
+    beforeRead(fn: (count: number) => void) { beforeRead = fn; },
     beforeWrite(fn: () => void) { beforeWrite = fn; }, setRow(next: Row | null) { row = next; },
     setContacts(next: ReturnType<typeof contact>[]) { circle = next; }, failRead() { failRead = true; },
   };
@@ -315,4 +343,100 @@ test("bound failed dial and missing primary phone never return to heuristic/unsu
   assert.equal(h.row?.status, "open");
   assert.equal(h.resolves, 0);
   assert.deepEqual(h.errors, []);
+});
+
+
+function assertNoContactClaim(response: string) {
+  assert.doesNotMatch(response, /\b(alerting|contacting|notified|sent|calling)\b|reaching out|already been alerted|keep them updated/i);
+  assert.doesNotMatch(response, /12345|911|000|112/);
+}
+
+test("initial Gather binds its authoritative incident and Press 0 uses the bound guard", async () => {
+  const h = harness({ gather: true, row: openIncident({ id: "call-incident-7", wellnessCallStatus: "no_response" }) });
+  // Caller-supplied context is not a source for the newly rendered binding.
+  const menu = await h.request("gather", "2", { incidentId: "untrusted-other-incident" });
+  const action = menu.doc.getElementsByTagName("Gather")[0].getAttribute("action")!;
+  assert.equal(action, "/api/wellness-call/help-followup?incidentId=call-incident-7");
+  assertNoContactClaim(menu.response);
+  assert.match(menu.response, /You are marked as needing help. Your alert remains active./);
+  const url = new URL(action, "https://test.invalid");
+  const guidance = await h.request("help-followup", "0", Object.fromEntries(url.searchParams));
+  assert.match(guidance.response, /local emergency services/);
+  assert.match(guidance.response, /incidentId=call-incident-7/);
+  assertNoContactClaim(guidance.response);
+  assert.equal(h.row?.status, "open");
+  assert.equal(h.row?.wellnessCallStatus, "help");
+  assert.equal(h.resolves, 0);
+  assert.ok(h.row!.nextActionAt > new Date());
+  assert.equal(h.mockNotifications, 1, "existing notification processing is still invoked (mocked)");
+  assert.deepEqual(h.errors, []);
+});
+
+test("notification summaries, including in-app-only success, never become spoken dispatch proof", async () => {
+  for (const delivered of [[], ["in_app"], ["sms"]]) {
+    const h = harness({ gather: true, delivered, row: openIncident({ wellnessCallStatus: "no_response" }) });
+    const menu = await h.request("gather");
+    assertNoContactClaim(menu.response);
+    assert.match(menu.response, /You are marked as needing help/);
+    assert.equal(h.mockNotifications, 1);
+    assert.deepEqual(h.errors, []);
+  }
+});
+
+test("duplicate help acknowledges stored help without pretending to dispatch again", async () => {
+  for (const circle of [[contact("contact-1")], [], [contact("paused", 1, { pausedUntil: "2999-01-01" }), contact("removed", 2, { softDeletedAt: "2020-01-01" })]]) {
+    const h = harness({ contacts: circle, row: openIncident({ notifiedContactIds: '["contact-1"]' }) });
+    const reply = await h.request("gather");
+    assertNoContactClaim(reply.response);
+    if (circle.length === 1) assert.match(reply.response, /You are marked as needing help. Your alert remains active./);
+    else assert.ok(reply.response.includes(fallback));
+    assert.match(reply.response, /incidentId=incident-1/);
+    assert.equal(h.mockNotifications, 0);
+    assert.equal(h.writes, 0);
+    assert.deepEqual(h.errors, []);
+  }
+});
+
+test("initial zero-contact menu and its bound Press 0 preserve exact fallback and open incident", async () => {
+  const h = harness({ gather: true, contacts: [], row: openIncident({ wellnessCallStatus: "no_response" }) });
+  const menu = await h.request("gather");
+  assert.ok(menu.response.includes(fallback));
+  assertNoContactClaim(menu.response);
+  const action = menu.doc.getElementsByTagName("Gather")[0].getAttribute("action")!;
+  const guidance = await h.request("help-followup", "0", Object.fromEntries(new URL(action, "https://test.invalid").searchParams));
+  assert.ok(guidance.response.includes(fallback));
+  assertNoContactClaim(guidance.response);
+  assert.equal(h.row?.status, "open");
+  assert.equal(h.row?.wellnessCallStatus, "help");
+  assert.equal(h.resolves, 0);
+  assert.deepEqual(h.errors, []);
+});
+
+test("missing or stale initial-menu binding fails closed instead of adopting another incident", async () => {
+  for (const duplicate of [true, false]) {
+    for (const replacement of [null, openIncident({ status: "resolved" }), openIncident({ id: "replacement-incident" })]) {
+      const h = harness({ gather: true, row: openIncident({ wellnessCallStatus: duplicate ? "help" : "no_response" }) });
+      h.beforeRead(count => { if (count === 2) h.setRow(replacement); });
+      const result = await h.request("gather");
+      assert.match(result.response, /cannot confirm an active safety incident/);
+      assert.equal(result.doc.getElementsByTagName("Gather").length, 0);
+      assert.equal(result.doc.getElementsByTagName("Redirect").length, 0);
+      assertNoContactClaim(result.response);
+      assert.deepEqual(h.row, replacement);
+      assert.equal(h.resolves, 0);
+      assert.deepEqual(h.errors, []);
+    }
+  }
+});
+
+test("legacy unbound Press 0 never infers an incident, dispatch or emergency number", async () => {
+  for (const row of [openIncident(), null, openIncident({ status: "resolved" })]) {
+    const h = harness({ row });
+    const result = await h.request("help-followup", "0", {});
+    assert.match(result.response, /cannot confirm an active safety incident/);
+    assertNoContactClaim(result.response);
+    assert.equal(result.doc.getElementsByTagName("Hangup").length, 1);
+    assert.equal(h.writes, 0);
+    assert.deepEqual(h.errors, []);
+  }
 });
