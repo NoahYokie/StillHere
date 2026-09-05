@@ -411,6 +411,23 @@ function isContactActiveForAlerts(contact: { softDeletedAt?: Date | string | nul
   return new Date(contact.pausedUntil).getTime() <= Date.now();
 }
 
+// Eligibility is not proof of an outbound attempt or human receipt. In
+// particular, notifiedContactIds is not a universal contact-attempt ledger.
+function wellnessEscalationMessage(
+  incident: { status: string; isDrill: boolean; wellnessCallStatus: string | null } | undefined,
+  eligibleContacts: readonly unknown[],
+): string {
+  if (!incident || incident.status !== "open" || incident.isDrill) {
+    return "We cannot confirm an active safety incident for this call. If you still need help or are in immediate danger, please contact your local emergency services now.";
+  }
+  if (eligibleContacts.length === 0) {
+    return "There is no one else in your Safety Circle available to contact. If you are in immediate danger, please contact your local emergency services now.";
+  }
+  return incident.wellnessCallStatus === "help"
+    ? "You are still marked as needing help. We are continuing your Safety Circle escalation."
+    : "Your safety incident is still open. Safety Circle escalation remains active.";
+}
+
 async function sendLinkedWatcherPresencePush(
   userId: string,
   title: string,
@@ -8313,6 +8330,22 @@ export async function registerRoutes(
     }
   });
 
+  // Bind follow-up speech to the incident that offered the menu. A stale
+  // menu must not start processing a newer incident for the same user.
+  async function getWellnessEscalationState(userId: string | undefined, incidentId?: unknown) {
+    const current = userId ? await storage.getLatestRealOpenIncident(userId) : undefined;
+    const incident = current && current.status === "open" && !current.isDrill
+      && (incidentId === undefined || incidentId === current.id) ? current : undefined;
+    const eligibleContacts = incident
+      ? (await storage.getContacts(incident.userId)).filter(isContactActiveForAlerts)
+      : [];
+    return { incident, eligibleContacts, message: wellnessEscalationMessage(incident, eligibleContacts) };
+  }
+
+  function wellnessComfortUrl(incidentId: string, cycle = 1): string {
+    return escapeXml(`/api/wellness-call/comfort?cycle=${cycle}&incidentId=${encodeURIComponent(incidentId)}`);
+  }
+
   // After the user pressed 2 ("I need help"), this handles the second-tier
   // menu so we never just leave them on a dead line.
   app.post("/api/wellness-call/help-followup", verifyTwilioSignature, async (req, res) => {
@@ -8322,6 +8355,17 @@ export async function registerRoutes(
       const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
       const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
 
+      const scopedState = req.query.incidentId !== undefined
+        ? await getWellnessEscalationState(user?.id, req.query.incidentId) : undefined;
+      if (scopedState && (!scopedState.incident || digits === "0" || !scopedState.eligibleContacts.some(c => c.phone))) {
+        const guidance = scopedState.incident && scopedState.eligibleContacts.length > 0
+          ? "If you are in immediate danger, please contact your local emergency services now."
+          : scopedState.message;
+        return res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Polly.Joanna-Neural">${calm(guidance)}</Say>${scopedState.incident
+          ? `<Redirect method="POST">${wellnessComfortUrl(scopedState.incident.id)}</Redirect>` : "<Hangup/>"}</Response>`);
+      }
+
       // Press 1 -> patch them through to their primary contact via <Dial>
       // The Dial uses an `action` URL so Twilio posts back the real outcome
       // (DialCallStatus + DialCallDuration). Without the action attribute,
@@ -8329,20 +8373,28 @@ export async function registerRoutes(
       // contact answered, which caused us to incorrectly say
       // "we couldn't reach <name>" even after a successful conversation.
       if (digits === "1" && user) {
-        const allContacts = await storage.getContacts(user.id);
+        const allContacts = scopedState?.eligibleContacts
+          ?? (await storage.getContacts(user.id)).filter(isContactActiveForAlerts);
         const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
         const primary = sorted[0];
         if (primary && primary.phone) {
           const safeName = escapeXml(primary.name);
           const safeContactId = escapeXml(primary.id);
+          const dialIncident = scopedState?.incident || await storage.getLatestRealOpenIncident(user.id);
+          const safeIncidentId = escapeXml(dialIncident?.id || "");
           const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm(`Connecting you to ${safeName} now. Please hold.`)}</Say>
-  <Dial timeout="25" callerId="${escapeXml(getTwilioVoiceFromNumber() || "")}" answerOnBridge="true" action="/api/wellness-call/dial-result?contactId=${safeContactId}" method="POST">
+  <Dial timeout="25" callerId="${escapeXml(getTwilioVoiceFromNumber() || "")}" answerOnBridge="true" action="/api/wellness-call/dial-result?contactId=${safeContactId}&amp;incidentId=${safeIncidentId}" method="POST">
     <Number>${escapeXml(primary.phone)}</Number>
   </Dial>
 </Response>`;
           return res.type("text/xml").send(twiml);
+        }
+        // Bound continuations must not fall back to heuristic emergency numbers.
+        if (scopedState?.incident) {
+          return res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Polly.Joanna-Neural">${calm("We do not have a contact phone number to connect you to right now. If you are in immediate danger, please contact your local emergency services now.")}</Say><Redirect method="POST">${wellnessComfortUrl(scopedState.incident.id)}</Redirect></Response>`);
         }
         // No contact available -> fall through to comfort
         const emergencyNoContact = user ? await getEmergencyInfoForUser(user as any) : { number: "911" };
@@ -8370,12 +8422,12 @@ export async function registerRoutes(
 
       // Anything else (timeout, other digit) -> comfort loop
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`;
+<Response><Redirect method="POST">${scopedState?.incident ? wellnessComfortUrl(scopedState.incident.id) : "/api/wellness-call/comfort?cycle=1"}</Redirect></Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call help-followup:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
+<Response><Say voice="Polly.Joanna-Neural">${calm(wellnessEscalationMessage(undefined, []))}</Say><Hangup/></Response>`);
     }
   });
 
@@ -8420,11 +8472,15 @@ export async function registerRoutes(
         timestamp: new Date().toISOString(),
       }));
 
+      const dialState = await getWellnessEscalationState(user?.id, req.query.incidentId);
+      let followupIncidentId = "";
+
       // Append to the incident escalation timeline so the watcher dashboard,
       // emergency page, and weekly report all show the truth.
       if (user) {
-        const incident = await storage.getLatestRealOpenIncident(user.id);
+        const { incident } = dialState;
         if (incident && !incident.isDrill) {
+          followupIncidentId = incident.id;
           let timeline: any[] = [];
           try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
           if (wasReached) {
@@ -8452,13 +8508,13 @@ export async function registerRoutes(
 <Response>
   <Say voice="Polly.Joanna-Neural">${calm(`Welcome back. We're glad you got through to ${safeName}.`)}</Say>
   <Pause length="1"/>
-  <Gather numDigits="1" action="/api/wellness-call/post-contact-followup" method="POST" timeout="15" actionOnEmptyResult="true">
+  <Gather numDigits="1" action="/api/wellness-call/post-contact-followup?incidentId=${escapeXml(followupIncidentId)}" method="POST" timeout="15" actionOnEmptyResult="true">
     <Say voice="Polly.Joanna-Neural">${calm(`Is everything okay now? Press 1 if you're safe and the situation is resolved. Press 2 if you still need more help.`)}</Say>
     <Pause length="2"/>
     <Say voice="Polly.Joanna-Neural">${calm(`Take your time. Press 1 if you're safe. Press 2 if you still need help.`)}</Say>
   </Gather>
-  <Say voice="Polly.Joanna-Neural">${calm("We didn't catch your response. We'll keep your safety circle on alert just in case.")}</Say>
-  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+  <Say voice="Polly.Joanna-Neural">${calm(dialState.message)}</Say>
+  <Redirect method="POST">${wellnessComfortUrl(followupIncidentId)}</Redirect>
 </Response>`;
         return res.type("text/xml").send(twiml);
       }
@@ -8466,14 +8522,14 @@ export async function registerRoutes(
       // Truly didn't reach them — be honest, continue the comfort loop.
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm(`We could not reach ${safeName} right now. We will keep trying your safety circle. Stay with us.`)}</Say>
-  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+  <Say voice="Polly.Joanna-Neural">${calm(`We could not reach ${safeName} right now. ${dialState.message}`)}</Say>
+  <Redirect method="POST">${wellnessComfortUrl(followupIncidentId)}</Redirect>
 </Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call dial-result:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
+<Response><Say voice="Polly.Joanna-Neural">${calm(wellnessEscalationMessage(undefined, []))}</Say><Hangup/></Response>`);
     }
   });
 
@@ -8482,9 +8538,8 @@ export async function registerRoutes(
   // - Press 1 = resolved -> resolveCheckin (closes incident, sends all-clear
   //   SMS to the rest of the circle, stops further escalation, logs to the
   //   weekly safety report).
-  // - Press 2 = still needs help -> log timeline entry and accelerate
-  //   escalation by setting nextActionAt to now so the next cron tick
-  //   immediately notifies the next contact in the chain.
+  // - Press 2 = still needs help -> conditionally record help and schedule
+  //   existing worker processing. Scheduling does not prove outbound dispatch.
   app.post("/api/wellness-call/post-contact-followup", verifyTwilioSignature, async (req, res) => {
     try {
       const digits = req.body.Digits;
@@ -8521,44 +8576,59 @@ export async function registerRoutes(
         return res.type("text/xml").send(twiml);
       }
 
-      if (digits === "2" && user) {
-        // Still not resolved — log it and force the next escalation step soon.
-        const incident = await storage.getLatestRealOpenIncident(user.id);
-        if (incident && !incident.isDrill) {
-          let timeline: any[] = [];
-          try { timeline = JSON.parse(incident.escalationTimeline || "[]"); } catch {}
-          timeline.push({
-            type: "still_need_help",
-            time: new Date().toISOString(),
-            detail: "User confirmed they still need help after speaking with their contact",
-          });
-          // Set nextActionAt to now so the cron picks up this incident on its
-          // next tick and notifies the next contact in the chain immediately.
-          await storage.updateIncident(incident.id, {
-            escalationTimeline: JSON.stringify(timeline),
-            nextActionAt: new Date(),
-          });
-          console.log(`[WELLNESS CALL] User user=${user.id} still needs help — accelerating escalation to next contact`);
+      if (digits === "2") {
+        // Missing/malformed bindings fail closed, including old unbound menus.
+        const state = await getWellnessEscalationState(user?.id, req.query.incidentId ?? "");
+        if (!state.incident) {
+          return res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Polly.Joanna-Neural">${calm(state.message)}</Say><Hangup/></Response>`);
         }
+        const now = new Date();
+        const entry = JSON.stringify([{
+          type: "still_need_help",
+          time: now.toISOString(),
+          detail: "User confirmed they still need help after speaking with their contact",
+        }]);
+        // Guard the write as well as the read: resolution can win between them.
+        // Append atomically; preserve ownership, contact order and delivery state.
+        // Release the worker lease just as storage.updateIncident(nextActionAt) does.
+        const updated = await db.update(incidents).set({
+          wellnessCallStatus: "help",
+          escalationTimeline: sql`(COALESCE(NULLIF(${incidents.escalationTimeline}, ''), '[]')::jsonb || ${entry}::jsonb)::text`,
+          nextActionAt: now,
+          processingLockId: null,
+          processingLockedAt: null,
+        }).where(and(
+          eq(incidents.id, state.incident.id),
+          eq(incidents.userId, user!.id),
+          eq(incidents.status, "open"),
+          eq(incidents.isDrill, false),
+        )).returning({ id: incidents.id });
+        if (updated.length === 0) {
+          return res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Polly.Joanna-Neural">${calm(wellnessEscalationMessage(undefined, []))}</Say><Hangup/></Response>`);
+        }
+        const message = wellnessEscalationMessage({ ...state.incident, wellnessCallStatus: "help" }, state.eligibleContacts);
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm("We hear you. We're alerting the next person in your safety circle right now. We are right here with you.")}</Say>
-  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+  <Say voice="Polly.Joanna-Neural">${calm(message)}</Say>
+  <Redirect method="POST">${wellnessComfortUrl(state.incident.id)}</Redirect>
 </Response>`;
         return res.type("text/xml").send(twiml);
       }
 
+      const state = await getWellnessEscalationState(user?.id, req.query.incidentId ?? "");
       // No clear response — stay with them, keep escalation going.
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm("We didn't catch that. We'll keep your safety circle on alert. We're right here with you.")}</Say>
-  <Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect>
+  <Say voice="Polly.Joanna-Neural">${calm(state.message)}</Say>
+  ${state.incident ? `<Redirect method="POST">${wellnessComfortUrl(state.incident.id)}</Redirect>` : "<Hangup/>"}
 </Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call post-contact-followup:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Redirect method="POST">/api/wellness-call/comfort?cycle=1</Redirect></Response>`);
+<Response><Say voice="Polly.Joanna-Neural">${calm(wellnessEscalationMessage(undefined, []))}</Say><Hangup/></Response>`);
     }
   });
 
@@ -8573,34 +8643,31 @@ export async function registerRoutes(
       const normalizedPhone = calledNumber ? (calledNumber.startsWith("+") ? calledNumber : `+${calledNumber}`) : null;
       const user = normalizedPhone ? await storage.getUserByPhone(normalizedPhone) : null;
 
-      let primaryName = "your primary contact";
-      let emergencyNumber = "911";
-      if (user) {
-        const allContacts = await storage.getContacts(user.id);
-        const sorted = [...allContacts].sort((a, b) => a.priority - b.priority);
-        if (sorted[0]) primaryName = sorted[0].name;
-        const e = await getEmergencyInfoForUser(user as any);
-        emergencyNumber = e.number;
+      const state = await getWellnessEscalationState(user?.id, req.query.incidentId);
+      if (!state.incident) {
+        return res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Say voice="Polly.Joanna-Neural">${calm(state.message)}</Say><Hangup/></Response>`);
       }
-      const safePrimary = escapeXml(primaryName);
-      const safeEmergency = escapeXml(emergencyNumber);
+      const primary = [...state.eligibleContacts].sort((a, b) => a.priority - b.priority)[0];
+      const safePrimary = escapeXml(primary?.name || "your primary contact");
+      const contactPrompt = primary?.phone
+        ? `Press 1 anytime to be connected directly to ${safePrimary}. Press 0 for emergency services guidance. Or just stay on the line with us.`
+        : "Press 0 for emergency services guidance. Or just stay on the line with us.";
 
       // Final cycle -> warm sign-off (never just a dead "Goodbye")
       if (cycle >= 3) {
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">${calm(`We need to end this call now so the line stays open for ${safePrimary}, but the safety flow is still active. We have reached out to your safety circle, and you have a text message from us with next steps.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm(state.message)}</Say>
   <Pause length="1"/>
-  <Say voice="Polly.Joanna-Neural">${calm(`If you are in danger right now, please call ${safeEmergency}. You are not alone. Take care.`)}</Say>
+  <Say voice="Polly.Joanna-Neural">${calm("We need to end this call now. If you are in immediate danger, please contact your local emergency services now. Take care.")}</Say>
   <Hangup/>
 </Response>`;
         return res.type("text/xml").send(twiml);
       }
 
-      // Reassurance varies a little per cycle so it doesn't feel robotic
-      const reassurance = cycle === 1
-        ? `We are still right here with you. We are attempting to reach ${safePrimary} now.`
-        : `Hang in there. We are still trying to reach your safety circle.`;
+      // Re-evaluate the same truth state on each callback; never infer dispatch.
+      const reassurance = state.message;
 
       const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -8610,16 +8677,16 @@ export async function registerRoutes(
   <Pause length="2"/>
   <Say voice="Polly.Joanna-Neural">${calm("And gently breathe out. You are doing great.")}</Say>
   <Pause length="2"/>
-  <Gather numDigits="1" action="/api/wellness-call/help-followup" method="POST" timeout="20" actionOnEmptyResult="true">
-    <Say voice="Polly.Joanna-Neural">${calm(`Press 1 anytime to be connected directly to ${safePrimary}. Press 0 for emergency services guidance. Or just stay on the line with us.`)}</Say>
+  <Gather numDigits="1" action="/api/wellness-call/help-followup?incidentId=${escapeXml(state.incident.id)}" method="POST" timeout="20" actionOnEmptyResult="true">
+    <Say voice="Polly.Joanna-Neural">${calm(contactPrompt)}</Say>
   </Gather>
-  <Redirect method="POST">/api/wellness-call/comfort?cycle=${cycle + 1}</Redirect>
+  <Redirect method="POST">${wellnessComfortUrl(state.incident.id, cycle + 1)}</Redirect>
 </Response>`;
       res.type("text/xml").send(twiml);
     } catch (error) {
       console.error("Error in wellness call comfort:", error);
       res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Say voice="Polly.Joanna-Neural">${calm("You are not alone. We are reaching out to your safety circle. Take care.")}</Say><Hangup/></Response>`);
+<Response><Say voice="Polly.Joanna-Neural">${calm(wellnessEscalationMessage(undefined, []))}</Say><Hangup/></Response>`);
     }
   });
 
