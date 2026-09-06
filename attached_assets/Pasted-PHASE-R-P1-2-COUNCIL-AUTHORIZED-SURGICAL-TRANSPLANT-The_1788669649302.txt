@@ -1,0 +1,15 @@
+PHASE R-P1.2 â€” COUNCIL-AUTHORIZED SURGICAL TRANSPLANT.
+
+The P0 forensic hold is now LIFTED FOR EXACTLY TWO FILES AND NOTHING ELSE. Codex was assigned this but has no Replit access, so it is reassigned to this workspace. Everything outside these two files remains frozen.
+
+YOU MAY WRITE ONLY:
+  1. artifacts/api-server/server/routes.ts
+  2. artifacts/api-server/test/wellness-call-certainty.test.ts   (new file)
+
+STILL ABSOLUTELY PROHIBITED: git pull / merge / cherry-pick / reset / rebase / branch changes / PUSH / Replit Git sync, deploy or Republish, any secret or env change, any database change, any real SMS / voice / email / push traffic, and edits to ANY other file. Do NOT run npm or pnpm install.
+
+Run this exactly, semicolons, and paste the raw output verbatim:
+
+cd /home/runner/workspace; echo B1_BASELINE; git rev-parse HEAD; git rev-parse --abbrev-ref HEAD; git status --porcelain | head -5; git status -sb | head -1; echo B2_PRE_HASH; md5sum artifacts/api-server/server/routes.ts; echo T1_FETCH_ROUTES; curl -fsSL "https://raw.githubusercontent.com/NoahYokie/StillHere/f1beaf475d247cbed963d297be29b9b77b7135ac/server/routes.ts" -o artifacts/api-server/server/routes.ts; echo "curl_exit=$?"; echo T2_ROUTES_HASH_MUST_BE_50481a6bf58c5bdf48ee688691436ecd; md5sum artifacts/api-server/server/routes.ts; wc -l artifacts/api-server/server/routes.ts; echo T3_FETCH_TEST; curl -fsSL "https://raw.githubusercontent.com/NoahYokie/StillHere/f1beaf475d247cbed963d297be29b9b77b7135ac/test/wellness-call-certainty.test.ts" -o artifacts/api-server/test/wellness-call-certainty.test.ts; echo "curl_exit=$?"; echo T4_ADAPT_IMPORT; sed -i '9s|"../shared/schema"|"../../../lib/stillhere-shared/src/schema"|' artifacts/api-server/test/wellness-call-certainty.test.ts; sed -n '9p' artifacts/api-server/test/wellness-call-certainty.test.ts; echo T5_TEST_HASH_MUST_BE_5170a7c00aae08b9bc0bd69e0c64890f; md5sum artifacts/api-server/test/wellness-call-certainty.test.ts; echo T6_CHANGED_FILES_MUST_BE_ONLY_THOSE_TWO; git status --porcelain
+
+Do not commit yet. Stop after this output so I can verify the hashes before anything else.
