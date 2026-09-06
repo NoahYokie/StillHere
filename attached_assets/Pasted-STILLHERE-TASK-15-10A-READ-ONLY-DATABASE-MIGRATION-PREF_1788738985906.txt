@@ -1,0 +1,322 @@
+STILLHERE — TASK 15.10A
+READ-ONLY DATABASE / MIGRATION PREFLIGHT
+
+Authorization: Full Council consensus.
+
+Purpose: Inspect the actual StillHere PostgreSQL target environment before any migration or deployment of Task 15.10A.
+
+STRICT MODE: READ ONLY / ZERO MUTATION
+
+You are not authorized to:
+
+execute DDL;
+execute DML;
+apply migration 0011;
+alter schema;
+create/drop indexes;
+create/validate constraints;
+modify extensions;
+modify data;
+deploy application code;
+trigger Twilio/SMS/push/email traffic;
+restart services;
+change environment variables/secrets;
+push/merge Git.
+
+This is inspection only.
+
+TARGET IMPLEMENTATION
+
+Repository:
+
+NoahYokie/StillHere
+
+Task 15.10A implementation commit:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Canonical base:
+
+f1beaf475d247cbed963d297be29b9b77b7135ac
+
+Migration under review:
+
+migrations/0011_incident_telephony_ledger.sql
+
+Claude Code independently audited this implementation and returned:
+
+PASS WITH NON-BLOCKING OBSERVATIONS — SAFE TO PROCEED TO COUNCIL DEPLOYMENT-GATE REVIEW.
+
+This preflight is specifically to resolve the remaining database-runtime questions before migration execution is considered.
+
+1. VERIFY ACTUAL DATABASE TARGET
+
+Report:
+
+database provider/platform;
+PostgreSQL exact version;
+current database name/schema relevant to StillHere;
+whether this is production, staging, or another environment;
+whether the currently deployed backend is actually connected to this database;
+any ambiguity about environment identity.
+
+Do not inspect or expose secrets.
+
+2. VERIFY UUID SUPPORT
+
+Determine whether:
+
+gen_random_uuid()
+
+is available in the target environment.
+
+Report:
+
+PostgreSQL version;
+whether gen_random_uuid() resolves natively;
+whether pgcrypto is installed if relevant;
+whether migration 0011 would require any extension change.
+
+Do not create/install/modify extensions.
+
+If the migration would fail without an extension or version capability, report it as a deployment blocker.
+
+3. INCIDENTS TABLE SCALE
+
+Read-only inspect the current incidents table.
+
+Report where available:
+
+approximate/exact row count;
+table size;
+index size;
+total relation size;
+existing relevant constraints;
+existing relevant indexes;
+current nullable/non-null state of fields involved by migration;
+whether any pre-existing schema conflicts with migration names/types.
+
+Use catalog/statistics queries where possible.
+
+Do not run unnecessarily expensive full-table operations merely for exact counts if safe catalog estimates are sufficient.
+
+4. CHECK-CONSTRAINT LOCK RISK
+
+Inspect the specific ALTER TABLE incidents ... ADD CONSTRAINT proposed by migration 0011.
+
+Claude Code flagged that normal constraint addition/validation may acquire an ACCESS EXCLUSIVE lock and validate existing rows.
+
+Determine:
+
+expected lock mode for the exact DDL;
+whether the table size makes this materially risky;
+whether concurrent application traffic could be blocked;
+whether the migration framework wraps the migration in a transaction;
+current statement/lock timeout configuration if visible read-only;
+whether ADD CONSTRAINT ... NOT VALID followed by later VALIDATE CONSTRAINT is technically appropriate for this exact constraint.
+
+Do not execute either form.
+
+Provide the recommended DDL shape only as a proposal.
+
+5. NOT VALID → VALIDATE CONSTRAINT ASSESSMENT
+
+Explicitly adjudicate:
+
+Option A
+
+existing migration form.
+
+Option B
+
+add constraint as:
+
+NOT VALID
+
+followed by:
+
+VALIDATE CONSTRAINT
+
+Compare:
+
+lock behavior;
+data validation behavior;
+deployment safety;
+transaction implications;
+compatibility with the project's migration runner.
+
+Recommend one option with evidence.
+
+No modification is authorized.
+
+6. NULLABLE sequence_id UNIQUENESS
+
+Inspect:
+
+incident_contact_attempts
+
+proposed uniqueness semantics.
+
+Claude Code identified:
+
+UNIQUE(incident_id, cycle, sequence_id, channel)
+
+does not prevent duplicates where:
+
+sequence_id IS NULL
+
+due to PostgreSQL NULL-distinct behavior.
+
+Evaluate whether this additional database constraint/index would correctly enforce the intended user-leg reservation invariant:
+
+CREATE UNIQUE INDEX uq_incident_user_call
+ON incident_contact_attempts (incident_id, cycle, channel)
+WHERE sequence_id IS NULL;
+
+Determine:
+
+whether it matches the implementation semantics;
+whether any legitimate NULL-sequence rows could require more than one record for the same incident/cycle/channel;
+whether an existing unique/index definition conflicts;
+whether a different partial uniqueness shape is safer.
+
+Do not create the index.
+
+Return an explicit recommendation:
+
+REQUIRED BEFORE DEPLOYMENT
+
+OPTIONAL HARDENING
+
+or
+
+NOT APPROPRIATE
+
+with reasoning.
+
+7. MIGRATION/SCHEMA PARITY
+
+Compare migration 0011 with the Task 15.10A schema definitions.
+
+Read-only verify:
+
+names;
+data types;
+nullability;
+defaults;
+FKs;
+CHECK constraints;
+indexes;
+uniqueness;
+snapshot metadata.
+
+Report any mismatch that could make the runtime schema differ from what the application expects.
+
+8. EXISTING DATA COMPATIBILITY
+
+Without modifying data, determine whether existing incidents rows are compatible with the nullable migration design.
+
+Confirm especially:
+
+existing incidents naturally remain NULL/NULL;
+migration contains no backfill;
+paired snapshot CHECK semantics will permit legacy rows;
+there is no current data state that would cause the proposed constraint to fail.
+
+If exact validation would require a mutating operation, do not perform it. Use safe read-only queries instead.
+
+9. ACTIVE LOCKS / TRAFFIC CONDITIONS
+
+If permissions allow read-only catalog inspection, report:
+
+active transactions;
+long-running transactions;
+current locks affecting incidents;
+whether migrations during ordinary application traffic would be risky;
+whether a quiet deployment window is advisable.
+
+Do not terminate sessions or transactions.
+
+10. PENDING-ATTEMPT OBSERVABILITY — INSPECTION ONLY
+
+No implementation is authorized.
+
+Inspect current operational monitoring/logging capability and determine whether StillHere already has a practical way to detect:
+
+contact attempt reserved/pending but no provider callback received for an abnormal duration.
+
+Report:
+
+whether logs/metrics can currently expose this;
+whether an alert could be created without changing core attempt semantics;
+the smallest future observability addition required before unsupervised production reliance.
+
+Do not implement a timeout, retry, reaper, metric, or alert.
+
+Do not lock a numeric threshold in this preflight unless an existing operational standard already exists.
+
+11. DEPLOYMENT ORDER ANALYSIS
+
+Read-only determine the safest eventual order among:
+
+migration;
+backend deployment of b37ddf7;
+health verification;
+controlled live Twilio test.
+
+Consider whether:
+
+old code can safely coexist briefly with the new nullable schema;
+new code can start before migration;
+migration must precede application startup;
+rollback compatibility exists.
+
+Do not perform any step.
+
+Return the recommended sequence.
+
+12. REQUIRED FINAL REPORT
+
+Return:
+
+environment inspected;
+PostgreSQL exact version;
+UUID function/extension result;
+incidents table scale;
+current relevant schema;
+migration/schema parity;
+CHECK-constraint lock assessment;
+NOT VALID / VALIDATE recommendation;
+nullable sequence_id uniqueness recommendation;
+existing-data compatibility;
+active-lock/traffic observations;
+migration runner/transaction observations;
+pending-attempt observability findings;
+safest future deployment order;
+blocking findings;
+non-blocking findings;
+unknowns requiring evidence.
+
+End with exactly one:
+
+TASK 15.10A DATABASE PREFLIGHT PASS — READY FOR COUNCIL MIGRATION/DEPLOYMENT GATE
+
+TASK 15.10A DATABASE PREFLIGHT PASS WITH REQUIRED DDL ADJUSTMENTS — RETURN TO COUNCIL
+
+TASK 15.10A DATABASE PREFLIGHT FAIL — DEPLOYMENT BLOCKED
+
+HARD STOP
+
+This authorization ends after the read-only report.
+
+ZERO DDL.
+
+ZERO DML.
+
+ZERO MIGRATION EXECUTION.
+
+ZERO DEPLOYMENT.
+
+ZERO LIVE PROVIDER TRAFFIC.
+
+Return the evidence to Council and stop.
