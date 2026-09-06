@@ -1,0 +1,99 @@
+STILLHERE — PHASE R-P1.3 COUNCIL-AUTHORIZED DEPLOYMENT
+
+Real Council consensus is complete. Claude and Gemini have both approved R-P1.2 and authorized controlled deployment.
+
+AUTHORIZED DEPLOYMENT SOURCE
+
+Replit HEAD:
+8ea13059531f74ea32acbf982b605e44517a0dfe
+
+Verified canonical production source:
+f1beaf475d247cbed963d297be29b9b77b7135ac
+
+Production routes.ts has already been independently proven byte-identical to canonical.
+
+1. DEPLOY
+
+Deploy the current verified Replit HEAD to the existing controlled StillHere environment using the normal established Replit deployment mechanism.
+
+This authorization is deployment-only.
+
+DO NOT:
+
+modify product code
+modify tests
+merge/rebase/reset/amend/cherry-pick
+push to canonical GitHub
+change schema
+execute migrations
+change secrets/environment variables
+install/update dependencies
+perform unrelated cleanup
+begin Level 1 Framework work
+modify SMS ownership
+modify Chat SOS
+modify iOS/App Shell/Info.plist
+modify background location
+modify billing
+
+If deployment requires an unexpected source/config/schema/dependency change, STOP and report rather than changing it.
+
+2. POST-DEPLOY VERIFICATION
+
+Before any live telecom traffic, capture:
+
+deployment timestamp
+deployed HEAD/SHA or equivalent deployment version
+active deployment/container/version ID if Replit exposes one
+/api/health result
+HTTP status must be 200
+confirmation the API booted normally
+confirmation no unexpected deployment error occurred
+
+Verify the controlled test user's incident state before testing.
+
+We require confirmation that no stale/unresolved incident exists that could contaminate the live test.
+
+Also record the designated Safety Circle configuration that will be used during the test.
+
+Do not alter genuine user safety data merely to make the test pass. If stale/open state is discovered, STOP and report it.
+
+3. STOP BEFORE LIVE CALL
+
+After successful deployment + health + pre-test-state verification:
+
+STOP.
+
+Do not initiate SMS, email, voice, push, wellness calls, or other provider traffic yourself.
+
+Report:
+
+deployment result
+deployment timestamp
+deployed version/SHA
+container/deployment ID if available
+/api/health HTTP status/result
+pre-test incident state
+Safety Circle configuration relevant to the test
+confirmation no unauthorized changes occurred
+confirmation environment is ready for Dauda's controlled handset test
+
+Final deployment verdict:
+
+R-P1.3 DEPLOYMENT PASS — READY FOR CONTROLLED LIVE HANDSET RETEST
+
+or
+
+R-P1.3 DEPLOYMENT FAIL — LIVE RETEST BLOCKED
+
+Do not initiate the live test. Dauda will control when real handset/provider traffic begins.
+
+After Replit says PASS
+
+Then we run the actual test deliberately, with you controlling Handset 1 and your designated Safety Circle contact controlling Handset 2.
+
+We should capture the superset of both Council requirements:
+
+Single/exhausted-circle unresolved help: wellness call → you press 2 → contact bridge → after speaking to the contact, you press 2 again because you still need help. We verify the false “next person” promise is gone, the truthful exhausted-circle message is spoken when that state actually applies, and the incident remains open.
+Initial second-tier Press 0: exercise the newly bound incidentId path and verify the old “Your safety circle has already been alerted…” assurance does not appear.
+Eligible-contact continuation: where the controlled Safety Circle configuration genuinely permits it, verify the non-promissory continuation behavior and that any claimed outbound action corresponds to actual dispatch evidence.
