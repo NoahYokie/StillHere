@@ -1,0 +1,241 @@
+STILLHERE — TASK 15.10A
+RATIFIED BASE DELTA INSPECTION + SELF-CONTAINED BUNDLE EXPORT
+COUNCIL AUTHORIZED
+
+Claude + Gemini voted A–H YES.
+
+Stage B/C implementation remains BLOCKED.
+
+This task consists of only:
+
+read-only inspection of the two commits after the ratified base;
+temporary export-ref creation;
+self-contained Git bundle creation;
+bundle verification and SHA-256 recording;
+deletion of the temporary export ref;
+STOP and report.
+LOCKED RATIFIED BASE
+
+Exact Stage B/C base:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+Current observed Replit HEAD:
+
+e4ffd25100cc9f3886cdf81ede9215c0f6d19763
+
+Do NOT silently move the implementation base to e4ffd251.
+
+PHASE 1 — TWO-COMMIT DELTA INSPECTION
+
+Inspect exactly the commits reachable after:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+through:
+
+e4ffd25100cc9f3886cdf81ede9215c0f6d19763
+
+Read-only.
+
+Report for each commit:
+
+exact SHA;
+parent SHA;
+author;
+committer;
+author date;
+commit date;
+subject/message;
+complete changed-file list;
+change type per file;
+whether any application source changed;
+whether schema changed;
+whether runtime configuration changed;
+whether package/workspace/build configuration changed;
+whether scripts/hooks changed.
+
+Also produce a combined diff classification for:
+
+893a073... -> e4ffd251...
+
+Final delta classification must be one of:
+
+BOOKKEEPING ONLY — ZERO APPLICATION/SCHEMA/CONFIG CHANGE
+
+RUNTIME-RELEVANT CHANGE PRESENT — COUNCIL REVIEW REQUIRED
+
+Do not modify anything as part of this inspection.
+
+PHASE 2 — TEMPORARY EXPORT REF
+
+Only after the inspection is complete, create exactly:
+
+refs/heads/export/15.10a-base-893a073
+
+pointing directly to:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+No commit creation.
+
+Do not check out this ref.
+
+Verify immediately that:
+
+git rev-parse refs/heads/export/15.10a-base-893a073
+
+returns exactly:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+PHASE 3 — CREATE SELF-CONTAINED BUNDLE
+
+Create a bundle from the temporary ref itself so the bundle contains the complete reachable history necessary for independent reconstruction.
+
+Preferred logical form:
+
+git bundle create <bundle-path> refs/heads/export/15.10a-base-893a073
+
+Do NOT create the bundle using only:
+
+e2b487d..893a073
+
+because the required artifact must be independently restorable rather than dependent on prerequisite objects outside the bundle.
+
+Suggested artifact name:
+
+stillhere-15.10a-base-893a073.bundle
+
+The bundle must advertise the export ref whose target is exact 893a073....
+
+PHASE 4 — BUNDLE VERIFICATION
+
+Run:
+
+git bundle verify <bundle-path>
+
+Verification must succeed.
+
+Inspect bundle heads and verify the advertised export ref resolves exactly to:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+Confirm the bundle permits recovery of the required ancestry including:
+
+9bd5b7001eac8d193402502b9740ab5841f9f37d
+
+and:
+
+e2b487d5ad9f0621a1a22f57fb265aaa2489d5f9
+
+If necessary, perform an offline isolated verification clone/import from the bundle only in a temporary directory, with zero network dependency.
+
+This isolated verification may:
+
+clone/fetch from the bundle;
+inspect commits/trees;
+verify ancestry and exact SHA.
+
+It must NOT:
+
+contact GitHub;
+contact GitSafe;
+mutate the StillHere working repository;
+run application code;
+run DB commands.
+
+Verify in the isolated repository:
+
+recovered head == exact 893a073...;
+9bd5b70... exists;
+e2b487d5... exists;
+git merge-base --is-ancestor 9bd5b70... 893a073... succeeds;
+git merge-base --is-ancestor e2b487d5... 893a073... succeeds.
+PHASE 5 — CRYPTOGRAPHIC ARTIFACT ID
+
+Calculate SHA-256 of the finished bundle.
+
+Return:
+
+exact bundle filename;
+exact local artifact path;
+file size;
+SHA-256;
+advertised ref;
+advertised SHA.
+
+Do not transfer the bundle anywhere yet.
+
+PHASE 6 — DELETE TEMPORARY EXPORT REF
+
+After successful bundle creation and verification, delete:
+
+refs/heads/export/15.10a-base-893a073
+
+Verify the temporary ref no longer exists.
+
+Deleting the temporary ref must NOT delete or alter commit objects or the verified bundle.
+
+HARD PROHIBITIONS
+
+Do NOT:
+
+begin Stage B/C coding;
+create feat/15.10a-escalation-ledger-replit;
+transplant any source;
+push to GitHub;
+retry previous GitHub writes;
+push to GitSafe;
+merge;
+rebase;
+amend;
+cherry-pick;
+force push;
+change canonical branches;
+edit application source;
+edit schema;
+edit runtime configuration;
+run db:push;
+execute migrations;
+access or mutate development DB;
+access or mutate production DB;
+Publish;
+deploy;
+generate Twilio/provider traffic.
+REQUIRED FINAL REPORT
+
+Return:
+
+two-commit delta table;
+final delta classification;
+confirmation ratified base remains 893a073...;
+temporary ref creation verification;
+bundle filename/path;
+bundle size;
+bundle SHA-256;
+git bundle verify result;
+advertised ref + exact advertised SHA;
+independent offline recovery result;
+proof 9bd5b70... is recoverable;
+proof e2b487d5... is recoverable;
+proof recovered head equals exact 893a073...;
+confirmation temporary export ref was deleted;
+final current branch and HEAD;
+tracked worktree/index state;
+confirmation no GitHub/GitSafe write occurred;
+confirmation no source/schema/config mutation;
+confirmation no DB/Publish/deploy/provider action occurred;
+blockers/unknowns.
+
+End exactly with one:
+
+TASK 15.10A BUNDLE EXPORT PASS — EXACT RATIFIED BASE PORTABLE AND VERIFIED
+
+TASK 15.10A BUNDLE EXPORT INCOMPLETE — ADDITIONAL EVIDENCE REQUIRED
+
+TASK 15.10A BUNDLE EXPORT FAIL — PROVENANCE RECOVERY BLOCKED
+
+Then STOP.
+
+Do not transfer the bundle to Codex or GitHub yet.
