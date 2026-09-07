@@ -1,0 +1,282 @@
+STILLHERE — TASK 15.10A
+STAGE B/C WORKING-TREE PROVENANCE RECONCILIATION
+READ-ONLY ONLY
+
+Codex attempted the Council-authorized Stage B/C source-only implementation and STOPPED before editing because its verified checkout does not contain the monorepo paths identified by your prior preflight.
+
+Codex verified:
+
+Repository:
+
+NoahYokie/StillHere
+
+Branch:
+
+feat/15.10a-escalation-ledger
+
+HEAD:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Remote canonical:
+
+f1beaf475d247cbed963d297be29b9b77b7135ac
+
+Migration 0011 SHA-256:
+
+3454bd48c1f4a4f9f69a4fe741421bac80bd340b56b8e57fed93d4fd7636a4a4
+
+Working tree clean.
+
+Codex found:
+
+shared/schema.ts exists;
+lib/stillhere-shared/src/schema.ts absent;
+scripts/post-merge.sh absent;
+pnpm-workspace.yaml absent;
+.replit uses npm commands and does not contain the pnpm --filter db push path.
+
+Your previous Replit preflight, however, identified a current monorepo workspace containing:
+
+lib/stillhere-shared/src/schema.ts;
+lib/db/src/schema/index.ts;
+scripts/post-merge.sh;
+pnpm workspace/package command chains;
+API aliases pointing to lib/stillhere-shared/src/schema.ts.
+
+We therefore need to establish the exact provenance relationship between the audited GitHub feature tree and the current Replit monorepo tree before any source change is authorized.
+
+HARD RULE
+
+READ-ONLY ONLY.
+
+Do not edit source.
+
+Do not commit.
+
+Do not merge.
+
+Do not rebase.
+
+Do not cherry-pick.
+
+Do not fetch in a way that mutates checked-out source unless ordinary read-only remote metadata inspection requires it.
+
+Do not change branch.
+
+Do not touch development DB.
+
+Do not touch production DB.
+
+Do not run migration.
+
+Do not run db:push.
+
+Do not Publish.
+
+Do not deploy.
+
+Do not generate provider traffic.
+
+1. CURRENT REPLIT WORKTREE IDENTITY
+
+Report the exact:
+
+repository remote URL;
+current branch;
+current HEAD SHA;
+upstream/tracking branch;
+working-tree status;
+whether HEAD is pushed to origin;
+whether Replit contains local-only commits;
+whether Replit contains uncommitted changes.
+
+If detached HEAD, report that explicitly.
+
+2. MONOREPO INTRODUCTION HISTORY
+
+Determine exactly which commit introduced/moved:
+
+lib/stillhere-shared/src/schema.ts;
+lib/db/src/schema/index.ts;
+scripts/post-merge.sh;
+pnpm-workspace.yaml;
+the current pnpm workspace structure.
+
+Identify:
+
+commit SHA;
+parent SHA;
+commit subject;
+whether that commit exists on origin;
+branch containing it.
+
+Determine whether this is the previously observed restructure commit:
+
+9bd5b70
+
+or another commit.
+
+Do not assume.
+
+3. RELATIONSHIP TO B37DDF7
+
+Determine whether Replit’s current HEAD:
+
+descends from b37ddf7;
+precedes b37ddf7;
+diverged before b37ddf7;
+contains equivalent 15.10A changes under moved paths;
+contains none of the 15.10A implementation.
+
+Use Git ancestry/diff evidence.
+
+Report exact merge-base(s).
+
+4. MAP THE 15.10A IMPLEMENTATION
+
+Compare audited feature commit:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+against the current Replit monorepo tree.
+
+Produce a path mapping for every file changed by b37ddf7.
+
+For each file classify:
+
+UNCHANGED PATH
+
+MOVED/RENAMED PATH
+
+EQUIVALENT FILE EXISTS
+
+DELETED BY RESTRUCTURE
+
+NO CURRENT EQUIVALENT
+
+CONTENT ALREADY PRESENT
+
+Do not modify anything.
+
+Pay particular attention to:
+
+schema;
+storage;
+emergency/telephony routes;
+service modules;
+tests;
+migration 0011.
+5. SCHEMA CONTENT COMPARISON
+
+Compare:
+
+audited feature:
+
+shared/schema.ts at b37ddf7
+
+versus current Replit:
+
+lib/stillhere-shared/src/schema.ts
+
+Determine exactly which Task 15.10A structures from b37ddf7 are:
+
+already present;
+missing;
+structurally changed;
+affected by unrelated Replit changes.
+
+Do not infer from names alone.
+
+6. APPLICATION LOGIC COMPARISON
+
+Determine whether the Task 15.10A runtime behavior from b37ddf7 survives in the current Replit tree.
+
+Confirm specifically:
+
+incident-opening immutable Safety Circle snapshot;
+attempt aggregate;
+telephony raw event ledger;
+provider-authoritative answer truth;
+removal of the 15-second answered/reached inversion;
+SID correlation;
+first-pass anti-loop/contact consumption;
+incident-bound Press-1 CAS behavior;
+exhausted-circle behavior;
+legacy NULL/NULL semantics.
+
+For each classify:
+
+PRESENT
+
+PARTIAL
+
+ABSENT
+
+UNABLE TO PROVE
+
+Include exact file paths and source evidence.
+
+7. SAFE IMPLEMENTATION BASE
+
+Based strictly on Git provenance, identify the safest future Stage B/C implementation location.
+
+Return exactly one recommendation:
+
+OPTION A — CONTINUE ON B37DDF7 OLD TREE AND PORT MONOREPO LATER
+
+OPTION B — PORT B37DDF7 INTO CURRENT REPLIT MONOREPO TREE
+
+OPTION C — CREATE A NEW FEATURE BRANCH FROM CURRENT MONOREPO HEAD AND TRANSPLANT ONLY AUDITED 15.10A CHANGES
+
+OPTION D — ADDITIONAL PROVENANCE WORK REQUIRED
+
+Do not perform the recommendation.
+
+Explain why.
+
+8. EXACT FUTURE BRANCH/BASE
+
+If enough evidence exists, identify:
+
+exact recommended base SHA;
+exact source commit containing audited 15.10A behavior;
+proposed future feature branch name;
+exact files requiring transplant;
+files that must NOT be copied because current monorepo versions supersede them.
+
+This is design only.
+
+9. REPLIT PREFLIGHT CONSISTENCY
+
+Confirm whether your earlier declarative-alignment preflight was run against the same current worktree/HEAD you are reporting now.
+
+If not, identify exactly what changed between those inspections.
+
+REQUIRED FINAL REPORT
+
+Return:
+
+exact Replit repo/branch/HEAD;
+worktree cleanliness;
+monorepo introduction commit;
+Git merge-base with b37ddf7;
+whether b37ddf7 is ancestor/descendant/diverged;
+complete 15.10A file-path mapping;
+schema parity findings;
+runtime behavior parity findings;
+safest implementation-base recommendation;
+proposed exact branch/base for future work;
+blockers;
+unknowns;
+explicit confirmation of zero mutation.
+
+End exactly with one:
+
+TASK 15.10A WORKTREE PROVENANCE PASS — SAFE IMPLEMENTATION BASE IDENTIFIED
+
+TASK 15.10A WORKTREE PROVENANCE INCOMPLETE — ADDITIONAL EVIDENCE REQUIRED
+
+TASK 15.10A WORKTREE PROVENANCE FAIL — IMPLEMENTATION BLOCKED
+
+Then STOP.
