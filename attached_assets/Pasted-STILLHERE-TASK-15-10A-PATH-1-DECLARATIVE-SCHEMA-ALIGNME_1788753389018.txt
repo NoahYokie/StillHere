@@ -1,0 +1,317 @@
+STILLHERE — TASK 15.10A
+PATH 1 DECLARATIVE SCHEMA ALIGNMENT PREFLIGHT
+READ-ONLY INSPECTION ONLY
+
+Council status: unanimous YES A–I from Claude and Gemini.
+
+Selected architecture:
+PATH 1 — REPLIT-NATIVE WITH STRICT CHECK CONSTRAINT EXTENSION
+
+This task is READ-ONLY ONLY.
+
+Do not modify source.
+
+Do not modify configuration.
+
+Do not mutate the development database.
+
+Do not mutate production.
+
+Do not run db:push.
+
+Do not run drizzle-kit push.
+
+Do not run migration 0011.
+
+Do not deploy.
+
+Do not Publish.
+
+Do not initiate Twilio/provider traffic.
+
+AUTHORITATIVE CONTEXT
+
+Repository:
+
+NoahYokie/StillHere
+
+Feature commit:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Canonical migration:
+
+migrations/0011_incident_telephony_ledger.sql
+
+Authoritative SHA-256:
+
+3454bd48c1f4a4f9f69a4fe741421bac80bd340b56b8e57fed93d4fd7636a4a4
+
+Complete Task 15.10A contract requires:
+
+2 incident metadata columns;
+incident_escalation_sequence;
+incident_contact_attempts;
+incident_telephony_events;
+all foreign keys;
+all defaults;
+all indexes;
+all five SQL CHECK constraints;
+dedicated StillHere migration ledger design if Council retains it.
+
+Current problem:
+
+the feature declarative schema does not include the five CHECK constraints, the proposed migration ledger is not represented declaratively, and the post-merge path is misaligned.
+
+1. INSTALLED DRIZZLE CAPABILITY
+
+Inspect the exact installed versions of:
+
+drizzle-orm;
+drizzle-kit;
+relevant PostgreSQL driver packages.
+
+Determine whether the exact installed drizzle-orm/pg-core supports declarative PostgreSQL CHECK constraints using check().
+
+Do not rely only on general Drizzle documentation.
+
+Inspect the installed package/type definitions/source as needed.
+
+Report:
+
+exact version;
+exact exported API;
+whether check() is supported;
+expected syntax shape;
+whether SQL expressions can represent each required constraint exactly.
+2. FIVE CHECK CONSTRAINT PARITY
+
+Read the exact definitions from:
+
+migrations/0011_incident_telephony_ledger.sql
+
+For each of the five CHECK constraints, determine whether it can be represented semantically and structurally in the installed Drizzle version.
+
+Required checks:
+
+incident snapshot metadata pair invariant;
+sequence priority rank > 0;
+attempt cycle = 1;
+duration >= 0;
+outcome_source restricted to the approved values.
+
+For each report:
+
+SQL constraint name;
+exact raw migration expression;
+proposed Drizzle representation as design only;
+whether generated SQL is expected to be equivalent;
+any quoting/cast/null-semantics difference;
+whether exact constraint naming can be preserved.
+
+Do not edit schema.ts.
+
+3. DRIZZLE-GENERATED SQL CERTAINTY
+
+Determine how we can prove that the eventual declarative check() definitions generate the intended PostgreSQL CHECK DDL.
+
+Investigate read-only:
+
+whether drizzle-kit generate can generate SQL without touching a DB;
+whether a temporary/local schema-diff generation can occur without persistent mutation;
+what exact command would later be safest for verification.
+
+Do NOT run any command that changes the development or production database.
+
+If generating a temporary local artifact would count as source/workspace mutation, do not do it in this task; describe the later verification method only.
+
+4. MIGRATION LEDGER DECLARATIVE DESIGN
+
+Council previously ratified the concept of:
+
+public.stillhere_schema_migrations
+
+But PATH 1 requires preventing production-only drift.
+
+Inspect whether this table can be represented safely in the authoritative declarative StillHere schema.
+
+Proposed fields from the prior executor design included:
+
+migration_id;
+applied_at;
+sql_sha256;
+executor_version;
+authorization_ref;
+target_evidence_ref;
+baseline_schema_sha256;
+legacy_count;
+legacy_ids_sha256;
+optional target project/branch/endpoint evidence.
+
+Determine:
+
+which fields remain meaningful under Replit-native Publish rather than standalone execution;
+whether executor_version should be renamed/generalized;
+whether migration SQL SHA still has meaning if Replit generates the actual production DDL;
+whether the ledger should record the audited contract/version rather than falsely claim exact execution of 0011;
+whether ledger insertion can/should happen atomically with Replit Publish;
+whether Replit Publish can populate such a record automatically;
+whether this ledger design should be retained, revised, or deferred.
+
+Important: do not invent audit semantics that Replit Publish cannot actually guarantee.
+
+Return a recommendation:
+
+RETAIN AS DESIGNED
+
+REVISE FOR REPLIT-NATIVE
+
+DEFER LEDGER UNTIL PUBLISH SEMANTICS ARE PROVEN
+
+with reasoning.
+
+5. AUTHORITATIVE SCHEMA FILE
+
+Confirm the exact authoritative StillHere schema path.
+
+Replit previously identified:
+
+lib/stillhere-shared/src/schema.ts
+
+Verify:
+
+API server import/use;
+Drizzle config path;
+workspace/package relationships;
+whether there are duplicate/legacy schema files;
+whether any other schema file could silently compete with it.
+
+Return one recommended canonical source-of-truth path.
+
+No edits.
+
+6. POST-MERGE HOOK REPAIR DESIGN
+
+Inspect:
+
+scripts/post-merge.sh
+
+and the package command it invokes.
+
+Previous evidence says it currently executes:
+
+pnpm --filter db push
+
+and that package points to an empty/template schema instead of StillHere’s actual schema.
+
+Determine the smallest safe repair design.
+
+Report:
+
+current command chain;
+current schema target;
+why it is wrong/incomplete;
+correct workspace/package command that would target the authoritative StillHere schema;
+whether the repair should call an existing API-server db:push script or a new dedicated schema package command;
+whether post-merge automatic DB mutation itself is safe or should instead become manual/explicit.
+
+Do not assume automatic post-merge mutation is desirable merely because it exists today.
+
+Assess whether an automatic db:push after every merge is too risky for a safety-critical application.
+
+Return one of:
+
+REPOINT EXISTING AUTO-HOOK
+
+REPLACE WITH EXPLICIT MANUAL DEV-SCHEMA COMMAND
+
+ADDITIONAL DESIGN REQUIRED
+
+with reasoning.
+
+7. DEVELOPMENT-FIRST PATH DESIGN
+
+Without executing anything, design the future controlled sequence for PATH 1.
+
+It should cover:
+
+complete declarative schema;
+exact CHECK parity verification;
+development DB application;
+development catalog verification;
+Replit read-only dev→prod schema diff;
+Council inspection of exact proposed production DDL;
+controlled interactive Publish;
+post-Publish catalog verification;
+backend b37ddf7 start only after schema verification passes.
+
+Identify where explicit Council approval is required between stages.
+
+No implementation.
+
+8. DRIFT-RISK ANALYSIS
+
+Identify every remaining way schema drift could occur after PATH 1 is adopted, including:
+
+CHECK constraints omitted by Drizzle;
+ledger table absent from declarative schema;
+legacy schema package still being used somewhere;
+post-merge automation hitting wrong DB;
+development and production diverging between approvals;
+future developer running a different db:push;
+Replit Publish interpreting constraint differences unexpectedly.
+
+For each, give the smallest preventative control.
+
+9. REQUIRED FINAL REPORT
+
+Return:
+
+installed Drizzle/Kit versions;
+proof whether check() is supported;
+five-constraint parity matrix;
+recommended declarative representations;
+migration-ledger recommendation;
+authoritative schema path;
+post-merge hook repair recommendation;
+development-first PATH 1 sequence;
+drift risks and controls;
+blockers;
+non-blocking observations;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A DECLARATIVE ALIGNMENT PREFLIGHT PASS — READY FOR COUNCIL DESIGN REVIEW
+
+TASK 15.10A DECLARATIVE ALIGNMENT PREFLIGHT INCOMPLETE — ADDITIONAL EVIDENCE REQUIRED
+
+TASK 15.10A DECLARATIVE ALIGNMENT PREFLIGHT FAIL — PATH 1 BLOCKED
+
+HARD STOP
+
+READ-ONLY.
+
+No source changes.
+
+No configuration changes.
+
+No DB writes.
+
+No development mutation.
+
+No production mutation.
+
+No migration.
+
+No schema push.
+
+No generated migration applied.
+
+No deployment.
+
+No Publish.
+
+No Twilio traffic.
+
+Stop after reporting.
