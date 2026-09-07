@@ -1,0 +1,373 @@
+STILLHERE — TASK 15.10A
+PRODUCTION TARGET-POLICY & MIGRATION-LEDGER INVENTORY
+READ-ONLY EVIDENCE COLLECTION
+
+Council authorization: unanimous YES A–I from Claude and Gemini.
+
+This task is READ-ONLY ONLY.
+
+Do not execute migration 0011.
+
+Do not modify source.
+
+Do not modify configuration.
+
+Do not perform DDL or DML.
+
+Do not deploy.
+
+Do not Publish.
+
+Do not initiate Twilio/provider traffic.
+
+AUTHORITATIVE CONTEXT
+
+Repository:
+
+NoahYokie/StillHere
+
+Feature implementation:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Migration:
+
+migrations/0011_incident_telephony_ledger.sql
+
+Authoritative SHA-256:
+
+3454bd48c1f4a4f9f69a4fe741421bac80bd340b56b8e57fed93d4fd7636a4a4
+
+Proposed future executor:
+
+standalone Node.js using existing pg.Client.
+
+Migration execution remains blocked.
+
+PURPOSE
+
+Collect independently verifiable evidence needed to bind the future migration executor to the correct production Neon database and determine whether production already contains a durable migration ledger.
+
+Do not infer or guess missing identifiers.
+
+If any item cannot be independently proven, report it as UNKNOWN/BLOCKING.
+
+1. NEON PRODUCTION IDENTITY
+
+Determine, using read-only evidence where available:
+
+Neon project ID;
+Neon branch ID;
+Neon endpoint ID;
+direct endpoint hostname;
+endpoint type;
+whether endpoint is direct or pooled;
+database name;
+PostgreSQL version.
+
+Important:
+
+Do not treat DATABASE_URL alone as independent proof of target identity.
+
+Where possible, corroborate connection-string values against Neon/Replit control-plane or environment metadata.
+
+Report the evidence source for every identifier.
+
+If project/branch/endpoint mapping cannot be independently verified:
+
+mark production target identity unresolved.
+
+2. ACTIVE DATABASE SESSION IDENTITY
+
+Through a READ-ONLY connection, report:
+
+current_database();
+current_user;
+current_schema();
+server_version;
+server_version_num;
+server encoding;
+recovery status;
+inet_server_addr() where permitted;
+inet_server_port() where permitted;
+connection/application identity available through PostgreSQL views.
+
+Do not print credentials or full connection strings.
+
+3. ROLE & PERMISSION INVENTORY
+
+Inspect READ-ONLY:
+
+current role attributes;
+role membership;
+ownership of public.incidents;
+ownership of current application tables;
+schema owner;
+whether current role can:
+CREATE in public;
+ALTER incidents;
+CREATE TABLE;
+CREATE INDEX;
+CREATE CONSTRAINT;
+INSERT into a future migration ledger;
+acquire table locks.
+
+Do not exercise those permissions.
+
+Only inspect privilege metadata.
+
+Also report whether the runtime application appears to use:
+
+the same database role;
+a separate application role;
+or this cannot be proven.
+
+This distinction matters because the future migration ledger is operational evidence, not tamper-proof evidence if the same broad owner role is used everywhere.
+
+4. MIGRATION-LEDGER INVENTORY
+
+Search the production catalog READ-ONLY for any durable migration/versioning tables or views.
+
+Include names matching or semantically related to:
+
+migration;
+migrations;
+schema_migrations;
+drizzle;
+drizzle_migrations;
+__drizzle_migrations;
+schema_version;
+flyway;
+databasechangelog;
+liquibase;
+version;
+
+Do not rely on names alone.
+
+For every candidate:
+
+schema;
+relation name;
+relation type;
+owner;
+columns;
+indexes/keys;
+row count where safe;
+whether it appears suitable to record Task 15.10A migration success.
+
+If no suitable existing ledger exists, explicitly report:
+
+NO SUITABLE DURABLE MIGRATION LEDGER FOUND
+
+Do not create one.
+
+5. BASELINE SCHEMA FINGERPRINT
+
+Reproduce the same baseline catalog scope proposed by Codex for:
+
+contacts
+incidents
+users
+
+Capture structural metadata only:
+
+table properties;
+columns;
+types;
+nullability;
+defaults;
+PKs;
+FKs;
+CHECKs;
+indexes;
+triggers;
+policies.
+
+Do not collect user row contents.
+
+Build a deterministic canonical representation and SHA-256 fingerprint.
+
+Report:
+
+baselineSchemaSha256
+
+Include enough read-only structural evidence that Codex can independently reproduce the fingerprint algorithm.
+
+6. CURRENT TASK 15.10A SCHEMA STATE
+
+Confirm production currently has:
+
+no escalation_snapshot_created_at;
+no escalation_snapshot_contact_count;
+no incident_escalation_sequence;
+no incident_contact_attempts;
+no incident_telephony_events;
+no Task 15.10A CHECK constraints;
+no Task 15.10A audit record.
+
+If any Task 15.10A object already exists:
+
+report exact object/definition and classify:
+
+PARTIAL SCHEMA — BLOCKING
+
+Do not repair or alter it.
+
+7. LEGACY INCIDENT BASELINE
+
+READ-ONLY:
+
+exact current incident count;
+deterministic SHA-256 fingerprint of sorted incident IDs;
+confirm whether all existing incidents currently lack Task 15.10A snapshot metadata because those columns do not yet exist.
+
+Do not print incident UUIDs individually.
+
+Report only:
+
+count;
+digest.
+
+This evidence will become the approved legacy baseline for the migration executor.
+
+8. CURRENT LOCK / TRAFFIC STATE
+
+READ-ONLY snapshot:
+
+active transactions;
+long-running transactions;
+locks involving incidents;
+blocked/blocking sessions;
+current database connection count;
+application-labelled sessions if visible.
+
+This is observation only.
+
+Do not terminate sessions.
+
+Do not change timeouts.
+
+Also state whether this snapshot is merely momentary and therefore cannot itself authorize future migration timing.
+
+9. EXECUTOR CONNECTION REQUIREMENTS
+
+Based on actual production evidence, determine whether the proposed future executor can safely use:
+
+direct Neon endpoint;
+TLS hostname verification;
+existing DATABASE_URL;
+existing role;
+existing pg connection options.
+
+Report any actual query parameters/options currently required by the production connection string, but redact credentials.
+
+Specifically determine whether Codex's proposed allowlist of only:
+
+sslmode=require or sslmode=verify-full
+
+would accept the real production URI.
+
+If not, report the exact non-secret options that would need Council review.
+
+10. TARGET POLICY CANDIDATE
+
+If all required facts are proven, return a candidate READ-ONLY target policy containing:
+
+host;
+port;
+database;
+role;
+neonProjectId;
+neonBranchId;
+neonEndpointId;
+PostgreSQL version;
+baselineSchemaSha256;
+migrationLedgerInventorySha256;
+expectedLegacyCount;
+legacyIdsSha256;
+whether a suitable existing ledger exists;
+suggested targetEvidenceRef.
+
+Do NOT create a production policy file.
+
+Do NOT choose an authorization reference.
+
+This is evidence for Council review only.
+
+If any critical identity element remains unverified:
+
+do not manufacture a policy.
+
+11. MIGRATION LEDGER RECOMMENDATION
+
+Based only on actual production inventory, recommend one:
+
+USE EXISTING DURABLE LEDGER
+
+CREATE DEDICATED public.stillhere_schema_migrations
+
+ADDITIONAL EVIDENCE REQUIRED
+
+If recommending an existing ledger, explain whether it can record:
+
+migration ID;
+applied timestamp;
+exact SQL SHA-256;
+executor version;
+Council authorization reference;
+target evidence reference;
+baseline fingerprint;
+legacy incident count/digest.
+
+If it cannot represent those fields cleanly, say so.
+
+12. REQUIRED FINAL REPORT
+
+Return:
+
+Neon production identity evidence;
+DB/session identity;
+role/permission inventory;
+migration-ledger inventory;
+ledger recommendation;
+baseline schema SHA-256;
+legacy incident count + ID digest;
+current Task 15.10A schema state;
+current lock/traffic snapshot;
+connection-option compatibility;
+candidate target policy, if fully supportable;
+blockers;
+non-blocking observations;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A TARGET-POLICY INVENTORY PASS — READY FOR COUNCIL REVIEW
+
+TASK 15.10A TARGET-POLICY INVENTORY INCOMPLETE — ADDITIONAL EVIDENCE REQUIRED
+
+TASK 15.10A TARGET-POLICY INVENTORY FAIL — MIGRATION REMAINS BLOCKED
+
+HARD STOP
+
+No DDL.
+
+No DML.
+
+No migration.
+
+No audit-table creation.
+
+No source changes.
+
+No configuration changes.
+
+No session termination.
+
+No deployment.
+
+No Publish.
+
+No Twilio/provider traffic.
+
+Stop after the evidence report.
