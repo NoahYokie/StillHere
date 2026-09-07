@@ -1,5 +1,5 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, real, doublePrecision, pgEnum, index } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, uuid, text, timestamp, integer, boolean, real, doublePrecision, pgEnum, index, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -311,6 +311,8 @@ export const incidents = pgTable("incidents", {
   nextActionAt: timestamp("next_action_at"),
   escalationLevel: integer("escalation_level").notNull().default(0),
   notifiedContactIds: text("notified_contact_ids").notNull().default("[]"),
+  escalationSnapshotCreatedAt: timestamp("escalation_snapshot_created_at", { withTimezone: true }),
+  escalationSnapshotContactCount: integer("escalation_snapshot_contact_count"),
   lastContactNotifiedAt: timestamp("last_contact_notified_at"),
   allContactsNotifiedAt: timestamp("all_contacts_notified_at"),
   userNotifiedNoResponseAt: timestamp("user_notified_no_response_at"),
@@ -343,6 +345,7 @@ export const incidents = pgTable("incidents", {
   // degradedDelivery (which means we found a working fallback).
   deliveryFailed: boolean("delivery_failed").notNull().default(false),
 }, (table) => [
+  check("incident_snapshot_metadata_pair", sql`(${table.escalationSnapshotCreatedAt} IS NULL AND ${table.escalationSnapshotContactCount} IS NULL) OR (${table.escalationSnapshotCreatedAt} IS NOT NULL AND ${table.escalationSnapshotContactCount} IS NOT NULL AND ${table.escalationSnapshotContactCount} >= 0)`),
   index("incidents_user_id_idx").on(table.userId),
   index("incidents_user_status_idx").on(table.userId, table.status),
   index("incidents_user_reason_status_idx").on(table.userId, table.reason, table.status),
@@ -1040,7 +1043,7 @@ export const insertContactSchema = createInsertSchema(contacts).omit({ id: true,
   email: z.string().trim().email("Please enter a valid email address").nullish().or(z.literal("").transform(() => null)),
 });
 export const insertCheckinSchema = createInsertSchema(checkins).omit({ id: true, createdAt: true });
-export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, startedAt: true });
+export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true, startedAt: true, escalationSnapshotCreatedAt: true, escalationSnapshotContactCount: true });
 export const insertLocationSessionSchema = createInsertSchema(locationSessions).omit({ id: true, updatedAt: true });
 export const insertOtpCodeSchema = createInsertSchema(otpCodes).omit({ id: true, createdAt: true });
 export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({ id: true, createdAt: true });
@@ -1411,6 +1414,74 @@ export type InsertSafeWalk = z.infer<typeof insertSafeWalkSchema>;
 
 export type TripPoint = typeof tripPoints.$inferSelect;
 export type InsertTripPoint = z.infer<typeof insertTripPointSchema>;
+
+export const incidentEscalationSequence = pgTable("incident_escalation_sequence", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  incidentId: uuid("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
+  // No live-contact FK: historical identity survives live contact deletion.
+  contactId: uuid("contact_id").notNull(),
+  priorityRank: integer("priority_rank").notNull(),
+  role: text("role").notNull(),
+  displayName: text("display_name").notNull(),
+  destination: text("destination").notNull(),
+  snapshotAt: timestamp("snapshot_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("incident_escalation_sequence_priority_rank_check", sql`${t.priorityRank} > 0`),
+  uniqueIndex("incident_sequence_rank_unique").on(t.incidentId, t.priorityRank),
+  uniqueIndex("incident_sequence_contact_unique").on(t.incidentId, t.contactId),
+]);
+
+export const incidentContactAttempts = pgTable("incident_contact_attempts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  incidentId: uuid("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
+  sequenceId: uuid("sequence_id").references(() => incidentEscalationSequence.id),
+  cycle: integer("cycle").notNull().default(1),
+  channel: text("channel").notNull().default("voice"),
+  state: text("state").notNull().default("reserved"),
+  parentCallSid: text("parent_call_sid"),
+  childCallSid: text("child_call_sid"),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }),
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  duration: integer("duration"),
+  outcome: text("outcome"),
+  outcomeSource: text("outcome_source"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("incident_contact_attempts_cycle_check", sql`${t.cycle} = 1`),
+  check("incident_contact_attempts_duration_check", sql`${t.duration} >= 0`),
+  check("incident_contact_attempts_outcome_source_check", sql`${t.outcomeSource} IN ('provider_authoritative','duration_inferred','system_inferred')`),
+  uniqueIndex("incident_attempt_cycle_contact_unique").on(t.incidentId, t.cycle, t.sequenceId, t.channel),
+  uniqueIndex("incident_attempt_child_sid_unique").on(t.childCallSid),
+  index("incident_attempt_parent_sid_idx").on(t.parentCallSid),
+]);
+
+// Append-only application journal; never dump webhook bodies or credentials.
+export const incidentTelephonyEvents = pgTable("incident_telephony_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  incidentId: uuid("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
+  attemptId: uuid("attempt_id").references(() => incidentContactAttempts.id),
+  provider: text("provider").notNull().default("twilio"),
+  eventKey: text("event_key").notNull(),
+  eventType: text("event_type").notNull(),
+  callStatus: text("call_status"),
+  dialCallStatus: text("dial_call_status"),
+  dialCallDuration: text("dial_call_duration"),
+  callDuration: text("call_duration"),
+  callSid: text("call_sid"),
+  parentCallSid: text("parent_call_sid"),
+  dialCallSid: text("dial_call_sid"),
+  answeredBy: text("answered_by"),
+  digits: text("digits"),
+  providerTimestamp: text("provider_timestamp"),
+  sequenceNumber: text("sequence_number"),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("incident_telephony_event_key_unique").on(t.eventKey),
+  index("incident_telephony_event_attempt_idx").on(t.attemptId, t.createdAt),
+]);
 
 export interface EscalationTimelineEntry {
   type: string;

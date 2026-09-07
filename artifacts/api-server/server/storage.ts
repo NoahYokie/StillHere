@@ -1,3 +1,4 @@
+import { createOpeningSnapshot, readOpeningRoster } from "./escalation-snapshot";
 import { randomBytes } from "crypto";
 import { eq, desc, and, ne, gt, gte, lt, lte, or, isNull, isNotNull, inArray, sql } from "drizzle-orm";
 import { db, pool } from "./db";
@@ -134,6 +135,7 @@ export type IncidentOwnershipType =
   | "test";
 
 export interface CreateIncidentOptions {
+  originatingIncidentId?: string;
   incidentType?: IncidentOwnershipType;
   incidentSubtype?: Level1IncidentSubtype;
   incidentSource?: Level1IncidentSource;
@@ -2193,6 +2195,7 @@ export class DatabaseStorage implements IStorage {
         await this.supersedePreviousIncidentTx(tx, existing, incidentType, "Higher-priority safety event superseded active incident");
       }
 
+      const opening = await readOpeningRoster(tx, userId);
       const [incident] = await tx.insert(incidents).values({
         userId,
         status: "open",
@@ -2203,7 +2206,7 @@ export class DatabaseStorage implements IStorage {
       }).returning();
 
       await this.createGuardianReviewsTx(tx, incident, incidentType, options);
-      return incident;
+      return createOpeningSnapshot(tx, incident, opening);
     });
   }
 
@@ -2228,6 +2231,10 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(incidents.startedAt))
         .limit(1);
 
+      if (options.originatingIncidentId && (!existing || existing.id !== options.originatingIncidentId || existing.status !== "open")) {
+        throw new Error("Originating wellness incident is no longer eligible");
+      }
+
       if (existing?.isDrill && options.isDrill !== true) {
         await this.cancelDrillIncidentTx(tx, existing, incidentType);
       } else if (existing && !existing.isDrill) {
@@ -2249,7 +2256,13 @@ export class DatabaseStorage implements IStorage {
         await this.supersedePreviousIncidentTx(tx, existing, incidentType, stateReason);
       }
 
+      const opening = await readOpeningRoster(tx, userId);
       const [createdIncident] = await tx.insert(incidents).values({
+        ...(options.originatingIncidentId ? {
+          wellnessCallStatus: "help",
+          lastEscalationStep: "wellness_call_help",
+          nextActionAt: new Date(),
+        } : {}),
         userId,
         status: "open",
         reason,
@@ -2273,7 +2286,7 @@ export class DatabaseStorage implements IStorage {
       }
 
       await this.createGuardianReviewsTx(tx, createdIncident, incidentType, options);
-      return createdIncident;
+      return createOpeningSnapshot(tx, createdIncident, opening);
     });
 
     console.log(`[SafetyState] user ${userId} ${oldState} -> ${newState} (${stateReason})`);
