@@ -1,0 +1,374 @@
+STILLHERE — TASK 15.10A
+WRITABLE PRIMARY & REPLIT PUBLISH RECONCILIATION
+READ-ONLY EVIDENCE TASK
+
+Council authorization: unanimous YES A–H from Claude and Gemini.
+
+This task is READ-ONLY ONLY.
+
+Do not execute migration 0011.
+
+Do not modify source.
+
+Do not modify configuration.
+
+Do not perform DDL or DML.
+
+Do not deploy.
+
+Do not Publish.
+
+Do not initiate Twilio/provider traffic.
+
+AUTHORITATIVE CONTEXT
+
+Repository:
+
+NoahYokie/StillHere
+
+Feature implementation:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Migration:
+
+migrations/0011_incident_telephony_ledger.sql
+
+Authoritative migration SHA-256:
+
+3454bd48c1f4a4f9f69a4fe741421bac80bd340b56b8e57fed93d4fd7636a4a4
+
+Verified production project:
+
+aged-feather-27953340
+
+Observed replica branch:
+
+br-bold-cloud-a7qnx9wb
+
+Observed replica endpoint:
+
+ep-wispy-hat-a78dlcfg
+
+Database:
+
+neondb
+
+PostgreSQL:
+
+16.15
+
+Observed role:
+
+neondb_owner
+
+Existing inspected endpoint is a read replica:
+
+pg_is_in_recovery() = true
+
+Therefore migration remains blocked.
+
+PURPOSE
+
+Resolve the remaining production-target and platform-mechanics blockers before executor implementation or hermetic testing can begin.
+
+Required evidence:
+
+writable primary endpoint identity;
+primary/replica proof;
+direct vs pooled connection proof;
+non-secret connection options;
+runtime application role vs migration role relationship;
+Replit Publish/schema-diff behavior and interaction with out-of-band DDL.
+
+If any item cannot be proven without mutation or credential disclosure, report it as UNKNOWN/BLOCKING.
+
+Do not infer missing values.
+
+1. WRITABLE NEON PRIMARY ENDPOINT
+
+Determine the production writable primary for Neon project:
+
+aged-feather-27953340
+
+Establish, through permitted read-only evidence:
+
+primary branch ID;
+primary endpoint ID;
+primary compute ID where exposed;
+client-facing primary hostname;
+port;
+database;
+endpoint state;
+endpoint type;
+direct vs pooled classification.
+
+Use independently corroborated platform/control-plane evidence where available.
+
+Do NOT treat the existing read-replica connection as the primary.
+
+Do NOT infer the primary hostname from naming conventions.
+
+If the writable primary cannot be surfaced:
+
+report:
+
+WRITABLE PRIMARY IDENTITY UNRESOLVED — BLOCKING
+
+2. PRIMARY PROOF
+
+If a permitted READ-ONLY session to the candidate primary is available, verify:
+
+pg_is_in_recovery() = false;
+current_database();
+current_user;
+current_schema();
+server_version_num;
+Neon project/branch/endpoint settings;
+compute mode if exposed;
+server encoding.
+
+Do not execute any write statement as a “test.”
+
+Primary status must be proven through read-only metadata only.
+
+3. DIRECT VS POOLED PROOF
+
+Determine whether the future production write connection is:
+
+direct Neon endpoint;
+pooled endpoint;
+Replit internal proxy;
+or another managed route.
+
+Report:
+
+hostname form, redacted if necessary;
+port;
+whether pooling/PgBouncer is involved;
+pool mode if discoverable;
+whether session state persists on a single PostgreSQL backend;
+whether transaction-level advisory locks are safe;
+whether multi-statement explicit transactions on one pg.Client are supported.
+
+Do not assume port alone proves pooled/direct status.
+
+4. CONNECTION OPTIONS / TLS
+
+Inspect non-secret production connection metadata where permitted.
+
+Report:
+
+required SSL/TLS mode;
+whether hostname verification is supported/required;
+non-secret query parameters;
+any Replit/Neon-specific connection flags;
+whether Codex’s proposed allowlist:
+
+sslmode=require
+
+or:
+
+sslmode=verify-full
+
+would accept the actual primary URI.
+
+Do not print:
+
+passwords;
+full DATABASE_URL;
+credentials/tokens.
+
+If credentials cannot be inspected without disclosure, inspect configuration shape or platform metadata instead.
+
+5. RUNTIME ROLE VS MIGRATION ROLE
+
+Determine whether the deployed StillHere production application uses:
+
+neondb_owner;
+another PostgreSQL role;
+a pooled/proxied identity;
+or this cannot be proven.
+
+Use read-only evidence such as:
+
+PostgreSQL sessions;
+process/config metadata;
+application startup configuration;
+Replit deployment configuration;
+platform-managed DB binding metadata.
+
+Report:
+
+runtime DB role;
+proposed migration DB role;
+whether they are the same;
+whether application role can modify the future migration ledger;
+whether application role will have required access to the three new Task 15.10A tables after migration.
+
+Do not change grants or roles.
+
+6. REPLIT PUBLISH / SCHEMA-DIFF RECONCILIATION
+
+Inspect repository and Replit platform configuration READ-ONLY to determine exactly how production schema changes are normally handled.
+
+Specifically determine:
+
+whether Replit Publish automatically runs drizzle-kit push;
+whether npm run db:push is executed during build/start/publish;
+whether any deployment hook modifies schema;
+whether Replit computes a schema diff from shared/schema.ts;
+whether Replit would attempt to recreate/remove/change objects after an out-of-band migration;
+whether SQL-only CHECK constraints absent from Drizzle schema would be preserved or dropped;
+whether the three new tables/columns in b37ddf7 are already represented in shared/schema.ts;
+whether the proposed dedicated migration ledger would be unknown to Drizzle and therefore at risk during Publish;
+whether Publish has a “schema synchronization” confirmation step or hidden managed action;
+whether production startup can be separated from schema mutation.
+
+Inspect:
+
+package.json;
+drizzle.config.ts;
+.replit;
+deployment/build/start commands;
+Replit deployment settings surfaced to the agent;
+relevant scripts;
+repository hooks/config.
+
+No edits.
+
+7. OUT-OF-BAND EXECUTOR COMPATIBILITY
+
+Based on the evidence, classify a standalone Node/pg.Client production migration executor as one of:
+
+COMPATIBLE WITH REPLIT PUBLISH
+
+COMPATIBLE ONLY WITH ADDITIONAL PUBLISH GUARD
+
+INCOMPATIBLE WITH CURRENT REPLIT PUBLISH FLOW
+
+UNKNOWN — ADDITIONAL EVIDENCE REQUIRED
+
+Explain why.
+
+If an additional guard is needed, describe the smallest design only.
+
+Do not implement it.
+
+8. AUTHORITATIVE SCHEMA SOURCE
+
+Determine what currently acts as production schema authority:
+
+standalone SQL migrations;
+shared/schema.ts;
+drizzle-kit push;
+Replit Publish;
+manual DDL;
+combination.
+
+Explain any conflict between:
+
+migrations/0011_incident_telephony_ledger.sql
+
+and:
+
+shared/schema.ts
+
+especially the five SQL-only CHECK constraints.
+
+We must know whether a future Publish could silently erase or fail to preserve those constraints.
+
+9. EXECUTION ENVIRONMENT OPTIONS
+
+Identify safe possible future execution locations WITHOUT executing anything:
+
+Replit shell;
+Replit deployment environment;
+external operator machine;
+Neon SQL console;
+another supported mechanism.
+
+For each, report whether it can satisfy:
+
+direct primary connection;
+exact SQL hash pinning;
+single dedicated pg.Client;
+transaction advisory lock;
+TLS;
+no pooled connection;
+audit logging;
+controlled credentials;
+deterministic exit codes.
+
+Recommend the safest execution environment based on evidence only.
+
+Do not run the executor.
+
+10. CURRENT BASELINE RECONFIRMATION
+
+READ-ONLY reconfirm:
+
+current baseline schema fingerprint;
+current legacy incident count;
+current legacy incident digest;
+Task 15.10A schema still absent;
+migration ledger still absent;
+current primary/replica observations.
+
+This is evidence only.
+
+Do not treat these values as permanently approved for future migration; production may change again.
+
+11. REQUIRED FINAL REPORT
+
+Return:
+
+writable primary identity;
+primary proof;
+direct/pooled classification;
+TLS/connection-option evidence;
+runtime vs migration role relationship;
+Replit Publish/schema-diff behavior;
+authoritative schema source;
+out-of-band executor compatibility classification;
+safest execution environment recommendation;
+refreshed baseline fingerprint/count/digest;
+blockers;
+non-blocking observations;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A PRIMARY/PUBLISH PREFLIGHT PASS — READY FOR COUNCIL REVIEW
+
+TASK 15.10A PRIMARY/PUBLISH PREFLIGHT INCOMPLETE — ADDITIONAL EVIDENCE REQUIRED
+
+TASK 15.10A PRIMARY/PUBLISH PREFLIGHT FAIL — MIGRATION REMAINS BLOCKED
+
+HARD STOP
+
+No DDL.
+
+No DML.
+
+No migration.
+
+No audit-table creation.
+
+No schema push.
+
+No drizzle-kit push.
+
+No source/configuration changes.
+
+No environment changes.
+
+No session termination.
+
+No deployment.
+
+No Publish.
+
+No Twilio/provider traffic.
+
+Stop after the evidence report.
