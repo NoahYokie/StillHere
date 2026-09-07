@@ -1,0 +1,301 @@
+STILLHERE — TASK 15.10A
+DATABASE PREFLIGHT COMPLETION — READ ONLY
+
+Provenance recovery is complete.
+
+Codex has pushed the exact independently audited feature branch:
+
+feat/15.10a-escalation-ledger
+
+Exact remote HEAD:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Parent:
+
+f1beaf475d247cbed963d297be29b9b77b7135ac
+
+Canonical release branch remains unchanged:
+
+build/release-candidate
+
+at:
+
+f1beaf475d247cbed963d297be29b9b77b7135ac
+
+AUTHORIZATION
+
+Complete the previously blocked portions of the Task 15.10A read-only database preflight.
+
+You are authorized to fetch/read the exact feature commit.
+
+You are not authorized to modify source, migration, database, deployment, configuration, or provider state.
+
+1. FETCH / PROVENANCE VERIFICATION
+
+Fetch:
+
+origin/feat/15.10a-escalation-ledger
+
+without tags and without changing the working branch.
+
+Verify the fetched remote branch resolves exactly to:
+
+b37ddf76181045cb0a22e11c5f4ae71a2a397a42
+
+Verify its parent is exactly:
+
+f1beaf475d247cbed963d297be29b9b77b7135ac
+
+Inspect the commit as a Git object/read-only ref.
+
+Do not checkout, merge, cherry-pick, rebase or modify the working tree.
+
+If provenance does not match exactly:
+
+STOP.
+
+2. INSPECT EXACT MIGRATION 0011
+
+Read:
+
+migrations/0011_incident_telephony_ledger.sql
+
+from exact commit b37ddf7.
+
+Report:
+
+exact snapshot metadata columns added to incidents;
+exact CHECK constraint;
+all new tables;
+columns;
+defaults;
+foreign keys;
+CHECK constraints;
+unique constraints;
+indexes;
+whether there is any backfill;
+whether there is any UPDATE/INSERT into historical incidents;
+whether any destructive DDL exists.
+
+Explicitly confirm whether migration 0011 fabricates any historical escalation snapshot data.
+
+3. MIGRATION ↔ APPLICATION SCHEMA PARITY
+
+Compare exact migration 0011 against:
+
+shared/schema.ts
+
+at b37ddf7.
+
+Verify parity for:
+
+incidents snapshot metadata;
+incident_escalation_sequence;
+incident_contact_attempts;
+incident_telephony_events;
+types;
+nullability;
+defaults;
+FK behavior;
+uniqueness;
+CHECK constraints;
+index definitions.
+
+Report every mismatch, including whether a constraint exists only in SQL but not representable/enforced by Drizzle.
+
+4. VERIFY LEGACY / ZERO-CONTACT SEMANTICS
+
+Inspect the implementation and confirm actual behavior for:
+
+Legacy incident
+
+snapshot timestamp = NULL
+snapshot count = NULL
+no authoritative opening snapshot
+
+Authoritative zero-contact incident
+
+snapshot timestamp present
+snapshot count = 0
+zero sequence rows
+
+Valid populated snapshot
+
+metadata count equals contiguous sequence rows
+
+Inconsistent/corrupt snapshot
+
+metadata/rows disagreement
+
+Explicitly determine:
+
+whether old production incidents remain valid as NULL/NULL;
+whether any historical backfill is expected or required;
+whether the application safely contains legacy incidents instead of inventing a current-roster snapshot;
+whether migration 0011 accepts all existing legacy rows without modification.
+
+Do not propose or execute a legacy backfill unless the exact code proves one is required.
+
+5. NULL sequence_id SEMANTICS — EXACT APPLICATION REVIEW
+
+Inspect all creation/reservation paths for:
+
+incident_contact_attempts.sequence_id
+
+Determine exactly what sequence_id IS NULL means.
+
+Specifically answer:
+
+Is NULL used only for a protected-user/user-leg call reservation?
+Can more than one legitimate NULL-sequence attempt exist for the same (incident_id, cycle, channel)?
+Are there multiple attempt purposes that share NULL?
+Does application code currently prevent duplicates?
+Is that prevention concurrency-safe without database uniqueness?
+
+Then evaluate this proposed partial index:
+
+CREATE UNIQUE INDEX uq_incident_user_call
+ON incident_contact_attempts (incident_id, cycle, channel)
+WHERE sequence_id IS NULL;
+
+Return one:
+
+REQUIRED BEFORE DEPLOYMENT
+
+OPTIONAL HARDENING
+
+NOT APPROPRIATE
+
+If a different key/predicate is required, state the exact reason and proposed shape.
+
+Do not modify migration 0011.
+
+6. EXACT CHECK CONSTRAINT / LOCK SHAPE
+
+Inspect the actual paired snapshot CHECK constraint in migration 0011.
+
+Determine whether converting it to:
+
+ADD CONSTRAINT ... NOT VALID
+
+followed by:
+
+VALIDATE CONSTRAINT
+
+preserves identical semantics.
+
+Use the already collected production facts:
+
+PostgreSQL 16.15;
+9 existing incident rows;
+lock_timeout = 0;
+statement_timeout = 0;
+no current incident lock during previous inspection.
+
+Return:
+
+CURRENT FORM ACCEPTABLE
+
+or
+
+DDL ADJUSTMENT RECOMMENDED BEFORE DEPLOYMENT
+
+Explain exact lock implications.
+
+Do not alter SQL.
+
+7. MIGRATION RUNNER / TRANSACTION PROCEDURE
+
+Inspect exact feature commit plus canonical runtime/repository configuration.
+
+Determine:
+
+what mechanism is intended to apply migration 0011;
+whether the project uses Drizzle migrator, drizzle-kit push, custom pg execution, Replit schema sync, or another path;
+whether migrations are recorded in __drizzle_migrations or another ledger;
+whether migration execution is transaction-wrapped;
+whether NOT VALID and VALIDATE CONSTRAINT can/should occur in one transaction or separate phases;
+rollback behavior if migration partially fails;
+whether old application code can safely run after the additive migration;
+whether new b37ddf7 application code can start before migration.
+
+If the execution mechanism still cannot be proven from the repository/environment:
+
+classify that as a blocking unknown rather than guessing.
+
+8. PENDING-ATTEMPT OBSERVABILITY
+
+Now that b37ddf7 is available, inspect its actual logging/operational behavior.
+
+Determine whether the implementation records enough information to detect:
+
+reservation created;
+provider dispatch attempted;
+callback received;
+provider status;
+attempt ID;
+incident ID;
+parent/child SID correlation;
+age of a pending attempt.
+
+Determine the smallest non-mutating operational query/metric that could identify attempts stuck pending beyond an eventual Council-defined threshold.
+
+Do not create metric, alert, timeout, reaper, retry or threshold.
+
+9. RECHECK WORKSPACE ANOMALY
+
+The prior preflight observed an unrelated .replit module-order-only modification.
+
+Do not edit or clean it.
+
+Report whether it remains present.
+
+It remains outside Task 15.10A.
+
+10. REQUIRED FINAL ADJUDICATION
+
+Provide:
+
+provenance verification;
+exact migration findings;
+schema parity;
+legacy compatibility;
+confirmation of backfill absence/presence;
+nullable-sequence application semantics;
+partial-index verdict;
+exact CHECK lock verdict;
+migration runner/transaction procedure;
+pending-attempt observability findings;
+workspace anomaly status;
+blocking findings;
+non-blocking findings;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A DATABASE PREFLIGHT PASS — READY FOR COUNCIL MIGRATION/DEPLOYMENT GATE
+
+TASK 15.10A DATABASE PREFLIGHT PASS WITH REQUIRED DDL ADJUSTMENTS — RETURN TO COUNCIL
+
+TASK 15.10A DATABASE PREFLIGHT FAIL — DEPLOYMENT BLOCKED
+
+HARD STOP
+
+No source modification.
+
+No migration modification.
+
+No DDL.
+
+No DML.
+
+No database mutation.
+
+No checkout/merge.
+
+No deployment.
+
+No live provider traffic.
+
+Stop after the report.
