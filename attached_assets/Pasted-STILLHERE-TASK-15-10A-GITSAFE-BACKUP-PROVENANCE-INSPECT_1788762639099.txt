@@ -1,0 +1,220 @@
+STILLHERE — TASK 15.10A
+GITSAFE BACKUP PROVENANCE INSPECTION
+COUNCIL AUTHORIZED — STRICT READ-ONLY
+
+Council consensus: Claude + Gemini A–E YES.
+
+Implementation remains BLOCKED.
+
+The only authorized task is to determine whether:
+
+gitsafe-backup/main
+
+is a genuine durable, externally reachable Git remote containing the exact ratified monorepo base:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+and its complete required ancestry.
+
+HARD PROHIBITIONS
+
+READ-ONLY ONLY.
+
+Do NOT:
+
+push anywhere;
+create a branch;
+switch branches;
+create commits;
+amend/rebase/merge/cherry-pick;
+edit source/config;
+create a Git bundle;
+export repository history;
+retry Replit→GitHub writes;
+mutate working-tree/index state;
+touch dev DB;
+touch prod DB;
+run migration;
+run db:push;
+Publish;
+deploy;
+generate Twilio/provider traffic.
+
+If any inspection command would expose credentials, redact secrets while preserving provider/hostname/protocol evidence.
+
+1. IDENTIFY gitsafe-backup
+
+Inspect:
+
+git remote -v
+relevant Git config for gitsafe-backup
+git rev-parse --symbolic-full-name gitsafe-backup/main
+
+Determine whether gitsafe-backup/main is:
+
+remote-tracking ref;
+local branch/ref;
+mirror/cache;
+Replit internal backup mechanism;
+external Git remote;
+other.
+
+Report exact classification.
+
+Do not expose credentials or tokens.
+
+2. REMOTE PROVIDER / TRANSPORT
+
+If gitsafe-backup is configured as a remote, report:
+
+provider/host;
+transport type, such as HTTPS or SSH;
+sanitized remote URL;
+whether it appears independently hosted outside the active Replit filesystem/container.
+
+Do NOT print embedded secrets.
+
+3. REMOTE HEAD VERIFICATION
+
+Perform a read-only remote query if supported, such as:
+
+git ls-remote --heads gitsafe-backup main
+
+without fetching or modifying the local repository.
+
+Determine whether remote main resolves exactly to:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+Return the exact result.
+
+If remote query is impossible, state precisely why.
+
+4. DURABILITY / EXTERNAL RECOVERABILITY
+
+Determine whether the remote/ref could survive loss of the current Replit workspace.
+
+Classify:
+
+DURABLE EXTERNAL REMOTE
+
+REPLIT-INTERNAL BUT DURABLE
+
+LOCAL/EPHEMERAL ONLY
+
+UNABLE TO PROVE
+
+Explain the evidence for the classification.
+
+5. ANCESTRY COMPLETENESS
+
+We need the full required history leading to:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+including the common ancestor:
+
+e2b487d5ad9f0621a1a22f57fb265aaa2489d5f9
+
+and the monorepo introduction:
+
+9bd5b7001eac8d193402502b9740ab5841f9f37d
+
+Determine, using read-only evidence, whether the backup contains the required commit ancestry rather than merely a pointer/name.
+
+Confirm specifically whether:
+
+893a073... exists;
+9bd5b70... exists in its ancestry;
+e2b487d5... exists in its ancestry;
+the intervening Replit-local commit chain is recoverable.
+
+Do not fetch merely to answer this if doing so alters repository state.
+
+If remote protocol cannot prove ancestry without fetch, say:
+
+REMOTE TIP VERIFIED — FULL REMOTE OBJECT COMPLETENESS NOT INDEPENDENTLY PROVEN
+
+rather than guessing.
+
+6. EXTERNAL BUILDER ACCESSIBILITY
+
+Determine whether a separate credential-capable environment such as Codex could reasonably fetch/clone this remote.
+
+Report:
+
+ACCESSIBLE IN PRINCIPLE
+
+REPLIT-INTERNAL ONLY
+
+REQUIRES UNKNOWN CREDENTIALS
+
+NOT ACCESSIBLE
+
+UNABLE TO PROVE
+
+Do not attempt to give Codex credentials.
+
+Do not expose tokens.
+
+7. BRIDGE SUITABILITY
+
+Return exactly one recommendation:
+
+OPTION A — GITSAFE IS A VALID DURABLE BRIDGE
+
+gitsafe-backup/main is independently recoverable and points to exact 893a073....
+
+OPTION B — GITSAFE MAY BE DURABLE BUT EXTERNAL BUILDER ACCESS IS UNPROVEN
+
+Further Council-approved transfer design required.
+
+OPTION C — GITSAFE IS LOCAL/EPHEMERAL AND NOT A VALID PROVENANCE ANCHOR
+
+Alternative exact-history transport required.
+
+OPTION D — INSUFFICIENT EVIDENCE
+
+More read-only evidence required.
+
+Do NOT perform the recommended next action.
+
+8. CONFIRM CURRENT REPOSITORY REMAINS UNCHANGED
+
+At end confirm:
+
+current branch unchanged;
+current HEAD unchanged;
+no new branch/ref created locally;
+no commit created;
+no tracked source/config modification;
+index unchanged;
+no push/fetch/pull that mutated repository state;
+canonical GitHub refs unchanged;
+no DB/Publish/deployment/provider activity.
+REQUIRED REPORT
+
+Return:
+
+exact classification of gitsafe-backup;
+sanitized remote/provider information;
+whether remote main exists;
+exact remote SHA if resolvable;
+whether SHA equals 893a073c7bb937d1a79b4d1394df09f6035918af;
+durability classification;
+ancestry evidence;
+external-builder accessibility classification;
+bridge-suitability option A/B/C/D;
+blockers;
+unknowns;
+zero-mutation confirmation.
+
+End with exactly one:
+
+TASK 15.10A GITSAFE PROVENANCE PASS — DURABLE BRIDGE VERIFIED
+
+TASK 15.10A GITSAFE PROVENANCE INCOMPLETE — ADDITIONAL EVIDENCE REQUIRED
+
+TASK 15.10A GITSAFE PROVENANCE FAIL — ALTERNATIVE TRANSFER REQUIRED
+
+Then STOP.
