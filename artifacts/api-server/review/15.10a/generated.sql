@@ -65,11 +65,11 @@ ALTER TABLE "incident_escalation_sequence" ADD CONSTRAINT "incident_escalation_s
 --> statement-breakpoint
 ALTER TABLE "incident_contact_attempts" ADD CONSTRAINT "incident_contact_attempts_incident_id_incidents_id_fk" FOREIGN KEY ("incident_id") REFERENCES "public"."incidents"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE "incident_contact_attempts" ADD CONSTRAINT "incident_contact_attempts_sequence_id_incident_escalation_sequence_id_fk" FOREIGN KEY ("sequence_id") REFERENCES "public"."incident_escalation_sequence"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "incident_contact_attempts" ADD CONSTRAINT "ica_sequence_id_ies_id_fk" FOREIGN KEY ("sequence_id") REFERENCES "public"."incident_escalation_sequence"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 ALTER TABLE "incident_telephony_events" ADD CONSTRAINT "incident_telephony_events_incident_id_incidents_id_fk" FOREIGN KEY ("incident_id") REFERENCES "public"."incidents"("id") ON DELETE cascade ON UPDATE no action;
 --> statement-breakpoint
-ALTER TABLE "incident_telephony_events" ADD CONSTRAINT "incident_telephony_events_attempt_id_incident_contact_attempts_id_fk" FOREIGN KEY ("attempt_id") REFERENCES "public"."incident_contact_attempts"("id") ON DELETE no action ON UPDATE no action;
+ALTER TABLE "incident_telephony_events" ADD CONSTRAINT "ite_attempt_id_ica_id_fk" FOREIGN KEY ("attempt_id") REFERENCES "public"."incident_contact_attempts"("id") ON DELETE no action ON UPDATE no action;
 --> statement-breakpoint
 CREATE UNIQUE INDEX "incident_sequence_rank_unique" ON "incident_escalation_sequence" USING btree ("incident_id","priority_rank");
 --> statement-breakpoint

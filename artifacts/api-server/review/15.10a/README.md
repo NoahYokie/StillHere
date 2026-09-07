@@ -30,7 +30,7 @@ Generated SQL first goes into a fresh disposable directory, then is retained her
 1. All identifiers are double-quoted. CHECK column references are additionally table-qualified; no casts or predicate changes are generated. Snapshot CHECK whitespace is flattened. All five explicit CHECK names match the named or expected PostgreSQL-generated names in 0011.
 2. `timestamptz` is rendered `timestamp with time zone`; `NOW()` becomes `now()`.
 3. Primary-key columns include explicit `NOT NULL`. DEFAULT and NOT NULL clause ordering differs without changing semantics.
-4. FKs are emitted as separate ALTER statements with explicit names, `public` referenced schema, and explicit ON UPDATE/ON DELETE NO ACTION where 0011 relies on defaults. Drizzle FK names differ from PostgreSQL's implicit names for 0011. Two generated FK names exceed 63 bytes and would be truncated by a standard PostgreSQL server; their long forms are visible in generated.sql. No database was contacted to inspect stored names.
+4. FKs are emitted as separate ALTER statements with explicit names, `public` referenced schema, and explicit ON UPDATE/ON DELETE NO ACTION where 0011 relies on defaults. Drizzle FK names differ from PostgreSQL's implicit names for 0011. The two formerly overlength names are explicitly hardened to Council-ratified `ica_sequence_id_ies_id_fk` and `ite_attempt_id_ica_id_fk` (25 and 24 ASCII bytes). No database was contacted to inspect stored names.
 5. Indexes explicitly state USING btree. Names, uniqueness and column ordering agree with 0011.
 6. CREATE statements precede incident-column additions. Incident columns and metadata CHECK are separate ALTER statements instead of one grouped ALTER. Statement-breakpoint comments and formatting differ.
 

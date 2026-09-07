@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, real, doublePrecision, pgEnum, index, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, real, doublePrecision, pgEnum, index, uniqueIndex, check, foreignKey } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -1434,7 +1434,7 @@ export const incidentEscalationSequence = pgTable("incident_escalation_sequence"
 export const incidentContactAttempts = pgTable("incident_contact_attempts", {
   id: uuid("id").defaultRandom().primaryKey(),
   incidentId: uuid("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
-  sequenceId: uuid("sequence_id").references(() => incidentEscalationSequence.id),
+  sequenceId: uuid("sequence_id"),
   cycle: integer("cycle").notNull().default(1),
   channel: text("channel").notNull().default("voice"),
   state: text("state").notNull().default("reserved"),
@@ -1449,6 +1449,7 @@ export const incidentContactAttempts = pgTable("incident_contact_attempts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
+  foreignKey({ name: "ica_sequence_id_ies_id_fk", columns: [t.sequenceId], foreignColumns: [incidentEscalationSequence.id] }),
   check("incident_contact_attempts_cycle_check", sql`${t.cycle} = 1`),
   check("incident_contact_attempts_duration_check", sql`${t.duration} >= 0`),
   check("incident_contact_attempts_outcome_source_check", sql`${t.outcomeSource} IN ('provider_authoritative','duration_inferred','system_inferred')`),
@@ -1461,7 +1462,7 @@ export const incidentContactAttempts = pgTable("incident_contact_attempts", {
 export const incidentTelephonyEvents = pgTable("incident_telephony_events", {
   id: uuid("id").defaultRandom().primaryKey(),
   incidentId: uuid("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
-  attemptId: uuid("attempt_id").references(() => incidentContactAttempts.id),
+  attemptId: uuid("attempt_id"),
   provider: text("provider").notNull().default("twilio"),
   eventKey: text("event_key").notNull(),
   eventType: text("event_type").notNull(),
@@ -1479,6 +1480,7 @@ export const incidentTelephonyEvents = pgTable("incident_telephony_events", {
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
+  foreignKey({ name: "ite_attempt_id_ica_id_fk", columns: [t.attemptId], foreignColumns: [incidentContactAttempts.id] }),
   uniqueIndex("incident_telephony_event_key_unique").on(t.eventKey),
   index("incident_telephony_event_attempt_idx").on(t.attemptId, t.createdAt),
 ]);

@@ -83,6 +83,11 @@ test("all five foreign-key targets and delete/update semantics match", () => {
     'incident_telephony_events|attempt_id|incident_contact_attempts|id|no action|no action',
   ].sort();
   assert.deepEqual(actual, expected);
+  for (const [table, name] of [[incidentContactAttempts, "ica_sequence_id_ies_id_fk"], [incidentTelephonyEvents, "ite_attempt_id_ica_id_fk"]] as const) {
+    assert.ok(getTableConfig(table).foreignKeys.some(f => f.getName() === name));
+    assert.ok(Buffer.byteLength(name, "utf8") < 63);
+    assert.ok(generated.includes(`ADD CONSTRAINT "${name}" FOREIGN KEY`));
+  }
   const sqlFks = [...generated.replaceAll('"','').matchAll(/ALTER TABLE (\w+) ADD CONSTRAINT \w+ FOREIGN KEY \((\w+)\) REFERENCES public\.(\w+)\((\w+)\) ON DELETE (cascade|no action) ON UPDATE (no action)/g)].map(m => m.slice(1).join('|')).sort();
   assert.deepEqual(sqlFks, expected);
   assert.equal((contract.match(/REFERENCES /g) || []).length, 5);
