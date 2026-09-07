@@ -1,0 +1,104 @@
+STILLHERE — TASK 15.10A
+PROVENANCE PRESERVATION PUSH
+COUNCIL AUTHORIZED
+
+Council consensus:
+
+preserve exact Replit monorepo base before any implementation;
+do not alter canonical GitHub branches;
+do not rebase/amend/force;
+verify exact remote SHA after push;
+no database/provider/deployment actions.
+EXACT SOURCE COMMIT
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+This exact commit is the ratified Stage B/C monorepo base.
+
+CREATE REMOTE PRESERVATION REF
+
+Push exact commit:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+to:
+
+origin/provenance/replit-monorepo-893a073
+
+Equivalent full ref:
+
+refs/heads/provenance/replit-monorepo-893a073
+
+This is a frozen provenance snapshot, not a working branch.
+
+STRICT GIT RULES
+
+Permitted:
+
+push exact existing commit/history to the new preservation ref;
+read-only remote verification afterward.
+
+Prohibited:
+
+no rebase;
+no amend;
+no squash;
+no cherry-pick;
+no merge;
+no force push;
+no movement of origin/build/release-candidate;
+no modification of any existing canonical remote branch;
+no new source/config changes.
+POST-PUSH VERIFICATION
+
+Verify that:
+
+origin/provenance/replit-monorepo-893a073
+
+resolves exactly to:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+Also verify:
+
+origin/build/release-candidate is unchanged;
+current tracked source remains unchanged;
+no extra commit was created;
+no force operation occurred.
+HARD BLOCKS REMAIN
+
+Do NOT:
+
+create the implementation feature branch yet;
+edit source;
+transplant 15.10A yet;
+touch dev DB;
+touch prod DB;
+run db:push;
+run migration;
+Publish;
+deploy;
+generate Twilio/provider traffic.
+
+This task is only the provenance-preservation push and verification.
+
+RETURN
+
+Return:
+
+source commit pushed;
+exact remote ref created;
+remote SHA verification;
+confirmation canonical branches unchanged;
+confirmation no source/config changes;
+confirmation no DB/Publish/deploy/provider activity.
+
+End with exactly:
+
+TASK 15.10A PROVENANCE PRESERVATION PASS — REMOTE BASE ANCHORED
+
+or
+
+TASK 15.10A PROVENANCE PRESERVATION FAIL — IMPLEMENTATION BLOCKED
+
+Then STOP.
