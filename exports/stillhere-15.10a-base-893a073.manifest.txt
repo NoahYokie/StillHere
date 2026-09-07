@@ -1,0 +1,20 @@
+Artifact: StillHere Task 15.10A Ratified Base Git Bundle Transport
+Ratified Git commit: 893a073c7bb937d1a79b4d1394df09f6035918af
+Original bundle filename: stillhere-15.10a-base-893a073.bundle
+Original byte size: 494535856
+Original SHA-256: 5f9f0cab32bb798b8ce53a20735f16d5856fd5bd4984474013e3c325d94f515f
+Chunk-size policy: maximum 90 MiB (94371840 bytes), raw sequential byte segmentation
+Total chunk count: 6
+
+Ordered chunk records:
+001 | stillhere-15.10a-base-893a073.bundle.part-001 | 94371840 bytes | SHA-256 d3ceb8bb57da136d8d1b385fb8e84fe63f9baf0bccbd297e9f9e96c3e3feb8dc
+002 | stillhere-15.10a-base-893a073.bundle.part-002 | 94371840 bytes | SHA-256 c58af7bc646322a49bf318c7794ae4282e9162c19f06acc833074e3ade9be38d
+003 | stillhere-15.10a-base-893a073.bundle.part-003 | 94371840 bytes | SHA-256 d6ba958365cc60bd6040e7ca609fb991b35491be050ae2e12e4c4a23011f5d49
+004 | stillhere-15.10a-base-893a073.bundle.part-004 | 94371840 bytes | SHA-256 3664651bcfdefbd6439a7fdd7e1c3086c1bee724fc68d9ba890abd9808875d07
+005 | stillhere-15.10a-base-893a073.bundle.part-005 | 94371840 bytes | SHA-256 347b0c396f7e4d72648e1ba0d85187c773352302528827b35c69ed0b5b3a6b2f
+006 | stillhere-15.10a-base-893a073.bundle.part-006 | 22676656 bytes | SHA-256 2ce5530be26f38845d1eff7b92c50af204dca163caa56620cf6fd1d92baf15ca
+
+Ordered reassembly rule: concatenate parts in ascending numeric suffix order (part-001 through part-006) with no separators, overlap, or omission.
+Example: cat stillhere-15.10a-base-893a073.bundle.part-* > stillhere-15.10a-base-893a073.bundle
+Expected reconstructed byte size: 494535856
+Expected reconstructed SHA-256: 5f9f0cab32bb798b8ce53a20735f16d5856fd5bd4984474013e3c325d94f515f

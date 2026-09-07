@@ -1,0 +1,198 @@
+STILLHERE — TASK 15.10A
+VERIFIED BUNDLE TRANSPORT CHUNKING + CRYPTOGRAPHIC MANIFEST
+COUNCIL AUTHORIZED
+
+Council accepts the local provenance recovery PASS.
+
+Locked ratified Stage B/C base:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+Verified source bundle:
+
+exports/stillhere-15.10a-base-893a073.bundle
+
+Expected exact size:
+
+494535856 bytes
+
+Expected master SHA-256:
+
+5f9f0cab32bb798b8ce53a20735f16d5856fd5bd4984474013e3c325d94f515f
+
+Temporary export ref has already been deleted and must remain absent.
+
+Current Replit HEAD 33732ac0597f6619e038cb44027cb3d6bb3b8e30 remains quarantined and irrelevant to this transport task.
+
+PHASE 0 — VERIFY SOURCE ARTIFACT BEFORE SPLIT
+
+Before creating any chunks, verify:
+
+source file exists;
+byte size equals exactly 494535856;
+SHA-256 equals exactly:
+
+5f9f0cab32bb798b8ce53a20735f16d5856fd5bd4984474013e3c325d94f515f
+
+If either size or hash differs:
+
+STOP immediately.
+
+Do not regenerate the bundle.
+
+Return FAIL.
+
+PHASE 1 — RAW BYTE SEGMENTATION
+
+Split the existing verified bundle only.
+
+Do NOT:
+
+regenerate it;
+repack Git objects;
+recompress it;
+modify it;
+rebuild history.
+
+Maximum chunk size:
+
+90 MiB = 94371840 bytes
+
+Use deterministic zero-padded names:
+
+stillhere-15.10a-base-893a073.bundle.part-001
+
+stillhere-15.10a-base-893a073.bundle.part-002
+
+continuing sequentially.
+
+The chunks must represent the bundle's bytes in exact sequential order with no overlap and no omission.
+
+PHASE 2 — PER-CHUNK CRYPTOGRAPHIC RECORD
+
+For every part record:
+
+sequence number;
+exact filename;
+exact byte size;
+SHA-256.
+
+Confirm:
+
+sum of all chunk byte sizes =
+
+494535856
+
+exactly.
+
+PHASE 3 — DETERMINISTIC MANIFEST
+
+Create:
+
+stillhere-15.10a-base-893a073.manifest.txt
+
+The manifest must contain:
+
+artifact name;
+ratified Git commit;
+original bundle filename;
+original exact byte size;
+original SHA-256;
+chunk-size policy;
+total chunk count;
+ordered chunk records;
+each chunk's exact size;
+each chunk's SHA-256;
+ordered reassembly rule;
+expected reconstructed byte size;
+expected reconstructed SHA-256.
+
+Do not call the manifest “signed” unless an actual cryptographic signing operation is performed. SHA-256 hashing alone is integrity verification, not a digital signature.
+
+PHASE 4 — LOCAL REASSEMBLY TEST
+
+Before presenting the chunks for transfer, perform one local verification using only the generated chunk files.
+
+Reassemble them in exact numeric order into a temporary file.
+
+Verify:
+
+reconstructed size =
+
+494535856
+
+reconstructed SHA-256 =
+
+5f9f0cab32bb798b8ce53a20735f16d5856fd5bd4984474013e3c325d94f515f
+
+If either differs:
+
+STOP and FAIL.
+
+Delete only the temporary reconstructed test file afterward.
+
+Do NOT delete:
+
+original verified bundle;
+transport chunks;
+manifest.
+PHASE 5 — PRESENT TRANSPORT ARTIFACTS
+
+Make each chunk and the manifest individually available as transferable Replit assets if the platform permits.
+
+Each chunk must remain under the presentation-size limit.
+
+Do NOT transfer/import them into Codex or GitHub during this task.
+
+If asset presentation itself would mutate source control or create commits, do not do that automatically. Report the limitation instead.
+
+HARD BLOCKS
+
+Do NOT:
+
+begin Stage B/C coding;
+create the implementation feature branch;
+push GitHub;
+push GitSafe;
+recreate the temporary export ref;
+modify source;
+modify schema;
+modify runtime/build/workspace config;
+run DB commands;
+run migration;
+run db:push;
+Publish;
+deploy;
+contact Twilio/provider systems.
+REQUIRED REPORT
+
+Return:
+
+source bundle pre-split size/hash verification;
+total number of chunks;
+ordered table of all chunk filenames;
+exact size of every chunk;
+SHA-256 of every chunk;
+sum of all chunk sizes;
+manifest filename/path;
+manifest SHA-256;
+local reassembly size verification;
+local reassembly SHA-256 verification;
+whether each chunk is individually transferable;
+temporary export ref remains absent;
+current branch/HEAD;
+tracked worktree/index state;
+confirmation no Git/network write occurred;
+confirmation no source/schema/config mutation;
+confirmation no DB/Publish/deploy/provider activity;
+blockers/unknowns.
+
+End exactly:
+
+TASK 15.10A TRANSPORT CHUNKS PASS — VERIFIED BUNDLE READY FOR CONTROLLED TRANSFER
+
+or
+
+TASK 15.10A TRANSPORT CHUNKS FAIL — TRANSFER BLOCKED
+
+Then STOP.

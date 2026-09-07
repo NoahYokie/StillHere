@@ -1,1 +1,6 @@
 exports/stillhere-15.10a-base-893a073.bundle filter=lfs diff=lfs merge=lfs -text
+exports/stillhere-15.10a-base-893a073.bundle.part-001 filter=lfs diff=lfs merge=lfs -text
+exports/stillhere-15.10a-base-893a073.bundle.part-002 filter=lfs diff=lfs merge=lfs -text
+exports/stillhere-15.10a-base-893a073.bundle.part-003 filter=lfs diff=lfs merge=lfs -text
+exports/stillhere-15.10a-base-893a073.bundle.part-004 filter=lfs diff=lfs merge=lfs -text
+exports/stillhere-15.10a-base-893a073.bundle.part-005 filter=lfs diff=lfs merge=lfs -text

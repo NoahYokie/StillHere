@@ -1,0 +1,100 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "jTulB5gaFpoDfHhnM2-j9"
+uri = "file://exports/stillhere-15.10a-base-893a073.manifest.txt"
+type = "text"
+title = "StillHere 15.10A Transport Manifest"
+description = "Integrity manifest and ordered reassembly instructions for the verified ratified-base bundle chunks."
+logical_id = "29cca00b-d946-4c56-9295-8562afeca82b"
+content_hash = "sha256:84b849056bbfb336245d7154f96c3ffee27cff9730d7f25c453b197bc41ad777"
+size = 1684
+mtime_ms = 1788764134533
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/29cca00b-d946-4c56-9295-8562afeca82b/18889f18-0287-452e-b2c5-2b4c9d9d7096"
+storage_version_token = "1788764150561575"
+content_type = "text/plain"
+
+[[outputs]]
+id = "6gaDKnPoLl8j7xTg6o4aT"
+uri = "file://exports/stillhere-15.10a-base-893a073.bundle.part-001"
+type = "unspecified"
+title = "StillHere Bundle Part 001"
+description = "Part 1 of 6; raw sequential bytes of the verified Git bundle."
+logical_id = "3791b7fc-b56f-4660-9a13-622c5d81382b"
+content_hash = "sha256:d3ceb8bb57da136d8d1b385fb8e84fe63f9baf0bccbd297e9f9e96c3e3feb8dc"
+size = 94371840
+mtime_ms = 1788764132493
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/3791b7fc-b56f-4660-9a13-622c5d81382b/dfc17bba-78c2-4bed-82af-accb812cd384"
+storage_version_token = "1788764152365536"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "mdI9E0UJ-9E05U3LhCNnQ"
+uri = "file://exports/stillhere-15.10a-base-893a073.bundle.part-002"
+type = "unspecified"
+title = "StillHere Bundle Part 002"
+description = "Part 2 of 6; raw sequential bytes of the verified Git bundle."
+logical_id = "07196ca9-4650-4fbf-a74a-d309537aeff5"
+content_hash = "sha256:c58af7bc646322a49bf318c7794ae4282e9162c19f06acc833074e3ade9be38d"
+size = 94371840
+mtime_ms = 1788764132565
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/07196ca9-4650-4fbf-a74a-d309537aeff5/0db0c60b-4c86-4f3b-b629-f4fff8bfab35"
+storage_version_token = "1788764153871865"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "KnWn4Kha6wxkDrNXL6BZ-"
+uri = "file://exports/stillhere-15.10a-base-893a073.bundle.part-003"
+type = "unspecified"
+title = "StillHere Bundle Part 003"
+description = "Part 3 of 6; raw sequential bytes of the verified Git bundle."
+logical_id = "da326fd9-f6eb-4b1d-acd8-a32aafee3b5d"
+content_hash = "sha256:d6ba958365cc60bd6040e7ca609fb991b35491be050ae2e12e4c4a23011f5d49"
+size = 94371840
+mtime_ms = 1788764132637
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/da326fd9-f6eb-4b1d-acd8-a32aafee3b5d/e329796c-c608-4051-945f-db9b240eb1d3"
+storage_version_token = "1788764155985448"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "rcsOV1yoIaE_JYAnDkggC"
+uri = "file://exports/stillhere-15.10a-base-893a073.bundle.part-004"
+type = "unspecified"
+title = "StillHere Bundle Part 004"
+description = "Part 4 of 6; raw sequential bytes of the verified Git bundle."
+logical_id = "2fd78907-8908-4fae-9904-372e6c74fc24"
+content_hash = "sha256:3664651bcfdefbd6439a7fdd7e1c3086c1bee724fc68d9ba890abd9808875d07"
+size = 94371840
+mtime_ms = 1788764132701
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/2fd78907-8908-4fae-9904-372e6c74fc24/b18927e1-501b-40e6-a399-d019e72f313e"
+storage_version_token = "1788764157778137"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "Ybz7g644qKeIvsCd2cfdO"
+uri = "file://exports/stillhere-15.10a-base-893a073.bundle.part-005"
+type = "unspecified"
+title = "StillHere Bundle Part 005"
+description = "Part 5 of 6; raw sequential bytes of the verified Git bundle."
+logical_id = "96130812-016d-425d-98d0-c41edfd462f3"
+content_hash = "sha256:347b0c396f7e4d72648e1ba0d85187c773352302528827b35c69ed0b5b3a6b2f"
+size = 94371840
+mtime_ms = 1788764132961
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/96130812-016d-425d-98d0-c41edfd462f3/5a1f8517-e47f-4ec0-bf8d-7a7eb47c8f5b"
+storage_version_token = "1788764159603298"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "xoiXHroRbySxPqX5KvNpd"
+uri = "file://exports/stillhere-15.10a-base-893a073.bundle.part-006"
+type = "unspecified"
+title = "StillHere Bundle Part 006"
+description = "Part 6 of 6; final raw sequential bytes of the verified Git bundle."
+logical_id = "56f31cd5-8c8c-4110-a189-2ac9e19fa220"
+content_hash = "sha256:2ce5530be26f38845d1eff7b92c50af204dca163caa56620cf6fd1d92baf15ca"
+size = 22676656
+mtime_ms = 1788764133033
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:347ceb5c-3049-4455-ab00-3c9ab0a45e84/56f31cd5-8c8c-4110-a189-2ac9e19fa220/6cd28b2b-c042-450a-88cd-0967dd5965a9"
+storage_version_token = "1788764160585109"
+content_type = "application/octet-stream"
