@@ -1,0 +1,554 @@
+TASK 15.10A — STAGE F UNIFIED READ-ONLY PRODUCTION RECONCILIATION PREFLIGHT
+
+AUTHORIZATION STATUS
+Council-approved Stage F only.
+
+This is a STRICT READ-ONLY evidence-gathering operation.
+
+DO NOT mutate any database.
+DO NOT deploy.
+DO NOT Publish.
+DO NOT run migrations.
+DO NOT run drizzle-kit push.
+DO NOT activate backend/runtime changes.
+DO NOT trigger Twilio, SMS, voice, email, APNS, or any external provider traffic.
+DO NOT modify source files, schema files, generated SQL, lockfiles, config, secrets, or production data.
+
+Stage D and Stage E are CLOSED.
+Stage D DDL MUST NEVER be rerun.
+
+Approved application commit:
+af5d79ddbb05bee44bbbcd0ba7e97a6878d7ff65
+
+Approved lineage:
+893a073
+→ d0f7f0f
+→ 93b9d902
+→ af5d79dd
+
+Locked Task 15.10A SQL artifact:
+artifacts/api-server/review/15.10a/generated.sql
+
+Locked SHA-256:
+aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244
+
+Expected locked SQL:
+Exactly 18 additive statements.
+
+PURPOSE
+
+Answer this question with evidence only:
+
+Can Task 15.10A be promoted into StillHere production without Replit, Drizzle, or the production database introducing any unreviewed schema or application change?
+
+==================================================
+PHASE A — WORKSPACE PROVENANCE
+==================================================
+
+Before touching any production database connection:
+
+1. Report:
+   git rev-parse HEAD
+
+2. Report:
+   git status --porcelain
+
+3. Confirm HEAD is EXACTLY:
+   af5d79ddbb05bee44bbbcd0ba7e97a6878d7ff65
+
+4. Confirm working tree is completely clean.
+
+5. Authenticate ancestry showing:
+   893a073 → d0f7f0f → 93b9d902 → af5d79dd
+
+STOP IMMEDIATELY if:
+- HEAD differs;
+- worktree is dirty;
+- provenance cannot be authenticated.
+
+If STOP occurs, do not connect to production DB.
+
+==================================================
+PHASE B — LOCKED ARTIFACT AUTHENTICATION
+==================================================
+
+READ ONLY.
+
+1. Calculate SHA-256 of:
+
+artifacts/api-server/review/15.10a/generated.sql
+
+2. Confirm exact value:
+
+aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244
+
+3. Count the SQL statements and confirm exactly 18.
+
+4. Inspect the artifact for:
+- DROP statements
+- destructive ALTER statements
+- data UPDATE
+- data DELETE
+- INSERT/backfill operations
+- any statement outside the audited Task 15.10A additive schema delta
+
+DO NOT execute the SQL.
+
+STOP if the hash differs or the artifact is not exactly the locked audited version.
+
+==================================================
+PHASE C — PRODUCTION DATABASE IDENTITY
+==================================================
+
+READ-ONLY CONNECTION ONLY.
+
+Identify the actual StillHere production database target independently.
+
+Return only non-secret metadata such as:
+
+- provider/platform
+- Neon project identifier/name if available
+- branch identifier/name
+- endpoint hostname/name
+- database name
+- PostgreSQL version
+- current database
+- current user/role
+- current schema
+
+DO NOT print:
+- DATABASE_URL
+- passwords
+- tokens
+- connection strings containing credentials
+- customer/user data
+- secrets of any kind
+
+We previously encountered a Neon replica during earlier investigation.
+
+Therefore positively determine whether the current target is the true production writable primary.
+
+Run only safe metadata/read queries sufficient to establish:
+
+pg_is_in_recovery()
+
+and:
+
+current_setting('transaction_read_only')
+
+Expected production-primary evidence:
+
+pg_is_in_recovery() = false
+transaction_read_only = off
+
+Do NOT prove writability by performing an INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, transaction-write probe, temp table creation, advisory mutation, sequence increment, or any other write.
+
+If:
+- identity is ambiguous;
+- endpoint is a replica;
+- pg_is_in_recovery() is true;
+- transaction_read_only is on;
+
+STOP and return evidence to Council.
+
+==================================================
+PHASE D — PRODUCTION TASK 15.10A CATALOG INVENTORY
+==================================================
+
+READ ONLY.
+
+Inspect pg_catalog / information_schema.
+
+Do not modify anything.
+
+Determine whether production currently contains any Task 15.10A objects.
+
+Inventory independently:
+
+A. INCIDENT METADATA COLUMNS
+
+Expected target columns:
+
+- escalation_snapshot_created_at
+- escalation_snapshot_contact_count
+
+Report whether each exists and its:
+- data type
+- nullability
+- default
+
+B. THREE TASK 15.10A TABLES
+
+- incident_escalation_sequence
+- incident_contact_attempts
+- incident_telephony_events
+
+Report whether each exists.
+
+C. FIVE DECLARATIVE CHECK CONSTRAINTS
+
+Identify whether any Task 15.10A CHECK constraints already exist and report their exact definitions.
+
+Target semantic checks cover:
+
+1. incident snapshot metadata pair consistency
+2. priority_rank > 0
+3. cycle = 1
+4. duration >= 0
+5. allowed outcome_source values
+
+D. FIVE FOREIGN KEYS
+
+Report whether any Task 15.10A FKs already exist, including:
+
+- constraint name
+- source table/columns
+- referenced table/columns
+- ON DELETE
+- ON UPDATE
+
+Pay particular attention to the audited explicit names including:
+
+ica_sequence_id_ies_id_fk
+ite_attempt_id_ica_id_fk
+
+E. SEVEN EXPLICIT INDEXES
+
+Report whether any Task 15.10A explicit indexes already exist.
+
+For each found index return:
+
+- index name
+- table
+- ordered columns
+- uniqueness
+- whether partial/predicate-based
+
+Do not count ordinary PK-created indexes as part of the seven explicit Task 15.10A indexes.
+
+==================================================
+PHASE E — LEGACY INCIDENT DATA CHARACTERISATION
+==================================================
+
+READ ONLY.
+
+NO PII.
+NO phone numbers.
+NO names.
+NO incident bodies/content.
+NO contact destinations.
+NO raw customer rows.
+
+Return aggregate counts only.
+
+Determine:
+
+1. total production incident row count
+
+2. count where:
+   escalation_snapshot_created_at IS NULL
+   AND escalation_snapshot_contact_count IS NULL
+
+3. count where exactly one snapshot metadata field is NULL and the other is non-NULL
+
+4. if either metadata column does not yet exist, state that clearly rather than querying nonexistent fields
+
+5. aggregate count of currently open/unresolved incidents using the existing canonical application/database definition, if that definition can be determined without modifying code
+
+6. whether any currently existing production data would conflict with the Task 15.10A no-historical-backfill design
+
+Do NOT invent a conclusion if the application definition of "open" is ambiguous.
+
+Report ambiguity to Council instead.
+
+The intended legacy semantics remain:
+
+NULL / NULL = legacy unknown snapshot state
+
+No historical snapshot fabrication.
+No historical attempt fabrication.
+No backfill.
+
+==================================================
+PHASE F — CURRENT PRODUCTION VS LOCKED TARGET DIFF
+==================================================
+
+Produce a READ-ONLY comparison between:
+
+CURRENT PRODUCTION SCHEMA
+
+and
+
+LOCKED TASK 15.10A TARGET represented by:
+generated.sql
+SHA-256 aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244
+
+Classify every target object as:
+
+ABSENT
+EXACT MATCH
+PARTIAL
+CONFLICTING
+UNEXPECTED
+
+Expected clean-slate result is normally that the 15.10A objects are absent.
+
+However, DO NOT assume this.
+
+Any PARTIAL or CONFLICTING Task 15.10A production state is a FAIL-CLOSED condition.
+
+Do not repair it.
+
+==================================================
+PHASE G — REPLIT PUBLISH / SCHEMA RECONCILIATION INSPECTION
+==================================================
+
+THIS IS ALSO READ ONLY.
+
+DO NOT PRESS PUBLISH.
+DO NOT EXECUTE A DEPLOYMENT.
+DO NOT RUN drizzle-kit push.
+DO NOT RUN any migration.
+DO NOT allow a schema synchronization operation to mutate any database.
+
+Inspect the repository and Replit configuration to determine exactly what would happen during a future Publish/deployment.
+
+Trace and report:
+
+- .replit deployment/build/run configuration
+- package scripts
+- post-merge scripts
+- database scripts
+- Drizzle configuration
+- schema paths
+- deployment hooks
+- shell scripts
+- CI/deploy scripts
+- any automatic schema reconciliation mechanism
+
+We previously found:
+
+.replit
+→ scripts/post-merge.sh
+→ pnpm --filter db push
+
+and this automatic DB mutation path was deliberately disarmed in the approved feature branch.
+
+Verify its CURRENT state at af5d79dd.
+
+Answer explicitly:
+
+1. Would a normal future Replit Publish invoke drizzle-kit push?
+
+2. Would Publish invoke any migration runner?
+
+3. Would Publish execute generated.sql?
+
+4. Would Publish automatically alter production schema?
+
+5. Would Publish attempt to DROP or rewrite any Task 15.10A CHECK constraint?
+
+6. Would Publish treat the three new tables as drift?
+
+7. Would Publish remove, rename, regenerate, or alter the seven explicit indexes?
+
+8. Would Publish modify either snapshot metadata column?
+
+9. Would any deployment hook run database schema mutation before application startup?
+
+10. Is there any second or hidden schema source that disagrees with:
+   lib/stillhere-shared/src/schema.ts
+
+Do not run Publish just to discover this.
+
+Use static/read-only inspection and any platform-supported preview/diff capability ONLY if that capability is guaranteed not to execute mutation.
+
+If Replit cannot expose an intended schema plan without actually performing mutation, state:
+
+"PLAN CANNOT BE SAFELY EXTRACTED READ-ONLY"
+
+and STOP that portion.
+
+Do NOT approximate or guess what Publish would do.
+
+==================================================
+PHASE H — REPLIT INTENDED DDL PLAN
+==================================================
+
+If and ONLY if Replit provides a genuinely non-mutating preview of production schema changes:
+
+Capture the intended DDL/diff.
+
+Compare it statement-by-statement against the locked 18-statement Task 15.10A generated.sql artifact.
+
+Classify:
+
+EXACT
+ADDITIONAL
+MISSING
+DESTRUCTIVE
+AMBIGUOUS
+
+Any of the following = FAIL CLOSED:
+
+- DROP
+- destructive ALTER
+- unexpected constraint change
+- unexpected index change
+- unexpected table change
+- unreviewed Drizzle-generated mutation
+- additional SQL
+- missing audited SQL
+- blind schema push
+- inability to determine what Publish would execute safely
+
+DO NOT execute the previewed plan.
+
+==================================================
+ABSOLUTE STOP CONDITIONS
+==================================================
+
+Immediately STOP Stage F and return evidence if ANY occur:
+
+- wrong Git commit
+- dirty workspace
+- locked SQL SHA mismatch
+- ambiguous production DB identity
+- production endpoint is a replica
+- transaction is read-only unexpectedly
+- partial Task 15.10A schema already exists
+- conflicting Task 15.10A objects
+- unexpected production schema drift relevant to this task
+- DROP statement
+- destructive ALTER
+- unexpected table/index/constraint modification
+- automatic drizzle-kit push
+- automatic schema reconciliation not previously audited
+- Replit Publish mutation plan cannot be established safely
+- any request/tool requires mutation in order to continue
+- any credential or sensitive customer data would have to be exposed
+
+Do not fix any failure.
+
+Do not continue past it.
+
+Return evidence to Council.
+
+==================================================
+ABSOLUTE PROHIBITIONS
+==================================================
+
+ZERO:
+
+- CREATE execution
+- ALTER execution
+- DROP execution
+- INSERT
+- UPDATE
+- DELETE
+- TRUNCATE
+- migration apply
+- generated.sql execution
+- drizzle-kit push
+- drizzle migration
+- pnpm db push
+- schema synchronization
+- Replit Publish
+- deployment
+- backend activation
+- provider traffic
+- Twilio traffic
+- SMS
+- voice calls
+- email
+- APNS
+- Task 15.10B work
+- Cycle 2 work
+- unrelated changes
+
+DO NOT modify the repository.
+
+==================================================
+REQUIRED FINAL REPORT
+==================================================
+
+Return one evidence dossier with these sections:
+
+A. EXECUTOR / WORKSPACE
+- exact HEAD
+- branch/detached state
+- worktree state
+- lineage
+
+B. LOCKED ARTIFACT
+- path
+- SHA-256
+- statement count
+- additive/destructive classification
+
+C. PRODUCTION IDENTITY
+- non-secret production topology metadata
+- pg_is_in_recovery()
+- transaction_read_only
+- determination: PRIMARY / REPLICA / AMBIGUOUS
+
+D. CURRENT PRODUCTION 15.10A INVENTORY
+- 2 columns
+- 3 tables
+- 5 CHECKs
+- 5 FKs
+- 7 explicit indexes
+
+E. PRODUCTION INCIDENT AGGREGATES
+- counts only
+- legacy NULL/NULL state
+- no PII
+
+F. CURRENT-vs-TARGET DIFF
+- ABSENT / EXACT / PARTIAL / CONFLICTING / UNEXPECTED
+
+G. REPLIT PUBLISH RECONCILIATION
+- precise static path
+- whether schema mutation would occur
+- whether drizzle-kit push could execute
+- whether schema source is canonical
+- exact risks
+
+H. REPLIT DDL PREVIEW
+- only if obtainable without mutation
+- comparison to locked 18-statement SQL
+
+I. MUTATION ATTESTATION
+Explicitly state whether Stage F caused:
+- DB writes
+- DDL
+- migration execution
+- Publish
+- deployment
+- schema push
+- provider traffic
+- repository changes
+
+Expected:
+NONE
+
+J. FINAL VERDICT
+
+Use exactly one:
+
+STAGE F READ-ONLY PREFLIGHT PASS — READY FOR COUNCIL REVIEW
+
+or
+
+STAGE F FAIL CLOSED — COUNCIL REVIEW REQUIRED
+
+IMPORTANT:
+
+A PASS DOES NOT AUTHORIZE PRODUCTION WRITES.
+
+After producing the report, STOP.
+
+Do not proceed to production execution.
+Do not deploy.
+Do not Publish.
+Do not begin Task 15.10B.

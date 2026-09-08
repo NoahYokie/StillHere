@@ -1,0 +1,247 @@
+STILLHERE — TASK 15.10A
+STAGE E FINAL APPLICATION SUITE RERUN
+COUNCIL-AUTHORIZED FOLLOW-ON AFTER INDEPENDENT DELTA AUDIT PASS
+
+Claude Code has completed the required independent audit.
+
+Result:
+
+TASK 15.10A TEST ASSERTION DELTA AUDIT PASS
+
+The remediation commit is:
+
+af5d79ddbb05bee44bbbcd0ba7e97a6878d7ff65
+
+Direct parent:
+
+93b9d902d976363518a340f1dd5501a59b116537
+
+Authorized delta:
+
+exactly one changed file:
+
+artifacts/api-server/test/wellness-call-intelligence.test.ts
+
+Authorized assertion now strictly equals:
+
+Wellness call connected — no safety confirmation received.
+
+No runtime, production wording, schema, migration, generated SQL, dependency or unrelated-test delta exists.
+
+OBJECTIVE
+
+Perform the final Stage E application-suite rerun against exact commit:
+
+af5d79ddbb05bee44bbbcd0ba7e97a6878d7ff65
+
+This rerun exists solely to obtain clean empirical execution evidence after the Council-approved test assertion correction.
+
+PHASE 1 — AUTHENTICATE PERSISTENT EXECUTOR
+
+Use a persistent isolated Replit/Linux executor.
+
+Do not use the ordinary build/release-candidate workspace as the test source.
+
+Verify before testing:
+
+HEAD = af5d79ddbb05bee44bbbcd0ba7e97a6878d7ff65
+
+direct parent:
+
+93b9d902d976363518a340f1dd5501a59b116537
+
+ancestry includes:
+
+893a073... → d0f7f0f... → 93b9d902... → af5d79dd...
+
+Worktree:
+
+clean
+
+Index:
+
+clean
+
+If provenance differs:
+
+STOP.
+
+PHASE 2 — CONTAINMENT
+
+Run in:
+
+NODE_ENV=test
+
+Explicitly remove/unset live provider credentials including:
+
+Twilio credentials;
+Resend credentials;
+APNS credentials.
+
+No production database.
+
+No production user data.
+
+No live provider callbacks.
+
+No outbound SMS.
+
+No calls.
+
+No Publish.
+
+No deployment.
+
+No backend production activation.
+
+PHASE 3 — RUN THE SAME COMPLETE STAGE E TARGETED SUITE
+
+Rerun the same seven Stage E test files previously executed:
+
+test/escalation-snapshot.test.ts
+
+test/incident-telephony.test.ts
+
+test/wellness-contact-routes.test.ts
+
+test/wellness-initial-routes.test.ts
+
+test/wellness-call-certainty.test.ts
+
+test/wellness-call-intelligence.test.ts
+
+test/schema-declarative.test.ts
+
+Use the normal working Linux toolchain.
+
+Do not modify source, tests, dependencies, manifests or lockfiles during the rerun.
+
+REQUIRED PASS STANDARD
+
+Expected equivalent result:
+
+91 tests
+
+91 PASS
+
+0 FAIL
+
+0 cancelled
+
+exit code 0
+
+If test count legitimately changes because of runner reporting, explain exactly why. Do not hide or ignore any failing test.
+
+RECONFIRM ALL 10 TASK 15.10A INVARIANTS
+
+Capture execution evidence showing:
+
+atomic incident-opening snapshot creation — PASS;
+legacy/empty/populated/inconsistent snapshot semantics — PASS;
+provider-confirmed brief answer remains answered independent of duration — PASS;
+answered remains separate from safe/resolved/helped — PASS;
+genuine Contact N attempt consumed in Cycle 1 — PASS;
+unresolved escalation selects N+1 — PASS;
+no same-cycle retry/redial of N — PASS;
+truthful exhausted-circle behavior — PASS;
+incident-bound Press-1 CAS/stale-action rejection — PASS;
+callback/raw-event idempotency and monotonic attempt state — PASS.
+
+Specifically show that the formerly failing wording assertion now passes with:
+
+Wellness call connected — no safety confirmation received.
+
+DATABASE / SCHEMA HOLD
+
+DO NOT EXECUTE THE TASK 15.10A DDL AGAIN.
+
+Stage D is closed.
+
+Do not run:
+
+migration 0011;
+generated 18-statement DDL;
+db:push;
+drizzle-kit push;
+any schema synchronization.
+
+If tests require development DB state, use only the already-certified Stage D development schema and synthetic/rollback-safe fixtures.
+
+At the end verify the certified development schema remains unchanged:
+
+2 Task columns
+
+3 Task tables
+
+5 CHECKs
+
+5 FKs
+
+7 declared Task indexes
+
+and catalog fingerprint remains:
+
+97188409e9ad762b43ff8366a48b4b82
+
+unless the tests are entirely in-memory and never touch the DB, in which case report that clearly.
+
+ABSOLUTE HOLDS
+
+Even after a clean 91/91 PASS, do NOT:
+
+access or mutate production DB;
+Publish;
+deploy;
+activate production backend;
+send provider traffic;
+begin Task 15.10B;
+implement Cycle 2;
+perform unrelated work.
+
+Stage E requires Council closure after this report.
+
+REQUIRED REPORT
+
+Return:
+
+executor path;
+HEAD;
+parent;
+ancestry result;
+worktree/index cleanliness;
+exact test command;
+containment configuration;
+total tests;
+passed;
+failed;
+cancelled/skipped;
+exit code;
+invariant 1 result;
+invariant 2 result;
+invariant 3 result;
+invariant 4 result;
+invariant 5 result;
+invariant 6 result;
+invariant 7 result;
+invariant 8 result;
+invariant 9 result;
+invariant 10 result;
+corrected wording assertion result;
+confirmation production runtime was unchanged;
+confirmation no DDL/schema mutation occurred;
+final DB/catalog integrity if DB was touched;
+confirmation no provider/live traffic;
+confirmation no production access;
+blockers;
+non-blocking observations;
+unknowns.
+
+End exactly with one:
+
+TASK 15.10A STAGE E FINAL RERUN PASS — READY FOR COUNCIL STAGE E CLOSURE
+
+TASK 15.10A STAGE E FINAL RERUN INCOMPLETE — ADDITIONAL COUNCIL DECISION REQUIRED
+
+TASK 15.10A STAGE E FINAL RERUN FAIL — PRODUCTION REMAINS BLOCKED
+
+Then STOP.
