@@ -1,0 +1,315 @@
+STILLHERE — TASK 15.10A
+STAGE D — CONTROLLED DEVELOPMENT DDL APPLY
+COUNCIL AUTHORIZED — DEVELOPMENT DATABASE ONLY
+
+Stage D target-identity and baseline preflight has PASSED.
+
+You are now authorized to apply the exact audited Task 15.10A schema to the development database only.
+
+LOCKED EXECUTOR
+
+Recreate the isolated executor if /tmp has been cleared.
+
+Before connecting for mutation, verify again:
+
+HEAD = 93b9d902d976363518a340f1dd5501a59b116537
+
+direct parent:
+
+d0f7f0f37b13bb112f2d063270a3a5560fc21240
+
+grandparent:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+worktree:
+
+clean
+
+Locked SQL:
+
+artifacts/api-server/review/15.10a/generated.sql
+
+SHA-256:
+
+aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244
+
+Statement count:
+
+18
+
+If any of those differ:
+
+STOP.
+
+LOCKED DEVELOPMENT TARGET
+
+The only authorized database target is the development target proven in preflight:
+
+Host: helium
+
+Address: 172.24.0.3
+
+Port: 5432
+
+Database: heliumdb
+
+Role: postgres
+
+Schema: public
+
+Expected:
+
+pg_is_in_recovery() = false
+
+transaction_read_only = off
+
+Before mutation, reconfirm the actual connection still matches this identity.
+
+If hostname, database, endpoint class, provider, recovery state, or role materially differs:
+
+STOP BEFORE DDL.
+
+Absolutely do not connect to or mutate the prohibited production Neon environment:
+
+aged-feather-27953340
+
+br-bold-cloud-a7qnx9wb
+
+PRE-MUTATION RECHECK
+
+Immediately before BEGIN, read-only verify:
+
+both Task 15.10A incident metadata columns still absent;
+all three Task 15.10A tables still absent;
+no Task 15.10A CHECK/FK/index objects appeared since preflight;
+baseline remains compatible.
+
+If drift exists:
+
+STOP.
+
+AUTHORIZED EXECUTION MODEL
+
+Execute only:
+
+BEGIN
+
+→
+
+the exact 18 statements from the authenticated generated.sql file
+
+→
+
+COMMIT
+
+The file itself is the sole authorized DDL payload.
+
+Do not manually rewrite the statements.
+
+Do not regenerate them.
+
+Do not reorder them.
+
+Do not add compatibility DDL.
+
+Do not omit any statement.
+
+Do not continue after any unexpected SQL failure.
+
+If any statement fails:
+
+ROLLBACK immediately.
+
+Do not attempt a second execution.
+
+Do not repair anything manually.
+
+Return evidence to Council.
+
+PROHIBITED EXECUTION PATHS
+
+Do NOT use:
+
+drizzle-kit push
+
+db:push
+
+broad migration runners
+
+schema synchronization tools
+
+Replit Publish
+
+application startup hooks that mutate schema
+
+The operation must be direct controlled execution of the exact audited SQL.
+
+STAGE E — IMMEDIATE POST-APPLY CATALOG CERTIFICATION
+
+If and only if COMMIT succeeds, perform read-only catalog verification.
+
+Confirm both incident columns now exist:
+
+escalation_snapshot_created_at
+
+escalation_snapshot_contact_count
+
+Confirm all three tables exist:
+
+incident_escalation_sequence
+
+incident_contact_attempts
+
+incident_telephony_events
+
+Confirm all five CHECK constraints, including exact names and predicates:
+
+incident_snapshot_metadata_pair
+
+incident_escalation_sequence_priority_rank_check
+
+incident_contact_attempts_cycle_check
+
+incident_contact_attempts_duration_check
+
+incident_contact_attempts_outcome_source_check
+
+Confirm all five foreign-key relationships and specifically exact hardened FK names:
+
+ica_sequence_id_ies_id_fk
+
+ite_attempt_id_ica_id_fk
+
+Confirm the expected indexes:
+
+5 unique indexes + 2 ordinary indexes
+
+Confirm PKs/defaults/nullability/types.
+
+Confirm incident row count remains:
+
+0
+
+Confirm there was:
+
+no historical backfill;
+no unrelated table mutation;
+no unrelated constraint/index addition;
+no unexpected destructive DDL.
+
+Produce a deterministic post-apply catalog fingerprint using the same method used for the pre-apply fingerprint.
+
+Pre-apply fingerprint:
+
+Catalog MD5: 73cb50de3fc95fd95c282c1a8d06a2f2
+
+Do not expect the post fingerprint to match—it should change because authorized schema objects were added. Instead, prove the delta consists only of the reviewed Task 15.10A schema changes.
+
+DEVELOPMENT-ONLY SYNTHETIC VALIDATION
+
+After catalog certification passes, you are authorized to perform the previously Council-approved development-only DB-integrated synthetic validation against the current monorepo implementation.
+
+This must use synthetic development records only.
+
+No Twilio.
+
+No real phone calls.
+
+No SMS.
+
+No provider APIs.
+
+No production records.
+
+No real users.
+
+Validate at minimum:
+
+New incident creation atomically creates its immutable Safety Circle snapshot.
+Snapshot metadata semantics:
+
+NULL / NULL = legacy unknown
+
+non-null + 0 = authoritative empty
+
+non-null + N = authoritative populated
+
+mismatched pair fails closed.
+
+All five CHECK constraints reject invalid values.
+Provider-authoritative answered state remains factual regardless of duration.
+
+A brief answered call must not become duration_inferred unanswered.
+
+answered remains separate from safe/resolved/helped.
+A genuinely attempted Contact N is consumed for first-pass escalation.
+If unresolved and N+1 exists, N+1 is selected.
+No same-cycle repeat of Contact N.
+If all contacts are consumed, exhausted-circle handling is truthful.
+Incident-bound Press-1 / resolution CAS prevents stale actions from changing a resolved incident.
+Raw provider events are append-only/idempotent according to the implementation contract.
+Legacy NULL/NULL incidents are handled without fabricated historical snapshots.
+
+Do not introduce new functionality to make tests pass.
+
+ABSOLUTE HOLDS REMAIN
+
+Even if Stage D and Stage E pass, do NOT:
+
+touch production DB;
+apply production DDL;
+Publish;
+deploy;
+activate production backend;
+send Twilio/provider traffic;
+start Task 15.10B;
+modify Cycle 2 behavior;
+do unrelated work.
+
+Production requires a completely separate Council gate.
+
+REQUIRED REPORT
+
+Return:
+
+executor HEAD / parent / grandparent;
+executor clean state;
+authenticated SQL SHA;
+authenticated statement count;
+actual development DB identity immediately before apply;
+pre-mutation drift check;
+transaction start result;
+number of SQL statements attempted;
+number successfully executed;
+COMMIT or ROLLBACK result;
+any PostgreSQL warnings/notices/errors;
+two new incident columns verification;
+three tables verification;
+five CHECK names/predicates;
+five FK relationships and exact hardened names;
+expected index inventory;
+types/defaults/nullability/PK verification;
+incident row count after apply;
+pre/post catalog fingerprint and exact authorized delta assessment;
+confirmation no backfill/unrelated mutation occurred;
+synthetic validation test cases and results;
+explicit result for the short answered-call scenario;
+explicit result for first-pass N → N+1 escalation;
+explicit result for no same-cycle retry;
+explicit result for legacy NULL/NULL handling;
+confirmation no provider/live traffic occurred;
+confirmation no production access/mutation occurred;
+blockers;
+non-blocking observations;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A STAGE D/E DEVELOPMENT PASS — READY FOR COUNCIL PRODUCTION-GATE REVIEW
+
+TASK 15.10A STAGE D/E DEVELOPMENT INCOMPLETE — ADDITIONAL COUNCIL DECISION REQUIRED
+
+TASK 15.10A STAGE D/E DEVELOPMENT FAIL — PRODUCTION REMAINS BLOCKED
+
+Then STOP.
