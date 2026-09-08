@@ -22,7 +22,7 @@ const noKeypad = classifyWellnessStatusCallback({
 });
 assert.equal(noKeypad.status, "no_response", "connected call without keypad must not be treated as safe or voicemail");
 assert.equal(noKeypad.shouldAccelerateContacts, true, "no keypad confirmation should continue escalation");
-assert.match(noKeypad.detail || "", /no keypad confirmation/i);
+assert.equal(noKeypad.detail, "Wellness call connected — no safety confirmation received.");
 
 for (const answeredBy of ["machine_start", "machine_end_beep", "machine_end_silence", "machine_end_other", "fax"]) {
   assert.equal(isMachineAnsweredBy(answeredBy), true, `${answeredBy} should be classified as machine/voicemail`);
