@@ -1,0 +1,335 @@
+STILLHERE — TASK 15.10A
+STAGE E APPLICATION VALIDATION RECOVERY + READ-ONLY WORKSPACE PROVENANCE AUDIT
+COUNCIL UNANIMOUSLY AUTHORIZED
+
+Council consensus is unanimous:
+
+Claude: YES A–J
+Gemini: YES A–J
+
+LOCKED STATUS
+
+Stage D development DDL apply is:
+
+PASS — CLOSED
+
+Development DB:
+
+heliumdb
+
+Task 15.10A DDL has already committed successfully.
+
+DO NOT RUN THE DDL AGAIN.
+
+No migration.
+
+No db:push.
+
+No drizzle-kit push.
+
+No schema re-application.
+
+If any schema change appears necessary, STOP and return to Council.
+
+AUTHORIZED TEST COMMIT
+
+All application validation must use exactly:
+
+93b9d902d976363518a340f1dd5501a59b116537
+
+Required ancestry:
+
+parent:
+
+d0f7f0f37b13bb112f2d063270a3a5560fc21240
+
+grandparent:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+PHASE 1 — CREATE PERSISTENT ISOLATED TEST EXECUTOR
+
+/tmp has proven unreliable.
+
+Create a persistent isolated checkout/worktree outside the ephemeral /tmp path.
+
+Example acceptable location:
+
+~/stillhere-15.10a-test-93b9d902
+
+or another persistent Replit-safe isolated location.
+
+Do NOT reuse:
+
+/home/runner/workspace
+
+Do NOT alter the current build/release-candidate workspace.
+
+Authenticate before testing:
+
+HEAD exact 93b9d902...
+parent exact d0f7f0f...
+grandparent exact 893a073...
+clean worktree
+clean index
+no untracked source/config changes
+
+If authentication fails:
+
+STOP.
+
+PHASE 2 — TEST CONTAINMENT
+
+This is a test-only operation.
+
+Tests must be:
+
+hermetic;
+synthetic;
+development-only;
+provider-isolated.
+
+Absolutely prohibited:
+
+Twilio API requests;
+outbound calls;
+SMS;
+provider callbacks from live services;
+production database access;
+production user data;
+Publish;
+deploy;
+backend production activation;
+Task 15.10B;
+Cycle 2 implementation;
+unrelated changes.
+
+Any carrier/provider dependency must be mocked/stubbed.
+
+PHASE 3 — APPLICATION-LEVEL VALIDATION
+
+Capture completed execution evidence for all 10 Council-required invariants.
+
+1. Atomic incident-opening snapshot creation
+
+New incident opening must atomically create its immutable Safety Circle snapshot.
+
+Prove no incident can be successfully opened with a partially written snapshot.
+
+2. Snapshot semantic states
+
+Validate:
+
+NULL / NULL = legacy unknown
+
+non-null timestamp + 0 = authoritative empty
+
+non-null timestamp + N > 0 = authoritative populated
+
+inconsistent metadata must fail closed.
+
+3. Brief provider-confirmed answer remains answered
+
+Test a short-duration answered call.
+
+Required truth:
+
+answered = true
+
+outcomeSource = provider_authoritative
+
+Duration must not downgrade it to unanswered.
+
+4. Answered != resolved/safe/helped
+
+Prove that a provider-confirmed answer does not automatically mark:
+
+user safe;
+incident resolved;
+help successfully delivered.
+
+These states must remain separate.
+
+5. Contact N consumed in Cycle 1
+
+Once Contact N has a genuine first-pass attempt, that contact is consumed for Cycle 1.
+
+6. Unresolved flow advances N → N+1
+
+If incident remains unresolved and another Safety Circle contact exists:
+
+select N+1.
+
+Do not select N again.
+
+7. No same-cycle retry
+
+Explicitly prove zero immediate same-cycle redial/retry of Contact N.
+
+Cycle 2 remains out of scope.
+
+8. Truthful exhausted-circle behavior
+
+When all first-pass contacts are consumed:
+
+return truthful exhausted-circle state;
+do not claim another contact exists;
+incident remains unresolved/open as appropriate;
+no hardcoded false escalation.
+9. Incident-bound Press-1 CAS
+
+Validate atomic incident-bound resolution behavior.
+
+A stale Press-1/action must not mutate an incident already resolved by another valid action.
+
+10. Callback/raw-event idempotency + monotonic attempts
+
+Validate:
+
+duplicate provider event does not create duplicate factual state;
+raw event uniqueness works;
+callback processing is idempotent;
+attempt state does not regress;
+authoritative provider evidence is not overwritten by weaker inference.
+REQUIRED TEST RESULT STANDARD
+
+Each invariant must return:
+
+PASS / FAIL
+
+Not:
+
+“covered by test code.”
+
+Not:
+
+“no failure observed.”
+
+Not:
+
+“expected to pass.”
+
+We need actual captured execution evidence.
+
+If one invariant cannot execute:
+
+report INCOMPLETE, not PASS.
+
+Do not modify production code merely to make tests run unless Council separately authorizes a fix.
+
+PHASE 4 — READ-ONLY WORKSPACE PROVENANCE AUDIT
+
+Independently inspect the original Replit workspace transition:
+
+Earlier:
+
+build/release-candidate
+
+10994c16b1c02cbbe33656794209a463cfae9129
+
+tracked worktree dirty
+
+Later:
+
+build/release-candidate
+
+eee0426bf63604a4ada83c90a19e9228930b0618
+
+tracked worktree clean
+
+This audit is read-only only.
+
+Allowed:
+
+git log
+git reflog
+ref inspection
+commit ancestry
+diff/stat inspection
+timestamps
+repository metadata
+
+Prohibited:
+
+reset
+checkout modification
+stash
+clean
+commit
+merge
+rebase
+cherry-pick
+ref movement
+source/config edits
+
+Determine:
+
+what caused 10994c16... → eee0426b...;
+whether any automated Replit checkpoint/bookkeeping process caused it;
+what files changed between those commits;
+whether any Task 15.10A source or SQL artifact was involved;
+whether the transition could have affected Stage D/E evidence;
+whether the transition is unrelated and safely quarantined.
+
+Do not use the original workspace as a substitute for exact 93b9d902... validation.
+
+DEVELOPMENT DATABASE RULE
+
+Existing Task 15.10A development schema may be used for synthetic tests.
+
+Test records must be isolated and cleaned up.
+
+Prefer transaction + rollback where appropriate.
+
+Never rerun the Task 15.10A DDL.
+
+At end, verify:
+
+no unintended test data remains;
+schema unchanged from certified Stage D state;
+no additional tables/constraints/indexes were created.
+REQUIRED REPORT
+
+Return:
+
+persistent test executor path;
+HEAD;
+parent;
+grandparent;
+worktree clean status;
+exact test commands executed;
+environment containment method;
+DB target used for synthetic validation;
+confirmation no DDL/schema mutation occurred;
+invariant 1 result + evidence;
+invariant 2 result + evidence;
+invariant 3 result + evidence;
+invariant 4 result + evidence;
+invariant 5 result + evidence;
+invariant 6 result + evidence;
+invariant 7 result + evidence;
+invariant 8 result + evidence;
+invariant 9 result + evidence;
+invariant 10 result + evidence;
+aggregate test count/pass/fail;
+test fixture cleanup result;
+final development schema integrity confirmation;
+workspace transition root cause;
+10994c16... → eee0426b... commit/diff explanation;
+whether Task 15.10A files were affected by that transition;
+whether Stage D/E evidence chain was affected;
+confirmation original workspace was not modified by audit;
+confirmation zero production/provider traffic;
+blockers;
+non-blocking observations;
+unknowns.
+
+End exactly with one:
+
+TASK 15.10A STAGE E APPLICATION VALIDATION PASS — READY FOR COUNCIL STAGE E CLOSURE REVIEW
+
+TASK 15.10A STAGE E APPLICATION VALIDATION INCOMPLETE — ADDITIONAL COUNCIL DECISION REQUIRED
+
+TASK 15.10A STAGE E APPLICATION VALIDATION FAIL — PRODUCTION REMAINS BLOCKED
+
+Then STOP.

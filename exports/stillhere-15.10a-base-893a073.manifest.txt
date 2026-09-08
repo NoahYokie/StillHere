@@ -1,4 +1,4 @@
-Artifact: StillHere Task 15.10A Ratified Base Git Bundle Transport
+x hdArtifact: StillHere Task 15.10A Ratified Base Git Bundle Transport
 Ratified Git commit: 893a073c7bb937d1a79b4d1394df09f6035918af
 Original bundle filename: stillhere-15.10a-base-893a073.bundle
 Original byte size: 494535856
