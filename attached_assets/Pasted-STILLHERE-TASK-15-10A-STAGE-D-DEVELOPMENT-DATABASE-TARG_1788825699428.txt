@@ -1,0 +1,194 @@
+STILLHERE — TASK 15.10A
+STAGE D — DEVELOPMENT DATABASE TARGET-IDENTITY + BASELINE PREFLIGHT
+COUNCIL AUTHORIZED — READ-ONLY DATABASE ACCESS ONLY
+
+Isolated recovery has PASSED.
+
+Authorized executor checkout:
+
+HEAD = 93b9d902d976363518a340f1dd5501a59b116537
+
+Locked SQL:
+
+artifacts/api-server/review/15.10a/generated.sql
+
+Locked SHA-256:
+
+aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244
+
+Locked statement count:
+
+18
+
+THIS GATE IS READ-ONLY
+
+You are now authorized to connect to PostgreSQL only to identify and inspect the intended development database.
+
+Do NOT execute the 18-statement DDL yet.
+
+Do NOT mutate any database.
+
+Do NOT open a mutation transaction.
+
+Do NOT run:
+
+db:push
+drizzle-kit push
+migrations
+Publish
+deploy
+PHASE 1 — POSITIVE DEVELOPMENT TARGET IDENTIFICATION
+
+Establish and report:
+
+Neon project ID/name;
+Neon branch ID/name;
+endpoint ID/hostname;
+database name;
+PostgreSQL version;
+connected role/user;
+active schema / search_path;
+pg_is_in_recovery();
+whether endpoint is primary or replica;
+whether the target is writable;
+evidence proving this is a development database;
+evidence proving this is not production.
+
+The previously identified production environment must remain prohibited.
+
+Specifically compare against:
+
+Neon project: aged-feather-27953340
+
+Production branch: br-bold-cloud-a7qnx9wb
+
+If the target is that production project/branch, or cannot be positively distinguished from production:
+
+STOP.
+
+If:
+
+pg_is_in_recovery() = true
+
+STOP.
+
+If endpoint is replica/read-only:
+
+STOP.
+
+Do not assume “development” from an environment-variable name. Prove the actual Neon identity.
+
+PHASE 2 — READ-ONLY BASELINE CATALOG INVENTORY
+
+If and only if the development target identity passes, inspect the current public schema read-only.
+
+Determine whether these incident columns already exist:
+
+escalation_snapshot_created_at
+
+escalation_snapshot_contact_count
+
+Determine whether these tables already exist:
+
+incident_escalation_sequence
+
+incident_contact_attempts
+
+incident_telephony_events
+
+Inspect relevant:
+
+columns/types/nullability/defaults;
+constraints;
+foreign keys;
+indexes;
+existing incidents table definition.
+
+Capture deterministic pre-apply catalog evidence/fingerprint.
+
+Record current incident row count without exposing incident/user data.
+
+Confirm whether any Task 15.10A schema object already exists partially or unexpectedly.
+
+If any expected-new object already exists unexpectedly, or baseline schema materially differs from what the audited SQL expects:
+
+STOP AND RETURN TO COUNCIL.
+
+PHASE 3 — RECONFIRM LOCKED PAYLOAD
+
+In the isolated executor checkout, reconfirm:
+
+HEAD exact 93b9d902...;
+worktree clean;
+SQL SHA exact aed3c5f9...2244;
+statement count exactly 18.
+
+No regeneration.
+
+No edits.
+
+ABSOLUTE FAIL-CLOSED CONDITIONS
+
+STOP and return evidence if:
+
+target identity is ambiguous;
+target may be production;
+prohibited production branch/project detected;
+replica detected;
+target not writable;
+baseline catalog differs unexpectedly;
+Task 15.10A objects partially exist;
+SQL SHA changed;
+statement count changed;
+isolated checkout no longer clean;
+any database mutation becomes necessary merely to complete preflight.
+STILL BLOCKED
+
+This preflight does NOT authorize:
+
+executing the 18 SQL statements;
+BEGIN for mutation;
+DDL;
+migration;
+db:push;
+drizzle-kit push;
+production DB access/mutation beyond any strictly necessary identity comparison already authorized by Council;
+Publish;
+deployment;
+backend activation;
+Twilio/provider traffic;
+Task 15.10B;
+unrelated work.
+REQUIRED REPORT
+
+Return:
+
+executor HEAD and clean status;
+development project/branch/endpoint identity;
+proof it is not production;
+pg_is_in_recovery() result;
+primary/replica status;
+writable status;
+DB/user/schema/PostgreSQL version;
+existing Task 15.10A columns;
+existing Task 15.10A tables;
+relevant CHECK/FK/index inventory;
+incident row count;
+pre-apply catalog fingerprint/evidence;
+baseline compatibility assessment;
+reconfirmed SQL SHA;
+reconfirmed 18-statement count;
+confirmation no database mutation occurred;
+blockers;
+non-blocking observations;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A STAGE D PREFLIGHT PASS — READY FOR CONTROLLED DEVELOPMENT DDL APPLY
+
+TASK 15.10A STAGE D PREFLIGHT INCOMPLETE — ADDITIONAL COUNCIL DECISION REQUIRED
+
+TASK 15.10A STAGE D PREFLIGHT FAIL — DEVELOPMENT APPLY BLOCKED
+
+Then STOP.

@@ -1,0 +1,173 @@
+STILLHERE — TASK 15.10A
+REPLIT ISOLATED RECOVERY + ARTIFACT AUTHENTICATION
+COUNCIL AUTHORIZED — NO DATABASE ACCESS YET
+
+Codex completed the authorized provenance transport.
+
+GitHub feature ref:
+
+refs/heads/feat/15.10a-escalation-ledger-replit
+
+must resolve exactly to:
+
+93b9d902d976363518a340f1dd5501a59b116537
+
+with direct parent:
+
+d0f7f0f37b13bb112f2d063270a3a5560fc21240
+
+and grandparent:
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+CRITICAL ISOLATION RULE
+
+Your existing dirty:
+
+build/release-candidate
+
+worktree must remain completely untouched.
+
+Do NOT:
+
+reset it;
+stash it;
+clean it;
+force-checkout it;
+merge into it;
+rebase it;
+delete untracked/tracked changes from it.
+
+Create/use a separate clean isolated git worktree or separate clean checkout directory for Task 15.10A.
+
+PHASE 1 — REMOTE FETCH + ISOLATED CHECKOUT
+
+Fetch:
+
+origin/feat/15.10a-escalation-ledger-replit
+
+into the isolated executor checkout.
+
+Do not modify any other ref.
+
+Check out exact:
+
+93b9d902d976363518a340f1dd5501a59b116537
+
+in that isolated environment.
+
+PHASE 2 — PROVENANCE VERIFICATION
+
+Before any database connection, verify:
+
+HEAD exactly =
+
+93b9d902d976363518a340f1dd5501a59b116537
+
+direct parent exactly =
+
+d0f7f0f37b13bb112f2d063270a3a5560fc21240
+
+grandparent exactly =
+
+893a073c7bb937d1a79b4d1394df09f6035918af
+
+ancestry is valid;
+isolated worktree is completely clean;
+no source/config/generated artifact changed during recovery.
+
+If any check fails:
+
+STOP.
+
+PHASE 3 — LOCKED SQL AUTHENTICATION
+
+Confirm file exists:
+
+artifacts/api-server/review/15.10a/generated.sql
+
+Independently calculate its SHA-256.
+
+It MUST equal exactly:
+
+aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244
+
+Confirm the reviewed payload contains exactly:
+
+18 SQL statements
+
+Do not regenerate SQL.
+
+Do not modify SQL.
+
+Do not use drizzle-kit push.
+
+Do not use db:push.
+
+If hash or statement count differs:
+
+STOP.
+
+PHASE 4 — CONTROL REF / ORIGINAL WORKTREE SAFETY
+
+Confirm:
+
+the dirty original build/release-candidate worktree remains untouched;
+its tracked/untracked state is unchanged by this operation;
+no other branch/ref was moved;
+no commits were created;
+no merge/rebase/cherry-pick occurred.
+ABSOLUTE HOLD
+
+This task does NOT yet authorize:
+
+development DB connection;
+production DB connection;
+SQL execution;
+transaction;
+migration;
+db:push;
+drizzle-kit push;
+Replit Publish;
+deployment;
+backend activation;
+Twilio/provider traffic;
+Task 15.10B;
+unrelated work.
+
+Even if recovery passes, STOP and return evidence first.
+
+REQUIRED REPORT
+
+Return:
+
+isolated checkout/worktree path or identity;
+fetched remote feature ref SHA;
+isolated HEAD;
+direct parent;
+grandparent;
+ancestry verification result;
+isolated worktree clean/dirty status;
+locked SQL path;
+calculated SQL SHA-256;
+expected SQL SHA-256;
+statement count;
+whether SQL was regenerated or altered;
+original dirty worktree before/after status;
+confirmation original worktree remained untouched;
+ref-movement verification;
+confirmation no DB access occurred;
+confirmation no deployment/provider action occurred;
+blockers;
+non-blocking observations;
+unknowns.
+
+End with exactly one:
+
+TASK 15.10A ISOLATED RECOVERY PASS — READY FOR STAGE D TARGET-IDENTITY PREFLIGHT
+
+TASK 15.10A ISOLATED RECOVERY INCOMPLETE — ADDITIONAL COUNCIL DECISION REQUIRED
+
+TASK 15.10A ISOLATED RECOVERY FAIL — STAGE D/E REMAINS BLOCKED
+
+Then STOP.
