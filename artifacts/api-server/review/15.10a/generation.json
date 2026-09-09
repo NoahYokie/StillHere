@@ -1,0 +1,66 @@
+{
+  "mode": "OFFLINE_REVIEW_ONLY",
+  "baseCommit": "893a073c7bb937d1a79b4d1394df09f6035918af",
+  "sourceHead": "d0f7f0f37b13bb112f2d063270a3a5560fc21240",
+  "schemaSha256": "90db2da47fa3c81c4003bd3ea6f39df8e53e98d1c2de0999702b31496949da52",
+  "migrationContractSha256": "3454bd48c1f4a4f9f69a4fe741421bac80bd340b56b8e57fed93d4fd7636a4a4",
+  "generatedSqlSha256": "aed3c5f9c398e27f7fc34f88e1f0e0fb97577441a54b7f28a95a87c95e8d2244",
+  "drizzleKit": "0.31.10",
+  "addedTables": [
+    "public.incident_escalation_sequence",
+    "public.incident_contact_attempts",
+    "public.incident_telephony_events"
+  ],
+  "changedTables": [
+    "public.incidents"
+  ],
+  "statements": [
+    "CREATE TABLE \"incident_escalation_sequence\" (\n\t\"id\" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,\n\t\"incident_id\" uuid NOT NULL,\n\t\"contact_id\" uuid NOT NULL,\n\t\"priority_rank\" integer NOT NULL,\n\t\"role\" text NOT NULL,\n\t\"display_name\" text NOT NULL,\n\t\"destination\" text NOT NULL,\n\t\"snapshot_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"incident_escalation_sequence_priority_rank_check\" CHECK (\"incident_escalation_sequence\".\"priority_rank\" > 0)\n);\n",
+    "CREATE TABLE \"incident_contact_attempts\" (\n\t\"id\" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,\n\t\"incident_id\" uuid NOT NULL,\n\t\"sequence_id\" uuid,\n\t\"cycle\" integer DEFAULT 1 NOT NULL,\n\t\"channel\" text DEFAULT 'voice' NOT NULL,\n\t\"state\" text DEFAULT 'reserved' NOT NULL,\n\t\"parent_call_sid\" text,\n\t\"child_call_sid\" text,\n\t\"attempted_at\" timestamp with time zone,\n\t\"answered_at\" timestamp with time zone,\n\t\"completed_at\" timestamp with time zone,\n\t\"duration\" integer,\n\t\"outcome\" text,\n\t\"outcome_source\" text,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"incident_contact_attempts_cycle_check\" CHECK (\"incident_contact_attempts\".\"cycle\" = 1),\n\tCONSTRAINT \"incident_contact_attempts_duration_check\" CHECK (\"incident_contact_attempts\".\"duration\" >= 0),\n\tCONSTRAINT \"incident_contact_attempts_outcome_source_check\" CHECK (\"incident_contact_attempts\".\"outcome_source\" IN ('provider_authoritative','duration_inferred','system_inferred'))\n);\n",
+    "CREATE TABLE \"incident_telephony_events\" (\n\t\"id\" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,\n\t\"incident_id\" uuid NOT NULL,\n\t\"attempt_id\" uuid,\n\t\"provider\" text DEFAULT 'twilio' NOT NULL,\n\t\"event_key\" text NOT NULL,\n\t\"event_type\" text NOT NULL,\n\t\"call_status\" text,\n\t\"dial_call_status\" text,\n\t\"dial_call_duration\" text,\n\t\"call_duration\" text,\n\t\"call_sid\" text,\n\t\"parent_call_sid\" text,\n\t\"dial_call_sid\" text,\n\t\"answered_by\" text,\n\t\"digits\" text,\n\t\"provider_timestamp\" text,\n\t\"sequence_number\" text,\n\t\"received_at\" timestamp with time zone NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);\n",
+    "ALTER TABLE \"incidents\" ADD COLUMN \"escalation_snapshot_created_at\" timestamp with time zone;",
+    "ALTER TABLE \"incidents\" ADD COLUMN \"escalation_snapshot_contact_count\" integer;",
+    "ALTER TABLE \"incident_escalation_sequence\" ADD CONSTRAINT \"incident_escalation_sequence_incident_id_incidents_id_fk\" FOREIGN KEY (\"incident_id\") REFERENCES \"public\".\"incidents\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+    "ALTER TABLE \"incident_contact_attempts\" ADD CONSTRAINT \"incident_contact_attempts_incident_id_incidents_id_fk\" FOREIGN KEY (\"incident_id\") REFERENCES \"public\".\"incidents\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+    "ALTER TABLE \"incident_contact_attempts\" ADD CONSTRAINT \"ica_sequence_id_ies_id_fk\" FOREIGN KEY (\"sequence_id\") REFERENCES \"public\".\"incident_escalation_sequence\"(\"id\") ON DELETE no action ON UPDATE no action;",
+    "ALTER TABLE \"incident_telephony_events\" ADD CONSTRAINT \"incident_telephony_events_incident_id_incidents_id_fk\" FOREIGN KEY (\"incident_id\") REFERENCES \"public\".\"incidents\"(\"id\") ON DELETE cascade ON UPDATE no action;",
+    "ALTER TABLE \"incident_telephony_events\" ADD CONSTRAINT \"ite_attempt_id_ica_id_fk\" FOREIGN KEY (\"attempt_id\") REFERENCES \"public\".\"incident_contact_attempts\"(\"id\") ON DELETE no action ON UPDATE no action;",
+    "CREATE UNIQUE INDEX \"incident_sequence_rank_unique\" ON \"incident_escalation_sequence\" USING btree (\"incident_id\",\"priority_rank\");",
+    "CREATE UNIQUE INDEX \"incident_sequence_contact_unique\" ON \"incident_escalation_sequence\" USING btree (\"incident_id\",\"contact_id\");",
+    "CREATE UNIQUE INDEX \"incident_attempt_cycle_contact_unique\" ON \"incident_contact_attempts\" USING btree (\"incident_id\",\"cycle\",\"sequence_id\",\"channel\");",
+    "CREATE UNIQUE INDEX \"incident_attempt_child_sid_unique\" ON \"incident_contact_attempts\" USING btree (\"child_call_sid\");",
+    "CREATE INDEX \"incident_attempt_parent_sid_idx\" ON \"incident_contact_attempts\" USING btree (\"parent_call_sid\");",
+    "CREATE UNIQUE INDEX \"incident_telephony_event_key_unique\" ON \"incident_telephony_events\" USING btree (\"event_key\");",
+    "CREATE INDEX \"incident_telephony_event_attempt_idx\" ON \"incident_telephony_events\" USING btree (\"attempt_id\",\"created_at\");",
+    "ALTER TABLE \"incidents\" ADD CONSTRAINT \"incident_snapshot_metadata_pair\" CHECK ((\"incidents\".\"escalation_snapshot_created_at\" IS NULL AND \"incidents\".\"escalation_snapshot_contact_count\" IS NULL) OR (\"incidents\".\"escalation_snapshot_created_at\" IS NOT NULL AND \"incidents\".\"escalation_snapshot_contact_count\" IS NOT NULL AND \"incidents\".\"escalation_snapshot_contact_count\" >= 0));"
+  ],
+  "checks": {
+    "public.incidents": {
+      "incident_snapshot_metadata_pair": {
+        "name": "incident_snapshot_metadata_pair",
+        "value": "(\"incidents\".\"escalation_snapshot_created_at\" IS NULL AND \"incidents\".\"escalation_snapshot_contact_count\" IS NULL) OR (\"incidents\".\"escalation_snapshot_created_at\" IS NOT NULL AND \"incidents\".\"escalation_snapshot_contact_count\" IS NOT NULL AND \"incidents\".\"escalation_snapshot_contact_count\" >= 0)"
+      }
+    },
+    "public.incident_escalation_sequence": {
+      "incident_escalation_sequence_priority_rank_check": {
+        "name": "incident_escalation_sequence_priority_rank_check",
+        "value": "\"incident_escalation_sequence\".\"priority_rank\" > 0"
+      }
+    },
+    "public.incident_contact_attempts": {
+      "incident_contact_attempts_cycle_check": {
+        "name": "incident_contact_attempts_cycle_check",
+        "value": "\"incident_contact_attempts\".\"cycle\" = 1"
+      },
+      "incident_contact_attempts_duration_check": {
+        "name": "incident_contact_attempts_duration_check",
+        "value": "\"incident_contact_attempts\".\"duration\" >= 0"
+      },
+      "incident_contact_attempts_outcome_source_check": {
+        "name": "incident_contact_attempts_outcome_source_check",
+        "value": "\"incident_contact_attempts\".\"outcome_source\" IN ('provider_authoritative','duration_inferred','system_inferred')"
+      }
+    },
+    "public.incident_telephony_events": {}
+  }
+}

@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
-pnpm --filter db push
+echo "Dependencies installed. Database schema application is a separate manual Council gate; no database command was run."

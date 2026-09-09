@@ -1,0 +1,32 @@
+[
+  {
+    "constraint": "incident_snapshot_metadata_pair",
+    "migration0011Predicate": "(escalation_snapshot_created_at IS NULL AND escalation_snapshot_contact_count IS NULL)\n    OR (escalation_snapshot_created_at IS NOT NULL AND escalation_snapshot_contact_count IS NOT NULL AND escalation_snapshot_contact_count >= 0)",
+    "generatedPredicate": "(\"incidents\".\"escalation_snapshot_created_at\" IS NULL AND \"incidents\".\"escalation_snapshot_contact_count\" IS NULL) OR (\"incidents\".\"escalation_snapshot_created_at\" IS NOT NULL AND \"incidents\".\"escalation_snapshot_contact_count\" IS NOT NULL AND \"incidents\".\"escalation_snapshot_contact_count\" >= 0)",
+    "difference": "Quoted, table-qualified column identifiers; whitespace/layout differs. No casts or predicate/NULL-semantics changes."
+  },
+  {
+    "constraint": "incident_escalation_sequence_priority_rank_check",
+    "migration0011Predicate": "priority_rank > 0",
+    "generatedPredicate": "\"incident_escalation_sequence\".\"priority_rank\" > 0",
+    "difference": "Quoted, table-qualified column identifiers; whitespace/layout differs. No casts or predicate/NULL-semantics changes."
+  },
+  {
+    "constraint": "incident_contact_attempts_cycle_check",
+    "migration0011Predicate": "cycle = 1",
+    "generatedPredicate": "\"incident_contact_attempts\".\"cycle\" = 1",
+    "difference": "Quoted, table-qualified column identifiers; whitespace/layout differs. No casts or predicate/NULL-semantics changes."
+  },
+  {
+    "constraint": "incident_contact_attempts_duration_check",
+    "migration0011Predicate": "duration >= 0",
+    "generatedPredicate": "\"incident_contact_attempts\".\"duration\" >= 0",
+    "difference": "Quoted, table-qualified column identifiers; whitespace/layout differs. No casts or predicate/NULL-semantics changes."
+  },
+  {
+    "constraint": "incident_contact_attempts_outcome_source_check",
+    "migration0011Predicate": "outcome_source IN ('provider_authoritative','duration_inferred','system_inferred')",
+    "generatedPredicate": "\"incident_contact_attempts\".\"outcome_source\" IN ('provider_authoritative','duration_inferred','system_inferred')",
+    "difference": "Quoted, table-qualified column identifiers; whitespace/layout differs. No casts or predicate/NULL-semantics changes."
+  }
+]
